@@ -26,7 +26,7 @@ Rules: [AGENTS.md](../../AGENTS.md).
 7. **Record**: a `changelog.d/` fragment, and the roadmap prose updated without status tags.
 8. **Validate** in `nix develop`: `lake build` and `bash scripts/checks/run.sh`; CI on the candidate.
    Commit, push `wip/<branch>` every 5 minutes.
-9. `/creview`, then `/land`.
+9. Send the exact branch head to the coordinator for review, then use `/land` once cleared.
 
 Report: the slice delivered, what remains of the task, the head SHA, the checks and their results,
-the Codex verdict.
+the coordinator review status.

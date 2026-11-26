@@ -92,7 +92,8 @@ private def build (source dir : System.FilePath) (backend : Option String) :
   let version ← liftExcept <| (← Driver.Project.checkInvocation (root / "Concrete.toml")).mapError
     Refusal.manifest
   let bytes ← toolIO "read source" (IO.FS.readBinFile path)
-  let out ← liftExcept (Stages.compile ⟨source.toString, bytes⟩)
+  let input ← liftExcept (Stages.Input.load source.toString bytes)
+  let out ← liftExcept (Stages.compile input)
   let executable ← toolIO "resolve compiler installation" (IO.appPath >>= IO.FS.realPath)
   let some installation := executable.parent >>= (·.parent) >>= (·.parent) >>= (·.parent)
     | throw (.internal "cannot locate the compiler installation")

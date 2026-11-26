@@ -11,7 +11,7 @@ LEAN_NUM_THREADS=2 lake build concrete
 .lake/build/bin/concrete build tests/slice0/answer.con -o "$output"
 ```
 
-Set `output` to a new build directory. The default writes `llvm.exe` and `lcb.exe` there.
+Set `output` to a build directory. The default writes `llvm.exe` and `lcb.exe` there.
 Use `--backend llvm` or `--backend lcb` for a single executable. The driver uses the pinned
 native build helper and the LCB executable built by Lake. It compiles and links in a private
 directory beside the destination, checks that the retained link inputs match the generated inputs,
@@ -55,22 +55,25 @@ premises.
   owns sharing the typed launcher input boundary with LCB. R-0509 also owns coverage of the
   CLI root in the environment-level axiom and example scans.
 
-Use a dedicated output directory. The CLI normalizes the `-o` path, then rejects a symlink at
-the final component, including one spelled with a trailing slash or `/.`. Ancestor components
-are resolved normally after normalization. The output directory cannot contain the working
-project, and its parent must be writable so the CLI can create a private sibling directory.
+Use a dedicated output directory. The CLI resolves ancestor symlinks before processing subsequent
+`..` components and rejects a symlink at the final component, including one spelled with a
+trailing slash or `/.`. The output directory cannot contain the working project. Its closest
+existing parent must be writable so the CLI can create a private staging directory there.
 
 A build writes and validates all selected artifacts in private staging. The publisher carries
 forward unrelated entries and artifacts of an unselected backend, then commits the complete
-directory by exclusive rename on first publication or atomic exchange on rebuild
-(Linux `renameat2` or macOS `renameatx_np`). The filesystem must support the operation. Before copying,
-the publisher checks that staging and every output directory have the same name-lookup
-rules. On Linux it checks the mount and the directory's casefold flag on ext2, ext3, ext4,
+directory with one atomic exchange (Linux `renameat2(RENAME_EXCHANGE)` or macOS
+`renameatx_np(RENAME_SWAP)`). A first publication installs the output and any missing ancestors
+with one exclusive rename. Before staging, the publisher checks the name-lookup rules of the closest
+existing parent and any existing output tree. Before publication it checks that staging and the
+destination use the same rules. On Linux it checks the mount and the directory's casefold flag on ext2, ext3, ext4,
 F2FS and tmpfs. On macOS it checks the volume and its reported case sensitivity. A
 mismatch or unavailable lookup information stops publication. A pre-commit failure
-returns `TOOL-FAILURE` with exit 2 and leaves existing outputs in place or the destination
-absent on first build. The parent-directory lock serializes commits by
-cooperating CLI builds, including builds selecting different backends.
+returns `TOOL-FAILURE` with exit 2 and leaves existing outputs in place. Missing output directories
+are created only when publication commits. The parent-directory lock serializes commits by
+cooperating CLI builds sharing that parent, including builds selecting different backends.
+If a cooperating build installs a missing ancestor while another waits for the lock, the waiting
+build locks the newly installed parent and rechecks the destination before taking its snapshot.
 
 The exchange is atomic for the directory name. A reader opening several files across the
 exchange may see different generations. The output directory inode changes, and carrying forward
