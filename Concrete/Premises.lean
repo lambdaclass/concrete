@@ -16,6 +16,7 @@ import Concrete.Backend.LCB
 import Concrete.Backend.LLVM
 import Concrete.Lex
 import Concrete.Stages
+import Concrete.Theorem
 
 namespace Concrete
 
@@ -302,11 +303,36 @@ def Premise.tableRow (p : Premise) : String :=
 def Premise.line (p : Premise) : String :=
   s!"premise {p.id} [{p.trust.name}] retired-by: {p.retiredBy} :: {p.statement}"
 
+/-- A production discharge entry must bind an actual registered reference and
+the correctness proof for the same profile. -/
+abbrev ImageDischarge := { profile : ImageTheorem.Profile // ImageTheorem.ProductionDischarge profile }
+
+def imageDischarges : List ImageDischarge := []
+
+private def imageDischargeLines (entries : List ImageDischarge) : List String :=
+  entries.map fun entry => s!"image claim discharged: {reprStr entry.val}"
+
+def imageObligation : String :=
+  "image claim open [LP0 / R-0505]: production reference registration and joint backend non-vacuity witnesses for the same profile, reference, policy, models and tools"
+
+/-- Even a vacuous conditional proof cannot populate the report while every
+production target lookup is empty. This exercises the input to the report's
+discharge renderer, including attempted alternative entries. -/
+example (entries : List ImageDischarge) : imageDischargeLines entries = [] := by
+  cases entries with
+  | nil => rfl
+  | cons entry _ =>
+    obtain ⟨profile, ⟨env, reference, _, _, _, _, registered, _⟩⟩ := entry
+    have missing : ImageTheorem.nativeReference profile.target = none := by
+      cases profile.target <;> rfl
+    rw [missing] at registered
+    cases registered
+
 open Lean in
 /-- The trusted-base report: one line per premise, then for each theorem its sorted axioms, then
     each axiom once with its type (so an axiom restated under the same name changes the report). -/
 def report (thms : List Name) : CoreM (List String) := do
-  let mut lines := all.map Premise.line
+  let mut lines := all.map Premise.line ++ [imageObligation] ++ imageDischargeLines imageDischarges
   let mut seen : Array Name := #[]
   for n in thms do
     let axs := (← collectAxioms n).qsort Name.lt

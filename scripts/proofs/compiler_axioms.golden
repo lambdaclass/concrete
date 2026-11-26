@@ -1392,6 +1392,7 @@ Concrete.ImageTheorem.NativeModels.mk.sizeOf_spec
 Concrete.ImageTheorem.NativeTools.mk.inj	
 Concrete.ImageTheorem.NativeTools.mk.injEq	propext
 Concrete.ImageTheorem.NativeTools.mk.sizeOf_spec	
+Concrete.ImageTheorem.ProductionDischarge.witnessed	Classical.choice Quot.sound propext
 Concrete.ImageTheorem.Profile.mk.inj	
 Concrete.ImageTheorem.Profile.mk.injEq	propext
 Concrete.ImageTheorem.Profile.mk.sizeOf_spec	
@@ -1452,7 +1453,6 @@ Concrete.ImageTheorem.ToolRole.llvmObject.sizeOf_spec
 Concrete.ImageTheorem.ToolRole.ofNat_ctorIdx	
 Concrete.ImageTheorem.ToolRole.runtimeAssembler.sizeOf_spec	
 Concrete.ImageTheorem.ToolRole.runtimeLowering.sizeOf_spec	
-Concrete.ImageTheorem.compile_correct_requires_registration	Classical.choice Quot.sound propext
 Concrete.ImageTheorem.instDecidableEqExternalPremise._proof_1	
 Concrete.ImageTheorem.instDecidableEqExternalPremise._proof_2	
 Concrete.ImageTheorem.instDecidableEqToolInvocation.decEq._proof_1	
@@ -2813,6 +2813,12 @@ _private.Concrete.Certificate.0.Concrete.Certificate.ImageBinding.openPremises.m
 _private.Concrete.Certificate.0.Concrete.Certificate.ImageBinding.openPremises.match_1.eq_2	
 _private.Concrete.Certificate.0.Concrete.Certificate.ImageClaim.openPremises.match_1.eq_1	
 _private.Concrete.Certificate.0.Concrete.Certificate.ImageClaim.openPremises.match_1.eq_2	
+_private.Concrete.Certificate.0.Concrete.Certificate.ImagePreserved.admission	
+_private.Concrete.Certificate.0.Concrete.Certificate.ImagePreserved.decoding	
+_private.Concrete.Certificate.0.Concrete.Certificate.ImagePreserved.launchReady	
+_private.Concrete.Certificate.0.Concrete.Certificate.ImagePreserved.maximal	
+_private.Concrete.Certificate.0.Concrete.Certificate.ImagePreserved.prefixes	
+_private.Concrete.Certificate.0.Concrete.Certificate.ImagePreserved.runReady	
 _private.Concrete.Certificate.0.Concrete.Certificate.acceptedNode	
 _private.Concrete.Certificate.0.Concrete.Certificate.testBuild.eq_1	Classical.choice Quot.sound propext
 _private.Concrete.Certificate.0.Concrete.Certificate.testImageGraph.eq_1	
@@ -3178,9 +3184,9 @@ _private.Concrete.Stages.0.Concrete.Stages.memory.eq_1
 _private.Concrete.Stages.0.Concrete.Stages.stages.eq_1	Classical.choice Quot.sound propext
 _private.Concrete.Stages.0.Except.map.match_1.eq_1	
 _private.Concrete.Stages.0.Except.map.match_1.eq_2	
-_private.Concrete.Theorem.0.Concrete.Backend.LCB.assemble.match_4.eq_1	
-_private.Concrete.Theorem.0.Concrete.Backend.LCB.assemble.match_4.eq_2	
-_private.Concrete.Theorem.0.Concrete.Backend.LCB.assemble.match_4.eq_3	
+_private.Concrete.Theorem.0.Concrete.Backend.LCB.assemble.match_1.eq_1	
+_private.Concrete.Theorem.0.Concrete.Backend.LCB.assemble.match_1.eq_2	
+_private.Concrete.Theorem.0.Concrete.Backend.LCB.assemble.match_1.eq_3	
 _private.Concrete.Theorem.0.Concrete.Backend.lcbTerminal.match_1.eq_1	propext
 _private.Concrete.Theorem.0.Concrete.Backend.lcbTerminal.match_1.eq_2	propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.answerBIRAssembly	Classical.choice Quot.sound propext

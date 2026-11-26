@@ -441,14 +441,16 @@ stderr bytes. The separate origin relation binds the table entries to source byt
 The BIR slot limit applies before emission. Final-image stack adequacy and launch admission
 govern finite-prefix safety. Maximal behavior also needs OS liveness and progress through
 short stderr writes and exit. The verifier selects the decoder, decoded-machine semantics and
-raw-byte process semantics from its native target registry. A proof of
-`compile_correct` must establish that the reference is registered. It also requires both
+raw-byte process semantics from its native target registry. The registration for the
+profile's target is a hypothesis of `compile_correct`. Its conclusion requires both
 backend claims, the unchecked claim and joint witnesses under the same reference, profile,
-execution policy, models and tools. B0a and LP0 compose the obligations stated in
+execution policy, models and tools. B0a and LP0 use the composition obligations stated in
 `CompileCorrectUnderReference` with their specified platform reference and named residual
-premises. R-0505 supplies the first production registry entry for final-image validation.
-The proof controls use a separate synthetic registry. The per-path premise list records
-dispositions for the remaining obligations. The unchecked path requires static typing and
+premises. The production registry is empty and the trusted-base inventory records no
+discharged production profiles. LP0 / R-0505 owns production registration and the joint
+non-vacuity witnesses for those profiles. The registered synthetic profile already has
+joint witnesses for both backends, including their unchecked trap claims.
+The per-path premise list records dispositions for the remaining obligations. The unchecked path requires static typing and
 scope, and uses empty discharge evidence. Its conclusion requires the exact trap observation
 under the run premises. Each backend has joint witness obligations for both production and
 trapping conformance builds.
@@ -459,8 +461,8 @@ validation propositions bind exact payload digests, resolved pins, and evidence 
 obligations. A single acyclic evidence graph identifies dependencies for revocation. The note
 is inserted after linking. Replay requires a registered target and the verifier’s policy for
 any note or image-validation claim. Production replay refuses those receipts until the target
-has a reference. Note replay requires the same environments to be launch-ready and run-ready
-for the linked and final bytes, and checks behavior in those environments. Driver-attested
+has a reference. Note replay preserves launch admission independently of stack adequacy. It also preserves
+launch-ready and run-ready environments and checks behavior in those environments. Driver-attested
 receipts without a note require exact equality to the linked bytes. An image-validation witness
 applies to the final bytes. The replay proposition determines the final-image dependencies. With a conditional stack claim the graph retains the
 stack premise. A proved-stack claim discharges it for all admitted launch environments.

@@ -371,20 +371,21 @@ def lcbPath : LCB.Target → LoweringPath
 /-- Tool slots distinguish invocations even when the same binary serves several roles. -/
 inductive ToolRole where
   | llvmObject | runtimeLowering | bodyAssembler | runtimeAssembler | linker
-  deriving DecidableEq
+  deriving DecidableEq, Repr
 
 structure ToolInvocation where
   role : ToolRole
   tool : String
   revision : String
   arguments : List String
-  deriving DecidableEq
+  deriving DecidableEq, Repr
 
 structure Profile where
   target : LCB.Target
   maxBIRSlots : Nat
   maxImageStackBytes : Nat
   tools : List ToolInvocation
+  deriving Repr
 
 /-- The build identity check compares this kernel-reducible pin to Lake's declared
 and resolved revisions. Handoffs also check the imported backend compiler identity. -/
@@ -753,25 +754,35 @@ private def CompileCorrectWith {Env : Type} {profile : Profile}
     (registry : NativeReferenceRegistry) (m : SharedModels profile.target)
     (reference : TargetReference Env profile.target) (policy : ExecutionPolicy Env)
     (n : NativeModels Env profile reference) (tools : NativeTools) : Prop :=
-  registry profile.target = some ⟨Env, reference⟩ ∧
+  registry profile.target = some ⟨Env, reference⟩ →
     CompileCorrectUnderReference m reference policy n tools
 
-/-- A production proof must establish the composition obligations and match the
-verifier's registered reference. Registration is part of the claim. -/
+/-- Production correctness is conditional on the verifier's registered reference
+for this profile's target. Its conclusion uses that same reference throughout. -/
 def compile_correct {Env : Type} {profile : Profile} (m : SharedModels profile.target)
     (reference : TargetReference Env profile.target) (policy : ExecutionPolicy Env)
     (n : NativeModels Env profile reference) (tools : NativeTools) : Prop :=
   CompileCorrectWith nativeReference m reference policy n tools
 
-theorem compile_correct_requires_registration {Env : Type} {profile : Profile}
-    {m : SharedModels profile.target} {reference : TargetReference Env profile.target}
-    {policy : ExecutionPolicy Env} {n : NativeModels Env profile reference} {tools : NativeTools}
+/-- An empty registry leaves a conditional statement. A caller cannot use
+its conclusion without separately providing a registration. -/
+example {Env : Type} {profile : Profile} (m : SharedModels profile.target)
+    (reference : TargetReference Env profile.target) (policy : ExecutionPolicy Env)
+    (n : NativeModels Env profile reference) (tools : NativeTools)
     (missing : nativeReference profile.target = none) :
-    ¬ compile_correct m reference policy n tools := by
-  intro correct
-  have registered := correct.1
+    compile_correct m reference policy n tools := by
+  intro registered
   rw [missing] at registered
   cases registered
+
+/-- Evidence required to inventory a production profile as discharged. A
+conditional proof alone can be vacuous while the registry is empty. -/
+structure ProductionDischarge (profile : Profile) : Prop where
+  witnessed : ∃ (Env : Type) (reference : TargetReference Env profile.target)
+    (m : SharedModels profile.target) (policy : ExecutionPolicy Env)
+    (n : NativeModels Env profile reference) (tools : NativeTools),
+    nativeReference profile.target = some ⟨Env, reference⟩ ∧
+      compile_correct m reference policy n tools
 
 namespace Sanity
 
@@ -1401,8 +1412,9 @@ all admitted environments, even for a registered test reference. -/
 example (m : SharedModels sampleProfile.target) :
     ¬ CompileCorrectWith testRegistry m testReference
       {testExecutionPolicy with launchAdmitted := fun _ _ _ => False} testNative testTools := by
-  intro correct
-  obtain ⟨anchor, _, _, build, env, _, _, _, _, _, ready, _⟩ := correct.2.2.2.2.2.1.1
+  intro conditional
+  have correct := conditional rfl
+  obtain ⟨anchor, _, _, build, env, _, _, _, _, _, ready, _⟩ := correct.2.2.2.2.1.1
   have impossible : testNative.launchAdmitted build.image env = False :=
     congrFun (congrFun anchor.2.1 build.image) env
   exact impossible ▸ ready.1.2

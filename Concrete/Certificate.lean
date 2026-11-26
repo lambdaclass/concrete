@@ -404,20 +404,21 @@ private def ImageClaim.proposition {Env : Type} {profile : Profile}
   | .provedStack => ∀ env, n.launchAdmitted exe env →
       n.stackAdequate exe env profile.maxImageStackBytes
 
-/-- Note insertion preserves decoding, the verifier's ready environments, and
-process behavior in those environments. -/
-private def ImagePreserved {Env : Type} {profile : Profile}
+/-- Note insertion preserves decoding, launch admission independently of stack
+adequacy, and the verifier's readiness and behavior guarantees. -/
+private structure ImagePreserved {Env : Type} {profile : Profile}
     {platform : TargetReference Env profile.target} (n : NativeModels Env profile platform)
-    (build : ExactBuild) (exe : ByteArray) : Prop :=
-  platform.decode exe = platform.decode build.linkedImage ∧
-  (∀ env, LaunchReady n build.linkedImage env ↔ LaunchReady n exe env) ∧
-  (∀ env, RunReady n build.linkedImage env ↔ RunReady n exe env) ∧
-  (∀ env, LaunchReady n exe env →
-    Contracts.PrefixSafety n.process n.process (build.linkedImage, env) (exe, env)) ∧
-  (∀ env, RunReady n exe env →
+    (build : ExactBuild) (exe : ByteArray) : Prop where
+  decoding : platform.decode exe = platform.decode build.linkedImage
+  admission : ∀ env, n.launchAdmitted build.linkedImage env ↔ n.launchAdmitted exe env
+  launchReady : ∀ env, LaunchReady n build.linkedImage env ↔ LaunchReady n exe env
+  runReady : ∀ env, RunReady n build.linkedImage env ↔ RunReady n exe env
+  prefixes : ∀ env, LaunchReady n exe env →
+    Contracts.PrefixSafety n.process n.process (build.linkedImage, env) (exe, env)
+  maximal : ∀ env, RunReady n exe env →
     Contracts.MaximalRefinement n.process n.process (build.linkedImage, env) (exe, env) ∧
     ((∃ o, n.process.observes (build.linkedImage, env) o) →
-      ∃ o, n.process.observes (exe, env) o))
+      ∃ o, n.process.observes (exe, env) o)
 
 private def ImageReplay {Env : Type} {profile : Profile}
     {platform : TargetReference Env profile.target} (policy : ExecutionPolicy Env)
@@ -653,7 +654,7 @@ private theorem testImageReplay (binding : ImageBinding) :
       binding testNative := by
   with_unfolding_all
     have ready : ImagePreserved testNative (testBuild answerImage) answerImage :=
-      ⟨rfl, fun _ => Iff.rfl, fun _ => Iff.rfl,
+      ⟨rfl, fun _ => Iff.rfl, fun _ => Iff.rfl, fun _ => Iff.rfl,
         fun env _ => (instantRefines _ _ (answerImage, env) (answerImage, env) rfl).1,
         fun env _ => ⟨(instantRefines _ _ (answerImage, env) (answerImage, env) rfl).2, id⟩⟩
     refine ⟨testAnchor, ready, ?_⟩
@@ -754,7 +755,7 @@ example : changedByNote.decode noteBytes = changedByNote.decode answerImage ∧
   refine ⟨rfl, ?_⟩
   intro replay
   have ready : RunReady (noteModels changedByNote) noteBytes () := ⟨⟨trivial, trivial⟩, trivial, trivial⟩
-  have refines := (replay.2.1.2.2.2.2 () ready).1
+  have refines := (replay.2.1.maximal () ready).1
   have observed : changedByNote.process.observes (noteBytes, ()) (.returned 1 ByteArray.empty) :=
     instantObserves _ _
   obtain ⟨state, finite, returned⟩ := observed
@@ -776,7 +777,7 @@ private def unchangedByNote : TargetReference Unit sampleProfile.target :=
 /-- With a process that ignores the note, the same insertion preserves execution. -/
 example : ImageReplay testExecutionPolicy testCodec answerInput answerOutput (testBuild answerImage)
     noteBytes .driverAttested (noteModels unchangedByNote) := by
-  refine ⟨⟨rfl, rfl, rfl, rfl⟩, ⟨rfl, fun _ => Iff.rfl, fun _ => Iff.rfl, ?_, ?_⟩, trivial⟩
+  refine ⟨⟨rfl, rfl, rfl, rfl⟩, ⟨rfl, fun _ => Iff.rfl, fun _ => Iff.rfl, fun _ => Iff.rfl, ?_, ?_⟩, trivial⟩
   · intro env _
     exact (instantRefines _ _ (answerImage, env) (noteBytes, env) rfl).1
   · intro env _
@@ -797,8 +798,28 @@ example : RunReady linkedOnlyModels answerImage () ∧
     ⟨⟨trivial, rfl⟩, trivial, trivial⟩
   refine ⟨linkedReady, ?_⟩
   intro replay
-  have finalReady := (replay.2.1.2.2.1 ()).mp linkedReady
+  have finalReady := (replay.2.1.runReady ()).mp linkedReady
   exact (by decide : noteBytes ≠ answerImage) finalReady.1.2
+
+private def unestablishedStackPolicy : ExecutionPolicy Unit :=
+  { linkedOnlyPolicy with stackAdequate := fun _ _ _ _ => False }
+
+private def unestablishedStackModels : NativeModels Unit sampleProfile changedByNote :=
+  { linkedOnlyModels with stackAdequate := fun _ _ _ => False }
+
+/-- With stack adequacy open on both images, both readiness implications are
+vacuous. Replay still rejects the exit-changing note on admission alone. -/
+example :
+    unestablishedStackPolicy.launchAdmitted sampleProfile answerImage () ∧
+    ¬ unestablishedStackPolicy.launchAdmitted sampleProfile noteBytes () ∧
+    (∀ image env, ¬ LaunchReady unestablishedStackModels image env) ∧
+    (∀ image env, ¬ RunReady unestablishedStackModels image env) ∧
+    ¬ ImageReplay unestablishedStackPolicy testCodec answerInput answerOutput (testBuild answerImage)
+      noteBytes .driverAttested unestablishedStackModels := by
+  have refuses : noteBytes ≠ answerImage := by decide
+  refine ⟨rfl, refuses, fun _ _ ready => ready.1, fun _ _ ready => ready.1.1, ?_⟩
+  intro replay
+  exact refuses ((replay.2.1.admission ()).mp rfl)
 
 private def wrongImage : ByteArray := ⟨#[43]⟩
 
