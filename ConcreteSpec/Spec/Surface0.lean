@@ -808,7 +808,7 @@ def builtinTypeNames : List String :=
    "char", "String", "Unit", "Option", "Result", "Heap", "HeapArray", "Vec"]
 
 /-- Slice 0 supports named bindings that do not shadow the entry point, an intrinsic,
-or an earlier local. -/
+a builtin type name or an earlier local. -/
 def BinderLegal (locals : List String) (name : String) : Prop :=
   name ≠ "_" ∧ name ≠ "main" ∧ name ∉ intrinsicNames ∧ name ∉ builtinTypeNames ∧ name ∉ locals
 

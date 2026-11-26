@@ -470,11 +470,14 @@ def TargetReference.decodedProcess {Env : Type} {target : LCB.Target} (platform 
     Semantics (ByteArray × Env) :=
   platform.machine.onInput fun (image, env) => (platform.decode image, env)
 
+abbrev NativeReferenceRegistry :=
+  (target : LCB.Target) → Option (Σ env : Type, TargetReference env target)
+
 /-- Verifier-owned native references. R-0505 supplies the decoded final-image
 reference for the first production target. Until then, native image claims are
 unavailable even on targets supported by the assembly emitter. -/
-def nativeReference (target : LCB.Target) : Option (Σ env : Type, TargetReference env target) :=
-  match target with
+def nativeReference : NativeReferenceRegistry :=
+  fun target => match target with
   | .x86_64Linux => none
   | .aarch64Linux => none
   | .aarch64Macos => none
@@ -737,25 +740,38 @@ def NativeNonvacuous {Env : Type} {profile : Profile}
   LLVMNonvacuous policy n tools ∧ LCBNonvacuous policy n tools ∧
     LLVMUncheckedNonvacuous policy n tools ∧ LCBUncheckedNonvacuous policy n tools
 
-/-- The stage and adapter obligations are part of what this theorem must establish.
-Native obligations and their joint qualification are required for the selected reference. -/
-private def compileCorrectFor {Env : Type} {profile : Profile} (m : SharedModels profile.target)
+/-- Conditional composition contract for a specified platform reference. The
+same reference indexes the policy and native models throughout the proof. -/
+def CompileCorrectUnderReference {Env : Type} {profile : Profile} (m : SharedModels profile.target)
     (reference : TargetReference Env profile.target) (policy : ExecutionPolicy Env)
     (n : NativeModels Env profile reference) (tools : NativeTools) : Prop :=
   SharedSound m ∧ SharedCorrect ∧ UncheckedSharedCorrect ∧ LCBAdapterSound ∧
     NativeNonvacuous policy n tools ∧ LLVMCorrect n tools ∧ LCBCorrect n tools ∧
     UncheckedCorrect n tools
 
+private def CompileCorrectWith {Env : Type} {profile : Profile}
+    (registry : NativeReferenceRegistry) (m : SharedModels profile.target)
+    (reference : TargetReference Env profile.target) (policy : ExecutionPolicy Env)
+    (n : NativeModels Env profile reference) (tools : NativeTools) : Prop :=
+  registry profile.target = some ⟨Env, reference⟩ ∧
+    CompileCorrectUnderReference m reference policy n tools
 
-/-- The final theorem is scoped to targets with a verifier-owned native reference.
-An assembly-emitter profile alone is insufficient to instantiate it. -/
-def compile_correct {profile : Profile} (m : SharedModels profile.target)
-    (registered : (nativeReference profile.target).isSome)
-    (policy : ExecutionPolicy ((nativeReference profile.target).get registered).1)
-    (n : NativeModels _ profile ((nativeReference profile.target).get registered).2)
-    (tools : NativeTools) : Prop :=
-  compileCorrectFor m _ policy n tools
+/-- A production proof must establish the composition obligations and match the
+verifier's registered reference. Registration is part of the claim. -/
+def compile_correct {Env : Type} {profile : Profile} (m : SharedModels profile.target)
+    (reference : TargetReference Env profile.target) (policy : ExecutionPolicy Env)
+    (n : NativeModels Env profile reference) (tools : NativeTools) : Prop :=
+  CompileCorrectWith nativeReference m reference policy n tools
 
+theorem compile_correct_requires_registration {Env : Type} {profile : Profile}
+    {m : SharedModels profile.target} {reference : TargetReference Env profile.target}
+    {policy : ExecutionPolicy Env} {n : NativeModels Env profile reference} {tools : NativeTools}
+    (missing : nativeReference profile.target = none) :
+    ¬ compile_correct m reference policy n tools := by
+  intro correct
+  have registered := correct.1
+  rw [missing] at registered
+  cases registered
 
 namespace Sanity
 
@@ -1030,6 +1046,11 @@ private def trapBytecodeObservation (bytes : ByteArray) : Observation :=
 
 def testReference : TargetReference Unit sampleProfile.target :=
   testPlatform sampleProfile.target trapBytecodeObservation
+
+/-- Regression tests select their reference by target just as production does. -/
+def testRegistry : NativeReferenceRegistry :=
+  fun target =>
+    if h : target = sampleProfile.target then some ⟨Unit, h.symm ▸ testReference⟩ else none
 
 /-- The fixture routes the two emitted payloads by a byte where they differ. The
 proofs below check those bytes against the actual printer and runtime inputs. -/
@@ -1371,14 +1392,17 @@ private theorem lcbUncheckedWitness : LCBUncheckedNonvacuous testExecutionPolicy
             exact projection))⟩,
       ⟨⟨trivial, trivial⟩, trivial, trivial⟩, trapTerminates, returnAtOne rfl rfl, instantObserves _ _⟩
 
-example : NativeNonvacuous testExecutionPolicy testNative testTools :=
-  ⟨llvmWitness, lcbWitness, llvmUncheckedWitness, lcbUncheckedWitness⟩
+example : testRegistry sampleProfile.target = some ⟨Unit, testReference⟩ ∧
+    NativeNonvacuous testExecutionPolicy testNative testTools :=
+  ⟨rfl, llvmWitness, lcbWitness, llvmUncheckedWitness, lcbUncheckedWitness⟩
 
+/-- The conditional composition contract cannot claim correctness by suppressing
+all admitted environments, even for a registered test reference. -/
 example (m : SharedModels sampleProfile.target) :
-    ¬ compileCorrectFor m testReference {testExecutionPolicy with launchAdmitted := fun _ _ _ => False}
-      testNative testTools := by
+    ¬ CompileCorrectWith testRegistry m testReference
+      {testExecutionPolicy with launchAdmitted := fun _ _ _ => False} testNative testTools := by
   intro correct
-  obtain ⟨anchor, _, _, build, env, _, _, _, _, _, ready, _⟩ := correct.2.2.2.2.1.1
+  obtain ⟨anchor, _, _, build, env, _, _, _, _, _, ready, _⟩ := correct.2.2.2.2.2.1.1
   have impossible : testNative.launchAdmitted build.image env = False :=
     congrFun (congrFun anchor.2.1 build.image) env
   exact impossible ▸ ready.1.2

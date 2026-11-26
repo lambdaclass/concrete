@@ -1413,6 +1413,7 @@ Concrete.ImageTheorem.Sanity.refinementsToInstant	Quot.sound propext
 Concrete.ImageTheorem.Sanity.returnAtTwo	Quot.sound propext
 Concrete.ImageTheorem.Sanity.testAnchor	Classical.choice Quot.sound propext
 Concrete.ImageTheorem.Sanity.testLLVMHandoffs	Classical.choice Quot.sound propext
+Concrete.ImageTheorem.Sanity.testRegistry._proof_1	
 Concrete.ImageTheorem.SharedModels.mk.inj	
 Concrete.ImageTheorem.SharedModels.mk.injEq	propext
 Concrete.ImageTheorem.SharedModels.mk.sizeOf_spec	
@@ -1451,6 +1452,7 @@ Concrete.ImageTheorem.ToolRole.llvmObject.sizeOf_spec
 Concrete.ImageTheorem.ToolRole.ofNat_ctorIdx	
 Concrete.ImageTheorem.ToolRole.runtimeAssembler.sizeOf_spec	
 Concrete.ImageTheorem.ToolRole.runtimeLowering.sizeOf_spec	
+Concrete.ImageTheorem.compile_correct_requires_registration	Classical.choice Quot.sound propext
 Concrete.ImageTheorem.instDecidableEqExternalPremise._proof_1	
 Concrete.ImageTheorem.instDecidableEqExternalPremise._proof_2	
 Concrete.ImageTheorem.instDecidableEqToolInvocation.decEq._proof_1	
