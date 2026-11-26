@@ -4,6 +4,7 @@ import ConcreteSpec.Spec.Accounting
 import ConcreteSpec.Spec.Const
 import ConcreteSpec.Spec.Ident
 import ConcreteSpec.Spec.Own
+import ConcreteSpec.Spec.Slice0Rules
 import ConcreteSpec.Spec.Slice1Checker
 
 /-!
@@ -21,24 +22,6 @@ anchor. Example links use Lean declaration names, the identities used by the sit
 -/
 
 namespace ConcreteSpec.Core
-
-/-- Diagnostic rule identities, in specification order. Each judgment delegates to its owning
-definition; registration adds no language policy. -/
-def registeredRules : List RuleId :=
-  [⟨``ConstsPermitted, 1⟩, ⟨``Own.OwnerPermitted, 1⟩, ⟨``Own.LoanPermitted, 1⟩,
-   ⟨``Own.EndPermitted, 1⟩, ⟨``Own.MovePermitted, 1⟩,
-   ⟨``Own.DropPermitted, 1⟩, ⟨``Own.LeavePermitted, 1⟩,
-   ⟨``Leak.Account.WF, 1⟩, ⟨``Leak.ResetConserved, 1⟩, ⟨``Leak.SignedNetSound, 1⟩,
-   ⟨``Leak.ByteBoundSound, 1⟩, ⟨``Leak.ByteBoundSoundOptional, 1⟩, ⟨``Leak.ReportSound, 1⟩,
-   ⟨``AbortReady, 1⟩, ⟨``ProgramPermitted, 1⟩,
-   ⟨``Leak.FiniteActionPermitted, 1⟩, ⟨``Leak.FiniteSequencePermitted, 1⟩] ++ SourcePath.Reason.inOrder.map SourcePath.Reason.ruleId ++
-  [SourcePath.Project.Reason.caseCollision, .fileDirectoryConflict, .duplicate].map
-    SourcePath.Project.Reason.ruleId ++
-  [⟨``SourcePathSpan.FilePresent, 2⟩, ⟨``SourcePathSpan.OrderedOffsets, 2⟩,
-   ⟨``SourcePathSpan.EndInSource, 2⟩, ⟨``SourcePathSpan.LineMatches, 2⟩,
-   ⟨``SourcePathSpan.ColumnMatches, 2⟩, Project.languagePinRule, Project.clauseRule,
-   Project.tableVersionRule, Project.Manifest.sizeRule, Project.Manifest.encodingRule,
-   Project.Manifest.depthRule, Project.Manifest.syntaxRule]
 
 /-- Acceptance evidence applies the owning rule's judgment to a concrete input.
 The exporter recognizes this proposition's elaborated type, without unfolding the wrapper. -/
@@ -63,5 +46,80 @@ structure RuleExample where
   rule : Lean.Name
   declaration : Lean.Name
 
+/-- Refusal categories that can cite a slice-0 rule. -/
+inductive RuleRefusalCategory where
+  | malformed | unsupported | checker | resource | internal
+  deriving DecidableEq
+
+/-- Slice 0's required rule identities and the categories that may cite them.
+Proof links live in the evidence inventory. -/
+def slice0RuleEntries : List (RuleId × RuleRefusalCategory) :=
+  [⟨⟨``Slice0Rules.Lexed, 1⟩, .malformed⟩,
+   ⟨⟨``Slice0Rules.Predictive, 1⟩, .internal⟩,
+   ⟨⟨``Slice0Rules.Parsed, 1⟩, .malformed⟩,
+   ⟨⟨``Slice0Rules.EntryName, 1⟩, .unsupported⟩,
+   ⟨⟨``Slice0Rules.Returns, 1⟩, .checker⟩,
+   ⟨⟨``Slice0Rules.ReachableBody, 1⟩, .checker⟩,
+   ⟨⟨``Slice0Rules.ExpectedTypeLiteral, 1⟩, .checker⟩,
+   ⟨⟨``Slice0Rules.LocalBound, 1⟩, .checker⟩,
+   ⟨⟨``Slice0Rules.FreshLocal, 1⟩, .checker⟩,
+   ⟨⟨``Slice0Rules.UnreservedLocal, 1⟩, .checker⟩,
+   ⟨⟨``Slice0Rules.NamedBinding, 1⟩, .unsupported⟩,
+   ⟨⟨``Slice0Rules.DecimalLiteral, 1⟩, .unsupported⟩,
+   ⟨⟨``Slice0Rules.AdmittedProduction, 1⟩, .unsupported⟩,
+   ⟨⟨``Slice0Rules.LiteralTyped, 1⟩, .checker⟩,
+   ⟨⟨``Slice0Rules.Admitted, 1⟩, .checker⟩,
+   ⟨⟨``Slice0Rules.LocalsUsed, 1⟩, .checker⟩,
+   ⟨⟨``Slice0Rules.AdditionFits, 1⟩, .checker⟩,
+   ⟨⟨``Slice0Rules.WithinLimit, 1⟩, .resource⟩]
+
+def slice0Rules : List RuleId := slice0RuleEntries.map Prod.fst
+
+/-- The refusal category of an exact slice-0 rule reference. -/
+def RuleId.refusalCategory (rule : RuleId) : Option RuleRefusalCategory :=
+  (slice0RuleEntries.find? fun entry => entry.1 == rule).map Prod.snd
+
+/-- Diagnostic rule identities, in specification order. Each judgment delegates to its owning
+definition; registration adds no language policy. -/
+def registeredRules : List RuleId :=
+  [⟨``ConstsPermitted, 1⟩, ⟨``Own.OwnerPermitted, 1⟩, ⟨``Own.LoanPermitted, 1⟩,
+   ⟨``Own.EndPermitted, 1⟩, ⟨``Own.MovePermitted, 1⟩,
+   ⟨``Own.DropPermitted, 1⟩, ⟨``Own.LeavePermitted, 1⟩,
+   ⟨``Leak.Account.WF, 1⟩, ⟨``Leak.ResetConserved, 1⟩, ⟨``Leak.SignedNetSound, 1⟩,
+   ⟨``Leak.ByteBoundSound, 1⟩, ⟨``Leak.ByteBoundSoundOptional, 1⟩, ⟨``Leak.ReportSound, 1⟩,
+   ⟨``AbortReady, 1⟩, ⟨``ProgramPermitted, 1⟩,
+   ⟨``Leak.FiniteActionPermitted, 1⟩, ⟨``Leak.FiniteSequencePermitted, 1⟩] ++ SourcePath.Reason.inOrder.map SourcePath.Reason.ruleId ++
+  [SourcePath.Project.Reason.caseCollision, .fileDirectoryConflict, .duplicate].map
+    SourcePath.Project.Reason.ruleId ++
+  [⟨``SourcePathSpan.FilePresent, 2⟩, ⟨``SourcePathSpan.OrderedOffsets, 2⟩,
+   ⟨``SourcePathSpan.EndInSource, 2⟩, ⟨``SourcePathSpan.LineMatches, 2⟩,
+   ⟨``SourcePathSpan.ColumnMatches, 2⟩, Project.languagePinRule, Project.clauseRule,
+   Project.tableVersionRule, Project.Manifest.sizeRule, Project.Manifest.encodingRule,
+   Project.Manifest.depthRule, Project.Manifest.syntaxRule] ++ slice0Rules
+
+/-- A rule reference whose exact name and revision occur in the registry. -/
+abbrev RegisteredRule := { rule : RuleId // rule ∈ registeredRules }
+
+/-- Check an incoming reference, including its revision. -/
+def validateRule (rule : RuleId) : Option RegisteredRule :=
+  if h : rule ∈ registeredRules then some ⟨rule, h⟩ else none
+
+/-- Generate a reference for the current revision of a declaration. -/
+def referenceRule (name : Lean.Name) : Option RegisteredRule :=
+  (registeredRules.find? (fun rule => rule.name == name)).bind validateRule
+
+/-- Rule references required for the slice's conformance coverage, in registry order.
+An unregistered slice has no coverage claim. -/
+def rulesForSlice (slice : SliceId) : Option (List RegisteredRule) :=
+  if slice.n.val = 0 then
+    some (slice0Rules.attach.map fun entry =>
+      ⟨entry.val, List.mem_append_right _ entry.property⟩)
+  else none
+
+/-- Missing conformance coverage in registry order. Coverage is revision-specific. -/
+def missingRules (slice : SliceId) (exercised : List RegisteredRule) :
+    Option (List RegisteredRule) :=
+  (rulesForSlice slice).map fun rules =>
+    rules.filter fun rule => !(exercised.any fun hit => hit.val == rule.val)
 
 end ConcreteSpec.Core

@@ -17,8 +17,14 @@ base = (root / 'ConcreteSpec/Spec/Rules.lean').read_text().replace(
     'import ConcreteSpec.Spec.Ident', 'import ConcreteSpec.Spec.Ident\nimport Lean')
 # Isolate synthetic fixtures from production registrations and conformance declarations.
 # Keep the actual registry types and evidence wrappers, so every control exercises them.
+base = re.sub(r'/-- Refusal categories.*?(?=/-- Diagnostic rule identities)', '',
+              base, flags=re.S)
+base = re.sub(r'def rulesForSlice .*?(?=\n/--)',
+              'def rulesForSlice (_ : SliceId) : Option (List RegisteredRule) := none\n',
+              base, flags=re.S)
 base = re.sub(r'def registeredRules : List RuleId :=.*?(?=\n/--)',
               'def registeredRules : List RuleId := []\n', base, flags=re.S)
+base = base.replace('import ConcreteSpec.Spec.Slice0Rules\n', '')
 base = base.replace('import ConcreteSpec.Spec.Const\n', '').replace('import ConcreteSpec.Spec.Own\n', '')
 base = base.replace('end ConcreteSpec.Core',
                     '/-- Complete conformance links. -/\n'
@@ -116,6 +122,23 @@ for name, prelude, carrier, value in [
             decl=prelude + '/-- The rule (Q9.1). -/\ndef ok (_p : ' + carrier + ') : Prop := True\n',
             proof='theorem accepts : RuleAccepted ok (' + value + ' : ' + carrier + ') := True.intro\n',
             evidence='[⟨`ConcreteSpec.Core.ok, `ConcreteSpec.Core.accepts⟩]')
+
+# Keep the real registry and every other link. The exporter must detect the
+# uncovered rule itself, before the transport validator sees a completion record.
+for rule_name, proof_name in [('Lexed', 'lexRefused'), ('LocalsUsed', 'localsUsedRefused')]:
+    coverage = tmp / f'missing-{rule_name}-evidence.lean'
+    coverage.write_text(
+        'import ConcreteSpecEvidence.Rules\nimport Lean\nopen Lean Elab Command\n' +
+        exporter.split('-- EXPORTER ENTRY\n', 1)[0] +
+        '#eval exportRules (registeredRuleExamples.filter\n'
+        f'  (fun e => e.declaration != ``Slice0Rules.{proof_name}))\n')
+    check = subprocess.run(['lake', 'env', 'lean', str(coverage)], capture_output=True, text=True)
+    assert check.returncode != 0 and (
+        f'slice 0 lacks validated conformance for [ConcreteSpec.Core.Slice0Rules.{rule_name}]'
+        in check.stdout + check.stderr), check
+    assert '{"end":true}' not in check.stdout, check
+    count += 1
+    print(f'  ok   missing-{rule_name}-evidence: refuses missing conformance proof', flush=True)
 
 fixture('good')
 fixture('empty', decl='', proof='', reg='[]', evidence='[]')
