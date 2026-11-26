@@ -153,13 +153,13 @@ def llvm (tbl : SiteTable) : String := render (llvmItems tbl)
 /-- QBE data bytes for a string: one `b N` per UTF-8 byte, so no character needs escaping. -/
 def qbeBytes (s : String) : String := ", ".intercalate (s.toUTF8.toList.map fun b => s!"b {b}")
 
-/-- The runtime entry as QBE text for LCB, for the site table `tbl`. -/
-def qbe (tbl : SiteTable) : String :=
-  let sites := indexed tbl
-  let datas := sites.map fun (i, e) => s!"data $site{i} = \{ {qbeBytes (trapLine e ++ "\n")} }\n"
-  let dispatch := sites.map fun (i, e) =>
+/-- Render the exact runtime input from its ordered, newline-terminated diagnostics. -/
+def qbeDiagnostics (diagnostics : List String) : String :=
+  let sites := indexed diagnostics
+  let datas := sites.map fun (i, message) => s!"data $site{i} = \{ {qbeBytes message} }\n"
+  let dispatch := sites.map fun (i, message) =>
     s!"@c{i}\n    %c{i} =w ceqw %i, {i}\n    jnz %c{i}, @t{i}, @c{i + 1}\n" ++
-    s!"@t{i}\n    call $concrete_rt_write_all(l $site{i}, l {(trapLine e ++ "\n").utf8ByteSize})\n" ++
+    s!"@t{i}\n    call $concrete_rt_write_all(l $site{i}, l {message.utf8ByteSize})\n" ++
     "    call $_exit(w 134)\n    ret 0\n"
   String.join datas ++
   s!"data $bad = \{ {qbeBytes (invalidLine ++ "\n")} }\n" ++
@@ -174,8 +174,12 @@ def qbe (tbl : SiteTable) : String :=
   "@exit\n    ret %w\n" ++
   "@trap\n    %i =w sub %w, 256\n    jmp @c0\n" ++
   String.join dispatch ++
-  s!"@c{tbl.length}\n    call $concrete_rt_write_all(l $bad, l {(invalidLine ++ "\n").utf8ByteSize})\n" ++
+  s!"@c{diagnostics.length}\n    call $concrete_rt_write_all(l $bad, l {(invalidLine ++ "\n").utf8ByteSize})\n" ++
   "    call $abort()\n    ret 0\n" ++
   "}\n"
+
+/-- The current compiler renders its legacy site table with the same runtime template. -/
+def qbe (tbl : SiteTable) : String :=
+  qbeDiagnostics (tbl.map fun entry => trapLine entry ++ "\n")
 
 end Concrete.Backend.Runtime

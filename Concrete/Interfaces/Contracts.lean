@@ -1,6 +1,6 @@
 import Concrete.Interfaces.Carriers
 import Concrete.Contracts
-import Concrete.Backend.LCB
+import Concrete.Backend.Observation
 
 namespace Concrete.Interfaces
 
@@ -161,8 +161,9 @@ def MIR.operations {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
   mir.functions.flatMap fun (fn, _, graph) =>
     graph.blocks.toList.flatMap fun block =>
       block.body.zipIdx.filterMap fun (inst, index) => match inst.instruction with
-        | @MIRInst.op _ _ opcode _ _ _ _ args checks =>
-          some ⟨fn, block.id, index, inst.origin, .operator opcode, args.identities, checks⟩
+        | @MIRInst.op _ _ opcode _ _ _ _ args checks addresses =>
+          some ⟨fn, block.id, index, inst.origin, .operator opcode,
+            args.identities ++ addresses.map (fun p => (p.1, .address p.2.root p.2.path)), checks⟩
         | .call callee _ args checks =>
           some ⟨fn, block.id, index, inst.origin, .call callee,
             args.map (fun arg => (arg.1, arg.2.identity)), checks⟩
@@ -238,12 +239,10 @@ def LayoutsMatch {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
 
 def MIR.Escapes {language : CoreLanguage} {lang : LoweringLanguage language.operands.Ty}
     {profile : Profile} (mir : MIR lang profile) (fn : FnId) (place : PlaceId) : Prop :=
-  ∃ op ∈ mir.operations, op.fn = fn ∧ ∃ operator index ty path,
-    op.opcode = .operator operator ∧ index ∈ language.addressOperands operator ∧
-    (op.operands[index]? = some (ty, .copy place path) ∨
-      op.operands[index]? = some (ty, .move place path))
+  ∃ op ∈ mir.operations, op.fn = fn ∧
+    ∃ ty path, (ty, .address place path) ∈ op.operands
 
-private def Memory.SignatureMatches {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+def Memory.SignatureMatches {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
     (memory : Memory lang profile) (fn : FnId) (graph : MemoryGraph lang) : Prop :=
   ∃ signature, AList.lookup memory.signatures fn = some signature ∧
     (∃ entry ∈ graph.blocks.toList, entry.id = graph.entry ∧
@@ -253,12 +252,12 @@ private def Memory.SignatureMatches {Ty : Type} {lang : LoweringLanguage Ty} {pr
       | .ret operand => operand.map Sigma.fst = signature.result
       | _ => True) ∧
       ∀ op ∈ block.body, match op.instruction with
-        | .call callee destination args =>
+        | .call callee destination args _ =>
           ∃ target, AList.lookup memory.signatures callee = some target ∧
             args.map Sigma.fst = target.parameters ∧ destination.map Sigma.fst = target.result
         | _ => True
 
-private def Memory.TablesWF {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+def Memory.TablesWF {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
     (memory : Memory lang profile) : Prop :=
   (List.map Prod.fst memory.functions).Nodup ∧ (List.map Prod.fst memory.signatures).Nodup ∧
   (List.map Prod.fst memory.storage).Nodup ∧ (List.map Prod.fst memory.layouts).Nodup ∧
@@ -362,9 +361,9 @@ def loadValue (memory : Memory lang profile)
     let root ← AList.lookup state.virtualValues place.logical.root
     if place.logical.path.isEmpty then some root else language.field root place.logical.path
   | .materialized =>
-    if place.logical.path.isEmpty &&
-        memory.zeroRoot state.frame place.logical.root then
-      AList.lookup state.zeroValues place.logical.root
+    if memory.zeroRoot state.frame place.logical.root then do
+      let root ← AList.lookup state.zeroValues place.logical.root
+      if place.logical.path.isEmpty then some root else language.field root place.logical.path
     else do
       let range ← memory.rangeAt state place.logical
       let bytes ← state.bytes.load profile.memoryTarget range.ptr range.extent range.align
@@ -388,7 +387,7 @@ private def StoresValue (memory : Memory lang profile)
     (place : MemoryPlace _ ty) (value : language.operands.Val) : Prop :=
   memory.loadValue state place = some value ∧
   (place.storage = .materialized →
-    (place.logical.path.isEmpty ∧ memory.zeroRoot state.frame place.logical.root) ∨
+    memory.zeroRoot state.frame place.logical.root = true ∨
     ∃ range runs, memory.rangeAt state place.logical = some range ∧
       byteRuns profile.memoryTarget ty value = some runs ∧
       (0 < range.extent → ∃ offset bytes, (offset, bytes) ∈ runs ∧ bytes ≠ []) ∧
@@ -403,6 +402,7 @@ def writeValue (memory : Memory lang profile)
     Option (MemoryRegisters language profile) := do
   let root := place.logical.root
   if !state.live.contains root then none else
+  if !place.logical.path.isEmpty && !state.initialized.contains root then none else
   let state := if state.initialized.contains root then state
     else {state with initialized := root :: state.initialized}
   match place.storage with
@@ -412,8 +412,11 @@ def writeValue (memory : Memory lang profile)
       language.replaceField before place.logical.path value
     return {state with virtualValues := (root, stored) :: AList.erase state.virtualValues root}
   | .materialized =>
-    if place.logical.path.isEmpty && memory.zeroRoot state.frame root then
-      return {state with zeroValues := (root, value) :: AList.erase state.zeroValues root}
+    if memory.zeroRoot state.frame root then
+      let stored ← if place.logical.path.isEmpty then some value else do
+        let before ← AList.lookup state.zeroValues root
+        language.replaceField before place.logical.path value
+      return {state with zeroValues := (root, stored) :: AList.erase state.zeroValues root}
     else do
       let range ← memory.rangeAt state place.logical
       let runs ← byteRuns profile.memoryTarget ty value
@@ -575,6 +578,7 @@ def Call (memory : Memory lang profile) (callee : FnId)
     memory.WriteParams entry.params values
       { toMemoryFrame := ⟨callee, graph.entry, 0, [], [], [], [], []⟩
         bytes := afterRead.bytes
+        ownership := afterRead.ownership
         effects := afterRead.effects
         callers := ⟨afterRead.advance.toMemoryFrame, dst⟩ :: afterRead.callers } next
 
@@ -586,7 +590,7 @@ def Return (memory : Memory lang profile) (operand : Option (Sigma (MemoryRead _
     memory.EndLocals afterRead.live afterRead ended ∧
     operand.toList.map Sigma.fst = caller.destination.toList.map Sigma.fst ∧
     memory.WriteParams caller.destination.toList values
-      { toMemoryFrame := caller.caller, bytes := ended.bytes, callers := rest, effects := ended.effects } next
+      { toMemoryFrame := caller.caller, bytes := ended.bytes, callers := rest, effects := ended.effects, ownership := ended.ownership } next
 
 def Transfer (memory : Memory lang profile) (edge : CFGEdge (Sigma (MemoryRead _ lang.literal)))
     (state next : MemoryRegisters language profile) : Prop :=
@@ -608,6 +612,36 @@ def DestructureFields (language : CoreLanguage) (ty : language.operands.Ty)
       ∃ fieldTy, language.fieldType ty field = some fieldTy ∧
         language.operands.isCopy fieldTy = true
 
+def firstTrap (opcode : Opcode) (values : List language.operands.Val)
+    (checks : List OperationCheck) : Option TrapKind :=
+  (checks.find? fun check => check.disposition == .residual &&
+    language.checkTrap opcode check.discriminator values).map OperationCheck.trap
+
+def instructionTrap (memory : Memory lang profile) (state : MemoryRegisters language profile) :
+    MemoryInst lang → Option TrapKind
+  | @MemoryInst.op _ _ opcode _ _ _ _ args checks _ => do
+    let (values, _) ← memory.readArgs args state
+    firstTrap (.operator opcode) values checks
+  | .call callee _ args checks => do
+    let (values, _) ← memory.readOperands args state
+    firstTrap (.call callee) values checks
+  | _ => none
+
+def resolveAddress (memory : Memory lang profile)
+    (state : MemoryRegisters language profile) (logical : Bool)
+    (operand : Sigma (MemoryPlace language.operands.Ty)) :
+    Option (OperationAddress language.operands.Ty) := do
+  let place := operand.2
+  if !memory.validPlace state place || !state.live.contains place.logical.root ||
+      !state.initialized.contains place.logical.root then none else
+  if logical then
+    return ⟨operand.1, place.logical.root, place.logical.path, none⟩
+  else
+    if place.storage != .materialized then none else
+    let range ← memory.rangeAt state place.logical
+    let _ ← state.bytes.access profile.memoryTarget range.ptr range.extent range.align
+    return ⟨operand.1, place.logical.root, place.logical.path, some range⟩
+
 def InstructionStep (memory : Memory lang profile)
     (state next : MemoryRegisters language profile) (logical : Bool := false) : MemoryInst lang → Prop
   | .bind dst src =>
@@ -617,11 +651,15 @@ def InstructionStep (memory : Memory lang profile)
   | .assign dst src =>
     ∃ value afterRead stored, memory.readValue state src = some (value, afterRead) ∧
       memory.Writes afterRead dst value stored ∧ next = stored.advance
-  | @MemoryInst.op _ _ opcode types ty dst _ args =>
-    ∃ values afterReads result effects stored, memory.readArgs args state = some (values, afterReads) ∧
-      language.operation opcode types ty values result effects ∧
-      (if logical then memory.WriteParams [⟨_, dst⟩] [result] afterReads stored
-        else memory.Writes afterReads dst result stored) ∧
+  | @MemoryInst.op _ _ opcode types ty dst _ args checks addresses =>
+    ∃ values afterReads operands result effects changed stored, memory.readArgs args state = some (values, afterReads) ∧
+      firstTrap (.operator opcode) values checks = none ∧
+      addresses.mapM (memory.resolveAddress afterReads logical) = some operands ∧
+      language.operation opcode types ty values profile.memoryTarget operands
+        ⟨afterReads.bytes, afterReads.ownership⟩ result effects changed ∧
+      let afterOperation := {afterReads with bytes := changed.bytes, ownership := changed.ownership}
+      (if logical then memory.WriteParams [⟨_, dst⟩] [result] afterOperation stored
+        else memory.Writes afterOperation dst result stored) ∧
       next = {stored.advance with effects := stored.effects ++ effects}
   | .beginLifetime place => ∃ started, memory.Begins state place started ∧ next = started.advance
   | .endLifetime place => ∃ ended, memory.Ends state place ended ∧ next = ended.advance
@@ -631,7 +669,9 @@ def InstructionStep (memory : Memory lang profile)
       DestructureFields language ty value (bindings.map fun (field, dst) => (field, dst.1)) ∧
       bindings.mapM (fun binding => language.field value [binding.1]) = some fields ∧
       memory.WriteParams (bindings.map Prod.snd) fields afterRead stored ∧ next = stored.advance
-  | .call callee dst args => memory.Call callee dst args state next
+  | .call callee dst args checks =>
+    memory.instructionTrap state (.call callee dst args checks) = none ∧
+      memory.Call callee dst args state next
 
 def ControlStep (memory : Memory lang profile)
     (state next : MemoryRegisters language profile) :
@@ -657,15 +697,19 @@ def Initial (memory : Memory lang profile) (state : MemoryRegisters language pro
   (∃ block, memory.blockAt state = some block ∧ block.params = []) ∧
   state.instruction = 0 ∧ state.virtualValues = [] ∧
   state.materialized = [] ∧ state.live = [] ∧ state.initialized = [] ∧ state.zeroValues = [] ∧
-  state.bytes = Mem.Memory.empty ∧ state.effects = []
+  state.bytes = Mem.Memory.empty ∧ state.effects = [] ∧ state.ownership = {}
 
 end Memory
 
 /-- Render the hosted trap diagnostic from the originating source location. -/
+private def trapMessage (kind : TrapKind) (site : SiteId) (span : FileSpan) (file : File) :
+    String :=
+  s!"concrete: trap: {kind.name} at {file.path.render.text}:{span.line}:{span.col} (site {site.id})\n"
+
 def trapDiagnostic (project : Project) (kind : TrapKind) (site : SiteId)
-    (span : FileSpan) : ByteArray := Id.run do
-  let some file := project.files[span.file.index]? | return ByteArray.empty
-  return s!"concrete: trap: {kind.name} at {file.path.render.text}:{span.line}:{span.col} (site {site.id})\n".toUTF8
+    (span : FileSpan) : ByteArray :=
+  (project.files[span.file.index]?.map fun file => (trapMessage kind site span file).toUTF8)
+    |>.getD ByteArray.empty
 
 def coreTrapDiagnostic {language : CoreLanguage} (core : CoreInput language)
     (kind : TrapKind) (site : SiteId) : ByteArray :=
@@ -680,7 +724,12 @@ def Memory.terminalObservation {language : CoreLanguage} {lang : LoweringLanguag
     {profile : Profile} (memory : Memory lang profile)
     (state : MemoryRegisters language profile) : Option Observation := do
   let block ← memory.blockAt state
-  if state.instruction != block.body.length then none else
+  if let some op := block.body[state.instruction]? then
+    let kind ← memory.instructionTrap state op.instruction
+    let .trapped status kind _ ← language.hostedResult (.trapped kind op.origin.operation) | none
+    return .trapped status kind op.origin.lexical
+      (trapDiagnostic memory.project kind op.origin.operation op.origin.lexical)
+  else if state.instruction != block.body.length then none else
   match block.ending with
   | .ret (some ⟨_, operand⟩) => do
     if !state.callers.isEmpty || state.frame != memory.entry then none else
@@ -721,11 +770,12 @@ private def logicalArgs : {types : List language.operands.Ty} →
 private def logicalInstruction : MIRInst lang → MemoryInst lang
   | .bind dst src => .bind (logicalPlace dst) (logicalRead src)
   | .assign dst src => .assign (logicalPlace dst) (logicalRead src)
-  | .op dst op args _ => .op (logicalPlace dst) op (logicalArgs args)
+  | .op dst op args checks addresses =>
+    .op (logicalPlace dst) op (logicalArgs args) checks (addresses.map logicalParam)
   | .endLifetime place => .endLifetime place
   | .destructure src bindings => .destructure (logicalPlace src)
       (bindings.map fun (field, place) => (field, logicalParam place))
-  | .call callee dst args _ => .call callee (dst.map logicalParam) (args.map logicalOperand)
+  | .call callee dst args checks => .call callee (dst.map logicalParam) (args.map logicalOperand) checks
 
 private def logicalTerminator : Terminator (Sigma (Read _ lang.literal)) (Read _ lang.literal lang.bool) →
     MemoryTerm lang
@@ -755,21 +805,6 @@ def logicalView (mir : MIR lang profile) : Memory lang profile where
   storage := mir.functions.map fun (locals, _) =>
     locals.map fun _ => .virtual
 
-private def firstTrap (opcode : Opcode) (values : List language.operands.Val)
-    (checks : List OperationCheck) : Option TrapKind :=
-  (checks.find? fun check => check.disposition == .residual &&
-    language.checkTrap opcode check.discriminator values).map OperationCheck.trap
-
-private def checked (view : Memory lang profile) (state : MemoryRegisters language profile) :
-    MIRInst lang → Option (Option TrapKind)
-  | @MIRInst.op _ _ opcode _ _ _ _ args checks => do
-    let (values, _) ← view.readArgs (logicalArgs args) state
-    return firstTrap (.operator opcode) values checks
-  | .call callee _ args checks => do
-    let (values, _) ← view.readOperands (args.map logicalOperand) state
-    return firstTrap (.call callee) values checks
-  | _ => some none
-
 private def instructionAt (mir : MIR lang profile) (state : MemoryRegisters language profile) :
     Option (LocatedOp (MIRInst lang)) := do
   let (_, graph) ← AList.lookup mir.functions state.frame
@@ -779,21 +814,14 @@ private def instructionAt (mir : MIR lang profile) (state : MemoryRegisters lang
 def Step (mir : MIR lang profile) (state next : MemoryRegisters language profile) : Prop :=
   let view := mir.logicalView
   match mir.instructionAt state with
-  | some op => checked view state op.instruction = some none ∧
+  | some op => view.instructionTrap state (logicalInstruction op.instruction) = none ∧
     view.InstructionStep state next true (logicalInstruction op.instruction)
   | none => ∃ block, view.blockAt state = some block ∧ state.instruction = block.body.length ∧
     view.ControlStep state next block.ending
 
 def terminalObservation (mir : MIR lang profile) (state : MemoryRegisters language profile) :
-    Option Observation := do
-  let view := mir.logicalView
-  match mir.instructionAt state with
-  | none => view.terminalObservation state
-  | some op => do
-    let some kind ← checked view state op.instruction | none
-    let .trapped status kind _ ← language.hostedResult (.trapped kind op.origin.operation) | none
-    return .trapped status kind op.origin.lexical
-      (trapDiagnostic mir.project kind op.origin.operation op.origin.lexical)
+    Option Observation :=
+  mir.logicalView.terminalObservation state
 
 end MIR
 
@@ -905,10 +933,12 @@ def MIR.ExecutionExact (mir : MIR lang profile)
   ∀ p result, m.mir.execution.finite mir p →
     (m.mir.result mir p result ↔ mir.terminalObservation (m.mirState p) = some result)
 
-private def Memory.RepresentsActivation (memory : Memory lang profile)
+def Memory.RepresentsActivation (memory : Memory lang profile)
     (logical physical : MemoryFrame language.operands.Val) (bytes : Mem.Memory) : Prop :=
-  memory.Represents ⟨logical.frame, logical.live, logical.virtualValues⟩ ⟨physical, bytes, [], []⟩
+  memory.Represents ⟨logical.frame, logical.live, logical.virtualValues⟩ ⟨physical, bytes, [], [], {}⟩
 
+/-- The target simulates source behavior. Source prefixes must also extend to
+related target prefixes so that non-observable materialization still occurs. -/
 def LowersMemory (m : LoweringModels language lang profile)
     (mir : MIR lang profile) (memory : Memory lang profile) : Prop :=
   memory.project = mir.project ∧ memory.entry = mir.entry ∧
@@ -917,6 +947,12 @@ def LowersMemory (m : LoweringModels language lang profile)
   memory.ExecutionExact m ∧ mir.ExecutionExact m ∧ memory.TablesWF ∧ mir.logicalView.TablesWF ∧
   ∃ sim : Concrete.Contracts.Simulates m.mir.execution m.memory.execution mir memory,
     m.mir.MatchesResult m.memory sim ∧
+    (∀ p, m.mir.execution.initial mir p → ∃ q, m.memory.execution.initial memory q ∧
+      sim.simulation.stateRel p q) ∧
+    (∀ p p' q, m.mir.execution.finite mir p → m.memory.execution.finite memory q →
+      sim.simulation.stateRel p q → m.mir.execution.step mir p p' →
+      ∃ q', Concrete.Contracts.Steps (m.memory.execution.step memory) q q' ∧
+        sim.simulation.stateRel p' q') ∧
     ∀ p q, m.mir.execution.finite mir p → m.memory.execution.finite memory q →
       sim.simulation.stateRel p q →
       let source := m.mirState p
@@ -951,6 +987,34 @@ def EmitsLLVM (m : LoweringModels language lang profile)
   profile.backend = .llvm ∧ output.triple = profile.llvmTriple ∧
   output.dataLayout = profile.llvmDataLayout ∧ output.sites = bir.sites ∧ m.llvmHandoff bir output ∧ m.bir.Refines m.llvm bir output
 
+private def TrapEntry.runtimeFile (entry : TrapEntry) (project : Project) : Option File :=
+  project.files[entry.origin.lexical.file.index]?
+
+private def TrapEntry.runtimeMessage (entry : TrapEntry) (file : File) : String :=
+  trapMessage entry.kind entry.origin.operation entry.origin.lexical file
+
+def LCBInput.RuntimeMatches (output : LCBInput profile) (project : Project) : Prop :=
+  ∃ diagnostics,
+    output.sites.toList.mapM (fun entry =>
+      (entry.runtimeFile project).map entry.runtimeMessage) = some diagnostics ∧
+    output.runtimeInput = (Backend.Runtime.qbeDiagnostics diagnostics).toUTF8
+
+private def LCBInput.runtimeResult (project : Project) (output : LCBInput profile) :
+    LeanCompilerBackend.Verified.Source.Value → Option Concrete.Contracts.Observation
+  | .word word => do
+    if word.toNat < 256 then
+      return .returned (UInt8.ofNat word.toNat) ByteArray.empty
+    else
+      let entry ← output.sites[word.toNat - 256]?
+      let file ← entry.runtimeFile project
+      let site : Concrete.Contracts.DiagnosticSite := ⟨⟨entry.origin.operation.id⟩,
+        ⟨file.path.render.text, entry.origin.lexical.line, entry.origin.lexical.col⟩⟩
+      return .trapped 134 entry.kind site (entry.runtimeMessage file).toUTF8
+  | _ => none
+
+def LCBInput.Execution (E : Type) (project : Project) : Semantics (LCBInput profile) E :=
+  Backend.lcbSemanticsFor LCBInput.body (LCBInput.runtimeResult project)
+
 def EmitsLCB (m : LoweringModels language lang profile)
     (bir : BIR lang profile) (output : LCBInput profile) : Prop :=
   profile.backend = .lcb ∧
@@ -958,6 +1022,8 @@ def EmitsLCB (m : LoweringModels language lang profile)
   (∀ job ∈ output.additionalJobs, LeanCompilerBackend.Verified.validateJob job = .ok ()) ∧
   ((Backend.LCB.job output.body :: output.additionalJobs).map
     (fun job => job.code.symbol.name)).Nodup ∧
-  output.sites = bir.sites ∧ m.lcbHandoff bir output ∧ m.bir.Simulates m.lcb bir output
+  output.sites = bir.sites ∧ output.RuntimeMatches bir.project ∧
+  Concrete.Contracts.Refines m.bir.execution (LCBInput.Execution _ bir.project) bir output ∧
+  m.lcbHandoff bir output ∧ m.bir.Simulates m.lcb bir output
 
 end Concrete.Interfaces

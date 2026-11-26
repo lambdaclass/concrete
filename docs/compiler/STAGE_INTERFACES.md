@@ -32,19 +32,28 @@ Fix (c) owns evidence validation and consumption and the empty-evidence entry. F
 Fix (b) owns the CFG substrate and direct lowering to `Memory`. Both graphs use the same
 block and terminator families and check the types of block arguments. The integrated spec
 determines layouts, literal and operation values, field projections and aggregate codecs.
-Integer literals and materialized integer operands use the spec decoder. Each reachable
+Integer literals and materialized integer operands use the spec decoder. Before registering
+a big-endian profile, fixes (e) and (b) must pin the target-independent Core literal
+encoding separately from target-endian materialized bytes. Each reachable
 projection must execute the instruction fetched at its program counter. Calls push the
 caller’s resume point, destination and suspended locals. Return evaluates the callee operand,
 ends its frame’s lifetimes and writes the result in the restored caller. Hosted observations
 use the fetched return operand or trap kind and origin. The trace records spec operation
 effects and the fetched trap’s diagnostic bytes.
 
-The logical MIR evaluator fetches the MIR instruction, evaluates residual checks and
-holds roots as logical values. The same simulation relates those reachable logical
-activations, including suspended callers, to virtual values or to live backing ranges and
-initialized bytes. Every virtual Memory root has an eligible scalar MIR root. Materialized
-zero-byte roots have a logical lifetime and initialized value. They acquire no byte range,
-and a linear move consumes their stored value. Replace the erase-to-MIR `Memory.lower`
+The logical MIR evaluator holds roots as logical values. Both IRs retain residual operation
+and call checks and evaluate them before performing the instruction. The simulation
+relates reachable activations, including suspended callers, to virtual values or live
+backing ranges and initialized bytes. Every related source transition must extend to a
+related target prefix. A target that returns early cannot erase a source materialization
+by retaining its declaration and origin metadata.
+
+Address operands name typed places explicitly. Physical execution resolves a live,
+initialized materialized place through its recorded range and passes that range, byte
+memory and ownership state to the spec operation transition. MIR supplies the logical
+place identity. Materialized zero-byte roots keep a logical value that supports field
+reads and replacement without a byte allocation. A linear move consumes root
+initialization, and field writes require an initialized root. Replace the erase-to-MIR `Memory.lower`
 and `Memory.run` proof path.
 
 ## Memory → SSA
@@ -61,7 +70,9 @@ Fix (a) registers the exact emitter and the named LLVM premise. `LLVMInput` carr
 
 ## BIR → LCB
 
-Fix (a) registers the exact adapter and profile preparation. `LCBInput` carries the actual source function, additional exact jobs for the later call profile, runtime input bytes and the same trap table. `EmitsLCB` requires validation of the exact canonical body job and every additional job, unique emitted symbols, exact handoff, and BIR refinement on adapter success. The proved source adapter and native lowering premises remain separate. The result-word encoding belongs in the backend/runtime projection.
+Fix (a) registers the exact adapter and profile preparation. `LCBInput` carries the actual source function, additional exact jobs for the later call profile, runtime input bytes and the same trap table. `EmitsLCB` requires validation of the exact canonical body job and every additional job, unique emitted symbols and the exact handoff. Its refinement obligation runs the supplied
+body in imported LCB source semantics. The runtime bytes must render the same ordered
+diagnostics used by the return-word projection. The proved source adapter and native lowering premises remain separate. The result-word encoding belongs in the backend/runtime projection.
 
 ## Common proof boundary
 

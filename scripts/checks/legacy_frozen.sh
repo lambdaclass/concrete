@@ -96,7 +96,7 @@ echo "=== legacy/ against $LOCK ==="
 base="$(sed -n 's/^base //p' "$LOCK")"; frozen="$(sed -n 's/^tree //p' "$LOCK")"
 pv="$(sed -n 's/^preview //p' "$LOCK")"
 [ -z "$pv" ] && ok "the move was generated with its landing prerequisites met" \
-  || no "the move is a --preview build ($pv); regenerate it with scripts/land/legacy_move.sh on a base that meets them"
+  || no "the move is a --preview build ($pv); restore the frozen lock from the completed migration"
 if [ -z "$base" ] || [ -z "$frozen" ]; then
   no "$LOCK needs a 'base <commit>' and a 'tree <oid>' line"
 elif [ "$(git rev-parse -q --verify "$base^{tree}" 2>/dev/null)" != "$frozen" ]; then

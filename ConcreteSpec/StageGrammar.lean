@@ -84,7 +84,8 @@ def SharedGrammar.required {count : Nat} (g : SharedGrammar count) (token : Toke
   let base := g.terminalSlices[token.kind.ctorIdx]'(g.terminalSliceCoverage token.kind)
   match token with
   | .integer _ radix suffix =>
-    max base (g.integerSlices[integerForm radix suffix]'(g.integerSliceCoverage radix suffix))
+    let integer := g.integerSlices[integerForm radix suffix]'(g.integerSliceCoverage radix suffix)
+    if base.val < integer.val then integer else base
   | _ => base
 
 def tableLookup {count : Nat} (columns : Nat) (cells : Array (Option Nat))
@@ -178,7 +179,7 @@ theorem Derives.tokensEligible {count : Nat} {g : SharedGrammar count} {slice : 
     · exact right t mem
 
 def SharedGrammar.Productive {count : Nat} (g : SharedGrammar count) : Prop :=
-  ∀ p ∈ g.productions.toList, ∃ tokens args steps, DerivesArgs g ⟨21, by decide⟩ p.rhs tokens args steps
+  ∀ p ∈ g.productions.toList, ∃ tokens args steps, DerivesArgs g ⟨Fin.last _⟩ p.rhs tokens args steps
 
 def SharedGrammar.size {count : Nat} (g : SharedGrammar count) : Nat :=
   g.productions.foldl (fun size p => size + 1 + p.rhs.length) 0

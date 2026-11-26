@@ -29,7 +29,6 @@ lake-manifest.json
 lakefile.toml
 lean-toolchain
 legacy
-required-checks-transition.tsv
 required-checks.txt
 scripts
 tests
@@ -40,11 +39,10 @@ docs/SELF_HOSTED_RUNNERS.md
 docs/archive
 docs/compiler
 docs/decisions.md
+docs/project
 docs/proposals
 scripts/checks
-scripts/land
 scripts/oracle
 scripts/proofs
-scripts/review
 scripts/spec
 scripts/worktree-new.sh

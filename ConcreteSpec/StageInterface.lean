@@ -8,11 +8,11 @@ namespace ConcreteSpec.StageInterface
 
 open Core Core.SourcePathSpan
 
-abbrev Slice := Fin 22
+abbrev Slice := Core.SliceId
 
-structure FileId where
-  index : Nat
-  deriving DecidableEq, Repr
+def Slice.val (slice : Slice) : Nat := slice.n.val
+
+abbrev FileId := Core.FileId
 
 /-- Coordinates use Core.Span's half-open byte range and 1-based line and column. -/
 structure FileSpan where
@@ -25,7 +25,7 @@ structure FileSpan where
 
 def FileSpan.Binds (span : FileSpan) (project : Project) (specSpan : Span) : Prop :=
   ∃ file, project.files[span.file.index]? = some file ∧
-    SourcePathSpan.Reference.Binds project specSpan file ∧ specSpan.LocationOk file.source ∧
+    span.file = specSpan.fileId ∧ specSpan.LocationOk file.source ∧
     span.startOffset = specSpan.startOffset ∧ span.endOffset = specSpan.endOffset ∧
     span.line = specSpan.line ∧ span.col = specSpan.col
 
@@ -131,6 +131,7 @@ inductive OperandRead where
   | literal (encoding : List UInt8)
   | copy (place : PlaceId) (fields : List FieldId)
   | move (place : PlaceId) (fields : List FieldId)
+  | address (place : PlaceId) (fields : List FieldId)
   deriving DecidableEq
 
 /-- The active syntax at an operation's evaluation point. Deferred calls and loop
@@ -172,6 +173,18 @@ structure Layout where
 
 abbrev LayoutOf (Ty : Type) := Target → Ty → Option Layout
 
+/-- An address operand identifies its pointee even in the logical execution.
+Physical execution also supplies the live, provenance-bearing byte range. -/
+structure OperationAddress (Ty : Type) where
+  pointee : Ty
+  root : PlaceId
+  fields : List FieldId
+  range : Option Hybrid.Range
+
+structure OperationStore where
+  bytes : Mem.Memory
+  ownership : Own.State
+
 /-- The operand family is supplied by ConcreteSpec. Control, calls and scoped lifetime use Exec. -/
 structure CoreLanguage where
   operands : Exec.Operands
@@ -195,8 +208,9 @@ structure CoreLanguage where
   typeDecidableEq : DecidableEq operands.Ty
   fieldType : operands.Ty → FieldId → Option operands.Ty
   activeFields : operands.Ty → operands.Val → Option (List FieldId)
-  addressOperands : Operator → List Nat
-  operation : Operator → List operands.Ty → operands.Ty → List operands.Val → operands.Val → List operands.Event → Prop
+  operation : Operator → List operands.Ty → operands.Ty → List operands.Val →
+    Target → List (OperationAddress operands.Ty) → OperationStore →
+    operands.Val → List operands.Event → OperationStore → Prop
   checkTrap : Opcode → Nat → List operands.Val → Bool
   field : operands.Val → List FieldId → Option operands.Val
   replaceField : operands.Val → List FieldId → operands.Val → Option operands.Val

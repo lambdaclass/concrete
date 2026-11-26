@@ -147,7 +147,7 @@ inductive MIRInst {Ty : Type} (lang : LoweringLanguage Ty) where
   | assign {ty : Ty} (dst : Place Ty ty) (src : Read Ty lang.literal ty)
   | op {opcode : Operator} {types : List Ty} {ty : Ty} (dst : Place Ty ty)
       (op : lang.operation opcode types ty) (args : Args (Read Ty lang.literal) types)
-      (checks : List OperationCheck)
+      (checks : List OperationCheck) (addresses : List (Sigma (Place Ty)) := [])
   | endLifetime (place : PlaceId)
   | destructure {ty : Ty} (src : Place Ty ty) (bindings : List (FieldId × Sigma (Place Ty)))
   | call (callee : FnId) (dst : Option (Sigma (Place Ty)))
@@ -199,12 +199,13 @@ inductive MemoryInst {Ty : Type} (lang : LoweringLanguage Ty) where
   | assign {ty : Ty} (dst : MemoryPlace Ty ty) (src : MemoryRead Ty lang.literal ty)
   | op {opcode : Operator} {types : List Ty} {ty : Ty} (dst : MemoryPlace Ty ty)
       (op : lang.operation opcode types ty) (args : Args (MemoryRead Ty lang.literal) types)
+      (checks : List OperationCheck := []) (addresses : List (Sigma (MemoryPlace Ty)) := [])
   | beginLifetime (place : PlaceId)
   | endLifetime (place : PlaceId)
   | destructure {ty : Ty} (src : MemoryPlace Ty ty)
       (bindings : List (FieldId × Sigma (MemoryPlace Ty)))
   | call (callee : FnId) (dst : Option (Sigma (MemoryPlace Ty)))
-      (args : List (Sigma (MemoryRead Ty lang.literal)))
+      (args : List (Sigma (MemoryRead Ty lang.literal))) (checks : List OperationCheck := [])
 
 abbrev MemoryTerm {Ty : Type} (lang : LoweringLanguage Ty) :=
   Terminator (Sigma (MemoryRead Ty lang.literal)) (MemoryRead Ty lang.literal lang.bool)
@@ -243,6 +244,7 @@ structure MemoryState (Ty Value Event : Type) (profile : Profile) extends Memory
   bytes : Mem.Memory
   callers : List (MemoryContinuation Ty Value) := []
   effects : List Event := []
+  ownership : Own.State := {}
 
 def MemoryState.BytesWF {Ty Value Event : Type} {profile : Profile}
     (state : MemoryState Ty Value Event profile) :
