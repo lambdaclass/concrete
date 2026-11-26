@@ -9,6 +9,51 @@ Concrete.Admission.check_evidence	propext
 Concrete.Admission.instDecidableEqToken.decEq._proof_1	
 Concrete.Admission.instDecidableEqToken.decEq._proof_2	
 Concrete.Admission.instDecidableEqToken.decEq._proof_3	
+Concrete.Artifact.Digest.mk.congr_simp	
+Concrete.Artifact.Digest.mk.inj	
+Concrete.Artifact.Digest.mk.injEq	propext
+Concrete.Artifact.Digest.mk.sizeOf_spec	
+Concrete.Artifact.Digest.ofBytes_eq_none_iff	propext
+Concrete.Artifact.Digest.size_eq	
+Concrete.Artifact.PayloadRole.assembly.sizeOf_spec	
+Concrete.Artifact.PayloadRole.backendInput.sizeOf_spec	
+Concrete.Artifact.PayloadRole.bir.sizeOf_spec	
+Concrete.Artifact.PayloadRole.certificate.sizeOf_spec	
+Concrete.Artifact.PayloadRole.compiler.sizeOf_spec	
+Concrete.Artifact.PayloadRole.executable.sizeOf_spec	
+Concrete.Artifact.PayloadRole.facts.sizeOf_spec	
+Concrete.Artifact.PayloadRole.lcbJob.sizeOf_spec	
+Concrete.Artifact.PayloadRole.lcbSource.sizeOf_spec	
+Concrete.Artifact.PayloadRole.llvmModule.sizeOf_spec	
+Concrete.Artifact.PayloadRole.loweringPath.sizeOf_spec	
+Concrete.Artifact.PayloadRole.mem_all	propext
+Concrete.Artifact.PayloadRole.ofNat_ctorIdx	
+Concrete.Artifact.PayloadRole.runtime.sizeOf_spec	
+Concrete.Artifact.PayloadRole.siteTable.sizeOf_spec	
+Concrete.Artifact.PayloadRole.source.sizeOf_spec	
+Concrete.Artifact.PayloadRole.spec.sizeOf_spec	
+Concrete.Artifact.PayloadRole.target.sizeOf_spec	
+Concrete.Artifact.PayloadRole.tool.sizeOf_spec	
+Concrete.Artifact.PayloadRole.toolInput.sizeOf_spec	
+Concrete.Artifact.RecordKind.certificate.sizeOf_spec	
+Concrete.Artifact.RecordKind.facts.sizeOf_spec	
+Concrete.Artifact.RecordKind.mem_all	propext
+Concrete.Artifact.RecordKind.ofNat_ctorIdx	
+Concrete.Artifact.RecordKind.receipt.sizeOf_spec	
+Concrete.Artifact.Sha256.hash_eq_none_iff	Quot.sound propext
+Concrete.Artifact.digest.eq_1	Quot.sound propext
+Concrete.Artifact.digestInput_injective	Classical.choice Quot.sound propext
+Concrete.Artifact.encodeFrames.eq_1	
+Concrete.Artifact.encodeFrames_injective	Classical.choice Quot.sound propext
+Concrete.Artifact.encode_injective	Classical.choice Quot.sound propext
+Concrete.Artifact.encode_ne_digestInput	Classical.choice Quot.sound propext
+Concrete.Artifact.instDecidableEqPayloadRole._proof_1	
+Concrete.Artifact.instDecidableEqPayloadRole._proof_2	
+Concrete.Artifact.instDecidableEqRecordKind._proof_1	
+Concrete.Artifact.instDecidableEqRecordKind._proof_2	
+Concrete.Artifact.matchesDigest.eq_1	Classical.choice Quot.sound propext
+Concrete.Artifact.matchesDigest_of_none	Classical.choice Quot.sound propext
+Concrete.Artifact.matchesDigest_of_rejected_length	Classical.choice Quot.sound propext
 Concrete.BIR.Behaviour.diverges.sizeOf_spec	
 Concrete.BIR.Behaviour.exited.inj	
 Concrete.BIR.Behaviour.exited.injEq	propext
@@ -2088,6 +2133,23 @@ Std.Legacy.Range.mk.congr_simp
 _private.Concrete.Admission.0.Concrete.Admission.Output.mk.inj	
 _private.Concrete.Admission.0.Concrete.Admission.Output.mk.injEq	propext
 _private.Concrete.Admission.0.Concrete.Admission.Output.mk.sizeOf_spec	
+_private.Concrete.Artifact.Encoding.0.Concrete.Artifact.appendFrame.eq_1	
+_private.Concrete.Artifact.Encoding.0.Concrete.Artifact.appendFrames.eq_1	
+_private.Concrete.Artifact.Encoding.0.Concrete.Artifact.appendFrames_prefix	Quot.sound propext
+_private.Concrete.Artifact.Encoding.0.Concrete.Artifact.decimal_injective	Classical.choice Quot.sound propext
+_private.Concrete.Artifact.Encoding.0.Concrete.Artifact.decimal_no_colon	Classical.choice Quot.sound propext
+_private.Concrete.Artifact.Encoding.0.Concrete.Artifact.decimal_no_colon._proof_1_1	Quot.sound propext
+_private.Concrete.Artifact.Encoding.0.Concrete.Artifact.decimal_no_colon._proof_1_2	Quot.sound propext
+_private.Concrete.Artifact.Encoding.0.Concrete.Artifact.decimal_no_colon._proof_1_3	Quot.sound propext
+_private.Concrete.Artifact.Encoding.0.Concrete.Artifact.domain_fields_eq	Classical.choice Quot.sound propext
+_private.Concrete.Artifact.Encoding.0.Concrete.Artifact.domain_fields_eq._simp_1_1	propext
+_private.Concrete.Artifact.Encoding.0.Concrete.Artifact.encodeFrames_cons	Quot.sound propext
+_private.Concrete.Artifact.Encoding.0.Concrete.Artifact.eq_of_mapped_eq	Quot.sound propext
+_private.Concrete.Artifact.Encoding.0.Concrete.Artifact.frame.eq_1	
+_private.Concrete.Artifact.Encoding.0.Concrete.Artifact.frameHeader.eq_1	
+_private.Concrete.Artifact.Encoding.0.Concrete.Artifact.frame_cancel	Classical.choice Quot.sound propext
+_private.Concrete.Artifact.Encoding.0.Concrete.Artifact.frame_cancel._simp_1_1	propext
+_private.Concrete.Artifact.Encoding.0.Concrete.Artifact.frame_prefix	Classical.choice Quot.sound propext
 _private.Concrete.BIR.0.Concrete.BIR.BinOp.exact.match_1.eq_1	
 _private.Concrete.BIR.0.Concrete.BIR.BinOp.exact.match_1.eq_2	
 _private.Concrete.BIR.0.Concrete.BIR.BinOp.exact.match_1.eq_3	

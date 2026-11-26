@@ -26,8 +26,48 @@ CLI_CASES = {
     "cli:build-input-write-failure",
 }
 SLICE_RE = re.compile(r"[a-z0-9_]+")
-RULE_RE = re.compile(r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*(?:@[0-9]+)?")
-TRAP_KIND_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+RULE_RE = re.compile(r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*@[1-9][0-9]*")
+TRAP_KINDS = frozenset(("arithmeticOverflow", "division_by_zero", "invalid_shift",
+                        "out_of_bounds", "invalid_range", "abort"))
+ORIGIN_RE = re.compile(r"([0-9]+):([0-9]+):([1-9][0-9]*):([1-9][0-9]*)")
+CLI_CODE_RE = re.compile(r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*")
+LABEL_RE = re.compile(r"[a-z][a-z0-9_]*")
+REFUSAL_KINDS = frozenset(("unreachable_statement",))
+PENDING_REFUSALS = frozenset(("syntax", "unsupported_form", "checker"))
+# Shrink this inventory as 4(c)/4(d)/4(f) expose typed refusals. New paths require typed fields.
+PENDING_SOURCES = frozenset(
+    "con:tests/slice0/" + name for name in (
+        "overflow.con",
+        "syntax_error.con",
+        "unsupported.con",
+        "unannotated.con",
+        "suffix.con",
+        "reserved.con",
+        "reserved_move.con",
+        "reserved_struct.con",
+        "intrinsic_shadow.con",
+        "radix_missing_semi.con",
+        "malformed_if.con",
+        "multiply.con",
+        "conditional.con",
+        "mutable.con",
+        "contextual_multiply.con",
+        "shadow_destroy.con",
+        "shadow_discard.con",
+        "shadow_alloc.con",
+        "shadow_sizeof.con",
+        "shadow_alignof.con",
+        "shadow_read_owned.con",
+        "shadow_get_args.con",
+        "shadow_byte_at.con",
+        "empty_body.con",
+        "fallthrough.con",
+        "shadow_wrapping_add.con",
+        "shadow_saturating_add.con",
+        "shadow_checked_add.con",
+        "shadow_try_convert.con",
+    )
+)
 
 
 class Row(NamedTuple):
@@ -53,29 +93,56 @@ def natural(path, line, text):
         fail(path, line, f"invalid natural number {text!r}")
 
 
+def validate_origin(path, line, origin):
+    match = ORIGIN_RE.fullmatch(origin)
+    if not match:
+        fail(path, line, f"invalid origin {origin!r}")
+    start, stop, _, _ = (natural(path, line, value) for value in match.groups())
+    if stop < start:
+        fail(path, line, f"reversed origin {origin!r}")
+
+
+def validate_stderr(path, line, data):
+    if data != "-" and not re.fullmatch(r"(?:[0-9a-f]{2})+", data):
+        fail(path, line, f"invalid stderr bytes {data!r}")
+
+
 def validate_expect(path, line, expect):
     parts = expect.split(" ")
-    if len(parts) == 2 and parts[0] == "exit" and re.fullmatch(r"[0-9]+", parts[1]):
-        status = natural(path, line, parts[1])
-        if status > 255:
-            fail(path, line, f"exit status {status} is outside 0..255")
-        return
-    if (len(parts) == 4 and parts[0] == "trap" and parts[2] == "site"
-            and TRAP_KIND_RE.fullmatch(parts[1]) and re.fullmatch(r"[0-9]+", parts[3])):
-        natural(path, line, parts[3])
-        return
-    if len(parts) >= 3 and RULE_RE.fullmatch(parts[2]) and all(parts[3:]):
-        if parts[:2] == ["refuse", "1"]:
-            return
-        if parts[0] == "diagnostic" and parts[1] in ("2", "3", "4"):
-            return
-    if len(parts) >= 7 and parts[0:2] == ["llvm", "exit"] and parts[3:5] == ["lcb", "diagnostic"]:
-        validate_expect(path, line, " ".join(parts[1:3]))
-        validate_expect(path, line, " ".join(parts[4:]))
-        return
-    fail(path, line, f"invalid expect {expect!r}; use exit N, trap KIND site N, "
-         "refuse 1 CODE [MESSAGE], diagnostic STATUS CODE [MESSAGE], "
-         "or llvm exit N lcb diagnostic STATUS CODE [MESSAGE]")
+    match parts:
+        case ["exit", status, stderr] if re.fullmatch(r"[0-9]+", status):
+            status = natural(path, line, status)
+            if status > 255:
+                fail(path, line, f"exit status {status} is outside 0..255")
+            validate_stderr(path, line, stderr)
+        case ["trap", kind, site, stderr] if kind in TRAP_KINDS and re.fullmatch(r"[0-9]+", site):
+            natural(path, line, site)
+            validate_stderr(path, line, stderr)
+            if stderr == "-":
+                fail(path, line, "trap requires nonempty stderr")
+        case ["refuse", "1", kind, rule, primary, related] if kind in REFUSAL_KINDS and RULE_RE.fullmatch(rule):
+            validate_origin(path, line, primary)
+            labels = set()
+            if related != "-":
+                for item in related.split(","):
+                    label, _, location = item.partition("=")
+                    if not LABEL_RE.fullmatch(label) or label in labels:
+                        fail(path, line, f"invalid or duplicate related origin label {label!r}")
+                    labels.add(label)
+                    validate_origin(path, line, location)
+        case ["pending-refusal", "1", kind] if kind in PENDING_REFUSALS:
+            pass
+        case ["diagnostic", status, code, *message] if (
+                status in ("2", "3", "4") and CLI_CODE_RE.fullmatch(code) and all(message)):
+            pass
+        case ["llvm", "exit", status, "lcb", "resource", resource, bound, measured] if (
+                LABEL_RE.fullmatch(resource) and re.fullmatch(r"[1-9][0-9]*", bound)
+                and re.fullmatch(r"[1-9][0-9]*", measured)):
+            if natural(path, line, measured) <= natural(path, line, bound):
+                fail(path, line, "resource measurement must exceed the bound")
+            validate_expect(path, line, f"exit {status} -")
+        case _:
+            fail(path, line, f"invalid expect {expect!r}")
 
 
 def validate_source(path, line, program, seen_sources):
@@ -147,8 +214,10 @@ def parse(path, text):
         elif program not in CLI_CASES:
             fail(path, line_number, f"invalid program {program!r}; expected bir:, con: or a known cli: case")
         validate_expect(path, line_number, expect)
-        if program.startswith("bir:") and expect.startswith("refuse "):
+        if program.startswith("bir:") and expect.startswith(("refuse ", "pending-refusal ")):
             fail(path, line_number, f"bir: row {ident!r} cannot use refuse; expected exit or trap")
+        if expect.startswith("pending-refusal ") and program not in PENDING_SOURCES:
+            fail(path, line_number, "pending-refusal is restricted to existing untyped source fixtures")
         if program.startswith("cli:") != expect.startswith("diagnostic "):
             fail(path, line_number, "standalone diagnostic expectations require a cli: case")
         if not program.startswith("con:") and expect.startswith("llvm "):
@@ -182,29 +251,39 @@ def self_test():
         (tests / "slice0" / "link.con").symlink_to(tests / "slice0" / "ok.con")
         (tests / "slice0" / "dangling.con").symlink_to(tests / "slice0" / "missing.con")
         valid = ("id\tprogram\texpect\tslice\n"
-                 "a\tbir:answer\texit 42\tslice0\n"
-                 "b\tcon:tests/slice0/ok.con\trefuse 1 SYN-5@1\tslice0\n")
+                 "a\tbir:answer\texit 42 -\tslice0\n"
+                 "b\tcon:tests/slice0/ok.con\trefuse 1 unreachable_statement STMT-14@1 0:1:1:1 anchor=2:3:1:3\tslice0\n")
         assert len(parse(tests / "manifest.tsv", valid)) == 2
-        split = valid.replace("refuse 1 SYN-5@1", "llvm exit 42 lcb diagnostic 2 BACKEND-LIMIT")
-        assert len(parse(tests / "manifest.tsv", split)) == 2
+        refusal = "refuse 1 unreachable_statement STMT-14@1 0:1:1:1 anchor=2:3:1:3"
+        llvm = valid.replace(refusal, "llvm exit 42 lcb resource values 488 1924")
+        assert len(parse(tests / "manifest.tsv", llvm)) == 2
         cli = "c\tcli:invalid-backend\tdiagnostic 3 USAGE\tslice0\n"
         assert len(parse(tests / "manifest.tsv", valid + cli)) == 3
         bad = [
             valid + cli.replace("diagnostic 3", "diagnostic 0"),
-            valid + cli.replace("diagnostic 3 USAGE", "exit 3"),
+            valid + cli.replace("diagnostic 3 USAGE", "exit 3 -"),
             valid + cli.replace("invalid-backend", "unknown-case"),
+            valid.replace(refusal, "diagnostic 3 USAGE"),
             valid.replace("refuse 1", "refuse 2"),
-            split.replace("exit 42 lcb", "exit 256 lcb"),
-            valid + "c\tbir:other\tllvm exit 42 lcb diagnostic 2 BACKEND-LIMIT\tslice0\n",
-            valid + "a\tbir:other\texit 0\tslice0\n",
-            valid + "c\tbir:other\texit 256\tslice0\n",
-            valid + "c\tbir:other\ttrap foo\tslice0\n",
-            valid + "c\tbir:other\ttrap arithmeticOverflow site 0\n",
-            valid + "c\tbir:answer\texit 0\tslice0\n",
-            valid + "c\tbir:other\trefuse 1 SYN-5\tslice0\n",
-            valid + "c\tcon:tests/slice0/missing.con\texit 0\tslice0\n",
-            valid + "c\tcon:tests/slice0/link.con\texit 0\tslice0\n",
-            valid + "c\tcon:tests/slice0/dangling.con\texit 0\tslice0\n",
+            valid.replace(refusal, "pending-refusal 2 checker"),
+            llvm.replace("488 1924", "488 488"),
+            llvm.replace("exit 42 lcb", "exit 256 lcb"),
+            llvm.replace("values 488", "values 0"),
+            valid.replace(refusal, "pending-refusal 1 checker"),
+            valid.replace("exit 42 -", "pending-refusal 1 checker"),
+            valid.replace("exit 42 -", "trap arithmeticOverflow 0 -"),
+            valid.replace("exit 42 -", "exit 42 0A"),
+            valid.replace("STMT-14@1", "STMT-14@0"),
+            valid.replace("0:1:1:1", "0:1:0:1"),
+            valid.replace("0:1:1:1", "0:1:1:0"),
+            valid.replace("STMT-14@1", "STMT-14"),
+            valid.replace("0:1:1:1", "1:0:1:1"),
+            valid.replace("anchor=2:3:1:3", "anchor=2:3:1:3,anchor=0:1:1:1"),
+            valid.replace("exit 42 -", "exit 42 0"),
+            valid.replace("exit 42 -", "trap overflow 0 0a"),
+            valid.replace("exit 42 -", "llvm exit 42 lcb resource values 488 1924"),
+            valid + "c\tcon:tests/slice0/link.con\texit 0 -\tslice0\n",
+            valid + "c\tcon:tests/slice0/dangling.con\texit 0 -\tslice0\n",
         ]
         for text in bad:
             try:
