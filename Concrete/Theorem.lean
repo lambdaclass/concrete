@@ -6,7 +6,7 @@ namespace Concrete.ImageTheorem
 
 open Contracts Backend
 open LeanCompilerBackend.Verified
-open ConcreteSpec.Surface0 (Token Derives Lexes Program Expr Span Binding checkBody)
+open ConcreteSpec.Surface0 (Token Derives Lexes Program Expr Span Binding BinderLegal checkBody)
 
 /-- Independent, name-parametric elaboration of operands and operations. The relation
 records the origin of each introduced operation and permits any fresh binder IDs. -/
@@ -24,13 +24,22 @@ inductive ElaboratesBindings :
     Elab.Scope → List Binding → Elab.Scope → List Core.Stmt → List Elab.SourceSite → Prop where
   | nil (scope) : ElaboratesBindings scope [] scope [] []
   | atom {scope binding rest final x a body sites} :
+      BinderLegal (scope.map Prod.fst) binding.name →
       ElaboratesExpr scope binding.rhs a [] [] →
       ElaboratesBindings ((binding.name, x) :: scope) rest final body sites →
       ElaboratesBindings scope (binding :: rest) final (⟨x, .atom a⟩ :: body) sites
   | operation {scope binding rest final x head tail hs ts} :
+      BinderLegal (scope.map Prod.fst) binding.name →
       ElaboratesExpr scope binding.rhs (.var x) head hs → head ≠ [] →
       ElaboratesBindings ((binding.name, x) :: scope) rest final tail ts →
       ElaboratesBindings scope (binding :: rest) final (head ++ tail) (hs ++ ts)
+
+theorem ElaboratesBindings.headLegal {scope : Elab.Scope} {binding : Binding}
+    {rest final body sites} (h : ElaboratesBindings scope (binding :: rest) final body sites) :
+    BinderLegal (scope.map Prod.fst) binding.name := by
+  cases h with
+  | atom legal _ _ => exact legal
+  | operation legal _ _ _ => exact legal
 
 /-- Exactly one origin per addition, in evaluation order, with globally fresh binders. -/
 def additionBinders (body : List Core.Stmt) : List ConcreteSpec.Var :=
@@ -59,8 +68,8 @@ private theorem elaboratesBindings_origins {scope final : Elab.Scope} {bindings 
     sites.map (·.binding) = additionBinders body := by
   induction h with
   | nil => rfl
-  | atom _ _ ih => exact ih
-  | operation h _ _ ih =>
+  | atom _ _ _ ih => exact ih
+  | operation _ h _ _ ih =>
     simp only [List.map_append, additionBinders_append]
     rw [elaboratesExpr_origins h, ih]
 
@@ -442,10 +451,8 @@ def LCBHandoffs (profile : Profile) (tools : NativeTools) (bir : BIR.Program)
   (∃ pin, profile.invocation .linker pin ∧
     tools.link pin [build.bodyObject, build.runtimeObject] build.linkInputs build.image)
 
-/-- A verifier supplies the target ISA and OS reference independently of the compiler,
-toolchain models, and receipt. Absence of a reference disables exact-image validation. -/
+/-- Resource and environment predicates for a verifier's selected profile. -/
 structure ExecutionPolicy (Env : Type) where
-  reference : LCB.Target → Option (Semantics (ByteArray × Env))
   stackAdequate : Profile → ByteArray → Env → Nat → Prop
   launchAdmitted : Profile → ByteArray → Env → Prop
   osLive : Profile → ByteArray → Env → Prop
@@ -454,13 +461,13 @@ structure ExecutionPolicy (Env : Type) where
 /-- Independently specified platform image semantics. The decoder is indexed by the
 target and consumes the exact final image, including entry and relocation information.
 The machine starts from the decoded image and the actual launch environment. -/
-structure Platform (Env : Type) (_target : LCB.Target)
-    (_execution : Semantics (ByteArray × Env)) where
+structure TargetReference (Env : Type) (_target : LCB.Target) where
+  process : Semantics (ByteArray × Env)
   Image : Type
   decode : ByteArray → Option Image
   machine : Semantics (Option Image × Env)
 
-def Platform.decodedProcess {Env : Type} {target : LCB.Target} {execution : Semantics (ByteArray × Env)} (platform : Platform Env target execution) :
+def TargetReference.decodedProcess {Env : Type} {target : LCB.Target} (platform : TargetReference Env target) :
     Semantics (ByteArray × Env) :=
   platform.machine.onInput fun (image, env) => (platform.decode image, env)
 
@@ -468,7 +475,7 @@ def Platform.decodedProcess {Env : Type} {target : LCB.Target} {execution : Sema
 intermediate views let linker, loader, runtime and trap rendering discharge distinct claims.
 Each view projects to the common observation at its boundary. -/
 structure NativeModels (Env : Type) (profile : Profile)
-    {execution : Semantics (ByteArray × Env)} (platform : Platform Env profile.target execution) where
+    (platform : TargetReference Env profile.target) where
   llvmModule : Semantics ByteArray
   llvmWellFormed : ByteArray → Prop
   lcbBodyAssembly : Semantics (ByteArray × ByteArray)
@@ -485,33 +492,32 @@ structure NativeModels (Env : Type) (profile : Profile)
   through short writes. The rendering edge specifies which bytes the run observes. -/
   stderrAndExitAvailable : ByteArray → Env → Prop
 
-def NativeModels.process {Env : Type} {profile : Profile} {execution : Semantics (ByteArray × Env)} {platform : Platform Env profile.target execution} (_n : NativeModels Env profile platform) : Semantics (ByteArray × Env) :=
-  execution
+def NativeModels.process {Env : Type} {profile : Profile} {platform : TargetReference Env profile.target} (_n : NativeModels Env profile platform) : Semantics (ByteArray × Env) :=
+  platform.process
 
-/-- Both execution and its resource and environment judgments come from verifier policy. -/
+/-- The native boundary uses the verifier’s resource and environment judgments. -/
 def ExecutionPolicy.Anchors {Env : Type} {profile : Profile}
-    {execution : Semantics (ByteArray × Env)} {platform : Platform Env profile.target execution}
+    {platform : TargetReference Env profile.target}
     (policy : ExecutionPolicy Env) (n : NativeModels Env profile platform) : Prop :=
-  policy.reference profile.target = some execution ∧
   n.stackAdequate = policy.stackAdequate profile ∧
   n.launchAdmitted = policy.launchAdmitted profile ∧ n.osLive = policy.osLive profile ∧
   n.stderrAndExitAvailable = policy.stderrAndExitAvailable profile
 
 /-- Image-level stack adequacy and launch admission are the finite-prefix safety conditions.
 The stack budget is expressed in bytes and includes startup and runtime frames. -/
-def LaunchReady {Env : Type} {profile : Profile} {execution : Semantics (ByteArray × Env)} {platform : Platform Env profile.target execution} (n : NativeModels Env profile platform)
+def LaunchReady {Env : Type} {profile : Profile} {platform : TargetReference Env profile.target} (n : NativeModels Env profile platform)
     (image : ByteArray) (env : Env) : Prop :=
   n.stackAdequate image env profile.maxImageStackBytes ∧ n.launchAdmitted image env
 
 /-- Maximal execution also requires OS liveness and progress through stderr writes and exit. -/
-def RunReady {Env : Type} {profile : Profile} {execution : Semantics (ByteArray × Env)} {platform : Platform Env profile.target execution} (n : NativeModels Env profile platform)
+def RunReady {Env : Type} {profile : Profile} {platform : TargetReference Env profile.target} (n : NativeModels Env profile platform)
     (image : ByteArray) (env : Env) : Prop :=
   LaunchReady n image env ∧ n.osLive image env ∧ n.stderrAndExitAvailable image env
 
 /-- Shared shape of the residual image premises. These premises apply separately to each backend
 and each artifact, with exact linker inputs and image bytes. Liveness supplies an observation
 when finite-prefix safety and absence of target divergence have been established. -/
-structure ImagePremises {Env : Type} {profile : Profile} {execution : Semantics (ByteArray × Env)} {platform : Platform Env profile.target execution} (n : NativeModels Env profile platform)
+structure ImagePremises {Env : Type} {profile : Profile} {platform : TargetReference Env profile.target} (n : NativeModels Env profile platform)
     (inputs : List ByteArray) (image : ByteArray) : Prop where
   linker : Refines n.objects n.linked inputs image
   decoder : ∀ env, LaunchReady n image env →
@@ -538,7 +544,7 @@ structure ImagePremises {Env : Type} {profile : Profile} {execution : Semantics 
 
 /-- The LLVM printer edge targets the complete module as written to the tool input. -/
 def LLVMEmissionContract {Env : Type} {profile : Profile}
-    {execution : Semantics (ByteArray × Env)} {platform : Platform Env profile.target execution} (n : NativeModels Env profile platform) :
+    {platform : TargetReference Env profile.target} (n : NativeModels Env profile platform) :
     EdgeContract (TotalGraph (fun bir => (LLVM.module bir).toUTF8)) where
   kind := .namedPremise "LLVM printer"
   inputInvariant := BIR.WF
@@ -547,7 +553,7 @@ def LLVMEmissionContract {Env : Type} {profile : Profile}
 
 /-- LLVM's unverified printer and toolchain premises for this exact artifact. -/
 structure LLVMPremises {Env : Type} {profile : Profile}
-    {execution : Semantics (ByteArray × Env)} {platform : Platform Env profile.target execution} (n : NativeModels Env profile platform) (bir : BIR.Program) (build : LLVMBuild) : Prop where
+    {platform : TargetReference Env profile.target} (n : NativeModels Env profile platform) (bir : BIR.Program) (build : LLVMBuild) : Prop where
   printer : (LLVMEmissionContract n).outputInvariant build.moduleBytes ∧
     (LLVMEmissionContract n).correspondence bir build.moduleBytes
   toolchain : n.llvmWellFormed build.moduleBytes →
@@ -557,7 +563,7 @@ structure LLVMPremises {Env : Type} {profile : Profile}
 
 /-- LCB's residual native premises for this exact artifact. The adapter has its own proof
 obligation. Native lowering is indexed by the profile-selected path, including Linux reification. -/
-structure LCBPremises {Env : Type} {profile : Profile} {execution : Semantics (ByteArray × Env)} {platform : Platform Env profile.target execution} (n : NativeModels Env profile platform)
+structure LCBPremises {Env : Type} {profile : Profile} {platform : TargetReference Env profile.target} (n : NativeModels Env profile platform)
     (build : LCBBuild) : Prop where
   nativeLowering : validateJob (LCB.job build.source) = .ok () →
     lcbPath profile.target = .lcbVerified →
@@ -609,7 +615,7 @@ def BIRSlotsFit (profile : Profile) (bir : BIR.Program) : Prop :=
 
 /-- The permitted image behaviors are anchored to the spec evaluator on the exact,
 path-indexed Core. Environment premises control progress through short writes and exit. -/
-def ImageCorrect {Env : Type} {profile : Profile} {execution : Semantics (ByteArray × Env)} {platform : Platform Env profile.target execution} (n : NativeModels Env profile platform)
+def ImageCorrect {Env : Type} {profile : Profile} {platform : TargetReference Env profile.target} (n : NativeModels Env profile platform)
     (source : Semantics (String × Elab.Output)) (path : String) (core : Elab.Output) (image : ByteArray) : Prop :=
   (∀ env, LaunchReady n image env →
     PrefixSafety source n.process (path, core) (image, env)) ∧
@@ -628,13 +634,13 @@ def SharedCorrect : Prop :=
   ∀ input out, Stages.compile input = .ok out → Compiled input out
 
 def LLVMCorrect {Env : Type} {profile : Profile}
-    {execution : Semantics (ByteArray × Env)} {platform : Platform Env profile.target execution} (n : NativeModels Env profile platform) (tools : NativeTools) : Prop :=
+    {platform : TargetReference Env profile.target} (n : NativeModels Env profile platform) (tools : NativeTools) : Prop :=
   ∀ input out build, Stages.compile input = .ok out → BIRSlotsFit profile out.bir →
     LLVMHandoffs profile tools out.bir build → LLVMPremises n out.bir build →
     Compiled input out ∧ ImageCorrect n admittedCoreSemantics input.path out.core build.image
 
 def LCBCorrect {Env : Type} {profile : Profile}
-    {execution : Semantics (ByteArray × Env)} {platform : Platform Env profile.target execution} (n : NativeModels Env profile platform) (tools : NativeTools) : Prop :=
+    {platform : TargetReference Env profile.target} (n : NativeModels Env profile platform) (tools : NativeTools) : Prop :=
   ∀ input out build, Stages.compile input = .ok out → BIRSlotsFit profile out.bir →
     LCBHandoffs profile tools out.bir build → LCBPremises n build →
     Compiled input out ∧ ImageCorrect n admittedCoreSemantics input.path out.core build.image
@@ -653,7 +659,7 @@ def UncheckedOrigins (input : Stages.Input) (core : Elab.Output) (bir : BIR.Prog
     SSA.lower input.path (Memory.lower mir) = .ok bir ∧
     SiteOrigins input.path core (Memory.lower mir) bir
 
-def ExactTrap {Env : Type} {profile : Profile} {execution : Semantics (ByteArray × Env)} {platform : Platform Env profile.target execution} (n : NativeModels Env profile platform)
+def ExactTrap {Env : Type} {profile : Profile} {platform : TargetReference Env profile.target} (n : NativeModels Env profile platform)
     (input : Stages.Input) (core : Elab.Output) (image : ByteArray) : Prop :=
   ∀ status kind site stderr, coreSemantics.observes (input.path, core)
     (.trapped status kind site stderr) → ∀ env, RunReady n image env →
@@ -668,7 +674,7 @@ def UncheckedSharedCorrect : Prop :=
     Stages.unchecked input = .ok bir → UncheckedCompiled input core bir
 
 def UncheckedCorrect {Env : Type} {profile : Profile}
-    {execution : Semantics (ByteArray × Env)} {platform : Platform Env profile.target execution} (n : NativeModels Env profile platform) (tools : NativeTools) : Prop :=
+    {platform : TargetReference Env profile.target} (n : NativeModels Env profile platform) (tools : NativeTools) : Prop :=
   ∀ input core bir, UncheckedHandoffs input core → ConformanceStatic core →
     Stages.unchecked input = .ok bir → BIRSlotsFit profile bir →
     UncheckedCompiled input core bir ∧
@@ -677,18 +683,9 @@ def UncheckedCorrect {Env : Type} {profile : Profile}
     (∀ build, LCBHandoffs profile tools bir build → LCBPremises n build →
       ImageCorrect n coreSemantics input.path core build.image ∧ ExactTrap n input core build.image)
 
-/-- The stage and adapter obligations are part of what this theorem must establish. The
-artifact-specific external hypotheses are local to the build claims below them. -/
-def compile_correct {Env : Type} {profile : Profile} (m : SharedModels profile.target)
-    (policy : ExecutionPolicy Env) (execution : Semantics (ByteArray × Env))
-    {platform : Platform Env profile.target execution}
-    (n : NativeModels Env profile platform) (tools : NativeTools) : Prop :=
-  SharedSound m ∧ SharedCorrect ∧ UncheckedSharedCorrect ∧ LCBAdapterSound ∧
-    (policy.Anchors n →
-      LLVMCorrect n tools ∧ LCBCorrect n tools ∧ UncheckedCorrect n tools)
-
 def LLVMNonvacuous {Env : Type} {profile : Profile}
-    {execution : Semantics (ByteArray × Env)} {platform : Platform Env profile.target execution} (n : NativeModels Env profile platform) (tools : NativeTools) : Prop :=
+    {platform : TargetReference Env profile.target} (policy : ExecutionPolicy Env) (n : NativeModels Env profile platform) (tools : NativeTools) : Prop :=
+  policy.Anchors n ∧
   ∃ input out build env o,
     Stages.compile input = .ok out ∧ BIRSlotsFit profile out.bir ∧
     LLVMHandoffs profile tools out.bir build ∧ LLVMPremises n out.bir build ∧
@@ -696,7 +693,8 @@ def LLVMNonvacuous {Env : Type} {profile : Profile}
     admittedCoreSemantics.observes (input.path, out.core) o ∧ n.process.observes (build.image, env) o
 
 def LCBNonvacuous {Env : Type} {profile : Profile}
-    {execution : Semantics (ByteArray × Env)} {platform : Platform Env profile.target execution} (n : NativeModels Env profile platform) (tools : NativeTools) : Prop :=
+    {platform : TargetReference Env profile.target} (policy : ExecutionPolicy Env) (n : NativeModels Env profile platform) (tools : NativeTools) : Prop :=
+  policy.Anchors n ∧
   ∃ input out build env o,
     Stages.compile input = .ok out ∧ BIRSlotsFit profile out.bir ∧
     LCBHandoffs profile tools out.bir build ∧ LCBPremises n build ∧
@@ -704,8 +702,9 @@ def LCBNonvacuous {Env : Type} {profile : Profile}
     admittedCoreSemantics.observes (input.path, out.core) o ∧ n.process.observes (build.image, env) o
 
 def UncheckedNonvacuous {Env : Type} {profile : Profile} {Build : Type}
-    {execution : Semantics (ByteArray × Env)} {platform : Platform Env profile.target execution} (n : NativeModels Env profile platform) (image : Build → ByteArray)
+    {platform : TargetReference Env profile.target} (policy : ExecutionPolicy Env) (n : NativeModels Env profile platform) (image : Build → ByteArray)
     (premises : BIR.Program → Build → Prop) : Prop :=
+  policy.Anchors n ∧
   ∃ input core bir build env status kind site stderr,
     UncheckedHandoffs input core ∧ ConformanceStatic core ∧
     Stages.unchecked input = .ok bir ∧ BIRSlotsFit profile bir ∧ premises bir build ∧
@@ -714,20 +713,68 @@ def UncheckedNonvacuous {Env : Type} {profile : Profile} {Build : Type}
     n.process.observes (image build, env) (.trapped status kind site stderr)
 
 def LLVMUncheckedNonvacuous {Env : Type} {profile : Profile}
-    {execution : Semantics (ByteArray × Env)} {platform : Platform Env profile.target execution} (n : NativeModels Env profile platform) (tools : NativeTools) : Prop :=
-  UncheckedNonvacuous n LLVMBuild.image fun bir build =>
+    {platform : TargetReference Env profile.target} (policy : ExecutionPolicy Env) (n : NativeModels Env profile platform) (tools : NativeTools) : Prop :=
+  UncheckedNonvacuous policy n LLVMBuild.image fun bir build =>
     LLVMHandoffs profile tools bir build ∧ LLVMPremises n bir build
 
 def LCBUncheckedNonvacuous {Env : Type} {profile : Profile}
-    {execution : Semantics (ByteArray × Env)} {platform : Platform Env profile.target execution} (n : NativeModels Env profile platform) (tools : NativeTools) : Prop :=
-  UncheckedNonvacuous n LCBBuild.image fun bir build =>
+    {platform : TargetReference Env profile.target} (policy : ExecutionPolicy Env) (n : NativeModels Env profile platform) (tools : NativeTools) : Prop :=
+  UncheckedNonvacuous policy n LCBBuild.image fun bir build =>
     LCBHandoffs profile tools bir build ∧ LCBPremises n build
+
+/-- Qualification and correctness use the same reference, profile, tools and native models. -/
+def NativeNonvacuous {Env : Type} {profile : Profile}
+    {reference : TargetReference Env profile.target} (policy : ExecutionPolicy Env)
+    (n : NativeModels Env profile reference) (tools : NativeTools) : Prop :=
+  LLVMNonvacuous policy n tools ∧ LCBNonvacuous policy n tools ∧
+    LLVMUncheckedNonvacuous policy n tools ∧ LCBUncheckedNonvacuous policy n tools
+
+/-- The stage and adapter obligations are part of what this theorem must establish.
+Native obligations and their joint qualification are required for the selected reference. -/
+def compile_correct {Env : Type} {profile : Profile} (m : SharedModels profile.target)
+    (reference : TargetReference Env profile.target) (policy : ExecutionPolicy Env)
+    (n : NativeModels Env profile reference) (tools : NativeTools) : Prop :=
+  SharedSound m ∧ SharedCorrect ∧ UncheckedSharedCorrect ∧ LCBAdapterSound ∧
+    NativeNonvacuous policy n tools ∧ LLVMCorrect n tools ∧ LCBCorrect n tools ∧
+    UncheckedCorrect n tools
 
 
 namespace Sanity
 
 def answerInput : Stages.Input :=
   ⟨"tests/slice0/answer.con", r#"fn main() -> u8 { return 20 + 22; }"#.toUTF8⟩
+
+private def bindingSpan : Span := ⟨0, 1, 1, 1⟩
+
+private def shadowSource := r#"fn main() -> u8 { let main: u8 = 0; return main; }"#.toUTF8
+private def shadowParse : Except Refusal Program := do Parse.parse (← Lex.lex shadowSource)
+private def shadowAst : Program := shadowParse.toOption.getD ⟨"", bindingSpan, []⟩
+
+/-- The reviewer’s reproducer parses, but neither elaboration nor its replay can accept it. -/
+example : shadowParse = .ok shadowAst ∧
+    Elab.elaborate shadowAst = .error (.checker "binding shadows 'main' at byte 22") ∧
+    ∀ core, ¬ Elaborates shadowAst core := by
+  refine ⟨rfl, rfl, ?_⟩
+  intro core h
+  obtain ⟨_, _, bindings, expr, _, _, _, _, _, shape, lowered, _⟩ := h
+  have parsedBody : ∃ binding expr, checkBody shadowAst.body = .ok ([binding], expr) ∧
+      binding.name = "main" := ⟨_, _, rfl, rfl⟩
+  obtain ⟨binding, ret, checked, name⟩ := parsedBody
+  have same := Except.ok.inj (checked.symm.trans shape)
+  cases same
+  exact (ElaboratesBindings.headLegal lowered).1 name
+
+example {final body sites} :
+    ¬ ElaboratesBindings [("x", ⟨0⟩)]
+      [⟨"x", bindingSpan, .add (.integer 1 none bindingSpan) (.integer 2 none bindingSpan)
+        bindingSpan⟩] final body sites := by
+  intro lowered
+  exact (ElaboratesBindings.headLegal lowered).2.2 (List.Mem.head _)
+
+example :
+    ElaboratesBindings [] [⟨"x", bindingSpan, .integer 1 none bindingSpan⟩]
+      [("x", ⟨0⟩)] [⟨⟨0⟩, .atom (.lit 1)⟩] [] :=
+  .atom (by decide) (.integer 1 _) (.nil _)
 
 def exit42 : Observation := .returned 42 ByteArray.empty
 
@@ -818,12 +865,12 @@ example : ¬ sampleProfile.invocation .llvmObject { samplePin with arguments := 
   unfold Profile.invocation
   decide
 
-def testTools (image : ByteArray) : NativeTools where
-  llvmObject p _ output := p = samplePin ∧ output = ⟨#[1]⟩
-  runtimeLowering p _ output := p = runtimePin ∧ output = ⟨#[2]⟩
-  assemble p _ output := (p = bodyAssemblerPin ∧ output = ⟨#[3]⟩) ∨
+def testTools : NativeTools where
+  llvmObject p _ _ := p = samplePin
+  runtimeLowering p input output := p = runtimePin ∧ output = input
+  assemble p _ output := p = bodyAssemblerPin ∨
     (p = runtimeAssemblerPin ∧ output = ⟨#[4]⟩)
-  link p inputs resolved output := p = linkerPin ∧ inputs = resolved ∧ output = image
+  link p inputs resolved output := p = linkerPin ∧ inputs = resolved ∧ inputs.head? = some output
 
 def instant {A : Type} (observe : A → Observation) : Semantics A where
   State := Unit
@@ -904,54 +951,70 @@ example : ¬ Refines coreSemantics (instant bytecodeObservation)
 
 /-- A test platform with identity loading and immediate, byte-indexed exits. -/
 def testPlatform (target : LCB.Target) (observe : ByteArray → Observation) :
-    Platform Unit target (instant fun (bytes, _) => observe bytes) where
+    TargetReference Unit target where
+  process := instant fun (bytes, _) => observe bytes
   Image := ByteArray
   decode := some
   machine := instant fun (bytes, _) => observe (bytes.getD ByteArray.empty)
 
-def testNative (profile : Profile) (observe : ByteArray → Observation) (image : ByteArray) :
-    NativeModels Unit profile (testPlatform profile.target observe) where
-  llvmModule := instant fun _ => observe image
+def answerBIR : BIR.Program :=
+  ⟨[⟨[], [.bin .add .u8 0 (.imm .u8 20) (.imm .u8 22)], .ret (.reg 0)⟩], []⟩
+
+def answerImage : ByteArray := ⟨#[42]⟩
+
+private def trapImage : ByteArray := ⟨#[134]⟩
+
+private def trapBytecodeObservation (bytes : ByteArray) : Observation :=
+  if bytes.data[0]? == some (134 : UInt8) then overflowObservation "src/a.con"
+  else bytecodeObservation bytes
+
+def testReference : TargetReference Unit sampleProfile.target :=
+  testPlatform sampleProfile.target trapBytecodeObservation
+
+/-- The fixture routes the two emitted payloads by a byte where they differ. The
+proofs below check those bytes against the actual printer and runtime inputs. -/
+def testNative : NativeModels Unit sampleProfile testReference where
+  llvmModule := instant fun bytes =>
+    trapBytecodeObservation (if bytes.data[0]? = some 10 then answerImage else trapImage)
   llvmWellFormed _ := True
-  lcbBodyAssembly := instant fun _ => observe image
-  lcbAssembly := instant fun _ => observe image
-  objectOperands := instant fun _ => observe image
-  objects := instant fun _ => observe image
-  linked := instant observe
-  loaded := instant fun (bytes, _) => observe bytes
-  runtime := instant fun (bytes, _) => observe bytes
+  lcbBodyAssembly := instant fun (_, runtime) =>
+    trapBytecodeObservation (if runtime.data[6]? = some 98 then answerImage else trapImage)
+  lcbAssembly := instant fun (_, runtime) =>
+    trapBytecodeObservation (if runtime.data[6]? = some 98 then answerImage else trapImage)
+  objectOperands := instant fun inputs => trapBytecodeObservation (inputs.headD ByteArray.empty)
+  objects := instant fun inputs => trapBytecodeObservation (inputs.headD ByteArray.empty)
+  linked := instant trapBytecodeObservation
+  loaded := instant fun (bytes, _) => trapBytecodeObservation bytes
+  runtime := instant fun (bytes, _) => trapBytecodeObservation bytes
   stackAdequate _ _ _ := True
   launchAdmitted _ _ := True
   osLive _ _ := True
   stderrAndExitAvailable _ _ := True
 
-def testExecutionPolicy (observe : ByteArray → Observation) : ExecutionPolicy Unit where
-  reference _ := some (instant fun (bytes, _) => observe bytes)
+def testExecutionPolicy : ExecutionPolicy Unit where
   stackAdequate _ _ _ _ := True
   launchAdmitted _ _ _ := True
   osLive _ _ _ := True
   stderrAndExitAvailable _ _ _ := True
 
-theorem testAnchor (observe : ByteArray → Observation) (image : ByteArray) :
-    (testExecutionPolicy observe).Anchors (testNative sampleProfile observe image) :=
-  ⟨rfl, rfl, rfl, rfl, rfl⟩
+theorem testAnchor :
+    testExecutionPolicy.Anchors testNative :=
+  ⟨rfl, rfl, rfl, rfl⟩
 
-/-- A self-consistent decoder and machine cannot substitute a different reference. -/
-example : ¬ (testExecutionPolicy bytecodeObservation).Anchors
-    (testNative sampleProfile (fun _ => exit42) ⟨#[43]⟩) := by
-  intro bound
-  have same := Option.some.inj bound.1
-  have claimed : (instant fun (_ : ByteArray × Unit) => exit42).observes (⟨#[43]⟩, ()) exit42 :=
-    instantObserves _ _
-  have anchored : (instant fun (bytes : ByteArray × Unit) => bytecodeObservation bytes.1).observes
-      (⟨#[43]⟩, ()) exit42 := same.symm ▸ claimed
+/-- Reusing an intermediate model cannot change the trusted reference index. -/
+example : testPlatform .aarch64Macos (fun _ => exit42) ≠
+    testReference := by
+  intro same
+  have claimed : (testPlatform .aarch64Macos (fun _ => exit42)).process.observes
+      (⟨#[43]⟩, ()) exit42 := instantObserves _ _
+  have anchored : testReference.process.observes
+      (⟨#[43]⟩, ()) exit42 := same ▸ claimed
   obtain ⟨_, _, result⟩ := anchored
   have status : (43 : UInt8) = 42 := (Observation.returned.inj result).1
   exact (by decide : (43 : UInt8) ≠ 42) status
 
-private theorem testImagePremises (profile : Profile) (observe : ByteArray → Observation)
-    (inputs : List ByteArray) (image : ByteArray) :
-    ImagePremises (testNative profile observe image) inputs image where
+private theorem testImagePremises (image : ByteArray) (rest : List ByteArray) :
+    ImagePremises testNative (image :: rest) image where
   linker := instantRefines _ _ _ _ rfl
   decoder env _ := ⟨⟨image, rfl⟩, (instantRefines _ _ (image, env) (image, env) rfl).1⟩
   decodedExecution env _ := (instantRefines _ _ (image, env) (image, env) rfl).2
@@ -963,17 +1026,23 @@ private theorem testImagePremises (profile : Profile) (observe : ByteArray → O
   trapRendering env _ := (instantRefines _ _ (image, env) (image, env) rfl).2
   liveness env _ _ _ := ⟨_, instantObserves _ (image, env)⟩
 
-private theorem testLLVMPremises (observe : ByteArray → Observation) (bir : BIR.Program)
-    (build : LLVMBuild) (h : birSemantics.observes bir (observe build.image)) :
-    LLVMPremises (testNative sampleProfile observe build.image) bir build where
+def testLLVMBuild (bir : BIR.Program) (image : ByteArray) : LLVMBuild :=
+  ⟨(LLVM.module bir).toUTF8, image, [image], image⟩
+
+private theorem testLLVMPremises (bir : BIR.Program) (image : ByteArray)
+    (route : trapBytecodeObservation
+      (if (LLVM.module bir).toUTF8.data[0]? = some 10 then answerImage else trapImage) =
+      trapBytecodeObservation image)
+    (h : birSemantics.observes bir (trapBytecodeObservation image)) :
+    LLVMPremises testNative bir (testLLVMBuild bir image) where
   printer := by
     obtain ⟨q, reach, terminal⟩ := h
     exact ⟨trivial, refinementsToInstant _ _ _ _ (fun e _ => runtimePermitted_all e)
-      ⟨q, reach, (fun e => by rw [terminal] at e; cases e), terminal,
-        show (birEvaluation bir q).events = _ by rw [terminal]; rfl⟩⟩
-  toolchain _ := instantRefines _ _ _ _ rfl
+      ⟨q, reach, (fun e => by rw [terminal] at e; cases e), terminal.trans (congrArg Evaluation.finished route.symm),
+        show (birEvaluation bir q).events = _ by rw [terminal, ← route]; rfl⟩⟩
+  toolchain _ := instantRefines _ _ _ _ route
   resolveLinkInputs := instantRefines _ _ _ _ rfl
-  image := testImagePremises _ _ _ _
+  image := testImagePremises _ _
 
 private theorem lcbSteps {i : LCBInput} {s t : Source.State} {fuel : Nat}
     (h : Source.Steps i.1 fuel s t) : Steps (lcbSemantics.step i) (some s) (some t) := by
@@ -993,23 +1062,6 @@ private theorem lcbToInstant {i : LCBInput} {value : Source.Value}
     · exact fun e _ => runtimePermitted_all e
     · exact ⟨some q, ⟨some s, by simp [lcbSemantics, init]; rfl, lcbSteps steps⟩,
       Or.inr (by rw [result]; rfl), result, by simp [lcbSemantics, result]⟩
-
-private theorem testLCBPremises (observe : ByteArray → Observation) (build : LCBBuild)
-    (h : Refines lcbSemantics (testNative sampleProfile observe build.image).lcbBodyAssembly
-      (build.source, build.sites, build.runtimeInput) (build.bodyAssembly, build.runtimeInput)) :
-    LCBPremises (testNative sampleProfile observe build.image) build where
-  nativeLowering _ _ := h
-  compatibilityLowering _ _ := h
-  runtimeLowering := instantRefines _ _ _ _ rfl
-  assembler := instantRefines _ _ _ _ rfl
-  resolveLinkInputs := instantRefines _ _ _ _ rfl
-  image := testImagePremises _ _ _ _
-
-def testLLVMBuild (bir : BIR.Program) (image : ByteArray) : LLVMBuild :=
-  ⟨(LLVM.module bir).toUTF8, ⟨#[1]⟩, [⟨#[1]⟩], image⟩
-
-def answerBIR : BIR.Program :=
-  ⟨[⟨[], [.bin .add .u8 0 (.imm .u8 20) (.imm .u8 22)], .ret (.reg 0)⟩], []⟩
 
 def answerOutput : Stages.Output :=
   match Stages.compile answerInput with
@@ -1051,11 +1103,27 @@ theorem pinnedRevision : pinnedLCBRevision = some declaredRevision := by
 private def testLCBBuild (bir : BIR.Program) (image : ByteArray) (assembly : String) : LCBBuild :=
   let (body, sites) := (LCB.emit bir).toOption.getD (⟨.word, #[], #[], #[]⟩, [])
   ⟨declaredRevision, compilerBuildIdentity, body, sites, (Runtime.qbe sites).toUTF8,
-    assembly.toUTF8, ⟨#[2]⟩, ⟨#[3]⟩, ⟨#[4]⟩, [⟨#[3]⟩, ⟨#[4]⟩], image⟩
+    assembly.toUTF8, (Runtime.qbe sites).toUTF8, image, ⟨#[4]⟩, [image, ⟨#[4]⟩], image⟩
+
+private theorem testLCBPremises (bir : BIR.Program) (image : ByteArray) (assembly : String)
+    (route : trapBytecodeObservation
+      (if (testLCBBuild bir image assembly).runtimeInput.data[6]? = some 98
+        then answerImage else trapImage) = trapBytecodeObservation image)
+    (h : Refines lcbSemantics testNative.lcbBodyAssembly
+      ((testLCBBuild bir image assembly).source, (testLCBBuild bir image assembly).sites,
+        (testLCBBuild bir image assembly).runtimeInput)
+      ((testLCBBuild bir image assembly).bodyAssembly, (testLCBBuild bir image assembly).runtimeInput)) :
+    LCBPremises testNative (testLCBBuild bir image assembly) where
+  nativeLowering _ _ := h
+  compatibilityLowering _ _ := h
+  runtimeLowering := instantRefines _ _ _ _ rfl
+  assembler := instantRefines _ _ _ _ route
+  resolveLinkInputs := instantRefines _ _ _ _ rfl
+  image := testImagePremises _ _
 
 theorem testLLVMHandoffs (bir : BIR.Program) (image : ByteArray) :
-    LLVMHandoffs sampleProfile (testTools image) bir (testLLVMBuild bir image) :=
-  ⟨rfl, ⟨samplePin, rfl, rfl, rfl⟩, ⟨linkerPin, rfl, rfl, rfl, rfl⟩⟩
+    LLVMHandoffs sampleProfile testTools bir (testLLVMBuild bir image) :=
+  ⟨rfl, ⟨samplePin, rfl, rfl⟩, ⟨linkerPin, rfl, rfl, rfl, rfl⟩⟩
 
 private theorem assembleMacOS {f : Source.Function} {stack : StackMIR.Function}
     {asm : TypedA64.Function} (jobOK : validateJob (LCB.job f) = .ok ())
@@ -1089,9 +1157,9 @@ private theorem testLCBHandoffs (bir : BIR.Program) (image : ByteArray) (assembl
     (job : validateJob (LCB.job (testLCBBuild bir image assembly).source) = .ok ())
     (assembled : LCB.assemble sampleProfile.target (testLCBBuild bir image assembly).source =
       .ok assembly) :
-    LCBHandoffs sampleProfile (testTools image) bir (testLCBBuild bir image assembly) := by
+    LCBHandoffs sampleProfile testTools bir (testLCBBuild bir image assembly) := by
   exact ⟨pinnedRevision, rfl, sites.symm ▸ emit, job, Stages.prepareLCB_of_edges _ _ emit job, sites,
-    rfl, ⟨assembly, assembled, rfl⟩, ⟨runtimePin, rfl, rfl, rfl⟩, ⟨bodyAssemblerPin, rfl, Or.inl ⟨rfl, rfl⟩⟩,
+    rfl, ⟨assembly, assembled, rfl⟩, ⟨runtimePin, rfl, rfl, rfl⟩, ⟨bodyAssemblerPin, rfl, Or.inl rfl⟩,
     ⟨runtimeAssemblerPin, rfl, Or.inr ⟨rfl, rfl⟩⟩, ⟨linkerPin, rfl, rfl, rfl, rfl⟩⟩
 
 private theorem coreTerminates (path : String) (core : Elab.Output) (o : Observation) (fuel : Nat)
@@ -1109,14 +1177,6 @@ theorem answerTerminates : SourceTerminates answerInput.path answerOutput.core a
     have terminal : admittedEvaluation (answerInput.path, answerOutput.core) 2 = .finished exit42 := rfl
     rw [terminal] at running
     cases running
-
-def answerImage : ByteArray := ⟨#[42]⟩
-
-private def trapImage : ByteArray := ⟨#[134]⟩
-
-private def trapBytecodeObservation (bytes : ByteArray) : Observation :=
-  if bytes.data[0]? == some (134 : UInt8) then overflowObservation "src/a.con"
-  else bytecodeObservation bytes
 
 private def trapInput := overflowInput "src/a.con" "// x"
 
@@ -1170,17 +1230,47 @@ private theorem trapBIRAssembly : ∃ text, LCB.assemble .aarch64Macos (testLCBB
   · dsimp only [f, stack, asm]
     with_unfolding_all rfl
 
-example : LLVMNonvacuous (testNative sampleProfile bytecodeObservation answerImage)
-    (testTools answerImage) := by
+private theorem firstLLVMByte (bir : BIR.Program) (first : String) (rest : List String)
+    (pieces : ((LLVM.moduleItems bir).flatMap LLVM.Item.pieces).map LLVM.Piece.render = first :: rest)
+    (nonempty : 0 < first.toUTF8.data.size) :
+    (LLVM.module bir).toUTF8.data[0]? = first.toUTF8.data[0]? := by
+  unfold LLVM.module LLVM.render LLVM.renderPieces
+  rw [pieces, String.join_cons]
+  change (first.toUTF8 ++ (String.join rest).toUTF8).data[0]? = _
+  rw [ByteArray.data_append, Array.getElem?_append_left nonempty]
+
+private theorem testLLVMAnswerMarker :
+    (LLVM.module answerBIR).toUTF8.data[0]? = some 10 :=
+  firstLLVMByte answerBIR "\n" _ rfl (by decide)
+
+private theorem testLLVMTrapMarker :
+    (LLVM.module trapBIR).toUTF8.data[0]? ≠ some 10 := by
+  have byte : (LLVM.module trapBIR).toUTF8.data[0]? = some 100 :=
+    firstLLVMByte trapBIR "declare " _ rfl (by decide)
+  exact fun h => (by decide : (some 100 : Option UInt8) ≠ some 10) (byte.symm.trans h)
+
+private theorem testLCBAnswerMarker : (Runtime.qbe []).toUTF8.data[6]? = some 98 := rfl
+
+private theorem testLCBTrapMarker :
+    (Runtime.qbe trapBIR.sites).toUTF8.data[6]? ≠ some 98 := by
+  have byte : (Runtime.qbe trapBIR.sites).toUTF8.data[6]? = some 115 := rfl
+  exact fun h => (by decide : (some 115 : Option UInt8) ≠ some 98) (byte.symm.trans h)
+
+private theorem llvmWitness : LLVMNonvacuous testExecutionPolicy testNative
+    testTools := by
   with_unfolding_all
+    refine ⟨testAnchor, ?_⟩
     exact ⟨answerInput, answerOutput, testLLVMBuild answerBIR answerImage, (), exit42,
-      answerCompiles, by unfold BIRSlotsFit; decide, testLLVMHandoffs _ _, testLLVMPremises bytecodeObservation answerBIR (testLLVMBuild answerBIR answerImage)
+      answerCompiles, by unfold BIRSlotsFit; decide, testLLVMHandoffs _ _,
+      testLLVMPremises answerBIR answerImage (by
+        exact congrArg trapBytecodeObservation (ite_eq_left testLLVMAnswerMarker))
         (returnAtOne rfl rfl),
       ⟨⟨trivial, trivial⟩, trivial, trivial⟩, answerTerminates, returnAtTwo rfl rfl rfl, instantObserves _ _⟩
 
-example : LCBNonvacuous (testNative sampleProfile bytecodeObservation answerImage)
-    (testTools answerImage) := by
+private theorem lcbWitness : LCBNonvacuous testExecutionPolicy testNative
+    testTools := by
   with_unfolding_all
+    refine ⟨testAnchor, ?_⟩
     obtain ⟨assembly, assembled⟩ := answerBIRAssembly
     have jobOK := answerBIRJob
     let build := testLCBBuild answerBIR answerImage assembly
@@ -1188,22 +1278,29 @@ example : LCBNonvacuous (testNative sampleProfile bytecodeObservation answerImag
     have adapter := (LCB.Proof.adapter_correct_run (p := answerBIR) rfl (LCB.Proof.emit_ok emit).1).1
     refine ⟨answerInput, answerOutput, build, (), exit42, answerCompiles, by unfold BIRSlotsFit; decide,
       testLCBHandoffs _ _ assembly rfl rfl jobOK assembled,
-      testLCBPremises bytecodeObservation build (lcbToInstant (adapter 1 42 rfl) rfl),
+      testLCBPremises answerBIR answerImage assembly (by
+        exact congrArg trapBytecodeObservation (ite_eq_left testLCBAnswerMarker))
+        (lcbToInstant (adapter 1 42 rfl) (by
+          change lcbResult build.sites (LCB.word 42) = some (trapBytecodeObservation
+            (if build.runtimeInput.data[6]? = some 98 then answerImage else trapImage))
+          exact (show lcbResult build.sites (LCB.word 42) = some (trapBytecodeObservation answerImage)
+            from rfl).trans (congrArg (some ∘ trapBytecodeObservation) (ite_eq_left testLCBAnswerMarker).symm))),
       ⟨⟨trivial, trivial⟩, trivial, trivial⟩, answerTerminates, returnAtTwo rfl rfl rfl, instantObserves _ _⟩
 
-example : LLVMUncheckedNonvacuous (testNative sampleProfile trapBytecodeObservation trapImage)
-    (testTools trapImage) := by
+private theorem llvmUncheckedWitness : LLVMUncheckedNonvacuous testExecutionPolicy testNative
+    testTools := by
   with_unfolding_all
+    refine ⟨testAnchor, ?_⟩
     exact ⟨trapInput, trapCore, trapBIR, testLLVMBuild trapBIR trapImage, (), 134, .overflow,
       ⟨⟨0⟩, ⟨"src/a.con", 2, 30⟩⟩, (overflowObservation "src/a.con").stderr,
       ⟨_, _, rfl, rfl, rfl⟩, trapStatic, rfl, by unfold BIRSlotsFit; decide,
-      ⟨testLLVMHandoffs _ _, testLLVMPremises trapBytecodeObservation trapBIR
-        (testLLVMBuild trapBIR trapImage) (returnAtTwo rfl rfl rfl)⟩,
+      ⟨testLLVMHandoffs _ _, testLLVMPremises trapBIR trapImage (by rw [ite_eq_right testLLVMTrapMarker]) (returnAtTwo rfl rfl rfl)⟩,
       ⟨⟨trivial, trivial⟩, trivial, trivial⟩, trapTerminates, returnAtOne rfl rfl, instantObserves _ _⟩
 
-example : LCBUncheckedNonvacuous (testNative sampleProfile trapBytecodeObservation trapImage)
-    (testTools trapImage) := by
+private theorem lcbUncheckedWitness : LCBUncheckedNonvacuous testExecutionPolicy testNative
+    testTools := by
   with_unfolding_all
+    refine ⟨testAnchor, ?_⟩
     obtain ⟨assembly, assembled⟩ := trapBIRAssembly
     have jobOK := trapBIRJob
     let build := testLCBBuild trapBIR trapImage assembly
@@ -1216,10 +1313,27 @@ example : LCBUncheckedNonvacuous (testNative sampleProfile trapBytecodeObservati
       ⟨⟨0⟩, ⟨"src/a.con", 2, 30⟩⟩, (overflowObservation "src/a.con").stderr,
       ⟨_, _, rfl, rfl, rfl⟩, trapStatic, rfl, by unfold BIRSlotsFit; decide,
       ⟨testLCBHandoffs _ _ assembly rfl rfl jobOK assembled,
-        testLCBPremises trapBytecodeObservation build
+        testLCBPremises trapBIR trapImage assembly (by
+          rw [ite_eq_right (show build.runtimeInput.data[6]? ≠ _ from testLCBTrapMarker)])
           (lcbToInstant (i := (build.source, build.sites, build.runtimeInput))
-          (adapter 2 0 hRun) projection)⟩,
+          (adapter 2 0 hRun) (by
+            change lcbResult build.sites (LCB.word 256) = some (trapBytecodeObservation
+              (if build.runtimeInput.data[6]? = some 98 then answerImage else trapImage))
+            rw [ite_eq_right (show build.runtimeInput.data[6]? ≠ _ from testLCBTrapMarker)]
+            exact projection))⟩,
       ⟨⟨trivial, trivial⟩, trivial, trivial⟩, trapTerminates, returnAtOne rfl rfl, instantObserves _ _⟩
+
+example : NativeNonvacuous testExecutionPolicy testNative testTools :=
+  ⟨llvmWitness, lcbWitness, llvmUncheckedWitness, lcbUncheckedWitness⟩
+
+example (m : SharedModels sampleProfile.target) :
+    ¬ compile_correct m testReference {testExecutionPolicy with launchAdmitted := fun _ _ _ => False}
+      testNative testTools := by
+  intro correct
+  obtain ⟨anchor, _, _, build, env, _, _, _, _, _, ready, _⟩ := correct.2.2.2.2.1.1
+  have impossible : testNative.launchAdmitted build.image env = False :=
+    congrFun (congrFun anchor.2.1 build.image) env
+  exact impossible ▸ ready.1.2
 
 private def trapMIR : MIR.Program :=
   ⟨[⟨⟨0⟩, .add (.lit 200) (.lit 56) ⟨⟨0⟩, ⟨34, 35, 2, 30⟩⟩ none⟩], .var ⟨0⟩⟩

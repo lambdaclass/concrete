@@ -397,6 +397,8 @@ The **execution-trust inventory** is in the same file, as documented non-Prop en
 
 [`Concrete/Theorem.lean`](Theorem.lean) states `ImageTheorem.compile_correct` as a proposition.
 It binds the exact input bytes to declarative lexing, parsing and name-parametric elaboration.
+Both binding rules use the spec’s prohibition on shadowing earlier locals, the entry point
+and intrinsics.
 The conclusion includes the shared stage obligations and the directly proved LCB adapter
 obligation. Each backend claim quantifies over the actual production handoffs and its own
 open native premises. LLVM uses the complete `LLVM.module`, including its runtime. LCB uses
@@ -415,9 +417,12 @@ stderr bytes. The separate origin relation binds the table entries to source byt
 
 The BIR slot limit applies before emission. Final-image stack adequacy and launch admission
 govern finite-prefix safety. Maximal behavior also needs OS liveness and progress through
-short stderr writes and exit. The statement takes an independently specified platform
-execution judgment. Its decoded-image interface is related to raw-byte execution by explicit
-premises pending LP0 and exact-image validation. The per-path premise list records
+short stderr writes and exit. A required target reference fixes the decoder, decoded-machine
+semantics and raw-byte execution judgment for the theorem, its witnesses and receipt replay.
+The execution policy supplies resource and environment predicates. The theorem requires the
+two backend claims, the unchecked claim and joint witnesses under the same reference, profile,
+policy, models and tools. The synthetic reference exercises this interface. LP0 and R-0505
+supply the production proof and final-image validation. The per-path premise list records
 dispositions for the remaining obligations. The unchecked path requires static typing and
 scope, and uses empty discharge evidence. Its conclusion requires the exact trap observation
 under the run premises. Each backend has joint witness obligations for both production and
@@ -428,7 +433,10 @@ certificate, optional non-loaded note, external receipt and refusal certificate.
 validation propositions bind exact payload digests, resolved pins, and evidence to fixed
 obligations. A single acyclic evidence graph identifies dependencies for revocation. The note
 is inserted after linking, with decoded-image and execution preservation checked at the
-receipt boundary. An image-validation witness applies to the final bytes. Canonical encoding,
+receipt boundary. An image-validation witness applies to the final bytes. The replay proposition
+determines the final-image dependencies. With a conditional stack claim the graph retains the
+stack premise. A proved-stack claim discharges it for all admitted launch environments.
+Launch, OS liveness and stderr progress remain premises of both claims. Canonical encoding,
 hash implementation, evidence emission and bounded offline replay remain step 5 work.
 
 The structural SSA validator checks operands, fresh definitions, ordered continuation

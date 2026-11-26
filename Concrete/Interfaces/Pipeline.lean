@@ -1,20 +1,21 @@
 import Concrete.Interfaces.Contracts
+import ConcreteSpec.StageGrammar
 
 namespace Concrete.Interfaces
 
-open ConcreteSpec.StageInterface
+open ConcreteSpec.StageInterface ConcreteSpec.StageGrammar
 open Concrete.Contracts (EvidenceKind)
 
-variable {Ast : Type} {language : CoreLanguage}
+variable {N : Type} {grammar : SharedGrammar N} {language : CoreLanguage}
   {lang : LoweringLanguage language.operands.Ty} {profile : Profile}
 
 /-- Executable signatures are collected separately from the declarative spec and models.
 The registry below builds its graphs from these values. -/
-structure Passes (Ast : Type) (language : CoreLanguage)
+structure Passes {N : Type} (grammar : SharedGrammar N) (language : CoreLanguage)
     (lang : LoweringLanguage language.operands.Ty) (profile : Profile) where
   lex : Source → Except LexRefusal TokenStream
-  parse : ParserView → Except ParseRefusal (Parsed Ast)
-  elaborate : Parsed Ast → Except ElabRefusal (CoreInput language)
+  parser : Parser grammar
+  elaborate : Parsed (grammar.value grammar.start) → Except ElabRefusal (CoreInput language)
   lowerCore : Admitted language → Except StageFailure (MIR lang profile)
   lowerUnchecked : CoreInput language → Except StageFailure (MIR lang profile)
   lowerMemory : MIR lang profile → Except StageFailure (Memory lang profile)
@@ -29,8 +30,8 @@ structure FrontendInvariants (Ast : Type) (language : CoreLanguage) where
   ast : Parsed Ast → Prop
   conformance : CoreInput language → Prop
 
-def Passes.lexer (passes : Passes Ast language lang profile) (spec : FrontendSpec Ast language)
-    (inv : FrontendInvariants Ast language) : Stage Source LexRefusal TokenStream where
+def Passes.lexer (passes : Passes grammar language lang profile) (spec : FrontendSpec (grammar.value grammar.start) language)
+    (inv : FrontendInvariants (grammar.value grammar.start) language) : Stage Source LexRefusal TokenStream where
   run := passes.lex
   kind := .directProof
   inputInvariant := inv.source
@@ -40,21 +41,21 @@ def Passes.lexer (passes : Passes Ast language lang profile) (spec : FrontendSpe
     | .malformed rule span => spec.malformedToken source rule span
     | .resource failure => spec.lexLimit source failure ∧ failure.limit < failure.measured
 
-def Passes.parser (passes : Passes Ast language lang profile) (spec : FrontendSpec Ast language)
-    (inv : FrontendInvariants Ast language) : Stage TokenStream ParseRefusal (Parsed Ast) where
-  run stream := passes.parse stream.parserView
+def Passes.parserEntry (passes : Passes grammar language lang profile)
+    (inv : FrontendInvariants (grammar.value grammar.start) language) :
+    Stage TokenStream ParseRefusal (Parsed (grammar.value grammar.start)) where
+  run stream := (passes.parser.run stream.parserView).2
   kind := .directProof
-  inputInvariant := inv.tokens
+  inputInvariant _ := True
   outputInvariant := inv.ast
-  success stream := Parses spec stream.parserView
-  refusal stream
-    | .malformed rule span => spec.malformed stream.parserView rule span
-    | .unsupported rule span required =>
-      stream.source.slice.val < required.val ∧ spec.unsupported stream.parserView rule span required
+  success stream output := Parses passes.parser stream.parserView output ∧
+    (passes.parser.run stream.parserView).1 ≤ passes.parser.bound stream.parserView
+  refusal stream failure := Refuses grammar stream.parserView failure ∧
+    (passes.parser.run stream.parserView).1 ≤ passes.parser.bound stream.parserView
 
-def Passes.elaborator (passes : Passes Ast language lang profile) (spec : FrontendSpec Ast language)
-    (admission : Admission language) (inv : FrontendInvariants Ast language) :
-    Stage (Parsed Ast) ElabRefusal (CoreInput language) where
+def Passes.elaborator (passes : Passes grammar language lang profile) (spec : FrontendSpec (grammar.value grammar.start) language)
+    (admission : Admission language) (inv : FrontendInvariants (grammar.value grammar.start) language) :
+    Stage (Parsed (grammar.value grammar.start)) ElabRefusal (CoreInput language) where
   run := passes.elaborate
   kind := .directProof
   inputInvariant := inv.ast
@@ -66,7 +67,7 @@ def Passes.elaborator (passes : Passes Ast language lang profile) (spec : Fronte
 def Admitted.Valid (admission : Admission language) (admitted : Admitted language) : Prop :=
   admitted.core.LocationsWF ∧ admission.fragment admitted.core.slice admitted.core.payload ∧
   admission.accepted admitted.core ∧ admission.statics admitted.core ∧
-  admission.ValidDischarges admitted.core admitted.discharges
+  ValidDischarges admitted.core admitted.discharges
 
 def admissionEntry (admission : Admission language) :
     Stage (CoreInput language) CheckerRefusal (Admitted language) where
@@ -88,11 +89,12 @@ structure LoweringFailures (language : CoreLanguage) (lang : LoweringLanguage la
   llvm : BIR lang profile → StageFailure → Prop
   lcb : BIR lang profile → StageFailure → Prop
 
-structure Registry (Ast : Type) (language : CoreLanguage)
+structure Registry {N : Type} (grammar : SharedGrammar N) (language : CoreLanguage)
     (lang : LoweringLanguage language.operands.Ty) (profile : Profile) where
+  coreModel : CoreModel language
   lexer : Stage Source LexRefusal TokenStream
-  parser : Stage TokenStream ParseRefusal (Parsed Ast)
-  elaborator : Stage (Parsed Ast) ElabRefusal (CoreInput language)
+  parser : Stage TokenStream ParseRefusal (Parsed (grammar.value grammar.start))
+  elaborator : Stage (Parsed (grammar.value grammar.start)) ElabRefusal (CoreInput language)
   admission : Stage (CoreInput language) CheckerRefusal (Admitted language)
   lowerCore : Stage (Admitted language) StageFailure (MIR lang profile)
   lowerUnchecked : Stage (CoreInput language) StageFailure (MIR lang profile)
@@ -102,12 +104,13 @@ structure Registry (Ast : Type) (language : CoreLanguage)
   emitLLVM : Stage (BIR lang profile) StageFailure (LLVMInput profile)
   emitLCB : Stage (BIR lang profile) StageFailure (LCBInput profile)
 
-def registry (passes : Passes Ast language lang profile) (front : FrontendSpec Ast language)
-    (inv : FrontendInvariants Ast language) (admission : Admission language)
+def registry (passes : Passes grammar language lang profile) (front : FrontendSpec (grammar.value grammar.start) language)
+    (inv : FrontendInvariants (grammar.value grammar.start) language) (admission : Admission language)
     (m : LoweringModels language lang profile) (fails : LoweringFailures language lang profile) :
-    Registry Ast language lang profile where
+    Registry grammar language lang profile where
+  coreModel := m.core
   lexer := passes.lexer front inv
-  parser := passes.parser front inv
+  parser := passes.parserEntry inv
   elaborator := passes.elaborator front admission inv
   admission := admissionEntry admission
   lowerCore := ⟨passes.lowerCore, .directProof, Admitted.Valid admission,
@@ -120,16 +123,16 @@ def registry (passes : Passes Ast language lang profile) (front : FrontendSpec A
   buildSSA := ⟨passes.buildSSA, .provedValidator, m.memoryInvariant,
     m.ssaInvariant, BuildsSSA m, fails.memory⟩
   buildBIR := ⟨passes.buildBIR, .provedValidator, m.ssaInvariant,
-    fun bir => m.birInvariant bir ∧ bir.TrapSlotsWF ∧ m.frameSlots bir ≤ profile.maxBIRSlots,
+    fun bir => m.birInvariant bir ∧ bir.TrapSlotsWF ∧ bir.frameSlots ≤ profile.maxBIRSlots,
     BuildsBIR m, fails.ssa⟩
   emitLLVM := ⟨passes.emitLLVM, .namedPremise "LLVM printer",
-    fun bir => m.birInvariant bir ∧ bir.TrapSlotsWF ∧ m.frameSlots bir ≤ profile.maxBIRSlots,
+    fun bir => m.birInvariant bir ∧ bir.TrapSlotsWF ∧ bir.frameSlots ≤ profile.maxBIRSlots,
     fun output => ∃ bir, EmitsLLVM m bir output, EmitsLLVM m, fails.llvm⟩
   emitLCB := ⟨passes.emitLCB, .directProof,
-    fun bir => m.birInvariant bir ∧ bir.TrapSlotsWF ∧ m.frameSlots bir ≤ profile.maxBIRSlots,
+    fun bir => m.birInvariant bir ∧ bir.TrapSlotsWF ∧ bir.frameSlots ≤ profile.maxBIRSlots,
     fun output => ∃ bir, EmitsLCB m bir output, EmitsLCB m, fails.lcb⟩
 
-def Registry.pipeline {Output : Type} (r : Registry Ast language lang profile) (unchecked : Bool)
+private def Registry.pipeline {Output : Type} (r : Registry grammar language lang profile) (unchecked : Bool)
     (backend : Stage (BIR lang profile) StageFailure Output) :
     Pipeline Source Output :=
   let lowering := Pipeline.next r.lowerMemory <| .next r.buildSSA <| .next r.buildBIR <|
@@ -137,6 +140,14 @@ def Registry.pipeline {Output : Type} (r : Registry Ast language lang profile) (
   let core := if unchecked then Pipeline.next r.lowerUnchecked lowering
     else .next r.admission (.next r.lowerCore lowering)
   .next r.lexer (.next r.parser (.next r.elaborator core))
+
+def Registry.llvmPipeline (r : Registry grammar language lang profile) (unchecked : Bool) :
+    Pipeline Source (LLVMInput profile) :=
+  r.pipeline unchecked r.emitLLVM
+
+def Registry.lcbPipeline (r : Registry grammar language lang profile) (unchecked : Bool) :
+    Pipeline Source (LCBInput profile) :=
+  r.pipeline unchecked r.emitLCB
 
 inductive Pipeline.Sound : {A B : Type} → Pipeline A B → Prop where
   | done {A : Type} : Sound (.done : Pipeline A A)

@@ -1,5 +1,5 @@
 import ConcreteSpec.StageInterface
-import LeanCompilerBackend.Verified.Source
+import LeanCompilerBackend.Verified.Job
 
 namespace Concrete.Backend.LCB
 
@@ -20,12 +20,36 @@ namespace Concrete.Interfaces
 
 open ConcreteSpec.Core ConcreteSpec.Core.SourcePathSpan ConcreteSpec.StageInterface
 
+inductive BackendKind where
+  | llvm | lcb
+  deriving DecidableEq, Repr
+
+inductive ISA where
+  | x86_64 | aarch64
+  deriving DecidableEq, Repr
+
+/-- Each supported platform has one ISA and one spec memory target. All three hosted
+platforms currently share the 64-bit little-endian memory layout. -/
 structure Profile where
+  backend : BackendKind
   backendTarget : Backend.LCB.Target
-  memoryTarget : Target
   maxBIRSlots : Nat
   maxImageStackBytes : Nat
-  targetWF : memoryTarget.WellFormed
+
+def Profile.isa (profile : Profile) : ISA :=
+  match profile.backendTarget with
+  | .x86_64Linux => .x86_64
+  | .aarch64Linux | .aarch64Macos => .aarch64
+
+def Profile.memoryTarget (profile : Profile) : Target :=
+  match profile.backendTarget with
+  | .x86_64Linux | .aarch64Linux | .aarch64Macos => linuxX8664
+
+def Profile.byteOrder (profile : Profile) := profile.memoryTarget.byteOrder
+
+theorem Profile.targetWF (profile : Profile) : profile.memoryTarget.WellFormed := by
+  cases profile with
+  | mk _ platform _ _ => cases platform <;> exact example_existing_profile_is_well_formed
 
 inductive LexRefusal where
   | malformed (rule : RuleId) (atSpan : FileSpan)
@@ -87,10 +111,27 @@ def CFG.WF {P I T A Ty : Type} (graph : CFG P I T) (successors : T → List (CFG
       edge.arguments.map argType = next.params.map paramType
 
 /-- The operation family is indexed by the entire input signature and the result type. -/
+structure Literal (Ty : Type) (_ty : Ty) where
+  encoding : List UInt8
+
 structure LoweringLanguage (Ty : Type) where
-  literal : Ty → Type
   operation : List Ty → Ty → Type
   bool : Ty
+
+abbrev LoweringLanguage.literal {Ty : Type} (_lang : LoweringLanguage Ty) := Literal Ty
+
+inductive CheckDisposition where
+  | residual
+  | discharged
+  deriving DecidableEq
+
+/-- Residual conditions are checked as part of executing the operation, before its
+unchecked action, on the same evaluated reads. No CFG edge enters between them. -/
+structure OperationCheck where
+  discriminator : Nat
+  trap : TrapKind
+  disposition : CheckDisposition
+  deriving DecidableEq
 
 inductive Args {Ty : Type} (Read : Ty → Type) : List Ty → Type where
   | nil : Args Read []
@@ -102,6 +143,7 @@ inductive MIRInst {Ty : Type} (lang : LoweringLanguage Ty) where
   | assign {ty : Ty} (dst : Place Ty ty) (src : Read Ty lang.literal ty)
   | op {types : List Ty} {ty : Ty} (dst : Place Ty ty)
       (op : lang.operation types ty) (args : Args (Read Ty lang.literal) types)
+      (checks : List OperationCheck)
   | endLifetime (place : PlaceId)
   | destructure {ty : Ty} (src : Place Ty ty) (bindings : List (FieldId × Sigma (Place Ty)))
   | call (callee : FnId) (dst : Option (Sigma (Place Ty)))
@@ -245,13 +287,24 @@ structure BIR {Ty : Type} (lang : LoweringLanguage Ty) (_profile : Profile) wher
   layouts : AList FnId (AList PlaceId Layout)
   sites : TrapTable
 
+/-- The register frame allocates a slot per definition, including block parameters.
+The ceiling is per activation, so the program uses the largest function frame. -/
+def BIR.frameSlots {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    (bir : BIR lang profile) : Nat :=
+  bir.functions.foldl (fun largest function =>
+    max largest (function.2.2.blocks.foldl (fun slots block =>
+      block.body.foldl (fun count inst => match inst.instruction with
+        | .op .. | .load .. => count + 1
+        | .call _ (some _) _ => count + 1
+        | _ => count) (slots + block.params.length)) 0)) 0
+
 structure LLVMInput (_profile : Profile) where
   moduleBytes : ByteArray
   sites : TrapTable
 
 structure LCBInput (_profile : Profile) where
   body : LeanCompilerBackend.Verified.Source.Function
-  additionalFunctions : List LeanCompilerBackend.Verified.Source.Function
+  additionalJobs : List LeanCompilerBackend.Verified.FunctionJob
   sites : TrapTable
   runtimeInput : ByteArray
 

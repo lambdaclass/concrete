@@ -9,11 +9,11 @@ The root check compares their exact SHA-256 digests with the [recorded manifest]
 
 ## Source → Tokens
 
-Fix (f) owns the lossless scanner. `Source` carries the admitted project, entry-file ID and active slice. `TokenStream` retains decoded token payloads and the leading and EOF trivia ranges. `Lexes` relates the exact project bytes to the token stream and requires exact reconstruction. Malformed input and resource limits have separate typed refusals. Migrate `Lex.lex` and its correctness proof to the retained stream and prove agreement on its parser view.
+Fix (f) owns the lossless scanner. `Source` carries the admitted project, entry-file ID and active slice. `TokenStream` retains typed decoded tokens, including string bytes, byte literals and label names, plus the leading and EOF trivia ranges. `Lexes` relates the exact project bytes to the token stream and requires exact reconstruction. Malformed input and resource limits have separate typed refusals. Migrate `Lex.lex` and its correctness proof to the retained stream and prove agreement on its parser view.
 
 ## Tokens → AST
 
-Fix (f) owns `ParserView → Except ParseRefusal (Parsed Ast)`. The AST is the typed start action result of one slice-tagged grammar. `CheckedTable` binds a lookahead to the exact production index. `Derives` covers all consumed tokens, production tags and action results. The parser reports a malformed stream or the required slice, with the positive derivation and the step bound separate from table verification cost. Replace `Parse.parse`, the refusal grammar, token rewriting and the separate handwritten body derivations.
+Fix (f) owns the registered metered parser. Its AST is indexed by the shared grammar's start symbol. The registered table is the successful result of the recorded verifier execution. For every parser view, success requires both a full declarative derivation and the same predictive visits using that exact table. These derivations count production and token visits. The same parser invocation supplies the result and charged steps, with a linear token budget on success and refusal. Refusals distinguish an under-sliced derivation from a stream with no derivation. Replace `Parse.parse`, the separate refusal grammar, token rewriting and handwritten body derivations.
 
 ## AST → Core → admitted Core
 
@@ -21,11 +21,11 @@ Fix (e) supplies the integrated Exec operands over Hybrid and the ownership inst
 
 Fix (d) supplies the location and provenance rules. Semantic identities are spec `Var`, `PlaceId` and declaration IDs. An `Origin` contains a run-local operation ID, file-scoped lexical span and persistent evidence key. A file span resolves against exact bytes in the admitted project and agrees with the spec span judgment. A backend table index is a separate type, allocated only at BIR formation. R-0709 is represented by the project admission invariant.
 
-Fix (c) supplies the single ConcreteSpec traversal. `Admitted` carries the exact Core input with its discharges grouped by operation and keyed by obligation within that group. Acceptance correspondence, independent static typing and discharge safety on reachable operation configurations are distinct proof obligations. A failed check yields `CheckerRefusal`; elaboration yields only elaboration refusals. Replace compiler-side `Admission.check`, `Admission.Token` and duplicate checker logic. The registry uses the exact spec checker through `check`.
+Fix (c) supplies the single ConcreteSpec traversal. `Admitted` carries the exact Core input with its discharges grouped by operation and keyed by obligation within that group. Acceptance correspondence, independent static typing and discharge safety on reachable operation configurations are distinct proof obligations. The Core payload selects the entry and supplies the initial configuration through `Exec.enter`. The active operation follows from Exec control and frames. Safety excludes the exact discharged trap and requires a transition at every reachable matching configuration. A failed check yields `CheckerRefusal`; elaboration yields only elaboration refusals. Replace compiler-side `Admission.check`, `Admission.Token` and duplicate checker logic. The registry uses the exact spec checker through `check`.
 
 ## Admitted Core → MIR
 
-Fix (c) owns evidence validation and consumption and the empty-evidence entry. Fix (b) owns the typed MIR instruction semantics. Fix (d) owns operation origin transport. `MIR` carries typed places, copy/move reads and explicit lifetime and control transfers. `LowersCore` ties removed checks to exact validated discharges and requires residual guard coverage. `LowersUnchecked` uses the same carrier and checks with no admission discharges. Both preserve origins and terminal observations. Replace the linear `MIR.Program` and its token-bearing operators.
+Fix (c) owns evidence validation and consumption and the empty-evidence entry. Fix (b) owns the typed MIR instruction semantics. Fix (d) owns operation origin transport. `MIR` carries typed places, copy/move reads and explicit lifetime and control transfers. `LowersCore` ties removed checks to exact validated discharges and checks every emitted occurrence against the source condition inventory and its ordered typed operand identities. A residual condition is part of the same MIR instruction as the operation it guards and traps at its origin on failure. CFG edges enter blocks, so they cannot enter an instruction after its checks. Each supplied discharge matches exactly one emitted occurrence. `LowersUnchecked` uses the same carrier and checks with no admission discharges. Both preserve origins and terminal observations. Replace the linear `MIR.Program` and its token-bearing operators.
 
 ## MIR → Memory
 
@@ -37,7 +37,7 @@ Fix (b) supplies the addressable/virtual partition and Fix (a) registers the val
 
 ## SSA → BIR
 
-Fix (a) owns the validated handoff and profile slot check. Fix (d) owns the trap table and its origin proof. `BIR` indexes traps through `TrapIndex`; `BuildsBIR` requires valid lookup, origin preservation, behavioral simulation and the resolved profile's BIR slot ceiling. Dominance-scoped validation can strengthen the invariant on the same graph before slice 3. Retire SSA's positional site creation and BIR's duplicate diagnostic identity and scalar vocabulary at cutover.
+Fix (a) owns the validated handoff and profile slot check. Fix (d) owns the trap table and its origin proof. `BIR` indexes traps through `TrapIndex`; `BuildsBIR` requires valid lookup, origin preservation, behavioral simulation and the resolved profile's BIR slot ceiling. The count is the largest function's number of BIR definitions, including block parameters and call destinations. The resolved platform supplies the ISA, byte order and spec memory layout for either backend. Dominance-scoped validation can strengthen the invariant on the same graph before slice 3. Retire SSA's positional site creation and BIR's duplicate diagnostic identity and scalar vocabulary at cutover.
 
 ## BIR → LLVM
 
@@ -45,11 +45,11 @@ Fix (a) registers the exact emitter and the named LLVM premise. `LLVMInput` carr
 
 ## BIR → LCB
 
-Fix (a) registers the exact adapter and profile preparation. `LCBInput` carries the actual source function, additional functions for the later call profile, runtime input bytes and the same trap table. `EmitsLCB` requires exact handoff and BIR refinement on adapter success. The proved source adapter and native lowering premises remain separate. The result-word encoding belongs in the backend/runtime projection.
+Fix (a) registers the exact adapter and profile preparation. `LCBInput` carries the actual source function, additional exact jobs for the later call profile, runtime input bytes and the same trap table. `EmitsLCB` requires validation of the exact canonical body job and every additional job, unique emitted symbols, exact handoff, and BIR refinement on adapter success. The proved source adapter and native lowering premises remain separate. The result-word encoding belongs in the backend/runtime projection.
 
 ## Common proof boundary
 
-Executable registry entries own the function and the proof graph uses that function's result. `Pipeline.Sound` requires edge soundness and adjacent invariant implication for the registered fold. The production and unchecked folds differ at admission. Semantic edges use fuel-free simulation over the theorem's transition system, with a nonempty source path or a decreasing stutter rank, finite-prefix safety, progress and divergence trace matching. The precise terminal projection distinguishes return, trap and startup refusal, including exact stderr and file-scoped lexical sites. Evaluator fuel appears separately in adequacy. Existence of an admitted observation and native-image assumptions remain theorem-level obligations.
+Executable registry entries own the function and the proof graph uses that function's result. `Pipeline.Sound` requires edge soundness and adjacent invariant implication for the registered fold. The production and unchecked folds differ at admission. Semantic edges use fuel-free simulation over the theorem's transition system, with a nonempty source path or a decreasing stutter rank, finite-prefix safety, progress and divergence trace matching. The precise terminal projection distinguishes return, trap and startup refusal, including exact stderr and file-scoped lexical sites. The Core trace starts empty and each step appends exactly the events of its Exec label. The process projection adds only the canonical terminal trap diagnostic from the lexical origin. Evaluator fuel appears separately in adequacy. Existence of an admitted observation and native-image assumptions remain theorem-level obligations.
 
 ## Writer ownership
 

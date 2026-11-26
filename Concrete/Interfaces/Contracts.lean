@@ -1,5 +1,6 @@
 import Concrete.Interfaces.Carriers
 import Concrete.Contracts
+import Concrete.Backend.LCB
 
 namespace Concrete.Interfaces
 
@@ -94,11 +95,6 @@ structure FrontendSpec (Ast : Type) (language : CoreLanguage) where
   reconstruct : TokenStream → ByteArray
   malformedToken : Source → RuleId → FileSpan → Prop
   lexLimit : Source → ResourceRefusal → Prop
-  derives : ParserView → Ast → Prop
-  malformed : ParserView → RuleId → FileSpan → Prop
-  unsupported : ParserView → RuleId → FileSpan → Slice → Prop
-  parseSteps : ParserView → Ast → Nat → Prop
-  parseBound : ParserView → Nat
   elaborates : Parsed Ast → Payload language → Prop
   elabRefusal : Parsed Ast → ElabRefusal → Prop
 
@@ -108,11 +104,6 @@ def Lexes {Ast : Type} {language : CoreLanguage} (spec : FrontendSpec Ast langua
   stream.trivia.size = stream.tokens.size + 1 ∧
   ∃ file, source.project.files[source.entryFile.index]? = some file ∧
     (spec.reconstruct stream).data.toList = file.source.toBytes
-
-def Parses {Ast : Type} {language : CoreLanguage} (spec : FrontendSpec Ast language)
-    (stream : ParserView) (ast : Parsed Ast) : Prop :=
-  ast.source = stream.source ∧ spec.derives stream ast.tree ∧
-  ∃ n, spec.parseSteps stream ast.tree n ∧ n ≤ spec.parseBound stream
 
 def Elaborates {Ast : Type} {language : CoreLanguage} (spec : FrontendSpec Ast language)
     (ast : Parsed Ast) (core : CoreInput language) : Prop :=
@@ -127,7 +118,7 @@ def check {language : CoreLanguage} (spec : Admission language) (core : CoreInpu
 def Admits {language : CoreLanguage} (spec : Admission language)
     (core : CoreInput language) (out : Admitted language) : Prop :=
   out.core = core ∧ spec.accepted core ∧ spec.statics core ∧
-    spec.fragment core.slice core.payload ∧ spec.ValidDischarges core out.discharges
+    spec.fragment core.slice core.payload ∧ ValidDischarges core out.discharges
 
 /-- Origin maps enumerate emitted copies as well as discharged and residual operations. -/
 def PreservesOrigins (source target : List Origin) : Prop :=
@@ -142,26 +133,57 @@ def Terminator.origins {A C : Type} : Terminator A C → List Origin
   | .trap _ origin => [origin]
   | _ => []
 
-/-- Each removed check has an admission discharge. Each raw checked operation has either this
-justification or a controlling residual guard on every incoming path. -/
-structure GuardJudgment {Ty : Type} (lang : LoweringLanguage Ty) (profile : Profile) where
-  unchecked : MIR lang profile → Origin → ObligationId → Prop
-  residual : MIR lang profile → Origin → ObligationId → Prop
-  coverage : MIR lang profile → Prop
+def Read.identity {Ty : Type} {ty : Ty} : Read Ty (Literal Ty) ty → OperandRead
+  | .literal value => .literal value.encoding
+  | .copy place => .copy place.root place.path
+  | .move place => .move place.root place.path
 
+def Args.identities {Ty : Type} {types : List Ty} :
+    Args (Read Ty (Literal Ty)) types → List (Ty × OperandRead)
+  | .nil => []
+  | @Args.cons _ _ ty _ read rest => (ty, read.identity) :: rest.identities
+
+structure MIR.Occurrence (Ty : Type) where
+  fn : FnId
+  block : BlockId
+  index : Nat
+  origin : Origin
+  operands : List (Ty × OperandRead)
+  checks : List OperationCheck
+
+def MIR.operations {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    (mir : MIR lang profile) : List (MIR.Occurrence Ty) :=
+  mir.functions.flatMap fun (fn, _, graph) =>
+    graph.blocks.toList.flatMap fun block =>
+      block.body.zipIdx.filterMap fun (inst, index) => match inst.instruction with
+        | .op _ _ args checks => some ⟨fn, block.id, index, inst.origin, args.identities, checks⟩
+        | _ => none
+
+def MIR.Occurrence.Justifies {language : CoreLanguage}
+    (op : MIR.Occurrence language.operands.Ty) (check : OperationCheck)
+    (d : Discharge language) : Prop :=
+  check.disposition = .discharged ∧ op.origin.operation = d.operation ∧
+  op.origin.evidenceKey = d.key ∧ check.discriminator = d.obligation.discriminator ∧
+  check.trap = d.trap ∧ op.operands = d.operands
+
+/-- Enumerate actual emitted operations. Each Core condition is handled at that occurrence,
+and every discharge is consumed once at an occurrence with exactly the same typed reads. -/
 def ConsumesEvidence {language : CoreLanguage} {lang : LoweringLanguage language.operands.Ty}
-    {profile : Profile} (guards : GuardJudgment lang profile)
-    (input : Admitted language) (mir : MIR lang profile) : Prop :=
-  guards.coverage mir ∧
-  (∀ origin obligation, guards.unchecked mir origin obligation ↔
-    ∃ d, input.discharges.Contains origin.operation d ∧ d.key = origin.evidenceKey ∧
-      d.obligation = obligation) ∧
-  (∀ origin obligation, guards.residual mir origin obligation →
-    ¬ guards.unchecked mir origin obligation)
-
-def UncheckedGuards {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
-    (guards : GuardJudgment lang profile) (mir : MIR lang profile) : Prop :=
-  guards.coverage mir ∧ ∀ origin obligation, ¬ guards.unchecked mir origin obligation
+    {profile : Profile} (core : CoreInput language) (discharges : Discharges language)
+    (mir : MIR lang profile) : Prop :=
+  ((mir.operations.map fun op => (op.fn, op.block, op.index)).Nodup) ∧
+  (∀ site conditions, core.payload.ConditionsAt site conditions → conditions ≠ [] →
+    ∃ op ∈ mir.operations, op.origin.operation = site) ∧
+  (∀ op ∈ mir.operations,
+    ∃ conditions, core.payload.ConditionsAt op.origin.operation conditions ∧
+      (op.checks.map OperationCheck.discriminator).Nodup ∧
+      conditions = op.checks.map (fun check => ⟨check.discriminator, check.trap, op.operands⟩) ∧
+      ∀ check ∈ op.checks, check.disposition = .discharged →
+        ∃ d, discharges.Contains op.origin.operation d ∧ op.Justifies check d) ∧
+  (∀ site d, discharges.Contains site d →
+    ∃ op ∈ mir.operations, ∃ check ∈ op.checks, op.Justifies check d ∧
+      ∀ other ∈ mir.operations, ∀ c ∈ other.checks, other.Justifies c d →
+        other = op ∧ c = check)
 
 def MIR.origins {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
     (mir : MIR lang profile) : List Origin :=
@@ -210,22 +232,49 @@ def PromotionSound {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
       ∃ classes, AList.lookup memory.storage fn = some classes ∧
         ((AList.lookup classes place = some .virtual) ↔ scalar ty ∧ ¬ escapes mir fn place)
 
+/-- The hosted runtime writes one diagnostic at a terminal trap. This projection
+uses lexical provenance, independently of the compiled trap table and its indices. -/
+def coreTrapDiagnostic {language : CoreLanguage} (core : CoreInput language)
+    (kind : TrapKind) (site : SiteId) : ByteArray := Id.run do
+  let some origin := AList.lookup core.payload.origins site | return ByteArray.empty
+  let span := origin.lexical
+  let some file := core.project.files[span.file.index]? | return ByteArray.empty
+  return s!"concrete: trap: {kind.name} at {file.path.render.text}:{span.line}:{span.col} (site {site.id})\n".toUTF8
+
+def coreRuntimeEvents {language : CoreLanguage} (core : CoreInput language)
+    (state : Exec.Config core.payload.machine) : List (ProcessEvent language.operands.Event) :=
+  match state.final? with
+  | some (.trapped kind site) => (coreTrapDiagnostic core kind site).data.toList.map .stderr
+  | _ => []
+
 /-- Relate the shared theorem model to actual spec configurations and spec transition labels. -/
 structure CoreModel (language : CoreLanguage) where
   model : Model (CoreInput language) language.operands.Event
   config : (a : CoreInput language) → model.execution.State → Exec.Config a.payload.machine
   projectFinal : CoreInput language → Exec.Final language.operands.Val → Observation → Prop
-  initial : (a : CoreInput language) → Exec.Config a.payload.machine → Prop
-  initialExact : ∀ a, (∀ state, model.execution.initial a state → initial a (config a state)) ∧
-    (∀ q, initial a q → ∃ state, model.execution.initial a state ∧ config a state = q)
+  specTrace : CoreInput language → model.execution.State → List language.operands.Event
+  initialExact : ∀ a state, model.execution.initial a state →
+    config a state = a.payload.initial ∧ specTrace a state = [] ∧
+      model.execution.trace a state = []
+  traceExact : ∀ a state, model.execution.trace a state =
+    (specTrace a state).map ProcessEvent.effect ++ coreRuntimeEvents a (config a state)
+  authorityExact : ∀ a e, model.execution.permitted a e ↔
+    ∃ state events, Exec.Steps a.payload.body a.payload.initial events state ∧
+      (e ∈ coreRuntimeEvents a state ∨
+        ∃ label next, Exec.Step a.payload.body state label next ∧
+          e ∈ label.events.map ProcessEvent.effect)
   stepsExact : ∀ a state next, model.execution.step a state next →
     ∃ label, Exec.Step a.payload.body (config a state) label (config a next) ∧
-      Concrete.Contracts.TracePrefix
-        (model.execution.trace a state ++ label.events.map ProcessEvent.effect)
-        (model.execution.trace a next)
+      specTrace a next = specTrace a state ++ label.events
   stepsComplete : ∀ a state label q, model.execution.finite a state →
     Exec.Step a.payload.body (config a state) label q →
-    ∃ next, model.execution.step a state next ∧ config a next = q
+    ∃ next, model.execution.step a state next ∧ config a next = q ∧
+      specTrace a next = specTrace a state ++ label.events
+  safetyCoversTraps : ∀ (a : CoreInput language) state events site op label next kind,
+    Exec.Steps a.payload.body a.payload.initial events state →
+    a.payload.activeOperation state = some (site, op) →
+    Exec.Step a.payload.body state label next → next.ctrl = .trapped kind site →
+    ∃ condition ∈ language.safety op, condition.trap = kind
   terminalExact : ∀ a state observed, model.result a state observed ↔
     ∃ outcome, (config a state).final? = some outcome ∧ projectFinal a outcome observed
   trapExact : ∀ a kind operation observed, projectFinal a (.trapped kind operation) observed →
@@ -242,7 +291,6 @@ structure LoweringModels (language : CoreLanguage) (lang : LoweringLanguage lang
   llvm : Model (LLVMInput profile) language.operands.Event
   lcb : Model (LCBInput profile) language.operands.Event
   layout : LayoutOf language.operands.Ty
-  guards : GuardJudgment lang profile
   mirInvariant : MIR lang profile → Prop
   memoryInvariant : Memory lang profile → Prop
   ssaInvariant : SSA lang profile → Prop
@@ -252,7 +300,6 @@ structure LoweringModels (language : CoreLanguage) (lang : LoweringLanguage lang
     MemoryState language.operands.Val profile → Prop
   scalar : language.operands.Ty → Prop
   escapes : MIR lang profile → FnId → PlaceId → Prop
-  frameSlots : BIR lang profile → Nat
   llvmHandoff : BIR lang profile → LLVMInput profile → Prop
   lcbHandoff : BIR lang profile → LCBInput profile → Prop
 
@@ -262,13 +309,13 @@ def LowersCore (m : LoweringModels language lang profile)
     (input : Admitted language) (mir : MIR lang profile) : Prop :=
   mir.project = input.core.project ∧ mir.entry = input.core.payload.entry ∧
   PreservesOrigins (List.map Prod.snd input.core.payload.origins) mir.origins ∧
-  ConsumesEvidence m.guards input mir ∧ m.core.model.Simulates m.mir input.core mir
+  ConsumesEvidence input.core input.discharges mir ∧ m.core.model.Simulates m.mir input.core mir
 
 def LowersUnchecked (m : LoweringModels language lang profile)
     (input : CoreInput language) (mir : MIR lang profile) : Prop :=
   mir.project = input.project ∧ mir.entry = input.payload.entry ∧
   PreservesOrigins (List.map Prod.snd input.payload.origins) mir.origins ∧
-  UncheckedGuards m.guards mir ∧ m.core.model.Simulates m.mir input mir
+  ConsumesEvidence input [] mir ∧ m.core.model.Simulates m.mir input mir
 
 def LowersMemory (m : LoweringModels language lang profile)
     (mir : MIR lang profile) (memory : Memory lang profile) : Prop :=
@@ -298,14 +345,19 @@ def BuildsBIR (m : LoweringModels language lang profile)
     (ssa : SSA lang profile) (bir : BIR lang profile) : Prop :=
   bir.project = ssa.project ∧ bir.entry = ssa.entry ∧ bir.layouts = ssa.layouts ∧
   bir.signatures = ssa.signatures ∧ bir.TrapSlotsWF ∧ bir.TrapsMatch ssa ∧ PreservesOrigins ssa.origins bir.origins ∧
-  m.frameSlots bir ≤ profile.maxBIRSlots ∧ m.ssa.Simulates m.bir ssa bir
+  bir.frameSlots ≤ profile.maxBIRSlots ∧ m.ssa.Simulates m.bir ssa bir
 
 def EmitsLLVM (m : LoweringModels language lang profile)
     (bir : BIR lang profile) (output : LLVMInput profile) : Prop :=
-  output.sites = bir.sites ∧ m.llvmHandoff bir output ∧ m.bir.Refines m.llvm bir output
+  profile.backend = .llvm ∧ output.sites = bir.sites ∧ m.llvmHandoff bir output ∧ m.bir.Refines m.llvm bir output
 
 def EmitsLCB (m : LoweringModels language lang profile)
     (bir : BIR lang profile) (output : LCBInput profile) : Prop :=
+  profile.backend = .lcb ∧
+  LeanCompilerBackend.Verified.validateJob (Backend.LCB.job output.body) = .ok () ∧
+  (∀ job ∈ output.additionalJobs, LeanCompilerBackend.Verified.validateJob job = .ok ()) ∧
+  ((Backend.LCB.job output.body :: output.additionalJobs).map
+    (fun job => job.code.symbol.name)).Nodup ∧
   output.sites = bir.sites ∧ m.lcbHandoff bir output ∧ m.bir.Simulates m.lcb bir output
 
 end Concrete.Interfaces

@@ -37,15 +37,39 @@ structure Located (A : Type) where
   span : FileSpan
   value : A
 
+abbrev Terminal := ConcreteSpec.Surface0.Terminal
+
+def Terminal.HasPayload : Terminal → Bool
+  | .ident | .integer | .stringLiteral | .byteLiteral | .label => true
+  | _ => false
+
+/-- The raw spelling lives in the span. These are the decoded values used by actions. -/
+inductive TokenValue where
+  | fixed (kind : Terminal) (plain : Terminal.HasPayload kind = false)
+  | name (text : String)
+  | integer (value : Nat) (radix : ConcreteSpec.Surface0.Radix) (suffix : Option IntTy)
+  | stringLiteral (bytes : List UInt8)
+  | byteLiteral (byte : UInt8)
+  | label (name : Name)
+  deriving DecidableEq, Repr
+
+def TokenValue.kind : TokenValue → Terminal
+  | .fixed kind _ => kind
+  | .name _ => .ident
+  | .integer .. => .integer
+  | .stringLiteral _ => .stringLiteral
+  | .byteLiteral _ => .byteLiteral
+  | .label _ => .label
+
 structure TokenStream where
   source : Source
-  tokens : Array (Located ConcreteSpec.Surface0.TokenValue)
+  tokens : Array (Located TokenValue)
   /-- Trivia preceding each token, followed by the EOF trivia. -/
   trivia : Array (Array FileSpan)
 
 structure ParserView where
   source : Source
-  tokens : Array (Located ConcreteSpec.Surface0.TokenValue)
+  tokens : Array (Located TokenValue)
 
 def TokenStream.parserView (stream : TokenStream) : ParserView :=
   ⟨stream.source, stream.tokens⟩
@@ -77,11 +101,33 @@ structure CheckerRefusal where
   related : List (Name × FileSpan)
   obligation : Option ObligationId
 
+/-- Canonical identity of an ordered operand, shared with typed MIR reads.
+Literal bytes are the integrated Core instance's canonical value encoding. -/
+inductive OperandRead where
+  | literal (encoding : List UInt8)
+  | copy (place : PlaceId) (fields : List FieldId)
+  | move (place : PlaceId) (fields : List FieldId)
+  deriving DecidableEq
+
+/-- The active syntax at an operation's evaluation point. Deferred calls and loop
+tests are inspected when evaluated, rather than when their frames are installed. -/
+inductive CoreOperation (O : Exec.Operands) where
+  | expression (expr : O.Expr)
+  | call (callee : FnId) (args : List O.Expr)
+  | primitive (primitive : O.Prim) (args : List O.Expr)
+
+structure SafetyCondition (Ty : Type) where
+  discriminator : Nat
+  trap : TrapKind
+  operands : List (Ty × OperandRead)
+
 /-- The operand family is supplied by ConcreteSpec. Control, calls and scoped lifetime use Exec. -/
 structure CoreLanguage where
   operands : Exec.Operands
   hybridStore : operands.Store = Hybrid.State
   Declaration : Type
+  /-- Exact ordered operand reads and trap conditions of the integrated spec operation. -/
+  safety : CoreOperation operands → List (SafetyCondition operands.Ty)
   permit : AList Var Own.Descriptor → AList Var operands.Val → operands.Expr →
     Own.State → Option Own.State
 
@@ -132,6 +178,48 @@ structure Payload (language : CoreLanguage) where
 abbrev Payload.machine {language : CoreLanguage} (payload : Payload language) : Exec.Operands :=
   language.instrumented payload.ownership
 
+def CoreLanguage.emptyStore (language : CoreLanguage) : Own.Store language.operands.Store :=
+  ⟨language.hybridStore.symm ▸ (⟨[], Mem.Memory.empty⟩ : Hybrid.State), {}⟩
+
+/-- Hosted Core starts at the program's entry with no language arguments,
+cells or outstanding loans. -/
+def Payload.initial? {language : CoreLanguage} (payload : Payload language) :
+    Option (Exec.Config payload.machine) := do
+  let fn ← AList.lookup payload.body.fns payload.entry
+  if fn.params.isEmpty then Exec.enter fn [] language.emptyStore else none
+
+def Payload.initial {language : CoreLanguage} (payload : Payload language) :
+    Exec.Config payload.machine :=
+  payload.initial?.getD ⟨.refused, [], language.emptyStore, []⟩
+
+def stmtOperations {O : Exec.Operands} : Exec.Stmt O → List (SiteId × CoreOperation O)
+  | .bind _ e site | .assign _ e site | .ret e site => [(site, .expression e)]
+  | .cond e yes no site => (site, .expression e) :: stmtOperations yes ++ stmtOperations no
+  | .loop _ cond test body site => (site, .expression test) :: stmtOperations cond ++ stmtOperations body
+  | .call _ fn args site | .defer fn args site => [(site, .call fn args)]
+  | .prim _ op args site => [(site, .primitive op args)]
+  | .seq first rest => stmtOperations first ++ stmtOperations rest
+  | .block _ body => stmtOperations body
+  | _ => []
+
+def Payload.operations {language : CoreLanguage} (payload : Payload language) :
+    List (SiteId × CoreOperation language.operands) :=
+  payload.body.fns.flatMap fun (_, fn) =>
+    (stmtOperations fn.body).map fun (site, op) => (site, match op with
+      | .expression e => .expression e
+      | .call fn args => .call fn args
+      | .primitive p args => .primitive p args)
+
+def Payload.activeOperation {language : CoreLanguage} (payload : Payload language)
+    (state : Exec.Config payload.machine) : Option (SiteId × CoreOperation language.operands) :=
+  match state.ctrl, state.frames with
+  | .exec (.bind _ e site), _ | .exec (.assign _ e site), _ | .exec (.ret e site), _
+  | .exec (.cond e _ _ site), _ | .done, .test _ _ e _ site _ :: _ =>
+    some (site, .expression e)
+  | .exec (.call _ fn args site), _ => some (site, .call fn args)
+  | .exec (.prim _ p args site), _ => some (site, .primitive p args)
+  | _, _ => none
+
 structure CoreInput (language : CoreLanguage) where
   project : Project
   slice : Slice
@@ -139,6 +227,7 @@ structure CoreInput (language : CoreLanguage) where
 
 def CoreInput.LocationsWF {language : CoreLanguage} (input : CoreInput language) : Prop :=
   (List.map Prod.fst input.payload.origins).Nodup ∧
+  (List.map Prod.fst input.payload.operations).Nodup ∧
   (List.map (fun (entry : SiteId × Origin) => entry.2.evidenceKey) input.payload.origins).Nodup ∧
   ∀ (site : SiteId) (origin : Origin), (site, origin) ∈ input.payload.origins →
     site = origin.operation ∧ ∃ span, origin.lexical.Binds input.project span
@@ -149,8 +238,8 @@ structure Discharge (language : CoreLanguage) where
   operation : SiteId
   key : StableKey
   obligation : ObligationId
-  operandTypes : List language.operands.Ty
-  operands : List language.operands.Expr
+  trap : TrapKind
+  operands : List (language.operands.Ty × OperandRead)
 
 /-- An operation can have several independent conditions, such as divisor nonzero and
 the signed division overflow guard. Each obligation appears once. -/
@@ -171,29 +260,37 @@ structure Admission (language : CoreLanguage) where
   statics : CoreInput language → Prop
   accepted : CoreInput language → Prop
   rejects : CoreInput language → CheckerRefusal → Prop
-  initial : (input : CoreInput language) → Exec.Config input.payload.machine → Prop
-  matchesOperation : CoreInput language → Discharge language → Prop
-  atOperation : (input : CoreInput language) → Exec.Config input.payload.machine → SiteId → Prop
-  holds : (input : CoreInput language) → Discharge language → Exec.Config input.payload.machine → Prop
   check : CoreInput language → Except CheckerRefusal (Discharges language)
 
-def Admission.ValidDischarges {language : CoreLanguage} (spec : Admission language)
-    (input : CoreInput language) (discharges : Discharges language) : Prop :=
+def Payload.ConditionsAt {language : CoreLanguage} (payload : Payload language) (site : SiteId)
+    (conditions : List (SafetyCondition language.operands.Ty)) : Prop :=
+  ∃ op, (site, op) ∈ payload.operations ∧ conditions = language.safety op
+
+def Discharge.condition {language : CoreLanguage} (d : Discharge language) :
+    SafetyCondition language.operands.Ty :=
+  ⟨d.obligation.discriminator, d.trap, d.operands⟩
+
+def ValidDischarges {language : CoreLanguage} (input : CoreInput language)
+    (discharges : Discharges language) : Prop :=
+  input.payload.initial?.isSome = true ∧
   (List.map Prod.fst discharges).Nodup ∧
   (∀ site group, (site, group) ∈ discharges →
     group ≠ [] ∧ (group.map Discharge.obligation).Nodup) ∧
   ∀ (site : SiteId) (d : Discharge language), discharges.Contains site d →
-    site = d.operation ∧ d.obligation.site = site ∧ spec.matchesOperation input d ∧
+    site = d.operation ∧ d.obligation.site = site ∧ d.obligation.kind = .safety ∧
+    (∃ conditions, input.payload.ConditionsAt site conditions ∧ d.condition ∈ conditions) ∧
     (∃ origin, (site, origin) ∈ input.payload.origins ∧ origin.evidenceKey = d.key) ∧
-    ∀ start state events, spec.initial input start →
-      Exec.Steps input.payload.body start events state → spec.atOperation input state site →
-      spec.holds input d state
+    ∀ state events op, Exec.Steps input.payload.body input.payload.initial events state →
+      input.payload.activeOperation state = some (site, op) →
+      (∃ label next, Exec.Step input.payload.body state label next) ∧
+      (∀ label next, Exec.Step input.payload.body state label next →
+        next.ctrl ≠ .trapped d.trap site)
 
 def Admission.Sound {language : CoreLanguage} (spec : Admission language) : Prop :=
   ∀ input, input.LocationsWF → spec.fragment input.slice input.payload →
     (spec.accepted input ↔ ∃ discharges, spec.check input = .ok discharges) ∧
     (∀ discharges, spec.check input = .ok discharges →
-      spec.statics input ∧ spec.ValidDischarges input discharges) ∧
+      spec.statics input ∧ ValidDischarges input discharges) ∧
     (∀ refusal, spec.check input = .error refusal → spec.rejects input refusal)
 
 /-- Layout is a spec function at the resolved target. A zero extent still has logical lifetime. -/
