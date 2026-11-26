@@ -127,6 +127,24 @@ private def checkCompilerFiles : IO Unit := do
       first.line = second.line ∧ first.column = second.column) do
     throw (IO.userError "identical text in different files must have distinct operator spans")
 
+-- Rebuilding an output with an edited project and the original payload must fail.
+example (_out : Concrete.Stages.Output) (_replacement : Concrete.Stages.Input) : True := by
+  fail_if_success
+    have _swapped : Concrete.Stages.Output := by
+      constructor
+      case project => exact _replacement.project
+      case fileId => exact _out.fileId
+      case tokens => exact _out.tokens
+      case ast => exact _out.ast
+      case core => exact _out.core
+      case evidence => exact _out.evidence
+      case mir => exact _out.mir
+      case memory => exact _out.memory
+      case bir => exact _out.bir
+      all_goals first | exact _out.provenance | trivial
+    trivial
+  trivial
+
 private def checkSingleFile : IO Unit := do
   let source := "fn main() -> u8 { return 20 + 22; }".toUTF8
   let edited := "fn main() -> u8 { return 20 + 23; }".toUTF8

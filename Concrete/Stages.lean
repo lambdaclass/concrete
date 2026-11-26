@@ -42,6 +42,11 @@ structure Output where
   mir : MIR.Program
   memory : Memory.Program
   bir : BIR.Program
+  /-- The site table comes from elaborating the exact file in the issuing project. -/
+  provenance : ∃ file,
+    project.fileAt fileId = some file ∧
+    Lex.lex ⟨file.source.toBytes.toArray⟩ fileId = .ok tokens ∧
+    Parse.parse tokens = .ok ast ∧ Elab.elaborate ast = .ok core
 
 /-- Resolve an actual elaborated operator site against the table used to compile it. -/
 def Output.operatorSpan (out : Output) (index : Nat) : Option (ScopedSpan out.project) := do
@@ -85,9 +90,36 @@ private def stages (path : String) :=
   .next (fun v => memory v.2) <|
   .next (fun v => SSA.lower path v.2) .done
 
-def compile (input : Input) : Except Refusal Output := do
-  let ((((((( _, tokens), ast), core), admitted), mir), mem), bir) ← (stages input.path).run input
-  return ⟨input.project, input.fileId, tokens, ast, core, admitted.tokens, mir, mem, bir⟩
+private theorem edges_of_run {input : Input} {resolved tokens ast core admitted mir mem bir}
+    (h : (stages input.path).run input =
+      .ok (((((((resolved, tokens), ast), core), admitted), mir), mem), bir)) :
+    Lex.lex input.source input.fileId = .ok tokens ∧
+    Parse.parse tokens = .ok ast ∧ Elab.elaborate ast = .ok core ∧
+    Admission.check core = .ok admitted ∧ MIR.lower admitted = .ok mir ∧
+    Memory.lower mir = mem ∧ SSA.lower input.path mem = .ok bir := by
+  simp only [stages, Pipeline.run, lex, memory, bind, Except.bind] at h
+  split at h <;> try contradiction
+  next lexed hLex =>
+    split at h <;> try contradiction
+    next parsed hParse =>
+      split at h <;> try contradiction
+      next elaborated hElab =>
+        split at h <;> try contradiction
+        next checked hAdmit =>
+          split at h <;> try contradiction
+          next lowered hLower =>
+            split at h <;> try contradiction
+            next loweredSSA hSSA =>
+              cases Except.ok.inj h
+              exact ⟨hLex, hParse, hElab, hAdmit, hLower, rfl, hSSA⟩
+
+def compile (input : Input) : Except Refusal Output :=
+  match h : (stages input.path).run input with
+  | .error e => .error e
+  | .ok ((((((( _, tokens), ast), core), admitted), mir), mem), bir) =>
+    have ⟨hLex, hParse, hElab, _, _, _, _⟩ := edges_of_run h
+    .ok ⟨input.project, input.fileId, tokens, ast, core, admitted.tokens, mir, mem, bir,
+      ⟨input.file, input.loaded, hLex, hParse, hElab⟩⟩
 
 /-- Compile the exact bytes in a resolved slot of the shared project table. -/
 def compileFile (project : Project) (fileId : FileId) : Except Refusal Output := do
@@ -96,31 +128,20 @@ def compileFile (project : Project) (fileId : FileId) : Except Refusal Output :=
 /-- Successful compilation retains the issuing project used on the lexical edge. -/
 theorem compile_project {input : Input} {out : Output} (h : compile input = .ok out) :
     out.project = input.project ∧ out.fileId = input.fileId := by
-  cases result : (stages input.path).run input with
-  | error e => simp [compile, result, bind, Except.bind] at h
-  | ok value =>
-    rcases value with ⟨⟨⟨⟨⟨⟨⟨_, tokens⟩, ast⟩, core⟩, admitted⟩, mir⟩, mem⟩, bir⟩
-    simp [compile, result, bind, Except.bind, pure, Except.pure] at h
-    subst out
+  unfold compile at h
+  split at h
+  · contradiction
+  · cases Except.ok.inj h
     exact ⟨rfl, rfl⟩
 
 /-- The token list recorded by successful compilation satisfies the surface lexical relation. -/
 theorem compile_lexes {input : Input} {out : Output} (h : compile input = .ok out) :
     ConcreteSpec.Surface0.Lexes input.source out.tokens input.fileId := by
-  simp only [compile, stages, Pipeline.run, lex, memory, bind, Except.bind, pure, Except.pure] at h
-  cases hl : Lex.lex input.source input.fileId <;> simp only [hl, reduceCtorEq] at h
-  rename_i toks
-  cases hp : Parse.parse toks <;> simp only [hp, reduceCtorEq] at h
-  rename_i ast
-  cases he : Elab.elaborate ast <;> simp only [he, reduceCtorEq] at h
-  rename_i core
-  cases ha : Admission.check core <;> simp only [ha, reduceCtorEq] at h
-  rename_i admitted
-  cases hm : MIR.lower admitted <;> simp only [hm, reduceCtorEq] at h
-  rename_i mir
-  cases hs : SSA.lower input.path (Memory.lower mir) <;> simp only [hs, reduceCtorEq] at h
-  cases Except.ok.inj h
-  exact Lex.lex_correct hl
+  obtain ⟨projectEq, fileIdEq⟩ := compile_project h
+  obtain ⟨file, loaded, hLex, _, _⟩ := out.provenance
+  rw [projectEq, fileIdEq, input.loaded] at loaded
+  cases Option.some.inj loaded
+  exact Lex.lex_correct (fileIdEq ▸ hLex)
 
 /-- Equalities for individual passes compose into a certificate about the production fold. -/
 theorem compile_of_edges (input : Input) (tokens : List ConcreteSpec.Surface0.Token)
@@ -133,70 +154,44 @@ theorem compile_of_edges (input : Input) (tokens : List ConcreteSpec.Surface0.To
     (hLower : MIR.lower admitted = .ok mir)
     (hMem : Memory.lower mir = mem)
     (hSSA : SSA.lower input.path mem = .ok bir) :
-    compile input = .ok ⟨input.project, input.fileId, tokens, ast, core, admitted.tokens, mir, mem, bir⟩ := by
-  simp [compile, stages, Pipeline.run, lex, memory, bind, Except.bind,
-    hLex, hParse, hElab, hAdmit, hLower, hMem, hSSA] <;> rfl
+    compile input = .ok ⟨input.project, input.fileId, tokens, ast, core, admitted.tokens, mir, mem, bir,
+      ⟨input.file, input.loaded, hLex, hParse, hElab⟩⟩ := by
+  have runEq : (stages input.path).run input =
+      .ok (((((((input, tokens), ast), core), admitted), mir), mem), bir) := by
+    simp [stages, Pipeline.run, lex, memory, bind, Except.bind,
+      hLex, hParse, hElab, hAdmit, hLower, hMem, hSSA]
+  unfold compile
+  split
+  · next failed h => rw [runEq] at h; contradiction
+  · next actual tokens' ast' core' admitted' mir' mem' bir' h =>
+      rw [runEq] at h
+      cases Except.ok.inj h
+      rfl
 
 /-- Successful production compilation preserves the Core outcome through Memory. -/
 theorem compile_core_correct {input : Input} {out : Output}
     (h : compile input = .ok out) :
     let p := Core.toCore out.core.program
     Memory.run out.memory = Core.run p (p.body.length + 1) := by
-  simp only [compile, stages, Pipeline.run, bind, Except.bind, memory] at h
-  cases hLex : lex input with
-  | error => simp [hLex] at h
-  | ok tokens =>
-    cases hParse : Parse.parse tokens with
-    | error => simp [hLex, hParse] at h
-    | ok ast =>
-      cases hElab : Elab.elaborate ast with
-      | error => simp [hLex, hParse, hElab] at h
-      | ok core =>
-        cases hAdmit : Admission.check core with
-        | error => simp [hLex, hParse, hElab, hAdmit] at h
-        | ok admitted =>
-          cases hLower : MIR.lower admitted with
-          | error => simp [hLex, hParse, hElab, hAdmit, hLower] at h
-          | ok mir =>
-            cases hSSA : SSA.lower input.path (Memory.lower mir) with
-            | error => simp [hLex, hParse, hElab, hAdmit, hLower, hSSA] at h
-            | ok bir =>
-              simp [hLex, hParse, hElab, hAdmit, hLower, hSSA, pure, Except.pure] at h
-              subst out
-              exact Memory.lower_admitted_correct hAdmit hLower
+  unfold compile at h
+  split at h
+  · contradiction
+  · next actual tokens ast core admitted mir mem bir runEq =>
+      obtain ⟨_, _, _, hAdmit, hLower, rfl, _⟩ := edges_of_run runEq
+      cases Except.ok.inj h
+      exact Memory.lower_admitted_correct hAdmit hLower
 
 /-- Every accepted production pipeline result satisfies the SSA contract on its
 recorded Memory and BIR programs. -/
 theorem compile_ssa_correct {input : Input} {out : Output}
     (h : compile input = .ok out) : SSA.Preserves out.memory out.bir := by
-  cases hLex : lex input with
-  | error e => simp [compile, stages, Pipeline.run, bind, Except.bind, hLex] at h
-  | ok tokens =>
-    cases hParse : Parse.parse tokens with
-    | error e => simp [compile, stages, Pipeline.run, bind, Except.bind, hLex, hParse] at h
-    | ok ast =>
-      cases hElab : Elab.elaborate ast with
-      | error e => simp [compile, stages, Pipeline.run, bind, Except.bind, hLex, hParse, hElab] at h
-      | ok core =>
-        cases hAdmit : Admission.check core with
-        | error e =>
-          simp [compile, stages, Pipeline.run, bind, Except.bind, hLex, hParse, hElab, hAdmit] at h
-        | ok admitted =>
-          cases hLower : MIR.lower admitted with
-          | error e =>
-            simp [compile, stages, Pipeline.run, bind, Except.bind,
-              hLex, hParse, hElab, hAdmit, hLower] at h
-          | ok mir =>
-            cases hSSA : SSA.lower input.path (Memory.lower mir) with
-            | error e =>
-              simp [compile, stages, Pipeline.run, memory, bind, Except.bind,
-                hLex, hParse, hElab, hAdmit, hLower, hSSA] at h
-            | ok bir =>
-              have he := compile_of_edges input tokens ast core admitted mir (Memory.lower mir) bir
-                hLex hParse hElab hAdmit hLower rfl hSSA
-              rw [he] at h
-              cases h
-              exact SSA.lower_correct hSSA
+  unfold compile at h
+  split at h
+  · contradiction
+  · next actual tokens ast core admitted mir mem bir runEq =>
+      obtain ⟨_, _, _, _, _, _, hSSA⟩ := edges_of_run runEq
+      cases Except.ok.inj h
+      exact SSA.lower_correct hSSA
 
 /-- The LCB adapter and profile checks compose independently of the shared stages. -/
 theorem prepareLCB_of_edges (bir : BIR.Program)
