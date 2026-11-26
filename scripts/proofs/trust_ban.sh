@@ -46,7 +46,8 @@ BANNED_WORD_RE='\b(sorry|sorryAx|admit|native_decide|ofReduceBool|ofReduceNat|tr
 # warningAsError (checked below in lakefile.toml), so a `sorry` that elaborates anywhere, whatever
 # tactic produced it (`stop` is `repeat sorry`), fails the build; `set_option warningAsError false`
 # would undo that. Nor do they run meta code (run_cmd, run_tac, #eval and the like).
-NATIVE_ATTR_RE='(?:@\[|\battribute\s+\[)[^]]*\b(?:csimp|implemented_by|extern|init|builtin_init|export|tagged_return|unbox)\b'
+# A French-quoted identifier is one token even when its spelling contains ].
+NATIVE_ATTR_RE='(?:@\[|\battribute\s+\[)(?:«[^»]*»|[^]«])*?(?<![\w.])(?:«(?:csimp|implemented_by|extern|init|builtin_init|export|tagged_return|unbox)»|(?:csimp|implemented_by|extern|init|builtin_init|export|tagged_return|unbox)\b)'
 TOTALITY_RE="\b(partial|unsafe|opaque|implemented_by|extern|_unsafe_rec|csimp|builtin_init)\b|$NATIVE_ATTR_RE"
 EXTENSION_RE='#eval\b|\b(run_cmd|run_tac|run_elab|run_meta|set_option|macro|macro_rules|syntax|notation|infix|infixl|infixr|prefix|postfix|elab|elab_rules|declare_syntax_cat|initialize|builtin_initialize)\b'
 
@@ -93,7 +94,17 @@ driver_lean() {
 [ "$FAIL" = 0 ] || finish
 "$LAKE" build +Main ConcreteSpec Concrete > "$TMP/driver-build.log" 2>&1 \
   || { cat "$TMP/driver-build.log" >&2; no "driver elaboration failed"; finish; }
-if PROOF_TOTALITY_SOURCES="$TMP/native-sources" driver_lean --run "$PROOFS_DIR/totality.lean" Main Concrete; then
+# The small backend runtime exception is tied to the reviewed dependency
+# revision and to its own sources and artifacts in the execution audit.
+BACKEND_ROOT="$PWD/.lake/packages/lean-compiler-backend"
+BACKEND_PIN=4bea4b3ffd8a43a73a0016012d865044067b3275
+if ! BACKEND_HEAD=$(git -C "$BACKEND_ROOT" rev-parse HEAD) ||
+   ! BACKEND_STATUS=$(git --no-optional-locks -C "$BACKEND_ROOT" status --porcelain --untracked-files=all) ||
+   [ "$BACKEND_HEAD" != "$BACKEND_PIN" ] || [ -n "$BACKEND_STATUS" ]; then
+  no "execution audit requires the clean reviewed backend revision $BACKEND_PIN"
+  finish
+fi
+if PROOF_TOTALITY_BACKEND="$(realpath "$BACKEND_ROOT")" PROOF_TOTALITY_SOURCES="$TMP/native-sources" driver_lean --run "$PROOFS_DIR/totality.lean" Main Concrete; then
   ok "compiler and driver execution closure passes totality and stage isolation"
 else
   no "execution closure violates totality or stage isolation"
@@ -103,9 +114,19 @@ fi
 # entire non-runtime import closure for substitutions, including Lake dependencies.
 if [ -s "$TMP/native-sources" ]; then
   mapfile -t NATIVE_SRC < "$TMP/native-sources"
+  for src in "${NATIVE_SRC[@]}"; do
+    case "$src" in
+      "$BACKEND_ROOT/"*)
+        git -C "$BACKEND_ROOT" ls-files --error-unmatch -- "${src#"$BACKEND_ROOT/"}" >/dev/null ||
+          no "backend closure source is outside the reviewed tree: $src"
+        ;;
+    esac
+  done
   W=$(python3 "$PROOFS_DIR/lean_lex.py" scan-code "$NATIVE_ATTR_RE" "${NATIVE_SRC[@]}"); RC=$?
   [ "$RC" = 0 ] && [ -z "$W" ] && ok "non-runtime closure sources contain no native substitution attributes" \
     || no "native closure source scan (rc=$RC): $W"
+elif [ "$FAIL" = 0 ]; then
+  no "execution audit did not write a nonempty closure source manifest"
 fi
 [ "$FAIL" = 0 ] || finish
 
@@ -278,16 +299,23 @@ for body in 'import Lean.Meta.Basic' 'import Init.System.IO' 'import LeanCompile
 done
 # Elaborate a transitive stage violation outside the compiler source tree, so
 # the source scan cannot account for the closure rejection.
-mkdir -p "$TMP/totality"
+mkdir -p "$TMP/totality/Std"
 cat > "$TMP/totality/Foreign.lean" <<'EOF'
+/-- A documented declaration whose name contains a closing square bracket. -/
+def «attribute]Probe» : Nat := 0
+
 partial def hiddenLoop (n : Nat) : Nat := hiddenLoop (n + 1)
 opaque importedField : Type := Nat
+@[export audit_planted_export] def plantedExport (a : Nat) : Nat := a
+
+@[inherit_doc «attribute]Probe», unbox] inductive PlantedUnbox where
+  | mk : Nat → PlantedUnbox
+
 def ordinary (a b : Nat) : Nat := a + b
 @[extern "lean_nat_mul"] def alternate (a b : Nat) : Nat := a + b
 @[csimp] theorem replaceOrdinary : ordinary = alternate := rfl
 def ordinaryLocal (a b : Nat) : Nat := a + b
 @[extern "lean_nat_mul"] def alternateLocal (a b : Nat) : Nat := a + b
-theorem replaceLocal : ordinaryLocal = alternateLocal := rfl
 unsafe def unsafeImpl (n : Nat) : Nat := n
 @[implemented_by unsafeImpl] def replaced (n : Nat) := n
 def initializer : IO Nat := do
@@ -306,12 +334,47 @@ inductive PlantedData where
 
 def plantedStage (n : Nat) : Nat := hiddenLoop n
 def plantedIO : IO Unit := IO.println "IO belongs in the driver"
+def plantedWhile (n : Nat) : Nat := Id.run do
+  let mut value := n
+  while value > 0 do
+    value := value + 1
+  return value
+
+inductive AuditStream where
+  | more
+
+instance : Std.Stream AuditStream Nat where
+  next? _ := some (1, .more)
+
+def plantedStream (n : Nat) : Nat := Id.run do
+  let mut value := n
+  for x in AuditStream.more do
+    value := value + x
+  return value
+
+def plantedState (n : Nat) : Nat := runST fun σ => do
+  let ref ← ST.mkRef (σ := σ) n
+  ref.get
+
+def plantedPlatform (_ : Unit) : Bool := System.Platform.isLinux
+def plantedHostWidth (_ : Unit) : Nat := System.Platform.numBits
+def plantedConcurrency (_ : Unit) : UInt32 := System.Platform.Internal.getHardwareConcurrency ()
+def plantedPanic (n : Nat) : Nat := if n == 0 then panic! "not pure" else n
+def plantedUnchecked (xs : List Nat) : Nat := xs[0]!
+def selectUnchecked (inst : GetElem? (List Nat) Nat Nat (fun xs i => i < xs.length))
+    (xs : List Nat) : Nat :=
+  match inst with
+  | GetElem?.mk _ getBang => @getBang inferInstance xs 0
+
+def plantedIndirectUnchecked (xs : List Nat) : Nat := selectUnchecked inferInstance xs
+
 def plantedTrace (n : Nat) : Nat := dbgTrace "stage" fun _ => n
 def plantedTask (n : Nat) : Task Nat := Task.spawn fun _ => n
 def plantedRewrite (a b : Nat) : Nat := ordinary a b
 example : plantedRewrite 2 3 = 5 := rfl
 section
-attribute [local csimp] replaceLocal
+theorem replaceLocal : ordinaryLocal = alternateLocal := rfl
+attribute [inherit_doc «attribute]Probe», local csimp] replaceLocal
 def plantedLocalRewrite (a b : Nat) : Nat := ordinaryLocal a b
 end
 def plantedImpl (n : Nat) : Nat := replaced n
@@ -323,21 +386,36 @@ EOF
 cat > "$TMP/totality/ConcreteTooling.lean" <<'EOF'
 def plantedTooling := 1
 EOF
+cat > "$TMP/totality/Std/AuditShadow.lean" <<'EOF'
+def shadowValue : Nat := 1
+EOF
 cat > "$TMP/totality/DriverDependency.lean" <<'EOF'
+import Std.AuditShadow
 import Lean.Meta.Basic
 import ConcreteTooling
-partial def driverLoop (n : Nat) : Nat := driverLoop (n + 1)
+partial def driverLoop (n : Nat) : Nat := driverLoop (n + shadowValue)
 EOF
 cat > "$TMP/totality/Driver.lean" <<'EOF'
 import DriverDependency
 def driverEntry (n : Nat) : Nat := driverLoop n
+
+def driverWhile (n : Nat) : Nat := Id.run do
+  let mut value := n
+  while value > 0 do
+    value := value + 1
+  return value
 EOF
 TOTALITY_PATH="$TMP/totality:$ROOT_DIR/.lake/build/lib/lean:$("$LAKE" env printenv LEAN_PATH)"
 totality_lean() {
   "$LAKE" env env LEAN_PATH="$TOTALITY_PATH" lean "$@"
 }
 if (
-  for module in Foreign Stage ConcreteTooling DriverDependency Driver; do
+  # Lean resolves a library directory as a unit. Keep actual standard
+  # artifacts linked to the sysroot and plant one foreign artifact beside them.
+  runtime_lib="$(totality_lean --print-prefix)/lib/lean"
+  ln -s "$runtime_lib"/Std/* "$TMP/totality/Std/" || exit
+  ln -s "$runtime_lib"/Std.olean* "$TMP/totality/" || exit
+  for module in Foreign Stage ConcreteTooling Std/AuditShadow DriverDependency Driver; do
     totality_lean -R "$TMP/totality" -o "$TMP/totality/$module.olean" "$TMP/totality/$module.lean" || exit
   done
 ) > "$TMP/totality-build.log" 2>&1; then
@@ -349,8 +427,18 @@ if (
   for reason in \
     'plantedStage reaches (partial|opaque) declaration hiddenLoop' \
     'PlantedData[.][^ ]+ reaches opaque declaration importedField' \
-    'reaches IO or task declaration .*dbgTrace' \
-    'reaches IO or task declaration .*Task' \
+    'reaches stage effect IO' \
+    'reaches (implemented_by|opaque|partial) declaration .*repeatM' \
+    'reaches (opaque|partial) declaration .*Stream.forIn' \
+    'reaches stage effect (runST|ST.mkRef)' \
+    'reaches stage effect System.Platform.isLinux' \
+    'plantedHostWidth reaches stage effect System.Platform.numBits' \
+    'plantedConcurrency reaches stage effect System.Platform.Internal.getHardwareConcurrency' \
+    'reaches stage effect panicCore' \
+    'reaches stage effect GetElem[?][.]getElem!' \
+    'selectUnchecked.*reaches stage effect GetElem[?][.]casesOn' \
+    'reaches stage effect .*dbgTrace' \
+    'reaches stage effect .*Task' \
     'ordinary has csimp replacement alternate' \
     'reaches extern declaration alternate$' \
     'plantedLocalRewrite reaches native extern alternateLocal' \
@@ -358,8 +446,11 @@ if (
     'replaced reaches unsafe declaration unsafeImpl' \
     'Foreign registers init for initialValue' \
     'Foreign registers builtin_init for builtinValue' \
+    'Foreign registers export for plantedExport' \
+    'Foreign registers unbox for PlantedUnbox' \
     'plantedChoice reaches noncomputable declaration plantedChoice' \
     'plantedAxiom reaches axiom declaration plantedAxiom' \
+    'Std[.]AuditShadow shadows the pinned runtime' \
     'compiler imports forbidden module Lean.Meta.Basic' \
     'compiler imports forbidden module ConcreteTooling' \
     'plantedBehaviour reaches noncomputable declaration Concrete.BIR.behaviour' \
@@ -367,13 +458,21 @@ if (
     has_match -E "$reason" < "$TMP/totality-control.log" \
       && ok "control: $reason" || no "totality control missed $reason: $(head -25 "$TMP/totality-control.log")"
   done
+  loop_hits=$(grep -c 'reaches implemented_by declaration repeatM' "$TMP/totality-control.log")
+  [ "$loop_hits" = 2 ] \
+    && ok "control: the stage and driver audits independently reject the while implementation" \
+    || no "expected separate stage and driver rejections for the while implementation, saw $loop_hits"
 else
   no "totality control did not elaborate: $(cat "$TMP/totality-build.log")"
 fi
 W=$(python3 "$PROOFS_DIR/lean_lex.py" scan-code "$NATIVE_ATTR_RE" "$TMP/totality/Stage.lean"); RC=$?
-[ "$RC" = 0 ] && [[ "$W" == *"attribute [local csimp] replaceLocal"* ]] \
-  && ok "control: closure source scan detects a local compiler rewrite" \
+[ "$RC" = 0 ] && [[ "$W" == *"attribute [inherit_doc «attribute]Probe», local csimp] replaceLocal"* ]] \
+  && ok "control: closure source scan detects local csimp after a quoted closing bracket" \
   || no "closure source scan missed the local compiler rewrite"
+W=$(python3 "$PROOFS_DIR/lean_lex.py" scan-totality "$TOTALITY_RE|$EXTENSION_RE" "$TMP/totality/Foreign.lean"); RC=$?
+[ "$RC" = 0 ] && [[ "$W" == *"@[inherit_doc «attribute]Probe», unbox]"* ]] \
+  && ok "control: totality source scan detects unbox after a quoted closing bracket" \
+  || no "totality source scan missed the unbox attribute"
 for word in partial unsafe opaque implemented_by extern csimp builtin_init '@[«implemented_by» impl]' '@[init impl]' 'set_option maxRecDepth 100000'; do
   printf 'def ready := 0\n%s\n' "$word" > "$TMP/Main.lean"
   W=$(python3 "$PROOFS_DIR/lean_lex.py" scan-totality "$TOTALITY_RE|$EXTENSION_RE" "$TMP/Main.lean"); RC=$?

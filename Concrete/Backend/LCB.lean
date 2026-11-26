@@ -4,6 +4,7 @@ import ConcreteSpec.Spec.Scalar
 import ConcreteSpec.Spec.Slice1Syntax
 import LeanCompilerBackend.IR
 import LeanCompilerBackend.Validate
+import LeanCompilerBackend.Verified.Admission
 import LeanCompilerBackend.Verified.BuildIdentity
 import LeanCompilerBackend.Verified.Canonical
 import LeanCompilerBackend.Verified.Plans
@@ -11,6 +12,7 @@ import LeanCompilerBackend.Verified.Source
 import ConcreteSpec.Proofs.Basics
 import Concrete.Backend.Runtime
 import Concrete.BIR.Progress
+import Concrete.Refusal
 import LeanCompilerBackend.Verified.Job
 import LeanCompilerBackend.AMD64
 import LeanCompilerBackend.AArch64
@@ -116,12 +118,12 @@ definitions, so this is a function of the register.
 For example, a register at offset 2 in a block with base 5 is looked up as `some 7`. -/
 def regId (p : Program) (r : Reg) : Option Nat := AList.lookup (ids p) r
 
-def idOf (p : Program) (r : Reg) : Except String Nat :=
+def idOf (p : Program) (r : Reg) : Except Refusal Nat :=
   match regId p r with
   | some n => .ok n
-  | none => .error s!"register %r{r} has no definition"
+  | none => .error (.internal s!"register %r{r} has no definition")
 
-def operand (p : Program) : Operand → Except String Source.Operand
+def operand (p : Program) : Operand → Except Refusal Source.Operand
   | .reg r => return .local (← idOf p r)
   | .imm _ v => return .literal (word v)
 
@@ -134,9 +136,9 @@ def ins (d : Nat) (op : Source.Operation) : Source.Instruction :=
   { destination := d, width := .word, operation := op }
 
 /-- An instruction's LCB instructions, its first value numbered `n`. -/
-def inst (p : Program) (n : Nat) : Inst → Except String (List Source.Instruction)
+def inst (p : Program) (n : Nat) : Inst → Except Refusal (List Source.Instruction)
   | .bin op t _ a b => do
-    unless inProfile t do throw s!"{repr t} is outside LCB's slice-0 profile"
+    unless inProfile t do throw (.backendProfile "LCB" s!"{repr t} is outside the slice-0 profile")
     let a ← operand p a
     let b ← operand p b
     return [ins n (.binary (opBinary op) a b),
@@ -144,7 +146,7 @@ def inst (p : Program) (n : Nat) : Inst → Except String (List Source.Instructi
       ins (n + 2) (.binary .andBits (.local (n + 1)) (.literal (word (2 ^ t.bits - 1)))),
       ins (n + 3) (.binary .add (.local (n + 2)) (.literal (word t.min)))]
   | .binOvf op t _ _ a b => do
-    unless inProfile t do throw s!"{repr t} is outside LCB's slice-0 profile"
+    unless inProfile t do throw (.backendProfile "LCB" s!"{repr t} is outside the slice-0 profile")
     let a ← operand p a
     let b ← operand p b
     return [ins n (.binary (opBinary op) a b),
@@ -154,7 +156,7 @@ def inst (p : Program) (n : Nat) : Inst → Except String (List Source.Instructi
       ins (n + 4) (.compare .unsignedLT .word (.local (n + 1)) (.literal (word (2 ^ t.bits)))),
       ins (n + 5) (.compare .eq .word (.local (n + 4)) (.literal (word 0)))]
   | .trunc fr to _ a => do
-    unless inProfile fr && inProfile to do throw s!"{repr fr} → {repr to} is outside LCB's slice-0 profile"
+    unless inProfile fr && inProfile to do throw (.backendProfile "LCB" s!"{repr fr} → {repr to} is outside the slice-0 profile")
     let a ← operand p a
     return [ins n (.binary .sub a (.literal (word to.min))),
       ins (n + 1) (.binary .andBits (.local n) (.literal (word (2 ^ to.bits - 1)))),
@@ -170,35 +172,35 @@ def edgesTo (j k : Nat) : Term → List (Nat × List Operand)
 def incoming (p : Program) (j : Nat) : List (Nat × List Operand) :=
   (indexed p.blocks).flatMap fun (k, b) => edgesTo j k b.term
 
-def term (p : Program) : Term → Except String Source.Terminator
+def term (p : Program) : Term → Except Refusal Source.Terminator
   | .ret a => return .ret (← operand p a)
   | .trap s => return .ret (.literal (word (256 + s)))
   | .br t _ => return .jump t
   | .condbr c t _ e _ => return .branch (.local (← idOf p c)) t e
 
 /-- Block `j`'s phi for its parameter `k`: one arm per incoming edge, by predecessor. -/
-def adaptPhi (p : Program) (j k : Nat) : Except String Source.Phi := do
+def adaptPhi (p : Program) (j k : Nat) : Except Refusal Source.Phi := do
   let arms ← (incoming p j).mapM fun (pred, args) => do
     let a ← match args[k]? with
       | some a => operand p a
-      | none => throw s!"block {pred} passes too few arguments to block {j}"
+      | none => throw (.internal s!"block {pred} passes too few arguments to block {j}")
     pure (pred, a)
   pure { destination := blockBase p j + k, width := .word, incoming := arms.toArray }
 
 /-- Instruction `i` of block `j`, numbered from its slot. -/
-def adaptInst (p : Program) (j : Nat) (b : Block) : Nat × Inst → Except String (List Source.Instruction)
+def adaptInst (p : Program) (j : Nat) (b : Block) : Nat × Inst → Except Refusal (List Source.Instruction)
   | (i, ins) => inst p (blockBase p j + instBase b i) ins
 
 /-- Block `j`: its phis, its instructions' expansions in order, its terminator. -/
-def adaptBlock (p : Program) : Nat × Block → Except String Source.Block
+def adaptBlock (p : Program) : Nat × Block → Except Refusal Source.Block
   | (j, b) => do
     let phis ← (indexed b.params).mapM fun (k, _) => adaptPhi p j k
     let insts ← (indexed b.insts).mapM (adaptInst p j b)
     pure { phis := phis.toArray, instructions := insts.flatten.toArray, terminator := ← term p b.term }
 
 /-- `main`'s body as a function of LCB's verified source profile. -/
-def adapt (p : Program) : Except String Source.Function := do
-  unless numberingOk p do throw "the numbering is not injective (a register defined twice?)"
+def adapt (p : Program) : Except Refusal Source.Function := do
+  unless numberingOk p do throw (.internal "LCB register numbering is not injective")
   let blocks ← (indexed p.blocks).mapM (adaptBlock p)
   return { resultWidth := .word, parameters := #[],
            valueWidths := Array.replicate (valueCount p) .word, blocks := blocks.toArray }
@@ -207,7 +209,7 @@ def adapt (p : Program) : Except String Source.Function := do
 decodes the body's result is part of the emitted artifact), or the adapter's refusal, in which case
 no artifact exists (`artifact` and the emitter build only from `.ok`). `Proof.emit_correct` and
 `Proof.artifact_correct` are the backend contract: no premise. -/
-def emit (p : Program) : Except String (Source.Function × SiteTable) := do
+def emit (p : Program) : Except Refusal (Source.Function × SiteTable) := do
   let f ← adapt p
   return (f, p.sites)
 
@@ -232,23 +234,35 @@ def job (f : Source.Function) : LeanCompilerBackend.Verified.FunctionJob :=
   { code := { symbol := bodySymbol, body := f, abi := LeanCompilerBackend.Verified.planAbi f,
               layout := LeanCompilerBackend.Verified.planFrame f } }
 
+/-- The compiler constructs the job and its plans. A failed structural check signals
+an invariant violation. Valid input can exceed the admission profile or its resource limits. -/
+def jobRefusal : LeanCompilerBackend.Verified.CompileError → Refusal
+  | .admission (.resourceLimit resource measured limit) =>
+    .backendResource "LCB" resource measured limit
+  | .admission (.unsupported feature) => .backendProfile "LCB" feature
+  | e => .internal s!"LCB job: {repr e}"
+
 /-- The adapted body as assembly text for `target`, computed in process from the value. -/
-def assemble (target : Target) (f : Source.Function) : Except String String :=
+def assemble (target : Target) (f : Source.Function) : Except Refusal String :=
   match target with
   | .aarch64Macos => do
     let artifact ← (LeanCompilerBackend.Verified.compileFunction (job f)).mapError
-      (fun e => s!"LCB first path: {repr e}")
+      jobRefusal
     return ".text\n" ++ artifact.code.fragment ++ ".subsections_via_symbols\n"
   | .x86_64Linux | .aarch64Linux => do
+    (LeanCompilerBackend.Verified.validateJob (job f)).mapError jobRefusal
     let m : LeanCompilerBackend.Module :=
       { functions := #[LeanCompilerBackend.Verified.reify f bodySymbol.name bodySymbol.exported] }
-    LeanCompilerBackend.validateModule m
-    match target with
-    | .x86_64Linux => LeanCompilerBackend.AMD64.emitModuleValidated m false false
-    | _ => LeanCompilerBackend.AArch64.emitModuleValidated m false false
+    (LeanCompilerBackend.validateModule m).mapError
+      (fun e => .internal s!"LCB compatibility module: {e}")
+    let emitted := match target with
+      | .x86_64Linux => LeanCompilerBackend.AMD64.emitModuleValidated m false false
+      | _ => LeanCompilerBackend.AArch64.emitModuleValidated m false false
+    -- Admission bounds the frame and excludes calls before compatibility emission.
+    emitted.mapError (fun e => .internal s!"LCB compatibility emitter: {e}")
 
 /-- The LCB body artifact for `target`: the assembly of a successful `emit`, or its refusal. -/
-def artifact (target : Target) (p : Program) : Except String String := do
+def artifact (target : Target) (p : Program) : Except Refusal String := do
   let (f, _) ← emit p
   assemble target f
 
@@ -578,7 +592,11 @@ theorem eval_bin {env : Source.Environment} {d : Nat} {op : Source.Binary} {a b 
 
 /-- Four consecutive slot writes, as a `bin` expansion makes them. -/
 def set4 (e : Source.Environment) (n : Nat) (u₀ u₁ u₂ v : Option Source.Value) : Source.Environment :=
-  (((e.set! n u₀).set! (n + 1) u₁).set! (n + 2) u₂).set! (n + 3) v
+  (((e.setIfInBounds n u₀).setIfInBounds (n + 1) u₁).setIfInBounds (n + 2) u₂).setIfInBounds (n + 3) v
+
+private theorem set4_eq (e : Source.Environment) (n : Nat) (u₀ u₁ u₂ v : Option Source.Value) :
+    set4 e n u₀ u₁ u₂ v = (((e.set! n u₀).set! (n + 1) u₁).set! (n + 2) u₂).set! (n + 3) v :=
+  rfl
 
 theorem size_set! (e : Source.Environment) (m : Nat) (u : Option Source.Value) :
     (e.set! m u).size = e.size := by
@@ -756,9 +774,9 @@ theorem binOvf_steps {f : Source.Function} {s : Source.State} {lb : Source.Block
     bin_steps (s := ⟨blk, pos, env⟩) ht hb (fun k hk => by
       rw [hq k (by omega)]; rcases k with _ | _ | _ | _ | k <;> first | rfl | omega)
       hA hB hW (by first | omega | (dsimp only; omega))
-  have zE : E.size = env.size := by simp only [E, set4, size_set!]
+  have zE : E.size = env.size := by simp only [E, set4_eq, size_set!]
   have r₁ : Source.read E .word (.local (n + 1)) = .ok (.word (biased t (raw op x y))) := by
-    simp only [E, set4]
+    simp only [E, set4_eq]
     rw [read_set_other (by omega), read_set_other (by omega)]
     exact read_set_self (by simp only [size_set!]; omega) rfl
   have h2 := flag_steps (E := E) (pos := pos + 4) (Q := BitVec.ofInt 32 (2 ^ t.bits)) hb
@@ -882,7 +900,7 @@ theorem inter_not_reg {p : Program} (hok : numberingOk p = true) {m : Nat}
 
 theorem size_set4 (e : Source.Environment) (n : Nat) (u₀ u₁ u₂ v : Option Source.Value) :
     (set4 e n u₀ u₁ u₂ v).size = e.size := by
-  simp only [set4, size_set!]
+  simp only [set4_eq, size_set!]
 
 /-- One `bin` instruction: its four LCB steps keep agreement, range and size, with the result
 bound. -/
@@ -916,6 +934,7 @@ theorem bin_sim {p : Program} (hok : numberingOk p = true) {f : Source.Function}
     · have m₀ := inter_not_reg hok (inter_mem (off := 0) hbj hi (by simp [interOffsets]))
       have m₁ := inter_not_reg hok (inter_mem (off := 1) hbj hi (by simp [interOffsets]))
       have m₂ := inter_not_reg hok (inter_mem (off := 2) hbj hi (by simp [interOffsets]))
+      rw [set4_eq]
       exact agrees_define hok (agrees_set_other (agrees_set_other (agrees_set_other hag m₀) m₁) m₂)
         hd (by simp only [size_set!]; omega)
     · exact inRange_cons hr (fun t' x' h => by cases h; exact wrap_inRange _ _)
@@ -957,7 +976,7 @@ theorem binOvf_sim {p : Program} (hok : numberingOk p = true) {f : Source.Functi
       have hdef : Agrees p ((d, .int t (wrap t (op.exact x y))) :: benv)
           (set4 s.environment n (some (.word (raw op x y))) (some (.word (biased t (raw op x y))))
             (some (.word (masked t (biased t (raw op x y))))) (some (word (wrap t (op.exact x y))))) :=
-        agrees_define hok (agrees_set_other (agrees_set_other (agrees_set_other hag m₀) m₁) m₂) hd
+        set4_eq .. ▸ agrees_define hok (agrees_set_other (agrees_set_other (agrees_set_other hag m₀) m₁) m₂) hd
           (by simp only [size_set!]; omega)
       exact agrees_define hok (agrees_set_other (x := u₄) hdef m₄) hf
         (by simp only [size_set!, size_set4]; omega)
@@ -1409,15 +1428,15 @@ theorem adaptPhi_ok {p : Program} {t k : Nat} {phi : Source.Phi} (h : adaptPhi p
     ∃ arms, (incoming p t).mapM (fun (pa : Nat × List Operand) => (do
         let a ← match pa.2[k]? with
           | some a => operand p a
-          | none => throw s!"block {pa.1} passes too few arguments to block {t}"
-        pure (pa.1, a) : Except String (Nat × Source.Operand))) = .ok arms ∧
+          | none => throw (.internal s!"block {pa.1} passes too few arguments to block {t}")
+        pure (pa.1, a) : Except Refusal (Nat × Source.Operand))) = .ok arms ∧
       phi = { destination := blockBase p t + k, width := .word, incoming := arms.toArray } := by
   unfold adaptPhi at h
   cases ha : (incoming p t).mapM (fun (pa : Nat × List Operand) => (do
         let a ← match pa.2[k]? with
           | some a => operand p a
-          | none => throw s!"block {pa.1} passes too few arguments to block {t}"
-        pure (pa.1, a) : Except String (Nat × Source.Operand))) <;>
+          | none => throw (.internal s!"block {pa.1} passes too few arguments to block {t}")
+        pure (pa.1, a) : Except Refusal (Nat × Source.Operand))) <;>
     simp_all [bind, Except.bind, pure, Except.pure]
 
 /-- An adapted phi has exactly one arm from a predecessor with exactly one edge into its block:
@@ -1430,8 +1449,8 @@ theorem phi_arm {p : Program} {t k j : Nat} {phi : Source.Phi} (h : adaptPhi p t
   have hG : ∀ (x : Nat × List Operand) (y : Nat × Source.Operand), (do
         let a ← match x.2[k]? with
           | some a => operand p a
-          | none => throw s!"block {x.1} passes too few arguments to block {t}"
-        pure (x.1, a) : Except String (Nat × Source.Operand)) = .ok y → y.1 = x.1 := by
+          | none => throw (.internal s!"block {x.1} passes too few arguments to block {t}")
+        pure (x.1, a) : Except Refusal (Nat × Source.Operand)) = .ok y → y.1 = x.1 := by
     intro x y hy
     cases hx : x.2[k]? with
     | none => simp [hx, bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at hy
@@ -2007,7 +2026,7 @@ theorem emit_correct {p : Program} (hwf : WF p) {f : Source.Function} {tbl : Sit
   exact adapter_correct hwf ha r hr
 
 /-- An adapter refusal produces no artifact, for every target. -/
-theorem artifact_of_emit_error {p : Program} {e : String} (h : emit p = .error e) (t : Target) :
+theorem artifact_of_emit_error {p : Program} {e : Refusal} (h : emit p = .error e) (t : Target) :
     artifact t p = .error e := by
   unfold artifact
   rw [h]

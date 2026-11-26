@@ -50,6 +50,30 @@ def aliasCandidates (ctx : ContextInfo) (id : Name) : List Name := Id.run do
       if opened.isPrefixOf id then candidates := id.replacePrefix opened resolved :: candidates
   return candidates
 
+-- Lean's selective opens create term info for the member, with the
+-- namespace already stripped from its syntax. Recover the qualified spelling
+-- using the open syntax and match it to the resolution of that same token.
+def openMembers (stx : Syntax) : Option (Ident × Array Ident) := do
+  unless [``Parser.Command.open, ``Parser.Term.open, ``Parser.Tactic.open].contains stx.getKind do
+    none
+  let decl : TSyntax ``Parser.Command.openDecl := ⟨stx[1]⟩
+  match decl with
+  | `(Parser.Command.openDecl| $ns ($ids*)) => some (ns, ids)
+  | `(Parser.Command.openDecl| $ns renaming $[$froms -> $_],*) => some (ns, froms)
+  | `(Parser.Command.openDecl| $ns hiding $ids*) => some (ns, ids)
+  | _ => none
+
+def openNamespaces (ctx : ContextInfo) (ns : Ident) : List Name :=
+  match ns.raw with
+  | .ident _ _ name pre =>
+    let resolved := pre.filterMap fun
+      | .namespace n => some n
+      | _ => none
+    if resolved.isEmpty then
+      ResolveName.resolveNamespace ctx.env ctx.currNamespace ctx.openDecls name
+    else resolved
+  | _ => []
+
 -- The term info pairs the source identifier with the constant it resolved to.
 -- Alias provenance comes from the module that registered that exact pair.
 def sourceAliases (env : Environment) (moduleName : Name) (path : String) :
@@ -66,12 +90,22 @@ def sourceAliases (env : Environment) (moduleName : Name) (path : String) :
   let owners := aliasOwners env
   let mut modules : Std.HashSet Name := {}
   for tree in state.commandState.infoState.trees do
+    let members := tree.foldInfo (init := ({} : Std.HashMap String.Pos.Raw (List Name)))
+      fun ctx info found => Id.run do
+        let some (ns, ids) := openMembers info.stx | return found
+        let namespaces := openNamespaces ctx ns
+        let mut result := found
+        for id in ids do
+          if let some pos := id.raw.getPos? then
+            result := result.insert pos (namespaces.map (· ++ id.getId.eraseMacroScopes))
+        return result
     modules := tree.foldInfo (init := modules) fun ctx info found => Id.run do
       let .ofTermInfo term := info | return found
       if !term.stx.isIdent then return found
       let .const resolved _ := term.expr.getAppFn | return found
       let mut result := found
-      for candidate in aliasCandidates ctx term.stx.getId.eraseMacroScopes do
+      let opened := (term.stx.getPos?.bind fun pos => members[pos]?).getD []
+      for candidate in opened ++ aliasCandidates ctx term.stx.getId.eraseMacroScopes do
         if candidate == resolved then continue
         for mod in owners[(candidate, resolved)]?.getD [] do
           result := result.insert mod

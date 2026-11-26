@@ -9,7 +9,6 @@ import ConcreteSpec.Spec.Slice0
 import ConcreteSpec.Spec.Slice1Semantics
 import ConcreteSpec.Spec.Slice1Syntax
 import ConcreteSpec.Spec.Surface0
-import LeanCompilerBackend.Verified.Admission
 import LeanCompilerBackend.Verified.Job
 import LeanCompilerBackend.Verified.Source
 import Concrete.Lex
@@ -46,12 +45,8 @@ private def loweringRefusal : MIR.LoweringFailure → Refusal
 (decided-2026-11-23-slice0-and-roadmap-answers, answer 6). -/
 def prepareLCB (p : BIR.Program) :
     Except Refusal LeanCompilerBackend.Verified.Source.Function := do
-  let (f, _) ← (Backend.LCB.emit p).mapError Refusal.internal
-  (LeanCompilerBackend.Verified.validateJob (Backend.LCB.job f)).mapError
-    (fun
-      | .admission (.resourceLimit resource measured limit) =>
-        .backendResource "LCB" resource measured limit
-      | e => .internal s!"LCB admission profile: {repr e}")
+  let (f, _) ← Backend.LCB.emit p
+  (LeanCompilerBackend.Verified.validateJob (Backend.LCB.job f)).mapError Backend.LCB.jobRefusal
   return f
 
 -- A typed list of stages. Each edge keeps its input in the accumulated value.

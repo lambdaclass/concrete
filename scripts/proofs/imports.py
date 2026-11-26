@@ -105,7 +105,7 @@ def rewrite(source, deps, modules=MODULES):
 def compiler_proof_paths(root):
     # Compatibility modules may intentionally only re-export context. Exact
     # imports concern proof sources, including mixed code and proof modules.
-    paths = sorted((root / 'Concrete').rglob('*.lean'))
+    paths = [*root.glob('Concrete.lean'), *sorted((root / 'Concrete').rglob('*.lean'))]
     proof_paths = []
     for p in paths:
         source = p.read_text(encoding='utf-8')
@@ -231,6 +231,15 @@ def controls(temp, compiler_modules):
         nested.touch()
         if proof_paths(root) != [nested]:
             raise SystemExit('recursive proof population control failed')
+        compiler_root = root / 'Concrete.lean'
+        compiler_root.write_text('import Concrete.Elab\n'
+                                 'theorem rootProof (p : Concrete.Core.Program) : p = p := rfl\n')
+        if compiler_proof_paths(root) != [compiler_root]:
+            raise SystemExit('compiler root proof discovery control failed')
+        source = compiler_root.read_text()
+        deps = dependencies(source, temp, compiler_modules=compiler_modules)
+        if 'Concrete.Core' not in deps or matches(source, deps, compiler_modules):
+            raise SystemExit('compiler root missing-direct-import control accepted')
     missing = good.replace('import ConcreteSpec.Spec.Basics', '')
     # Removing just the command retains its trailing comment and legal header.
     if matches(missing, dependencies(missing, temp)):
@@ -256,6 +265,18 @@ def controls(temp, compiler_modules):
         deps = dependencies(source, temp, compiler_modules=compiler_modules)
         if deps != direct or matches(source, deps, compiler_modules) != valid:
             raise SystemExit(f'compiler alias/quoted direct-import control: {header}, got {deps}')
+    direct = ['Concrete.Core', 'Concrete.Elab', 'ConcreteSpec.Spec.Slice0']
+    for open_decl, program in [('Concrete.Core (Program)', 'Program'),
+                               ('Concrete.Core renaming Program -> RenamedProgram', 'RenamedProgram')]:
+        for suffix in ('\n', ' in\n'):
+            body = (f'open {open_decl}{suffix}'
+                    f'theorem selectiveAliasProbe (p : {program}) (o : Concrete.Elab.Output) :'
+                    ' (p, o) = (p, o) := rfl\n')
+            for header in (direct, direct[1:]):
+                source = ''.join(f'import {mod}\n' for mod in header) + body
+                deps = dependencies(source, temp, compiler_modules=compiler_modules)
+                if deps != direct or matches(source, deps, compiler_modules) != (header == direct):
+                    raise SystemExit(f'compiler explicit-open import control: {open_decl}, {header}, got {deps}')
     print('imports: extra, transitive-only, commented-header and rewrite controls pass')
 
 
@@ -273,7 +294,7 @@ def main():
             source = path.read_bytes().decode('utf-8')
             module = '.'.join(path.relative_to(ROOT).with_suffix('').parts)
             try:
-                compiler = module.startswith('Concrete.')
+                compiler = module == 'Concrete' or module.startswith('Concrete.')
                 modules = compiler_modules if compiler else MODULES
                 deps = dependencies(source, temp, module,
                                     compiler_modules=compiler_modules if compiler else None)

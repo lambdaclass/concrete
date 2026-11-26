@@ -15,6 +15,29 @@ Set `output` to a build directory. The default writes `llvm.exe` and `lcb.exe` t
 Use `--backend llvm` or `--backend lcb` for a single executable. The driver uses the pinned
 native build helper and the LCB executable built by Lake.
 
+Use a dedicated output directory. The CLI normalizes the `-o` path, then rejects a symlink at
+the final component, including one spelled with a trailing slash or `/.`. Ancestor components
+are resolved normally after normalization. The output directory cannot contain the working
+project, and its parent must be writable so the CLI can create a private sibling directory.
+
+A build writes and validates all selected artifacts in private staging. The publisher carries
+forward unrelated entries and artifacts of an unselected backend, then commits the complete
+directory with one atomic exchange (Linux `renameat2(RENAME_EXCHANGE)` or macOS
+`renameatx_np(RENAME_SWAP)`). The filesystem must support the exchange. Before copying,
+the publisher checks that staging and every output directory have the same name-lookup
+rules. On Linux it checks the mount and the directory's casefold flag on ext2, ext3, ext4,
+F2FS and tmpfs. On macOS it checks the volume and its reported case sensitivity. A
+mismatch or unavailable lookup information stops publication. A pre-commit failure
+returns `TOOL-FAILURE` with exit 2 and leaves existing outputs in place. A first failed build
+may leave an empty output directory. The parent-directory lock serializes commits by
+cooperating CLI builds, including builds selecting different backends.
+
+The exchange is atomic for the directory name. A reader opening several files across the
+exchange may see different generations. The output directory inode changes, and carrying forward
+regular files requires hard-link support. Use an output tree without mount points or concurrent
+edits by other tools. This is a visibility guarantee during normal execution. It provides no
+crash durability, and interruption or cleanup failure can leave private staging behind.
+
 `scripts/checks/compiler/tests.sh` also compiles the `con:` manifest rows. For trap rows it
 first checks that admission refuses, then runs the same lowering stages without discharged
 evidence and compares both native observations.
@@ -123,7 +146,7 @@ Every BIR construct has a direct LLVM spelling (`@llvm.uadd.with.overflow.i8`) a
 
 The **LLVM printer** is unverified and stays a premise (`P_print`) until an LLVM-IR semantics exists.
 
-The **BIR → LCB-IR adapter** is the first backend proof target. `adapter_correct` states that the adapter's output, under **LCB's own semantics** (`LeanCompilerBackend.Verified.Source`, the `ssa-int-v2` profile, imported and never restated), has the BIR behaviour. It is proved (`Proof.adapter_correct`) for every WF program the adapter accepts (`adapt p = .ok f`). The backend contract is complete (owner, 2026-11-08): `LCB.emit : Program → Except String (Source.Function × SiteTable)` represents adaptation failure, `LCB.artifact` builds only from a successful `emit`, and `Proof.emit_correct` (success implies correctness), `Proof.artifact_of_emit_error` (a refusal produces no artifact, for every target) and `Proof.artifact_correct` (every artifact comes from a correct `emit`) state it. `P_adapter` is retired; the trusted-base golden (gate 9) records it.
+The **BIR → LCB-IR adapter** is the first backend proof target. `adapter_correct` states that the adapter's output, under **LCB's own semantics** (`LeanCompilerBackend.Verified.Source`, the `ssa-int-v2` profile, imported and never restated), has the BIR behaviour. It is proved (`Proof.adapter_correct`) for every WF program the adapter accepts (`adapt p = .ok f`). The backend contract is complete (owner, 2026-11-08): `LCB.emit : Program → Except Refusal (Source.Function × SiteTable)` represents adaptation failure, `LCB.artifact` builds only from a successful `emit`, and `Proof.emit_correct` (success implies correctness), `Proof.artifact_of_emit_error` (a refusal produces no artifact, for every target) and `Proof.artifact_correct` (every artifact comes from a correct `emit`) state it. `P_adapter` is retired; the trusted-base golden (gate 9) records it.
 
 The adapter's output is handed to LCB **in process**, as the value: on `aarch64-macos` through LCB's verified first path (`Verified.compileFunction`), on the Linux targets through LCB's compatibility backends (`Verified.reify`, then `AMD64`/`AArch64.emitModuleValidated`). No printer or importer sits between the adapter and LCB. The QBE text of the body is a debug dump only. The gate also runs the first path's admission on every example on every host.
 
@@ -302,7 +325,7 @@ def BodyResult.behaviour (tbl : SiteTable) : BodyResult → Behaviour
     (`emit_correct`). For LLVM it is a parameter (a premise). -/
 structure Backend where
   Text : Type
-  emit : BIR.Program → Except String Text
+  emit : BIR.Program → Except Refusal Text
   Means : Text → BodyResult → Prop
 
 /-- `LLVM.print` emits body text and spells integer types by bit width, so signed and
@@ -590,7 +613,11 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
 2. **Axioms and trust:** extended to `Concrete/`:
    - only the three axioms;
    - no `sorry` and no `native_decide`/`ofReduceBool`;
-   - a **totality ban**: `trust_ban.sh` checks executable definitions in `Concrete/` and `Main.lean`, and their dependencies outside the pinned Lean runtime, for totality overrides and noncomputability;
+   - a **totality ban**: `trust_ban.sh` checks executable definitions in `Concrete/` and `Main.lean`
+     and follows kernel dependencies, native calls and compiler substitutions. Pinned Lean runtime
+     declarations with execution overrides need explicit exceptions. The driver has a separate
+     allowance for file and process operations. Existing unchecked accesses and bounded iterator
+     implementations in the reviewed backend are scoped to that pinned dependency.
    - an external-checker replay (con-leche/nanoda, R-0553) of the compiler's theorems.
 
    The trust ban (`scripts/proofs/trust_ban.sh`) checks both `ConcreteSpec` and `Concrete`:
@@ -617,10 +644,19 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
 
    Accepted examples `return 125;` and `return 134;` are in the corpus and must classify as exits. Slice 0 can't produce a real startup refusal, because it has no grants. The refusal and trap classifications are also exercised by comparator self-tests: stub images, and the trap via gate 6.
 
-   The `llvm exit N lcb refuse CLASS` row runs the public build command in each backend mode
-   and checks the native LLVM exit and the LCB resource refusal.
+   The `llvm exit N lcb diagnostic STATUS CODE [MESSAGE]` row runs the public build command in
+   each backend mode and checks the native LLVM exit and the LCB diagnostic. The CLI
+   diagnostic rows check the diagnostic and exit status for an invalid backend, a non-canonical
+   source path, an unknown target reported by the native helper, a failed native helper, and a failed build-input write.
 
-   **Refused examples have their own leg.** The Lean `check` result, the compiler's refusal (with its rule) and the refusal certificate must agree with the row's `refuse RULE-ID` expectation. No executable exists for a refused example. A separate supported-subset coverage report lists every grammar production and Core form that the corpus exercises. A reject-all compiler fails, because every accepted example must exit with its status.
+   The compiler CLI exits 0 for a successful build or help, 1 for a source refusal
+   (`SYNTAX`, `SLICE-0`, `CORE-CHECK`), 2 for an incomplete build, 3 for `USAGE`, and
+   4 for `INTERNAL`. Incomplete diagnostics use `incomplete (reason)`. This includes
+   operational failures (`TOOL-FAILURE`) such as an unavailable native tool, a failed link,
+   or a failed CLI output write. If stderr cannot carry a diagnostic, the CLI still exits 2.
+   Compiler invariant failures use `INTERNAL`.
+
+   **Refused examples have their own leg.** The Lean `check` result, the compiler's refusal (with its rule) and the refusal certificate must agree with the row's `refuse 1 CODE [MESSAGE]` expectation. No executable exists for a refused example. A separate supported-subset coverage report lists every grammar production and Core form that the corpus exercises. A reject-all compiler fails, because every accepted example must exit with its status.
 5. **Differential at the source:** generated accepted programs, with replayable seeds; native exit = Lean `run`.
 6. **Differential through the token-free lowering, both backends.** This covers overflow. Generated **well-scoped, unchecked** slice-0 programs over **arbitrary** `u8` operands, including `200 + 56`, take `lower q ∅ → memory → ssa`, so they have no tokens and no checker. Their Core `run` is compared with the LLVM path and the LCB path. Overflow must give exit 134 and the right site's trap line on fd 2, for both backends. This exercises token-aware lowering, Memory CFG and SSA, not only the backends.
    A second leg compares generated BIR directly with both backends, to cover BIR shapes that lowering does not produce.
@@ -728,8 +764,10 @@ LCB is our own project; these are tasks for it, not premises to keep. Checked ag
 **For the trusted base (now):**
 1. A public entry `compileSource : Target → Symbol → Source.Function → Except Error Artifact`. Today the compiler builds LCB's `FunctionJob` itself (`Concrete/Backend/LCB.lean`, `assemble`).
 2. The verified first path for `x86_64-linux`. It exists only for `aarch64-apple-darwin` leaf functions; x86-64 goes through the compatibility backend, a larger unverified base.
-3. Larger resource limits on the first path: 64 blocks, 488 values and 480 definitions per function (`Verified/Canonical.lean`). Slice programs will exceed them. LCB profile limits yield a backend resource refusal
-   under the existing `INTERNAL` class, with the resource, measured amount and limit.
+3. Larger resource limits on the first path: 64 blocks, 488 values and 480 definitions per function (`Verified/Canonical.lean`). Slice programs can exceed them. `BACKEND-LIMIT` reports
+   `incomplete (LCB backend: RESOURCE: MEASURED exceeds limit LIMIT)` and exits 2. LLVM is
+   available independently through `--backend llvm`. Unsupported adapter widths use
+   `BACKEND-PROFILE` and also exit 2.
 4. Object emission (LCB V04), so assembly text and the system assembler leave the path.
 
 **For slice 2, integers complete (all widths u8–u64, i8–i64): provided on LCB's verified path (Apple AArch64).** LCB's verified profile now has `word` (32-bit) and `long` (64-bit) values, `add sub mul and or xor`, the shifts `shiftLeft logicalRight arithmeticRight` (count modulo the width), `mulHighUnsigned mulHighSigned` (accepted only at `long`), division and remainder (`unsignedDiv unsignedRem signedDiv signedRem`; a zero divisor or signed minimum by −1 is stuck, so the adapter must branch to a trap before them), and the comparisons `eq unsignedLT unsignedLE signedLT signedLE` (word result). The adapter will carry every integer as a `long`: exact for types up to 32 bits; 64-bit overflow uses the high multiply and, for add/sub, `xor`/`and`/compare. Still absent and optional while every integer is a `long`: width conversion (`word`↔`long` extension and truncation).
