@@ -66,6 +66,7 @@ if [ "$verify" = 1 ]; then
   diff -qr --no-dereference -- "$replay" "$stage" >&2
   exit
 fi
+writer="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/slice0_write.py"
 cd -- "$1"
 # Fixed epoch rather than wall clock or caller environment. No debug data is requested, and
 # prefix maps also cover future debug additions. Separate objects avoid random linker temp names.
@@ -112,7 +113,8 @@ if [ "${3:-}" != llvm ]; then
   if [ "$bound" = 1 ]; then sha256sum lcb_body.s lcb_rt.ssa >lcb.link.sha256; fi
   "${cc[@]}" -c lcb_body.s -o lcb_body.o
   if [ "$bound" = 1 ]; then sha256sum lcb_body.o >>lcb.link.sha256; fi
-  "${clean[@]}" "$lcb" -t "$target" lcb_rt.ssa -o lcb_rt.s
+  rm -f -- lcb_rt.s
+  "${clean[@]}" "$lcb" -t "$target" lcb_rt.ssa -o - | python3 "$writer" lcb_rt.s
   if [ "$bound" = 1 ]; then sha256sum lcb_rt.s >>lcb.link.sha256; fi
   "${cc[@]}" -c lcb_rt.s -o lcb_rt.o
   if [ "$bound" = 1 ]; then
@@ -124,4 +126,7 @@ if [ "${3:-}" != llvm ]; then
     sha256sum --quiet -c lcb.link.sha256
     sha256sum lcb.exe >>lcb.link.sha256
   fi
+fi
+if [ "$bound" = 1 ]; then
+  printf '%s\n' 'Runtime loader and system libraries are unbound environment premises.' >runtime-premises.txt
 fi

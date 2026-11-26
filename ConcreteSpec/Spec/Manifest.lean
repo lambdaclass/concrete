@@ -1,4 +1,6 @@
-namespace Concrete.Driver.Manifest
+import ConcreteSpec.Spec.Ident
+
+namespace ConcreteSpec.Project.Manifest
 
 /-! A bounded syntax recognizer for the project configuration boundary. Admission and
 wire-schema interpretation are separate. Container recursion spends the same budget as
@@ -201,3 +203,46 @@ private def document (limit : Nat) :
 def validate (limit : Nat) (text : String) : Except Error Unit := do
   let fuel := text.utf8ByteSize + 1
   document limit fuel [] {} (← lex fuel text.toList [])
+
+def byteLimit : Nat := 64 * 1024
+
+def depthLimit : Nat := 16
+
+/-- The provisional reader accepts at most 64 KiB of manifest bytes.
+R-0589 and docs/decisions.md#decided-project-concrete-toml own the manifest boundary. -/
+def SizeAccepted (bytes : Nat) : Prop := bytes ≤ byteLimit
+
+instance (bytes : Nat) : Decidable (SizeAccepted bytes) :=
+  inferInstanceAs (Decidable (bytes ≤ byteLimit))
+
+/-- The manifest bytes must decode as UTF-8.
+R-0589 and docs/decisions.md#decided-project-concrete-toml own the manifest boundary. -/
+def EncodingAccepted (bytes : ByteArray) : Prop := (String.fromUTF8? bytes).isSome = true
+
+instance (bytes : ByteArray) : Decidable (EncodingAccepted bytes) :=
+  inferInstanceAs (Decidable ((String.fromUTF8? bytes).isSome = true))
+
+/-- The bounded syntax recognizer must not exhaust its nesting budget of 16.
+Malformed input has its own judgment. This check classifies the first refusal from the
+recognizer, so it does not assign a depth to text that fails syntax before a depth check.
+R-0589 and docs/decisions.md#decided-project-concrete-toml own the manifest boundary. -/
+def DepthAccepted (text : String) : Prop :=
+  (match validate depthLimit text with | .error .depth => false | _ => true) = true
+
+instance (text : String) : Decidable (DepthAccepted text) :=
+  inferInstanceAs (Decidable (_ = true))
+
+/-- The bounded recognizer must accept the supported manifest syntax.
+R-0589 and docs/decisions.md#decided-project-concrete-toml track full TOML and schema decoding. -/
+def SyntaxAccepted (text : String) : Prop :=
+  (match validate depthLimit text with | .ok () => true | .error _ => false) = true
+
+instance (text : String) : Decidable (SyntaxAccepted text) :=
+  inferInstanceAs (Decidable (_ = true))
+
+def sizeRule : Core.RuleId := ⟨``SizeAccepted, 1⟩
+def encodingRule : Core.RuleId := ⟨``EncodingAccepted, 1⟩
+def depthRule : Core.RuleId := ⟨``DepthAccepted, 1⟩
+def syntaxRule : Core.RuleId := ⟨``SyntaxAccepted, 1⟩
+
+end ConcreteSpec.Project.Manifest

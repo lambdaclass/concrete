@@ -1,3 +1,4 @@
+import ConcreteSpec.Spec.Manifest
 import ConcreteSpec.Spec.ProjectPolicy
 import ConcreteSpec.Spec.Accounting
 import ConcreteSpec.Spec.Const
@@ -36,7 +37,8 @@ def registeredRules : List RuleId :=
   [⟨``SourcePathSpan.FilePresent, 1⟩, ⟨``SourcePathSpan.OrderedOffsets, 1⟩,
    ⟨``SourcePathSpan.EndInSource, 1⟩, ⟨``SourcePathSpan.LineMatches, 1⟩,
    ⟨``SourcePathSpan.ColumnMatches, 1⟩, Project.languagePinRule, Project.clauseRule,
-   Project.tableVersionRule]
+   Project.tableVersionRule, Project.Manifest.sizeRule, Project.Manifest.encodingRule,
+   Project.Manifest.depthRule, Project.Manifest.syntaxRule]
 
 /-- Acceptance evidence applies the owning rule's judgment to a concrete input.
 The exporter recognizes this proposition's elaborated type, without unfolding the wrapper. -/
@@ -595,6 +597,38 @@ theorem assumptionsVersionRefused : RuleRefused TableVersionsAccepted (tables, 1
   decide
 
 
+theorem sizeAccepted : RuleAccepted Project.Manifest.SizeAccepted 65536 := by
+  unfold RuleAccepted
+  decide
+
+theorem sizeRefused : RuleRefused Project.Manifest.SizeAccepted 65537 := by
+  unfold RuleRefused
+  decide
+
+theorem encodingAccepted : RuleAccepted Project.Manifest.EncodingAccepted (ByteArray.mk #[0xC3, 0xA9]) := by
+  unfold RuleAccepted
+  decide
+
+theorem encodingRefused : RuleRefused Project.Manifest.EncodingAccepted (ByteArray.mk #[0xFF]) := by
+  unfold RuleRefused
+  decide
+
+theorem depthAccepted : RuleAccepted Project.Manifest.DepthAccepted "[a.b.c.d.e.f.g.h.i.j.k.l.m.n.o]\nx = true" := by
+  unfold RuleAccepted
+  cbv <;> decide
+
+theorem depthRefused : RuleRefused Project.Manifest.DepthAccepted "[a.b.c.d.e.f.g.h.i.j.k.l.m.n.o.p]\nx = true" := by
+  unfold RuleRefused
+  cbv <;> decide
+
+theorem syntaxAccepted : RuleAccepted Project.Manifest.SyntaxAccepted "a = true" := by
+  unfold RuleAccepted
+  cbv <;> decide
+
+theorem syntaxRefused : RuleRefused Project.Manifest.SyntaxAccepted "a = " := by
+  unfold RuleRefused
+  cbv <;> decide
+
 end ProjectRegistry
 namespace Slice1Registry
 
@@ -735,6 +769,14 @@ def registeredRuleExamples : List RuleExample :=
    ⟨``Project.ClauseAccepted, ``ProjectRegistry.unknownRefused⟩,
    ⟨``Project.TableVersionsAccepted, ``ProjectRegistry.versionsAccepted⟩,
    ⟨``Project.TableVersionsAccepted, ``ProjectRegistry.policyVersionRefused⟩,
-   ⟨``Project.TableVersionsAccepted, ``ProjectRegistry.assumptionsVersionRefused⟩]
+   ⟨``Project.TableVersionsAccepted, ``ProjectRegistry.assumptionsVersionRefused⟩,
+   ⟨``Project.Manifest.SizeAccepted, ``ProjectRegistry.sizeAccepted⟩,
+   ⟨``Project.Manifest.SizeAccepted, ``ProjectRegistry.sizeRefused⟩,
+   ⟨``Project.Manifest.EncodingAccepted, ``ProjectRegistry.encodingAccepted⟩,
+   ⟨``Project.Manifest.EncodingAccepted, ``ProjectRegistry.encodingRefused⟩,
+   ⟨``Project.Manifest.DepthAccepted, ``ProjectRegistry.depthAccepted⟩,
+   ⟨``Project.Manifest.DepthAccepted, ``ProjectRegistry.depthRefused⟩,
+   ⟨``Project.Manifest.SyntaxAccepted, ``ProjectRegistry.syntaxAccepted⟩,
+   ⟨``Project.Manifest.SyntaxAccepted, ``ProjectRegistry.syntaxRefused⟩]
 
 end ConcreteSpec.Core

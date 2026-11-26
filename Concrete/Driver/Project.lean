@@ -1,4 +1,4 @@
-import Concrete.Driver.Manifest
+import Concrete.Refusal
 import Concrete.MIR
 import ConcreteSpec.Spec.ProjectPolicy
 
@@ -8,53 +8,27 @@ namespace Concrete.Driver.Project
 open ConcreteSpec.Core (PackageId FnId)
 open ConcreteSpec.Project
 
-def manifestByteLimit : Nat := 64 * 1024
+def manifestByteLimit : Nat := Manifest.byteLimit
 
-def manifestDepthLimit : Nat := 16
-
-inductive Refusal where
-  | read (detail : String)
-  | size
-  | encoding
-  | depth
-  | malformed
-  | schemaPending
-  deriving DecidableEq, Repr
-
-/-- Driver diagnostics for the pre-admission boundary. -/
-def Refusal.code : Refusal → String
-  | .read _ => "MANIFEST-READ"
-  | .size => "MANIFEST-SIZE"
-  | .encoding => "MANIFEST-ENCODING"
-  | .depth => "MANIFEST-DEPTH"
-  | .malformed => "MANIFEST-SYNTAX"
-  | .schemaPending => "MANIFEST-SCHEMA"
-
-def Refusal.message : Refusal → String
-  | .read detail => s!"cannot read Concrete.toml ({detail})"
-  | .size => s!"Concrete.toml exceeds {manifestByteLimit} bytes"
-  | .encoding => "Concrete.toml must be UTF-8"
-  | .depth => s!"Concrete.toml exceeds the nesting limit of {manifestDepthLimit}"
-  | .malformed => "Concrete.toml is malformed"
-  | .schemaPending => "Concrete.toml requires an approved manifest schema"
+def manifestDepthLimit : Nat := Manifest.depthLimit
 
 /-- Validate the byte envelope before any decoder can inspect it. -/
-def manifestText (bytes : ByteArray) : Except Refusal String := do
-  if bytes.size > manifestByteLimit then throw .size
+def manifestText (bytes : ByteArray) : Except ManifestRefusal String := do
+  if ¬ Manifest.SizeAccepted bytes.size then throw .size
   let some value := String.fromUTF8? bytes | throw .encoding
   return value
 
 
 /-- Check the bounded syntax supported by the configuration boundary. -/
-def parseManifest (text : String) : Except Refusal Unit :=
-  if text.utf8ByteSize > manifestByteLimit then .error .size
+def parseManifest (text : String) : Except ManifestRefusal Unit :=
+  if ¬ Manifest.SizeAccepted text.utf8ByteSize then .error .size
   else (Manifest.validate manifestDepthLimit text).mapError fun
     | .malformed => .malformed
     | .depth => .depth
 
 /-- Only an absent directory entry denotes single-file mode. Symlinks, inaccessible
 entries and special files are refused. -/
-def readManifest (path : System.FilePath) : IO (Except Refusal (Option String)) := do
+def readManifest (path : System.FilePath) : IO (Except ManifestRefusal (Option String)) := do
   let metadata ← path.symlinkMetadata.toBaseIO
   match metadata with
   | .error (.noFileOrDirectory ..) => return .ok none
@@ -76,7 +50,7 @@ def readManifest (path : System.FilePath) : IO (Except Refusal (Option String)) 
 
 /-- A present manifest cannot be treated as a single-file build while wire decoding is pending. -/
 def checkInvocation (path : System.FilePath) :
-    IO (Except Refusal LanguageRulesVersion) := do
+    IO (Except ManifestRefusal LanguageRulesVersion) := do
   match ← readManifest path with
   | .error e => return .error e
   | .ok none => return (selectLanguage supportedLanguage .standalone).mapError fun _ => .schemaPending
