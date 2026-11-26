@@ -4,7 +4,7 @@
 #   archived = moves to legacy/ and stays readable, never run, never deleted automatically;
 #   retire = the old pipeline (compiler, build files, its gates and tooling), deleted with legacy/ at LD (R-0590).
 # PATHS: a space-separated list. Assets are named by their path before the move; after it, a path
-# legacy/P is the same asset as P (scripts/land/retention.py strips the prefix). A retained row also
+# legacy/P is the same asset as P (scripts/checks/lib/retention.py strips the prefix). A retained row also
 # names the new root's path of the file (docs/project/AGENTS.md is AGENTS.md at the root). A new root
 # file and its legacy/ namesake (lakefile.toml, legacy/lakefile.toml) share a row; the row describes
 # the legacy/ copy, and the root file is the new root's own (scripts/checks/root_inventory.txt).
@@ -25,22 +25,22 @@ ROADMAP.md	plan	retained	ROADMAP.md	R-0558	root: never; legacy/ copy: at LD (R-0
 docs/project/AGENTS.md AGENTS.md	process	retained	AGENTS.md (root; CLAUDE.md points to it)	R-0558	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
 CLAUDE.md	process	retained	CLAUDE.md (pointer to AGENTS.md)	R-0558	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
 LICENSE	legal	retained	LICENSE	R-0558	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
-required-checks.txt required-checks-transition.tsv	landing	retained	root (scripts/land/required_checks.py reads both)	R-0563	root: never; the transition file is emptied once its rows are stale; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+required-checks.txt required-checks-transition.tsv	landing	retained	required-checks.txt and GitHub rules for main	R-0563	root: keep required-checks.txt; transition table retired; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
 RETENTION.tsv	landing	retained	RETENTION.tsv	R-0562	root: never; survives the deletion of legacy/; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
 ISSUES.tsv	issue record	retained	ISSUES.tsv (minimal issue record, P12)	R-0558	root: never; the full ledger joins it with slice 1; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
 ConcreteSpec ConcreteSpec.lean	spec	retained	root (the normative Lean specification)	R-0560	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
 tests/manifest.tsv tests/slice0	corpus	retained	root (the manifest-driven test corpus)	R-0558	root: never; legacy/ copy: none (new at the root, nothing to delete)	open
 scripts/proofs	proof integrity	retained	scripts/proofs (the proof-integrity checks of ConcreteSpec: axiom inventory, trust ban, kernel replay, external re-check; rewritten from legacy/scripts/tests/check_external_checker.sh and legacy/scripts/tools, which stay governed by their own rows)	R-0560	root: never; legacy/ copy: none (new at the root, nothing to delete)	open
 .github	ci	retained	rewritten for the new root; the old workflows move to legacy/.github and are not run	R-0563	root: never (the new root's workflows); legacy/ copy (the old workflows, never run): at LD (R-0590)	open
-.githooks	landing	retained	.githooks (pre-push, re-pointed at the new gate set)	R-0563	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+.githooks	landing	retained	.githooks (pre-push checks WIP refs)	R-0563	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
 .claude	agent skills	retained	.claude (skills re-pointed at moved paths)	R-0558	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
 .gitignore .gitattributes .envrc	repo	retained	root	R-0558	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
-scripts/land scripts/checks	landing	retained	scripts/land	R-0563	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
-scripts/review	landing	retained	scripts/review	R-0563	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+scripts/land scripts/checks	landing	retained	scripts/checks	R-0563	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+scripts/review	landing	retire	coordinator review outside the repository	R-0618	root tooling retired by owner; legacy/ copy: at LD (R-0590)	open
 scripts/worktree-new.sh	landing	retained	scripts/	R-0563	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
 scripts/oracle	oracle	retained	scripts/oracle (ORACLE.lock, build, fetch, publish, run)	R-0564	root: when the differential no longer uses the legacy oracle (after D); legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
 scripts/tests/check_oracle_fetch.sh	oracle	retained	scripts/checks/oracle_fetch.sh (the controls of the required job Oracle (GitHub-hosted fetch + smoke); at the move its guard line is repointed at the new root's gate guard and the job runs it there)	R-0564	root: with scripts/oracle; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
-docs/project/LANDING.md docs/project/SELF_HOSTED_RUNNERS.md docs/project/REVIEW.md docs/LANDING.md docs/SELF_HOSTED_RUNNERS.md docs/REVIEW.md	process	retained	docs/	R-0563	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+docs/project/TOOLING.md docs/project/LANDING.md docs/project/SELF_HOSTED_RUNNERS.md docs/project/REVIEW.md docs/LANDING.md docs/SELF_HOSTED_RUNNERS.md docs/REVIEW.md	process	retained	docs/	R-0563	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
 docs/project/PHILOSOPHY.md docs/PHILOSOPHY.md	vision	retained	docs/PHILOSOPHY.md	R-0558	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
 docs/spec/decisions.md docs/decisions.md	decisions	retained	docs/decisions.md	R-0558	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
 docs/archive/roadmap-2026-11 docs/archive/site-down.md docs/archive/decisions-2026-11-05 docs/archive/bugs-2026-11	plan and decision history	retained	docs/archive/ (the roadmap task_disposition.tsv, decision log, task register, reconciliation and restructure records, the site takedown record, the 2026-11-05 decision rows, the old bug ledger's disposition)	R-0558	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open

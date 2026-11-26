@@ -37,11 +37,44 @@ private def unfoldContractAlias (type : Expr) : MetaM (Option Expr) := do
   let some (.defnInfo info) := env.find? head | return none
   return some (mkAppN (info.value.instantiateLevelParams info.levelParams levels) type.getAppArgs)
 
-/-- Recognize literal logical fallbacks without reducing a conditional. -/
+-- Reduce only the projection shell. In particular, keep a conditional or
+-- operation in the selected field intact for applicability analysis.
+private partial def reduceProjection? (expr : Expr) : MetaM (Option Expr) := withIncRecDepth do
+  let head := expr.getAppFn
+  let args := expr.getAppArgs
+  let (subject, field, remaining) ← match head with
+    | .proj _ field subject => pure (subject, field, args)
+    | .const name _ => do
+      let some info := (← getEnv).getProjectionFnInfo? name | return none
+      let some subject := args[info.numParams]? | return none
+      pure (subject, info.i, args.extract (info.numParams + 1) args.size)
+    | _ => return none
+  let some value ← fieldValue? subject field | return none
+  return some (mkAppN value remaining)
+where
+  fieldValue? (subject : Expr) (field : Nat) : MetaM (Option Expr) := withIncRecDepth do
+    let subject := subject.consumeMData.headBeta
+    if let .letE _ _ value body _ := subject then
+      return ← fieldValue? (body.instantiate1 value) field
+    if let some value ← projectCore? subject field then return some value
+    if let some reduced ← reduceProjection? subject then return ← fieldValue? reduced field
+    if let some unfolded ← unfoldContractAlias subject then return ← fieldValue? unfolded field
+    return none
+
+/-- Classify only structurally constant arms while their discriminator is still
+intact. A quantifier with a constant affirmative body can be a fallback even
+when the quantified type's inhabitation is unknown. -/
 private partial def literalTruth? (body : Expr) : MetaM (Option Bool) := withIncRecDepth do
   let body := body.consumeMData.headBeta
   if body.isConstOf ``True then return some true
   if body.isConstOf ``False then return some false
+  if body.isForall then
+    return ← forallTelescope body fun _ conclusion => do
+      return if (← literalTruth? conclusion) == some true then some true else none
+  if body.isAppOfArity ``Exists 2 then
+    let args := body.getAppArgs
+    return ← withLocalDeclD `witness args[0]! fun witness =>
+      literalTruth? (mkApp args[1]! witness)
   if body.isAppOfArity ``Not 1 then
     return (← literalTruth? body.getAppArgs[0]!).map (! ·)
   if body.isAppOfArity ``And 2 || body.isAppOfArity ``Or 2 then
@@ -56,9 +89,59 @@ private partial def literalTruth? (body : Expr) : MetaM (Option Bool) := withInc
     return none
   if let .letE _ _ value rest _ := body then
     return ← literalTruth? (rest.instantiate1 value)
+  if let some reduced ← reduceProjection? body then
+    return ← literalTruth? reduced
   if let some unfolded ← unfoldContractAlias body then
     return ← literalTruth? unfolded
   return none
+
+-- A carrier computed by a type-level match is unsupported. Unfold wrappers
+-- without reducing that match to one of its potentially trivial branches.
+private partial def normalizeCarrierHead (type : Expr) : MetaM Expr := withIncRecDepth do
+  let type := type.consumeMData.headBeta
+  if let .letE _ _ value body _ := type then
+    return ← normalizeCarrierHead (body.instantiate1 value)
+  if let some reduced ← reduceProjection? type then
+    return ← normalizeCarrierHead reduced
+  if let some unfolded ← unfoldContractAlias type then
+    return ← normalizeCarrierHead unfolded
+  return type
+
+-- Inspect instantiated constructor fields, including fields in Type. An
+-- unknown or higher-order carrier is refused unless its shape is inspectable.
+private partial def checkDataCarrier (type : Expr) (allowAbstract : Bool)
+    (seen : Array Expr := #[]) : MetaM Unit := withIncRecDepth do
+  let type ← normalizeCarrierHead type
+  if seen.contains type then return
+  if allowAbstract && [``Nat.le, ``Nat.lt, ``Int.le, ``Int.lt].contains type.getAppFn.constName then
+    return
+  if type.isSort || (← isProp type) then
+    throwError "unsupported proof or proposition carrier: {type}"
+  let seen := seen.push type
+  if type.isForall then
+    return ← forallTelescope type fun fields result => do
+      for field in fields do
+        checkDataCarrier (← inferType field) allowAbstract seen
+      checkDataCarrier result allowAbstract seen
+  let head := type.getAppFn
+  if allowAbstract then
+    if type.isFVar then return
+    if let .proj _ _ subject := type then
+      if subject.isFVar then return
+  let .const name levels := head
+    | throwError "unsupported data carrier: {type}"
+  let env ← getEnv
+  let some (.inductInfo info) := env.find? name
+    | throwError "unsupported data carrier: {type}"
+  unless info.numIndices == 0 && type.getAppNumArgs == info.numParams do
+    throwError "unsupported indexed data carrier: {type}"
+  for ctor in info.ctors do
+    let ctorInfo ← getConstInfoCtor ctor
+    let ctorType := ctorInfo.type.instantiateLevelParams ctorInfo.levelParams levels
+    let fields ← instantiateForall ctorType type.getAppArgs
+    forallTelescope fields fun args _ => do
+      for arg in args do
+        checkDataCarrier (← inferType arg) allowAbstract seen
 
 private partial def argumentList? (expr : Expr) : MetaM (Option Expr) := withIncRecDepth do
   let expr := expr.consumeMData.headBeta
@@ -66,8 +149,14 @@ private partial def argumentList? (expr : Expr) : MetaM (Option Expr) := withInc
     return expr.getAppArgs.back?
   if let .letE _ _ value body _ := expr then
     return ← argumentList? (body.instantiate1 value)
+  if let some reduced ← reduceProjection? expr then
+    return ← argumentList? reduced
+  if expr.getAppFn.isProj then
+    throwError "unsupported projection in conditional discriminator: {expr}"
   if let some unfolded ← unfoldContractAlias expr then
     return ← argumentList? unfolded
+  if (expr.find? (·.isConstOf ``ConcreteSpec.Core.Exec.evalArgs)).isSome then
+    throwError "unsupported argument evaluation discriminator: {expr}"
   return none
 
 /-- Inspect the contract without reducing a match on its actual discriminant.
@@ -100,13 +189,17 @@ private partial def jointPremises (type : Expr) (anchored : Bool := false)
     if projection != type.getAppFn then
       return ← jointPremises (mkAppN projection type.getAppArgs) anchored negative
     throwError "unsupported membership instance: {instanceValue}"
-  let .const head _ := type.getAppFn
-    | throwError "unsupported conclusion head: {type}"
+  let .const head _ := type.getAppFn | do
+    if let some reduced ← reduceProjection? type then
+      return ← jointPremises reduced anchored negative
+    throwError "unsupported conclusion head: {type}"
   let args := type.getAppArgs
   if head == ``Not && args.size == 1 then
     return ← jointPremises args[0]! anchored (!negative)
   if head == ``Ne && args.size == 3 then
-    if !(← isDefEq args[0]! (.sort .zero)) then return mkConst ``True
+    if (← normalizeCarrierHead args[0]!) != .sort .zero then
+      checkDataCarrier args[0]! true
+      return mkConst ``True
   if head == ``And && args.size == 2 then
     let left ← jointPremises args[0]! anchored negative
     let right ← jointPremises args[1]! anchored negative
@@ -114,12 +207,16 @@ private partial def jointPremises (type : Expr) (anchored : Bool := false)
       throwError "unsupported negated conjunction: {type}"
     return combinePremises left right
   if head == ``Or && args.size == 2 then
-    let left ← jointPremises args[0]! anchored negative
-    let right ← jointPremises args[1]! anchored negative
-    if left.isConstOf ``True && right.isConstOf ``True then return mkConst ``True
     if negative then throwError "unsupported negated disjunction: {type}"
-    return mkApp2 (mkConst ``Or) (combinePremises args[0]! left)
-      (combinePremises args[1]! right)
+    let mut result := mkConst ``True
+    let mut substantive := false
+    for arm in args do
+      let premises ← jointPremises arm true
+      unless (← literalTruth? arm).isSome do
+        substantive := true
+        result := combinePremises result (combinePremises arm premises)
+    unless substantive do throwError "disjunction has no substantive arm: {type}"
+    return result
   if head == ``Exists && args.size == 2 then
     if negative then throwError "unsupported negated existential: {type}"
     return ← withLocalDeclD `witness args[0]! fun witness => do
@@ -128,22 +225,26 @@ private partial def jointPremises (type : Expr) (anchored : Bool := false)
       -- A proposition-valued binder itself carries a proof. Inspect its
       -- domain as well so the proof cannot hide a vacuous contract.
       let domain ← if ← isProp args[0]! then jointPremises args[0]! true
-        else pure (mkConst ``True)
-      let body := if premises.isConstOf ``True then premises
-        else combinePremises original premises
-      return combinePremises domain (← closePremises #[witness] body)
+        else do
+          checkDataCarrier args[0]! false
+          pure (mkConst ``True)
+      return combinePremises domain (← closePremises #[witness] (combinePremises original premises))
   let propositionEq ← if head == ``Eq && args.size == 3 then
-    isDefEq args[0]! (.sort .zero) else pure false
+    pure ((← normalizeCarrierHead args[0]!) == .sort .zero) else pure false
   if (head == ``Iff && args.size == 2) || propositionEq then
     if negative then throwError "unsupported negated propositional equivalence: {type}"
     let left := args[args.size - 2]!
     let right := args.back!
     let premises ← combinePremises <$> jointPremises left anchored <*> jointPremises right anchored
     return combinePremises (mkApp2 (mkConst ``And) left right) premises
+  if head == ``Eq && args.size == 3 then
+    checkDataCarrier args[0]! true
+    return mkConst ``True
   if head == ``HEq && args.size == 4 then
-    if (← isDefEq args[0]! (.sort .zero)) || (← isDefEq args[2]! (.sort .zero)) then
-      throwError "unsupported heterogeneous propositional equality: {type}"
-  if [``True, ``False, ``Eq, ``HEq, ``Nat.le, ``Nat.lt, ``Int.le, ``Int.lt,
+    checkDataCarrier args[0]! true
+    checkDataCarrier args[2]! true
+    return mkConst ``True
+  if [``True, ``False, ``Nat.le, ``Nat.lt, ``Int.le, ``Int.lt,
       ``List.Mem, ``List.Perm].contains head then
     return mkConst ``True
   if [``LE.le, ``LT.lt].contains head && args.size == 4 &&
@@ -153,12 +254,8 @@ private partial def jointPremises (type : Expr) (anchored : Bool := false)
     else
       if head == ``LE.le then ``Int.instLEInt else ``Int.instLTInt
     if ← isDefEq args[1]! (mkConst standard) then return mkConst ``True
-  if head == ``List.Pairwise && args.size == 3 then
-    let relation ← withLocalDeclD `first args[0]! fun first =>
-      withLocalDeclD `second args[0]! fun second =>
-        jointPremises (mkApp2 args[1]! first second) anchored negative
-    if relation.isConstOf ``True then return relation
-    throwError "unsupported premises in pairwise relation"
+  if head == ``List.Pairwise then
+    throwError "unsupported pairwise conclusion: no evidence that the relation is exercised"
   let env ← getEnv
   let conditional := if let some info := getMatcherInfoCore? env head then
       if args.size == info.arity then
@@ -174,9 +271,11 @@ private partial def jointPremises (type : Expr) (anchored : Bool := false)
     else if head == ``dite && args.size == 5 then some (#[3, 4], #[1])
     else none
   if let some (arms, discriminants) := conditional then
+    if negative then throwError "unsupported negated conditional: {type}"
     let mut guarded := args
+    let mut substantiveArms := 0
     for i in arms do
-      let arm ← forallTelescopeReducing (← inferType args[i]!) fun fields _ => do
+      let (arm, substantive) ← forallTelescopeReducing (← inferType args[i]!) fun fields _ => do
         let body := (mkAppN args[i]! fields).headBeta
         unless ← isProp body do
           throwError "unsupported conditional arm: {body}"
@@ -185,13 +284,19 @@ private partial def jointPremises (type : Expr) (anchored : Bool := false)
         if let some (.recInfo info) := env.find? head then
           if fields.size != info.rules[i - info.getFirstMinorIdx]!.nfields then
             throwError "unsupported recursive conditional conclusion: {head}"
-        let result ← if (← literalTruth? body).isSome then pure (mkConst ``False)
-          else jointPremises body anchored negative
-        mkLambdaFVars fields result
+        let premises ← jointPremises body true
+        let substantive := (← literalTruth? body).isNone
+        let result := if substantive then premises else mkConst ``False
+        return (← mkLambdaFVars fields result, substantive)
+      if substantive then substantiveArms := substantiveArms + 1
       guarded := guarded.set! i arm
+    if substantiveArms > 1 then
+      throwError "unsupported conditional with competing substantive arms: {type}"
     let mut result := mkAppN type.getAppFn guarded
     check result
     unless ← isProp result do throwError "unsupported conditional motive: {head}"
+    if head == ``ite || head == ``dite then
+      return combinePremises (← jointPremises args[1]! true) result
     for i in discriminants do
       if let some operands ← argumentList? args[i]! then
         -- A nil argument list executes neither operand semantics nor
@@ -205,6 +310,8 @@ private partial def jointPremises (type : Expr) (anchored : Bool := false)
       | .recInfo _ => true
       | _ => false) || isMatcherLikeCore env head || [``ite, ``dite].contains head then
     throwError "unsupported conditional conclusion: {head}"
+  if let some reduced ← reduceProjection? type then
+    return ← jointPremises reduced anchored negative
   if let some unfolded ← unfoldContractAlias type then
     return ← jointPremises unfolded anchored negative
   throwError "unsupported conclusion head: {head}"
@@ -961,6 +1068,95 @@ theorem disjointWitness :
 theorem vacuousFallback : if (0 : Nat) = 1 then (1 : Nat) = 1 else True ∧ True :=
   ⟨trivial, trivial⟩
 
+/-- Law: an existential fallback cannot cover an unreachable arm. -/
+theorem existentialFallback : if (0 : Nat) = 1 then (1 : Nat) = 1 else ∃ _ : Unit, True :=
+  ⟨(), trivial⟩
+
+/-- Law: a universal fallback cannot cover an unreachable arm. -/
+theorem universalFallback : if (0 : Nat) = 1 then (1 : Nat) = 1 else ∀ _ : Unit, True :=
+  fun _ => trivial
+
+/-- Law: an inhabited fallback constraint cannot cover a second substantive arm. -/
+theorem competingArms : if (0 : Nat) = 1 then (1 : Nat) = 1 else ∃ n : Nat, n = 0 :=
+  ⟨0, rfl⟩
+
+theorem unitFallbackWitness : ∃ _ : Unit, True := ⟨(), trivial⟩
+
+/-- Law: a decidable guard can itself contain a vacuous premise. -/
+theorem vacuousGuard : if (False → True) then (0 : Nat) = 0 else False := rfl
+
+/-- Law: dependent conditionals inspect their guard too. -/
+theorem vacuousDependentGuard : dite (False → True) (fun _ => (0 : Nat) = 0) (fun _ => False) := by
+  split
+  · rfl
+  · rename_i h
+    exact h (fun _ => trivial)
+
+/-- Law: a tautological disjunct does not supply the nested premises. -/
+theorem trivialDisjunct : True ∨ (∀ n : Nat, n = 0 → n = 1 → False) := .inl trivial
+
+theorem trivialDisjunctWitness :
+    True ∨ ((∀ n : Nat, n = 0 → n = 1 → False) ∧
+      (∃ (n : Nat) (_ : n = 0) (_ : n = 1), True)) :=
+  .inl trivial
+
+/-- Law: a competing disjunct does not supply a nested premise. -/
+theorem competingDisjunct (n : Nat) : n = 0 ∨ (n = 1 → n = 2 → False) :=
+  .inr fun h₁ h₂ => by omega
+
+theorem zeroDisjunctWitness :
+    ∃ n : Nat, n = 0 ∨ ((n = 1 → n = 2 → False) ∧ (∃ (_ : n = 1) (_ : n = 2), True)) :=
+  ⟨0, .inl rfl⟩
+
+/-- Law: predicate equality cannot flatten a nested telescope. -/
+theorem predicateEquality :
+    (fun n : Nat => n = 0 → n = 1 → False) = (fun n : Nat => n = 0 → n = 1 → False) := rfl
+
+/-- Law: a container can carry proposition values. -/
+theorem containerEquality : (some (False → True) : Option Prop) = some (False → True) := rfl
+
+/-- Law: a subtype can carry a proof field. -/
+theorem subtypeDomain : ∃ _ : { n : Nat // n = 0 ∧ (n = 1 → False) }, True :=
+  ⟨⟨0, rfl, by decide⟩, trivial⟩
+
+/-- Law: a lifted proposition remains a proof carrier. -/
+theorem liftedDomain : ∃ _ : PLift (∀ n : Nat, n = 0 → n = 1 → False), True :=
+  ⟨⟨fun _ h₀ h₁ => Nat.noConfusion (h₀.symm.trans h₁)⟩, trivial⟩
+
+structure TypedProof : Type where
+  proof : False → True
+
+/-- Law: a custom data structure can carry proof fields. -/
+theorem structureDomain : ∃ _ : TypedProof, True := ⟨⟨fun _ => trivial⟩, trivial⟩
+
+/-- Law: a type-level conditional can choose a trivial carrier. -/
+theorem conditionalDomain :
+    ∃ _ : (if (False → True) then Unit else TypedProof), True := ⟨(), trivial⟩
+
+/-- Law: inequality cannot discard a proposition-bearing operand type. -/
+theorem carrierInequality : (none : Option Prop) ≠ some (False → True) := by
+  intro h
+  cases h
+
+/-- Law: heterogeneous equality cannot discard a proposition-bearing operand type. -/
+theorem heterogeneousCarrierEquality :
+    HEq (some (False → True) : Option Prop) (some (False → True) : Option Prop) := HEq.rfl
+
+/-- Law: both substantive disjuncts admit the same input. -/
+theorem reachableDisjuncts (n : Nat) : n = n ∨ n < n + 1 := .inl rfl
+
+theorem reachableDisjunctsWitness : ∃ n : Nat, n = n ∧ n < n + 1 := ⟨0, rfl, by decide⟩
+
+/-- Law: the empty pairwise proof never exercises the relation. -/
+theorem emptyPairwise : List.Pairwise (fun (_ _ : Nat) => False) [] := .nil
+
+/-- Law: a premise forcing the empty list cannot exercise the relation. -/
+theorem contradictoryPairwise (xs : List Nat) (h : xs = []) :
+    List.Pairwise (fun a _ => a = 0 ∧ a = 1) xs := h.symm ▸ .nil
+
+theorem emptyPairwiseWitness : ∃ (xs : List Nat) (_ : xs = []), True :=
+  ⟨[], rfl, trivial⟩
+
 /-- Law: the substantive branch of an if can be reached. -/
 theorem reachableIf (n : Nat) : if n = 1 then n = n else True := by
   split
@@ -1025,6 +1221,13 @@ theorem counterfeitTrapBranchEmpty : (match Exec.evalArgs (instrumentOperands er
     | .trap _kd => False
     | _ => True) :=
   @evalArgs_trap_erasure erasedOps ConcreteSpec.Core.Own.Examples.types permitE [(x, 7)] [] ⟨0, initial⟩
+
+/-- Law: a projection must preserve the argument-list applicability constraint. -/
+theorem projectedEmptyOk : (match
+    (Exec.evalArgs (instrumentOperands erasedOps ConcreteSpec.Core.Own.Examples.types permitE)
+      [(x, 7)] ⟨0, initial⟩ [], ()).1 with
+    | .ok (vs, _t) => Exec.evalArgs erasedOps [(x, 7)] (erase (⟨0, initial⟩ : Store Int)) [] = .ok (vs, 0)
+    | _ => False) := counterfeitEmptyOk
 
 -- The archived projection cases use this satisfiable telescope. This control
 -- checks applicability and metadata independence; see R-0219 for body provenance.
@@ -1146,12 +1349,53 @@ private def controls : MetaM Unit := do
   let (errors, _, _, _) ← audit positiveScope []
   unless errors == #["missing joint-premise coverage: Nonvacuity.Control.realizable"] do
     throwError "omitted law control: {errors}"
+  let mut falsePasses := #[]
+  for (law, witness) in [(``Control.existentialFallback, ``Control.unitFallbackWitness),
+      (``Control.universalFallback, ``Control.unitFallbackWitness),
+      (``Control.competingArms, ``Control.someNat),
+      (``Control.vacuousGuard, ``Control.unconditional),
+      (``Control.vacuousDependentGuard, ``Control.unconditional),
+      (``Control.trivialDisjunct, ``Control.trivialDisjunctWitness),
+      (``Control.competingDisjunct, ``Control.zeroDisjunctWitness),
+      (``Control.predicateEquality, ``Control.unconditional),
+      (``Control.containerEquality, ``Control.unconditional),
+      (``Control.subtypeDomain, ``Control.subtypeDomain),
+      (``Control.liftedDomain, ``Control.liftedDomain),
+      (``Control.structureDomain, ``Control.structureDomain),
+      (``Control.conditionalDomain, ``Control.unitFallbackWitness),
+      (``Control.carrierInequality, ``Control.unconditional),
+      (``Control.heterogeneousCarrierEquality, ``Control.unconditional),
+      (``Control.emptyPairwise, ``Control.unconditional),
+      (``Control.contradictoryPairwise, ``Control.emptyPairwiseWitness),
+      (``Control.Historical.projectedEmptyOk, ``Control.unconditional)] do
+    let (errors, _, covered, laws) ← audit (· == law) [(law, witness)]
+    unless covered == 0 && laws == 1 && errors.size == 1 do
+      falsePasses := falsePasses.push law
+  unless falsePasses.isEmpty do
+    throwError "planted false passes accepted: {falsePasses}"
+  for law in [``Control.Historical.counterfeitEmptyOk, ``Control.Historical.counterfeitEmptyStore,
+      ``Control.Historical.counterfeitEmptyWildcard, ``Control.Historical.counterfeitTrapBranchEmpty,
+      ``Control.Historical.projectedEmptyOk] do
+    let expected ← jointPremises (← inferType (mkConst law))
+    let goal ← mkFreshExprMVar (mkApp (mkConst ``Not) expected)
+    let (h, contradiction) ← goal.mvarId!.intro1
+    contradiction.withContext do
+      let nonempty ← mkAppM ``And.left #[mkFVar h]
+      let premise ← whnf (← inferType nonempty)
+      forallTelescope premise fun args _ => do
+        let equality ← inferType args[0]!
+        let reflexivity ← mkEqRefl equality.getAppArgs.back!
+        contradiction.assign (mkApp nonempty reflexivity)
+    let proof ← instantiateMVars goal
+    unless (Kernel.check env {} proof).isOk do
+      throwError "empty-list applicability obligation is not refuted: {law}"
+  let mut badDiagnostics := #[]
   for (law, witness, diagnostic) in [
     (``Control.Historical.counterfeitEmptyOk, ``Control.unconditional, "witness does not establish the joint premises"),
     (``Control.Historical.counterfeitEmptyStore, ``Control.unconditional, "witness does not establish the joint premises"),
     (``Control.Historical.counterfeitEmptyWildcard, ``Control.unconditional, "witness does not establish the joint premises"),
     (``Control.Historical.counterfeitTrapBranchEmpty, ``Control.unconditional, "witness does not establish the joint premises"),
-    (``ConcreteSpec.Core.ConstOrderIndependent, ``SpecWitness.constantOrderOuterOnly, "witness does not establish the joint premises"),
+    (``ConcreteSpec.Core.ConstOrderIndependent, ``SpecWitness.constantOrderOuterOnly, "incomplete check"),
     (``Control.Historical.nonemptyWrongArm, ``Control.unconditional, "witness does not establish the joint premises"),
     (``Control.vacuousFallback, ``Control.unconditional, "witness does not establish the joint premises"),
     (``Control.detached, ``Control.detachedWitness, "witness does not establish the joint premises"),
@@ -1177,9 +1421,12 @@ private def controls : MetaM Unit := do
     (``Control.realizable, `missingWitness, "missing witness theorem")] do
     let (errors, _, _, _) ← audit (· == law) [(law, witness)]
     unless errors.size == 1 && (errors[0]?.getD "").contains diagnostic do
-      throwError "negative control {law}: {errors}"
+      badDiagnostics := badDiagnostics.push s!"{law}: {errors}"
+  unless badDiagnostics.isEmpty do
+    throwError "negative controls: {badDiagnostics}"
   for (law, witness) in [(``Control.attached, ``Control.attachedWitness),
       (``Control.reachableIf, ``Control.reachableIfWitness),
+      (``Control.reachableDisjuncts, ``Control.reachableDisjunctsWitness),
       (``Control.disjoint, ``Control.disjointWitness),
       (``Control.Historical.helperGrowth, ``Control.Historical.independentHelperWitness),
       (``ConcreteSpec.Core.Own.evalArgs_ok_erasure, ``SpecWitness.evalArgsOk),

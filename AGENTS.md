@@ -1,19 +1,10 @@
 # Agent and contributor workflow
 
-Status: operational procedure. How work is done in this repository: the agent playbooks, the
-rules they share, and [concurrent work](#concurrent-work-one-worktree-per-writer) (one worktree per
-writer, the server gate runs, publishing). It absorbed `CONCURRENT_WORK.md` on 2026-10-29. The
-tool manuals it points to stay separate: [LANDING.md](docs/LANDING.md) (landing trains),
-[REVIEW.md](docs/REVIEW.md) (`scripts/review/review.sh`), [WORK_QUEUE.md](legacy/docs/archive/roadmap-2026-11/WORK_QUEUE.md) (the agent work
-queue), [STATUS_PAGE.md](legacy/docs/project/STATUS_PAGE.md) and [PROMOTION_PIPELINE.md](legacy/docs/project/PROMOTION_PIPELINE.md) (the
-validation stages, CI tiers and result vocabulary).
-
-**Since the legacy/ move (R-0558).** The old compiler and its gates are frozen in `legacy/` and never
-run. Where this document names a path that is not at the root (`scripts/tests/`, `scripts/gen/`,
-`docs/bugs/`, `Concrete/` and the like), it now lives under `legacy/` and describes the old
-compiler. The checks a push, CI and the train run are `scripts/checks/run.sh`. A defect in the
-spec, the proofs, the tooling or CI is a row in [ISSUES.tsv](ISSUES.tsv); `/file-bug` and `/fix-bug`
-are archived with the old bug ledger (`legacy/.claude/commands/`).
+This file covers repository workflow. See [LANDING.md](docs/LANDING.md)
+for the GitHub merge queue and [TOOLING.md](docs/project/TOOLING.md) for the
+active script inventory. The old compiler and its gates are frozen in
+`legacy/`. File defects in the active spec, proofs, tooling or CI in
+[ISSUES.tsv](ISSUES.tsv).
 
 ## Playbooks
 
@@ -22,16 +13,12 @@ runs the same procedure by name instead of receiving a long prompt:
 
 | command | what it does |
 |---|---|
-| `/fix-bug <N or description>` | reproduce, classify, repair or contain one bug on its own branch |
 | `/roadmap-item <R-NNNN>` | carry one roadmap task to a landable candidate |
-| `/file-bug <title>` | file a new bug with `scripts/gen/new_bug.sh` |
-| `/creview` | Codex review of the branch through `scripts/review/review.sh` |
 | `/rebase` | the safe rebase onto `origin/main` |
-| `/land` | hand a validated branch to the landing train (`scripts/land/train.sh`) |
+| `/land` | open a PR and enable auto-merge through the merge queue |
 | `/cstatus` | where this worktree, its branch, its CI and this machine stand |
 
-`/creview` and `/cstatus` carry a `c` prefix so they do not shadow Claude Code's built-in `/review`
-and `/status`; a new playbook takes a name no built-in uses.
+`/cstatus` uses a distinct name from Claude Code’s built-in `/status`.
 
 This file owns the rules the commands share. A command links here rather than restating them, so a
 rule changes in one place.
@@ -52,35 +39,14 @@ agent, orchestrator or reviewer chooses, encodes, implements or provisionally sh
 of them, inside a bug fix or anywhere else. Agents present options and a recommendation to the owner
 and wait for an explicit answer. Behaviour already on main that took a side stays as it is, recorded
 as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
-- The Codex review of every fix (`scripts/review/review.sh` asks it) checks whether the fix
-  chooses, revises, encodes, implements, extends or reverts an owner decision without approval
-  covering the change. Accept an explicit owner answer or, for a matter within Slices 0 and 1,
-  a decision recorded under the November 25 delegation with all three agreeing verdicts.
-  If the fix needs a decision that lacks either form of approval, stop, report it to the owner,
-  and do not land it. See [REVIEW.md](docs/REVIEW.md#owner-decisions-choosing-versus-recording)
-  for the provenance checks.
+- The coordinator checks that approval covers any change to an owner decision. See
+  [REVIEW.md](docs/REVIEW.md#owner-decisions-choosing-versus-recording) for provenance checks.
 
-**Bugs.**
-- Every bug gets a structural cause and a structural owner: the design fact that let it exist, and
-  the roadmap task or pipeline stage that removes the whole class
-  ([STRUCTURAL_CLASSES.md](legacy/docs/bugs/STRUCTURAL_CLASSES.md)). A patch without them is not a fix.
-- To file a bug, run `scripts/gen/new_bug.sh`, which writes its record and runs the ledger
-  generator. To log a change, add a `changelog.d/` fragment
-  ([changelog.d/README.md](legacy/changelog.d/README.md)). Never hand-edit a generated view (the bug
-  lists, the class table's bugs column, the generated bug dashboard, `CHANGELOG.md`,
-  `Concrete/BuildIdentity.lean`); see [scripts/tests/README.md](legacy/scripts/tests/README.md),
-  "Shared ledgers".
-- Each bug's compiler area is derived from its fix commits ([AREAS.md](legacy/docs/bugs/AREAS.md);
-  `python3 scripts/gen/bug_ledger.py report` for the stage, class, month, silent, how-found and
-  time-to-fix tables, `--json` or `--sqlite PATH` for queries). Name the bug in the subject of each
-  commit that fixes it (`bug NNN: ...`), and after committing a fix rerun
-  `scripts/gen/refresh_generated.sh` and commit the regenerated AREAS.md. Add an `area:` line to a
-  record only when the record shows the derived area is wrong
-  ([README.md](legacy/docs/bugs/README.md#bug-areas)); never fill areas in by hand otherwise.
-- For `compiler: new`, a silent defect (wrong code, unsound claim) is stopped at once by repair
-  or fail-closed containment; a loud one is filed, pinned and owned. Legacy-compiler defects
-  are recorded against `legacy-compiler-final`, never repaired, under
-  [ROADMAP's defect disposition and frozen-compiler rule](ROADMAP.md#defect-disposition-rule).
+**Bugs.** Record each defect in [ISSUES.tsv](ISSUES.tsv) with evidence, a
+structural cause, an owner and a closure condition. Repair or contain silent
+defects in the new compiler immediately. File loud defects with a reproducer
+and owner. Record legacy defects against `legacy-compiler-final` under the
+[defect disposition rule](ROADMAP.md#defect-disposition-rule).
 
 **Who works on what** (owner, 2026-11-08, [decision](docs/decisions.md#decided-2026-11-08-eleven)).
 - Claude's quota goes to the critical path: the spec, slice 0 and the front end. Mechanical work
@@ -97,56 +63,20 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
   depends on it waits or rebases onto it.
 - Rebase onto `origin/main` after every landing (`/rebase`), not only before your own landing, so a
   conflict or a changed rule shows up while the branch is small.
-- Commit each validated slice. Push the branch to `wip/<branch>` at least every 5 minutes of work
-  (`git push origin HEAD:refs/heads/wip/<branch>`); the [pre-push hook](.githooks/pre-push) enforces the WIP tier.
-- Never push to `main` or `ci/*`. Only the remote name `origin` is permitted, with both fetch
-  and all push URLs targeting `lambdaclass/concrete`; there is no mirror. Landings go through
-  `scripts/land/train.sh`.
-  `train.sh check` runs the checks before the push, and the push runs the root hook's full set again.
-  The train reads back `ci/<name>` and `main` with `ls-remote` and retries dropped connections;
-  `land` requires origin/main at the exact head.
-- After any push of your own whose hook ran gates, check that the remote ref moved
-  (`git ls-remote origin refs/heads/<branch>`) and push again if it did not.
+- Commit each validated slice and back it up to `origin/wip/<branch>` at least
+  every five minutes. The pre-push hook scans WIP tips for conflict markers.
+- Use only `origin` pointing to `lambdaclass/concrete`. Land through a PR and
+  the GitHub merge queue. Direct pushes to `main` and `ci/*` are prohibited.
 
 **Validation.**
-- Locally, run only the impact-selected gates (pre-push runs the fast surface gates and the gates
-  selected by what the push touches). For the full set, dispatch CI on the branch
-  (`gh workflow run CI --ref <branch>`) or use the server (`concrete-remote wip/<branch> 'lake build
-  && bash scripts/checks/run.sh'`); never a full local run on the laptop.
-- Heavy legs default to the CI server (concrete-ci-2). Set `git config land.gatesHost concrete-ci-2`
-  in the clone you land from, and `train.sh check` then runs its impact gates there, bound to the
-  train head's SHA. The `ci` push still runs the root hook's full set; it reuses no remote result. An unreachable host is INCOMPLETE and blocks;
-  run locally only with `check --local-gates` (docs/LANDING.md, "Gate host").
-- At most 2 heavy runs (full suites, mutation campaigns, `lake build` of the whole tree) per machine.
-  Queue behind a running one; continue light work meanwhile. Honour a user's explicit CPU limits.
-- Run gates inside `nix develop`. A gate that passes by hand but fails under the hook: suspect an
-  inherited `GIT_*` variable first.
-- Record each result against the exact commit SHA it ran on.
-- Read the obligation, not the prose: a header says what was true when it was written. Make gates
-  assert properties, not counts, so an improvement does not read as a regression.
-
-**Before asking for review.** Each of these caused an integration failure in the week to
-2026-10-25; run them on the slice, in `nix develop`, before `/creview`:
-- `scripts/tests/test_golden.sh` after any change to compiler output or a report.
-- `scripts/tests/test_mutation.sh --check-patterns` after editing any file a mutation targets: it
-  finds an anchor the edit broke in seconds, before a mutation campaign fails on it.
-- `scripts/tests/check_type_identity.sh` and the other gates that elaborate Lean probes against the
-  compiler (`grep -l 'lake env lean' scripts/tests/check_*.sh`) after changing a signature or a
-  structure they construct.
-- A fixture's `run_ok` / `run_err` leg in `run_tests.sh` spells its file name literally: the
-  bug-corpus audit looks for each fixture's basename in `run_tests.sh`, so a name assembled from
-  parts is reported as uncovered.
-- Bound a command with `bounded_run` (`scripts/checks/lib/bounded.sh`), never GNU `timeout`: the
-  macOS job has no `timeout`, and `bounded_run` reports a second timeout as INCOMPLETE, not a pass.
-- A ledger `coverage:` line names only the gates that cover the bug: the filing check accepts a
-  `.sh` name there as the coverage claim without running or opening it.
-- File in the migrated ledger format with `scripts/gen/new_bug.sh`, which writes the `bug-ledger`
-  block, a `changelog.d/` fragment and the `discovery.tsv` row (`--batch` or `--new-batch`, with
-  `--silent`) and regenerates the views; after editing a record, regenerate with
-  `scripts/gen/bug_ledger.py --write` and `scripts/gen/bug_dashboard.py --write`. If the script fails
-  after reserving a number, rerun the `--number NNN` command it prints rather than filing by hand.
-- Have Codex confirm each bug is real (a reproducer and a verdict line in the record) before
-  filing it.
+- Run impact-selected checks in `nix develop` and run the full tier in CI.
+  Use a bounded Linux host for the root checks and record validation against
+  the exact revision tested.
+- At most two heavy runs per machine. Honor explicit CPU limits.
+- Use [`bounded_run`](scripts/checks/lib/bounded.sh) for portable command time
+  limits. An incomplete result blocks validation.
+- Read the obligation and make checks assert properties that distinguish a
+  regression from a valid change.
 
 <a id="review-proportion"></a>
 **Review proportion.** A soundness bug, wrong language semantics, false theorem or broken
@@ -158,17 +88,12 @@ Phase T pause. The [Phase T restart rule](ROADMAP.md#phase-t-restart-rule) gover
 restarts under the [November 25 decision](docs/decisions.md#decided-2026-11-25-freeze-and-grammar).
 
 <a id="review"></a>
-**Review.** Codex and agy review the grammar, with Gemini Neon for agy when available ([November 25 decision](docs/decisions.md#decided-2026-11-25-freeze-and-grammar)).
-Codex reviews everything before publication or owner delivery, and Kimi and agy (Gemini) also
-review every branch. Record any reviewer's absence
-([decision](docs/decisions.md#decided-project-review)). agy cannot read files: run it as
-`bounded_run 1500 -- agy -p "<prompt>"` with the diff and the context it needs in the prompt, ending with a
-required verdict line. Every slice gets a Codex review before it lands, through `scripts/review/review.sh`:
-at most 2 rounds for docs and the roadmap, 3 for scripts and 5 for the compiler and the spec
-(owner, 2026-11-08; `review.sh` enforces 5 until R-0618 lands), the first over the whole diff and each later round over the delta since the
-previous one. Answer each finding with a fix or a stated reason. Run Codex by hand only with
-`GIT_OPTIONAL_LOCKS=0` (and `</dev/null`): its sandboxed `git status` otherwise takes the
-worktree's `index.lock` and can leave it behind (bug 209).
+**Review.** The coordinator arranges Codex, Kimi and agy review outside the
+repository and records absences. Codex and agy review the grammar, with Gemini
+Neon for agy when available, under the [November 25 decision](docs/decisions.md#decided-2026-11-25-freeze-and-grammar).
+Clear review before landing. Review the full slice first and the delta in
+subsequent rounds. The caps are two rounds for docs and roadmap, three for scripts
+and five for compiler and spec. Answer each finding with a fix or a stated reason.
 
 **Git safety.**
 - Never pipe `git rebase` (or `git merge`, `git cherry-pick`) into anything: a pipe hides the stop.
@@ -201,10 +126,8 @@ remaining work are explicit. Historical commands and machine procedures are omit
 
 | Lesson | Check and scope |
 |---|---|
-| Read push refs from Git and run the checks selected for the push | The [pre-push hook](.githooks/pre-push#L38-L70) reads the advertised refs. Its [WIP-only tier](.githooks/pre-push#L72-L85) scans the advertised WIP tips. The full tier [checks the advertised gated SHAs against HEAD](.githooks/pre-push#L113-L123) and runs the root suite. [`landing_script.sh`](scripts/checks/landing_script.sh) exercises both tiers. The old compiler’s gate-selection rules are frozen. |
-| Require review provenance before landing | [`train.sh:1063`](scripts/land/train.sh#L1063) requires verified clean notes or exact-SHA owner sign-off through [`review_provenance`](scripts/land/train.sh#L539). [`verify.sh:69`](scripts/review/verify.sh#L69) checks the reviewer field for non-whitespace and [its final check](scripts/review/verify.sh#L87) requires a clean verdict. Check and CI dispatch can proceed before review. |
-| Check CI for the candidate and inspect its actual conclusion | [`train.sh:697`](scripts/land/train.sh#L697) checks the published SHA and filters for [the train’s CI event](scripts/land/train.sh#L705). [`train.sh:1028`](scripts/land/train.sh#L1028) requires a completed run at the exact head with successful landing-tier jobs, and [`required_checks.py:109`](scripts/land/required_checks.py) checks required jobs. Interactive triage still distinguishes infrastructure failures from code defects. |
-| Plan for a long hook to finish without the ref moving | [`train.sh:204`](scripts/land/train.sh#L204) retries verified publication and reads the exact ref after each attempt, including for [main publication](scripts/land/train.sh#L1077). Transport configuration and manual process cleanup are machine procedures. |
+| Scan advertised WIP tips | The [pre-push hook](.githooks/pre-push) checks the commits named in Git's ref list for conflict markers. |
+| Qualify the exact merged tree | GitHub's merge queue runs the full tier on its candidate. Required checks block advancement of `main`. |
 | Split declarations with expansions | The [shell assignment check](scripts/checks/lib/shell_assignments.py#L91-L143) parses tracked scripts and hooks with shfmt and fails on parse errors. A `local`, `declare`, `typeset`, `readonly`, or `export` statement with more than one name must have no parameter, arithmetic, or command expansions in its initializers. Split a declaration that uses one of those expansions into one declaration per line. |
 
 ### B. Mechanically checkable in this repository
@@ -212,21 +135,12 @@ remaining work are explicit. Historical commands and machine procedures are omit
 | Lesson | Check or remaining work under R-0710 |
 |---|---|
 | Detect dependencies that require Bash runtime context | Under R-0710, qualify computed variable names and context-dependent subscript evaluation beyond the explicit expansions covered by the shell assignment check if these patterns enter maintained tooling. Qualify with a same-declaration reference resolved through a nameref and an indexed-array subscript, plus passing controls with split assignments and a literal associative-array key. |
-| Reject fabricated review citations | Bind review targets and citations to the exact Git tree. Require resolvable evidence for a positive verdict. Citation resolution can test existence, while reviewers still assess relevance. |
 | Bound a reproducer and prevent recursive hooks | Extend the task, memory and wall-time bounds already used by [`sandbox_isolation.sh:154`](scripts/checks/sandbox_isolation.sh) to a shared entry point for live repository probes. Prove that it refuses to start without containment and that nested test Git processes cannot re-enter the hook. |
-| Require two independent reviews for cleanup | Bind review identities and their evidence to the same reviewed tree and require the configured reviewers or a recorded exception. The existing sign-off path covers a narrower case. Bind standard review notes to the configured reviewer identity as well. |
 | Confirm a defect independently before filing it | Verify that a new defect record links an independent, matching reproduction verdict when that evidence is machine-readable. Whether the observation violates the specification remains a review judgment. |
-| Launch branch CI early and keep independent landings moving | Have the writer-round completion path dispatch and record CI for its exact SHA. Schedule independent candidates from declared dependencies and test that an unrelated red candidate leaves ready work eligible. |
 | Sweep the full fixture corpus after behavior or API changes | Extend the active [`test_manifest.sh:24`](scripts/checks/test_manifest.sh) inventory approach to gate-only Lean probes and exercised job obligations. Test that an unregistered or stale fixture is surfaced by the relevant check. Frozen fixtures stay archived. |
 | Stop a commit or push when a check piped into a formatter fails | Give tracked validation-to-publication paths a status-preserving entry point, then plant a failed check whose trailing formatter succeeds. Interactive shell lines require use of that entry point. |
-| Avoid changing the running harness and accepting a writer's self-review | Run writer rounds from a fixed harness snapshot and record the writer identity in evidence that the review publisher checks. Plant a mid-run edit and a review from the recorded writer. |
 | Reserve issue IDs with the coordinator | Bind new IDs to a reservation before publication and test a collision across branches. [`issues.sh:25`](scripts/checks/issues.sh) checks ordering and uniqueness in a single ledger. |
-| Prevent repeat integration failures | Extend exact-SHA qualification for currently active gaps: assert structured edits took effect, extend the train’s stopped-operation guard to other repository generators and publishers, validate deletion targets, exercise retained fixture inventories, and refuse hook bypasses or unauthorized forced ref updates in publication tools. Keep the train’s intentional scratch-ref leases and CI reset covered by explicit controls. [`git_sandbox.sh:18`](scripts/checks/lib/git_sandbox.sh) already isolates fixture repositories. The hook already uses a private build log, and [`review.sh:325`](scripts/review/review.sh) suppresses optional index locking. Retired inventory and campaign checks stay frozen. |
-| Validate the train’s configured destination | Require the approved repository for the fetch URL and every effective push URL, including rewritten URLs. [`landing_sources.sh:15`](scripts/checks/landing_sources.sh#L15) checks the gate runner’s source contract, and [`archived_references.sh`](scripts/checks/archived_references.sh) checks stale references. Arbitrary manual publication requires hosting policy. |
-| Include the long-term design requirement in generated writer and reviewer prompts | Put the instruction in repository-owned prompt builders and test the rendered prompts. Reviewer judgment about a shortcut stays with the reviewer. |
-| Bind validation throughout a gated push and cover mixed-tier pushes | Validate an immutable snapshot for the full gate run, or otherwise prove that the reviewed state stayed stable, with a checkout-change control. Scan advertised WIP tips even when the push also contains a full-tier ref. Clone allocation remains operator coordination. |
-| Stop publication when preparation fails and bind gates to the intended source | Exercise the repository publication path with a failed preparation command and prove it sends nothing. Keep passing the explicit candidate SHA, and validate the remote gate endpoint against its configured source contract. Provisioning the execution identity is external. |
-| Require the complete review footer and validate each output | [ISS-0087](ISSUES.tsv#L59) tracks the intake gap. Generate the footer and validate the repository marker, verdict position and cited evidence in every repository review intake. [`review_tool.sh:445`](scripts/checks/review_tool.sh) already rejects a missing Codex verdict and [`signoff.sh:217`](scripts/land/signoff.sh) checks the final sign-off verdict declaration. |
+| Prevent repeat integration failures | Assert structured edits took effect, guard repository writers against stopped Git operations and validate deletion targets and fixture inventories. |
 | Keep status tags out of roadmap tasks | Lint the roadmap task rows for retired status tags and qualify the check with a tagged row and an ordinary bracketed link. |
 | Record structural cause and owner for defects | Check the structure and owner reference of new defect records in the active issue workflow. The relevance of the cause and suitability of the owner still need review. Frozen bug records stay archived. |
 
@@ -235,11 +149,11 @@ remaining work are explicit. Historical commands and machine procedures are omit
 | Lesson | Reason |
 |---|---|
 | Default build-host OS and core-dump policy | Host provisioning and kernel settings are external infrastructure. |
-| Require train publication to main, including roadmap changes | The historical roadmap exception was superseded by the branch rules above. The train qualifies its own publications. Requiring train provenance for arbitrary direct pushes depends on hosting permissions or a server-side rule. |
+| Require merge queue publication to main | The coordinator maintains the GitHub branch rules in [LANDING.md](docs/LANDING.md). |
 | Limit autonomous research to stable, agreed objectives | Choosing worthwhile objectives and granting research authority are owner decisions. |
 | Batch validated slices when publication costs dominate | This was based on retired publication tooling and was superseded by frequent WIP backups. Batching independent landings depends on readiness. |
 | Prefer a structural long-term fix and treat shortcuts as findings | Assessing the tradeoff and whether a fix removes the whole class requires judgment. Generated prompts are covered above. |
-| Assign writers and reviewers by role and available capacity | The coordinator assigns and provisions agents outside the repository. Review provenance is separately checkable. |
+| Assign writers and reviewers by role and available capacity | The coordinator assigns and provisions agents outside the repository. |
 | Commit validated slices and back them up frequently | A repository check cannot observe uncommitted work on another machine or know when a slice becomes ready. |
 | Commit coherent slices promptly | A gate cannot decide whether a partial change is coherent or schedule the writer's commits. |
 | Reason from project philosophy and put important decisions to the owner | Importance and tradeoffs require judgment, and the decision comes from the owner. |
@@ -258,7 +172,7 @@ remaining work are explicit. Historical commands and machine procedures are omit
 | Keep owner updates short and give each question context | Whether a message gives enough context requires conversational judgment. |
 | Stay silent on no-op watchdog ticks | The watchdog and its chat response policy run outside the repository. |
 | Prioritize specification work on the critical path | Allocation of quota and judgment about blockers are coordinator work. |
-| Place heavy work on the designated CI capacity | Host availability and fleet assignment are external operations. The train can enforce configured gate results. |
+| Place heavy work on the designated CI capacity | Host availability and fleet assignment are external operations. |
 | Delegate mechanical work when orchestration capacity is scarce | Quota and writer availability are external to the repository. |
 | Accept verbosity where it improves clarity or safety | Evaluating clarity and safety requires design judgment. |
 
@@ -274,186 +188,8 @@ This is not an optimization. One working tree cannot serve two writers, because
 the file system is the shared mutable state and neither writer can see the
 other's intent.
 
-### What went wrong when this was not the default
-
-On 2026-07-31 two agents were found working in the same worktree
-(`.claude/worktrees/r0442-proofcore-callee`). Every symptom was initially
-misread as something else:
-
-| symptom | what it was blamed on | what it actually was |
-| --- | --- | --- |
-| an edit to `ProofCore.lean` vanished, and the file dropped out of `git status` | the mutation harness | the mutation harness restoring a backup **over a concurrent edit**, then verifying against the pre-edit hash and reporting success |
-| `origin/main` moved three times mid-session | stale fetches | the other agent pushing |
-| two `push-both.sh` runs waiting on CI for the same SHA | a duplicated invocation | two agents each publishing |
-
-The first row is the expensive one: work was destroyed *and* the tool reported
-that nothing was wrong. A postcondition that compares against a stale baseline
-confirms the corruption it was meant to catch.
-
-### What a worktree does and does not isolate
-
-| | |
-| --- | --- |
-| **Isolated** | working tree, index, `HEAD`, current branch |
-| **Shared** | object store, remotes, **the stash stack**, branch namespace |
-
-So worktrees fix file-level races, not coordination:
-
-- Local landings are sequenced by the train’s common-git-directory `concrete-land.lock`.
-- `git stash` is still unsafe across worktrees; bare `git stash` / `git stash pop`
-  is banned repo-wide. Use a temporary WIP commit, or
-  `git stash push -u -m "<unique-tag>"` and recover by SHA with `apply`, never
-  `pop`.
-- A branch name is a shared resource. `worktree-new.sh` refuses to reuse one
-  rather than let `git` fail halfway, because the existing branch may belong to
-  another writer.
-
-### Enforcement is at the point of danger, not by head-count
-
-Two heuristics for "is another agent here?" were measured and both cried wolf:
-
-- matching process names (`pgrep -lf "codex|claude"`) reported **115** — every
-  shell wrapper's command line contains the `.claude` snapshot path;
-- counting processes whose CWD is the tree reported **7** in a worktree freshly
-  created by a single agent — its own shells and background waiters all sit there.
-
-Neither distinguishes "two writers" from "one agent working normally", and a
-warning that fires on non-events trains the reader to ignore the one that
-matters. So concurrency is caught where the signal is a fact:
-
-- **`scripts/tests/test_mutation.sh`** records a hash of the content it itself
-  wrote. At restore time, content that is neither its mutation nor the original
-  means a third party wrote the file: it **refuses to restore**, preserves their
-  version under `CONCURRENT-EDIT/`, keeps its own backup for reconciliation, and
-  fails the run. It cannot silently overwrite an edit it did not make.
-- **`scripts/land/train.sh land`** takes an exclusive lock in the **common** git dir
-  (`git rev-parse --git-common-dir`), not the worktree — remotes are shared, so a
-  per-worktree lock would miss two worktrees publishing at once.
-
-### Working while something long is running
-
-Long-running work does not always require an idle tree. Distinguish the phases:
-
-| phase | tree must be stable? |
-| --- | --- |
-| pre-push hook running gates | **yes** — gates read the working tree |
-| `run_ci_gates_local.sh` | **yes** — same reason |
-| `test_mutation.sh` | **yes** — it rewrites source in place |
-| `train.sh watch` waiting for remote CI | **no** — it only polls `gh` |
-
-The CI wait touches no files, so work can continue during it — in another
-worktree. Treating the whole publish as tree-freezing is over-caution; treating
-the hook phase as safe is the error that costs a run.
-
-### Landing, review and load (development throughput)
-
-On 2026-10-22 a finished branch took 6 – 10 h to reach main for about 1 h of work.
-The [development throughput](ROADMAP.md#development-throughput) track in the
-roadmap owns the repair. These rules apply to every writer now:
-
-- **One bug or one rule per branch** (R-0545). A branch that changes a language or
-  checker rule lands first and small, with the migrations of main's fixtures and
-  nothing else. A branch that needs two rules is two branches.
-- **Review per slice, delta after the first pass** (R-0544). After the first full
-  review, each round reviews only the diff since the previous round. Past the risk
-  cap (the round caps under **Review** above),
-  split the slice. Review ownership and memory-safety work with neutral prompts and
-  piecewise diffs.
-- **At most 2 heavy local runs per machine** (R-0543). Full gate sets, closure-mode
-  runs and mutation campaigns count as heavy. Agents run the fast and
-  impact-selected gates; full sets go to the servers (R-0541) or to CI. The
-  machine-wide semaphore `scripts/checks/lib/heavy_slots.sh` holds the full runners,
-  `run_tests.sh --full` and the mutation drivers to two slots; for any other heavy
-  command, check the load and queue behind a running heavy run instead of starting a third.
-- **Ready branches land together** (R-0539). Ready branches are integrated into one
-  train candidate with one CI run, rather than each rebasing onto the last landing,
-  through `scripts/land/train.sh` ([LANDING.md](docs/LANDING.md)). A train built by hand
-  follows the same rules: one integrated candidate, results recorded against its
-  exact SHA, and bisection by member only on red.
-
-### Running the full gate set on the server
-
-The full set runs on a server (or in CI), never on the laptop:
-
-```
-~/bin/concrete-remote <pushed-ref> \
-  'lake build && bash scripts/checks/run.sh'
-```
-
-`concrete-remote` checks the ref out as a `git clone --shared` (not a worktree:
-two mutation-driver gates refuse worktrees) and sets the runner's default width
-to the measured best for that host (`CONCRETE_GATE_JOBS_DEFAULT`; override with
-`CONCRETE_REMOTE_JOBS=N`, or pass `JOBS=N` in the command). The measurements and
-the critical path were taken on concrete-ci-1, since deleted (2026-10-23), and are
-in [GATE_PROFILE.md](legacy/docs/project/GATE_PROFILE.md#parallel-scaling-on-concrete-ci-1-r-0546-step-4).
-
-**A gate must be safe to run beside every other gate.** In a pass the gates run
-JOBS-wide in one checkout, and several passes run on one host. So a gate:
-
-- writes scratch only under `mktemp -d` (or a `.$$` name), never a fixed
-  `/tmp/<name>` — `check_gate_hygiene.sh` refuses fixed `/tmp` paths;
-- never edits a tracked file in place, not even to restore it a moment later.
-  A probe that perturbs a source runs in a private copy of the checkout
-  (`run_fast_surface_gates.sh --mutate`, `check_attestation_manifest.sh`). An
-  in-place edit of a `.lean` file makes every concurrent `require_fresh_binary`
-  rebuild the shared compiler from it;
-- runs sub-steps concurrently only under one lock it already holds (fresh.sh
-  refuses a second concurrent acquisition) and records each sub-step's exit
-  status, so a lost result is a failure, not a pass.
-
-A pool failure that passes on the runner's sequential re-check is listed under
-"Recovered under sequential re-run" and in `.ci-gate-timings.tsv` (stage
-`pool`, verdict `FAIL`, then stage `recheck`). Treat it as a race in that gate
-to fix, not as noise.
-
-### Killing a publish does not un-publish it
-
-The following 2026-07-31 incident concerns the retired `push-both.sh`. The same child-process
-and remote-readback rules apply to current train publication to origin.
-
-`push-both.sh` runs `git push` as a CHILD process. Killing the script does not
-kill that child, and a `git push` already in flight will complete.
-
-Measured 2026-07-31: a publish was killed during its pre-push hook, `git ls-remote`
-showed the primary unchanged, and that was read as "nothing was published". The
-`git push` child was still running; it finished moments later and advanced the
-primary. The next publish was then rejected as non-fast-forward — harmless here,
-but the reasoning behind the kill was a race read as a guarantee.
-
-So: a ref check taken *at* the moment of the kill proves nothing about a push
-that has already started. If a publish must be abandoned, re-check the remote
-AFTER the process tree is gone (`pgrep -f "git push"` clear), and treat the
-remote's actual state as the answer rather than the state you saw before killing.
-
-### Orchestrating a publish: never infer state from process names
-
-The `push-both` examples below are historical; use captured PIDs and exact origin refs for current
-train operations.
-
-`pgrep -f "push-both"` matches the WAITER'S OWN command line, which contains that
-string. Every `until ! pgrep -f "push-both"; do sleep 30; done` loop therefore
-waits on itself forever, and a status check written the same way reports "publish
-running" when nothing is. Measured 2026-08-01: six background tasks were stuck on
-this at once, and the reported state was wrong for as long as they ran. It is the
-same failure as counting `pgrep -lf "codex|claude"` and getting 115 — a
-process-name match catches the matcher.
-
-Do this instead:
-
-* capture the launched PID and `wait "$pid"`;
-* verify completion by checking the EXACT REMOTE SHA (`git ls-remote`), which is
-  the fact you actually care about;
-* query CI for that SHA (`gh run list --commit <full-sha>` — the full SHA; the
-  short form returns nothing);
-* never infer state from a process-name match.
-
-For a one-off inspection, `ps -eo command | grep -c "[p]ush-both.sh"` excludes
-itself via the bracket, but a ref check is still the better answer.
-
-### Reviewing a branch
-
-Every agent reviews the same way: `scripts/review/review.sh`, one round per
-invocation, with the verdict recorded as a git note on the reviewed commit. The
-note is shared through `origin`, so rounds run in another worktree or by another
-agent count toward the same cap, and the next round reviews only the delta. See
-[REVIEW.md](docs/REVIEW.md).
+A worktree isolates its files, index and branch checkout. The object store,
+remotes, branch namespace and stash are shared. Use distinct branch names and
+avoid sharing a checkout with a running check that reads or writes its files.
+CI watches the published revision, so work can continue in a separate worktree
+while the queue runs.

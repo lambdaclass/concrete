@@ -337,23 +337,38 @@ proposition. A registered closed application supplies its actual arguments.
 The checker constructs and kernel-checks the existential from those
 arguments, without taking evidence from the application's result. The
 source declaration does not enter the Law census. The audit reports missing
-registrations and refuses shapes
-with no supported applicability interpretation. The full audit is required for
-B0b and remains open in [ISS-0104](../../ISSUES.tsv).
+registrations and refuses shapes with no supported applicability
+interpretation. The audit remains a standalone command while coverage is
+incomplete. It is outside the required CI checks and remains a B0b closure
+obligation in [ISS-0104](../../ISSUES.tsv).
 
-An existential conclusion with nested applicability keeps its original body
-and its derived premises at the same witness. Proof-valued existential
-domains are inspected for nested telescopes. Independent conjunction cases
+An existential conclusion retains its original body and any nested
+applicability obligation at the same witness. Proposition-valued domains
+are inspected for nested telescopes. Data domains are inspected through
+their instantiated constructor fields and unsupported proof carriers are
+refused. Equality of propositions is checked like a biconditional.
+Predicate and container equalities are refused when their operand types
+carry propositions or unsupported proof fields. Pairwise conclusions are
+incomplete until the checker can certify that the witness exercises the
+relation. Double negation retains the inner obligation.
+
+A disjunction must establish each substantive arm and its applicability
+at the same inputs. A conditional must establish the applicability of its
+guard and select the sole substantive arm. Structurally constant arms,
+including quantified trivial fallbacks, earn no credit. A conditional with
+competing substantive arms is incomplete. Independent conjunction cases
 over data can use different inputs when they have no shared premise.
-Propositional equality is checked like a biconditional, and double negation
-retains the inner obligation. Unsupported contracts fail closed.
+Unsupported shapes fail closed.
 
 The exact closed empty-list store, wildcard, combined, and trap counterfeits
 from `fixtures/N2-Typed-Contracts.lean` at archived revision
 `8563ea20158be606aad867dac3f798b5dd1ef1b3` are runnable controls.
-The checker keeps the original discriminator and requires selection of a
-substantive arm. For `Exec.evalArgs` that arm must also have a nonempty
-operand list, since the empty list succeeds without running an operand.
+The checker requires selection of a substantive arm and reduces projection
+wrappers without evaluating the discriminant operation. For `Exec.evalArgs`
+the selected arm must also have a nonempty operand list, since the empty
+list succeeds without running an operand. The controls kernel-check that the
+derived obligations are uninhabited for the empty-list counterfeits,
+including the projected variant.
 The success and trap Laws have registered witnesses that run operands in
 the instrumented interpreter. The counterfeit types can no longer receive
 credit from `True`.
@@ -379,5 +394,6 @@ supplied-contradiction policy, and proof-body analysis budget remain open
 under R-0219.
 
 [ISS-0104](../../ISSUES.tsv) tracks remaining registrations, unsupported
-contract shapes, B0b gate wiring, and sharing orphan cleanup. The audit
+contract shapes, independently checking more than two disjoint conjunction
+cases beneath a data binder, B0b gate wiring, and sharing orphan cleanup. The audit
 continues to fail when any Law is missing coverage.
