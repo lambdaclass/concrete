@@ -4375,7 +4375,11 @@ ConcreteSpec.StageInterface.TokenValue.name.sizeOf_spec	propext
 ConcreteSpec.StageInterface.TokenValue.stringLiteral.inj	propext
 ConcreteSpec.StageInterface.TokenValue.stringLiteral.injEq	propext
 ConcreteSpec.StageInterface.TokenValue.stringLiteral.sizeOf_spec	propext
+ConcreteSpec.StageInterface.earlyAddLiteralCondition	Quot.sound propext
+ConcreteSpec.StageInterface.earlyAddOverflow	Quot.sound propext
 ConcreteSpec.StageInterface.earlyEntry._proof_1	
+ConcreteSpec.StageInterface.earlyIntegerLiteralRoundTrip	Quot.sound propext
+ConcreteSpec.StageInterface.earlyLiteralMatchesStorage	propext
 ConcreteSpec.StageInterface.earlyPayload._proof_1	
 ConcreteSpec.StageInterface.earlyPayload._proof_2	
 ConcreteSpec.StageInterface.instDecidableEqAddressStorage._proof_1	
@@ -5240,6 +5244,7 @@ Monad.toBind.eq_1
 Option.getD.match_1.congr_eq_1	
 Option.getD.match_1.congr_eq_2	
 Pure.pure.eq_1	
+_private.ConcreteSpec.IntegratedCore.0.ConcreteSpec.StageInterface.literalOctets	propext
 _private.ConcreteSpec.Proofs.Accounting.0.ConcreteSpec.Core.Leak.allocated.match_1.eq_1	propext
 _private.ConcreteSpec.Proofs.Accounting.0.ConcreteSpec.Core.Leak.allocated.match_1.eq_2	propext
 _private.ConcreteSpec.Proofs.Accounting.0.ConcreteSpec.Core.Leak.allocated.match_1.eq_3	propext

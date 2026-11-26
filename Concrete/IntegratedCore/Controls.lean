@@ -10,7 +10,7 @@ open ConcreteSpec.StageInterface
 
 private def source : Source :=
   ⟨Project.singleton mainSourcePath
-      (SourceText.ofBytes "fn main() -> u8 { return 42; }".toUTF8.data.toList), ⟨0⟩, slice0⟩
+      (SourceText.ofBytes r"fn main() -> u8 { return 42; }".toUTF8.data.toList), ⟨0⟩, slice0⟩
 
 private def returnTokens : ParserView :=
   let token := fun start stop value => (⟨⟨⟨0⟩, start, stop, 1, start + 1⟩, value⟩ : SurfaceToken)

@@ -191,7 +191,12 @@ theorem boundary.
 
 ## Writer ownership
 
-Use separate implementation modules so parallel proof and implementation work can proceed against the frozen signatures. These paths reserve ownership, including their eventual in-place retirements. Existing cross-cutting gates and root imports are integrated by (a) after the implementation branches are ready.
+Use separate implementation modules so parallel proof and implementation work
+can proceed against the frozen signatures. These paths reserve ownership,
+including their eventual in-place retirements. Under OWN-1, each writer adds
+root imports for their own new modules and regenerates the affected inventories
+with their generators. Fix (a) owns registration and integration into the
+permanent cross-stage gates at cutover.
 
 | Fix | Owned implementation paths and retirements |
 | --- | --- |
@@ -258,3 +263,23 @@ registered boundary.
 ISS-0114 tracks indexed type-family
 inspection in the semantic-parameter audit. ISS-0115 tracks aligning
 intermediate slice domains with production backend coverage before cutover.
+
+### Fix (e) hand-off
+
+- **ISS-XXXX — Fix (a) registration and cutover.** Register the integrated
+  elaborator and apply its validation theorem to the production pass bundle.
+  Wire its controls into the permanent compiler gate, update the trusted-base
+  registry, and complete the producer-side LCB encoding and LLVM encoding
+  and rendering correspondence proofs.
+- **ISS-XXXX — Coordinated retirement at cutover.** Migrate live callers
+  together, then remove the Slice 0 carrier and conversion, duplicate integer
+  and trap types, scalar bridge, slice integer conversion, BIR wrapping
+  helper, duplicate bit conversion and trap naming, and F31 census.
+  Changes to frozen interfaces require an interface round.
+- **ISS-XXXX — Fix (f) parser domain.** Prove that successful parses
+  establish `Parsed.ElaborationDomain`, including tree shape and span
+  well-formedness. The frozen elaboration rule supplies a typed
+  unsupported-slice refusal for Slice 1.
+- **ISS-XXXX — Big-endian interface revision.** Fixes (e) and (b) need a
+  revised interface separating target-independent Core literal decoding
+  from target-endian storage reads before enabling a big-endian profile.
