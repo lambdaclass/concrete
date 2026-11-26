@@ -175,7 +175,7 @@ while IFS=$'\t' read -r name program expect; do
   d="$work/ex/$name"
   t0=$(now_ms)
   emit_slice0_row "${CONCRETE_TEST_MANIFEST:-tests/manifest.tsv}" "$program" "$d" "$target" "$expect"
-  if [[ "$expect" == "refuse "* ]]; then continue; fi
+  if [[ "$expect" == "refuse "* || "$expect" == "pending-refusal "* ]]; then continue; fi
   if [ -z "$first_name" ]; then first_name=$name first_program=$program first_expect=$expect; fi
   t1=$(now_ms)
   build "$name" "$d/build.log" bounded "$native_secs" bash "$root/scripts/checks/lib/slice0_native.sh" "$d" "$lcb"

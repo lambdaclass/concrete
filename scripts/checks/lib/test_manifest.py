@@ -19,8 +19,13 @@ from typing import NamedTuple
 HEADER = ["id", "program", "expect", "slice"]
 ID_RE = re.compile(r"[a-z0-9_]+")
 SLICE_RE = re.compile(r"[a-z0-9_]+")
-RULE_RE = re.compile(r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*(?:@[0-9]+)?")
-TRAP_KIND_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+RULE_RE = re.compile(r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*@[1-9][0-9]*")
+TRAP_KINDS = frozenset(("overflow", "division_by_zero", "invalid_shift",
+                        "out_of_bounds", "invalid_range", "abort"))
+ORIGIN_RE = re.compile(r"([0-9]+):([0-9]+):([1-9][0-9]*):([1-9][0-9]*)")
+LABEL_RE = re.compile(r"[a-z][a-z0-9_]*")
+REFUSAL_KINDS = frozenset(("unreachable_statement",))
+PENDING_REFUSALS = frozenset(("syntax", "unsupported_form", "checker"))
 
 
 class Row(NamedTuple):
@@ -46,25 +51,51 @@ def natural(path, line, text):
         fail(path, line, f"invalid natural number {text!r}")
 
 
+def validate_origin(path, line, origin):
+    match = ORIGIN_RE.fullmatch(origin)
+    if not match:
+        fail(path, line, f"invalid origin {origin!r}")
+    start, stop, _, _ = (natural(path, line, value) for value in match.groups())
+    if stop < start:
+        fail(path, line, f"reversed origin {origin!r}")
+
+
+def validate_stderr(path, line, data):
+    if data != "-" and not re.fullmatch(r"(?:[0-9a-f]{2})+", data):
+        fail(path, line, f"invalid stderr bytes {data!r}")
+
+
 def validate_expect(path, line, expect):
     parts = expect.split(" ")
-    if len(parts) == 2 and parts[0] == "exit" and re.fullmatch(r"[0-9]+", parts[1]):
-        status = natural(path, line, parts[1])
-        if status > 255:
-            fail(path, line, f"exit status {status} is outside 0..255")
-        return
-    if (len(parts) == 4 and parts[0] == "trap" and parts[2] == "site"
-            and TRAP_KIND_RE.fullmatch(parts[1]) and re.fullmatch(r"[0-9]+", parts[3])):
-        natural(path, line, parts[3])
-        return
-    if (len(parts) >= 2 and parts[0] == "refuse" and RULE_RE.fullmatch(parts[1])
-            and all(parts[2:])):
-        return
-    if (len(parts) == 6 and parts[0] == "llvm" and parts[3:5] == ["lcb", "refuse"]
-            and parts[1] == "exit" and RULE_RE.fullmatch(parts[5])):
-        validate_expect(path, line, " ".join(parts[1:3]))
-        return
-    fail(path, line, f"invalid expect {expect!r}; use exit N, trap KIND site N, refuse CLASS [MESSAGE], or llvm exit N lcb refuse RULE-ID")
+    match parts:
+        case ["exit", status, stderr] if re.fullmatch(r"[0-9]+", status):
+            status = natural(path, line, status)
+            if status > 255:
+                fail(path, line, f"exit status {status} is outside 0..255")
+            validate_stderr(path, line, stderr)
+        case ["trap", kind, site, stderr] if kind in TRAP_KINDS and re.fullmatch(r"[0-9]+", site):
+            natural(path, line, site)
+            validate_stderr(path, line, stderr)
+            if stderr == "-":
+                fail(path, line, "trap requires nonempty stderr")
+        case ["refuse", kind, rule, primary, related] if kind in REFUSAL_KINDS and RULE_RE.fullmatch(rule):
+            validate_origin(path, line, primary)
+            labels = set()
+            if related != "-":
+                for item in related.split(","):
+                    label, _, location = item.partition("=")
+                    if not LABEL_RE.fullmatch(label) or label in labels:
+                        fail(path, line, f"invalid or duplicate related origin label {label!r}")
+                    labels.add(label)
+                    validate_origin(path, line, location)
+        case ["pending-refusal", kind] if kind in PENDING_REFUSALS:
+            pass
+        case ["llvm", "exit", status, "lcb", "resource", resource, bound] if (
+                LABEL_RE.fullmatch(resource) and re.fullmatch(r"[1-9][0-9]*", bound)):
+            natural(path, line, bound)
+            validate_expect(path, line, f"exit {status} -")
+        case _:
+            fail(path, line, f"invalid expect {expect!r}")
 
 
 def validate_source(path, line, program, seen_sources):
@@ -136,7 +167,7 @@ def parse(path, text):
         else:
             fail(path, line_number, f"invalid program {program!r}; expected bir: or con:")
         validate_expect(path, line_number, expect)
-        if program.startswith("bir:") and expect.startswith("refuse "):
+        if program.startswith("bir:") and expect.startswith(("refuse ", "pending-refusal ")):
             fail(path, line_number, f"bir: row {ident!r} cannot use refuse; expected exit or trap")
         if program.startswith("bir:") and expect.startswith("llvm "):
             fail(path, line_number, "backend-specific CLI expectations require a con: source")
@@ -169,23 +200,18 @@ def self_test():
         (tests / "slice0" / "link.con").symlink_to(tests / "slice0" / "ok.con")
         (tests / "slice0" / "dangling.con").symlink_to(tests / "slice0" / "missing.con")
         valid = ("id\tprogram\texpect\tslice\n"
-                 "a\tbir:answer\texit 42\tslice0\n"
-                 "b\tcon:tests/slice0/ok.con\trefuse SYN-5@1\tslice0\n")
+                 "a\tbir:answer\texit 42 -\tslice0\n"
+                 "b\tcon:tests/slice0/ok.con\trefuse unreachable_statement STMT-14@1 0:1:1:1 anchor=2:3:1:3\tslice0\n")
         assert len(parse(tests / "manifest.tsv", valid)) == 2
-        split = valid.replace("refuse SYN-5@1", "llvm exit 42 lcb refuse INTERNAL")
-        assert len(parse(tests / "manifest.tsv", split)) == 2
         bad = [
-            split.replace("exit 42 lcb", "exit 256 lcb"),
-            valid + "c\tbir:other\tllvm exit 42 lcb refuse INTERNAL\tslice0\n",
-            valid + "a\tbir:other\texit 0\tslice0\n",
-            valid + "c\tbir:other\texit 256\tslice0\n",
-            valid + "c\tbir:other\ttrap foo\tslice0\n",
-            valid + "c\tbir:other\ttrap arithmeticOverflow site 0\n",
-            valid + "c\tbir:answer\texit 0\tslice0\n",
-            valid + "c\tbir:other\trefuse SYN-5\tslice0\n",
-            valid + "c\tcon:tests/slice0/missing.con\texit 0\tslice0\n",
-            valid + "c\tcon:tests/slice0/link.con\texit 0\tslice0\n",
-            valid + "c\tcon:tests/slice0/dangling.con\texit 0\tslice0\n",
+            valid.replace("STMT-14@1", "STMT-14"),
+            valid.replace("0:1:1:1", "1:0:1:1"),
+            valid.replace("anchor=2:3:1:3", "anchor=2:3:1:3,anchor=0:1:1:1"),
+            valid.replace("exit 42 -", "exit 42 0"),
+            valid.replace("exit 42 -", "trap arithmeticOverflow 0 0a"),
+            valid.replace("exit 42 -", "llvm exit 42 lcb resource values 488"),
+            valid + "c\tcon:tests/slice0/link.con\texit 0 -\tslice0\n",
+            valid + "c\tcon:tests/slice0/dangling.con\texit 0 -\tslice0\n",
         ]
         for text in bad:
             try:

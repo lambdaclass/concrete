@@ -10,7 +10,7 @@
 #   root, work (removed on exit), lcb, target, emitter (the Lean emitter command, an array);
 #   expected_timeout CMD...: CMD with its bounded runs logged apart (a control expecting a timeout);
 #   observe EXE OUT SECS RETRY [MEM_MB [ENV...]]: run EXE under bounded_run (and limited_exec.sh
-#     MEM_MB, default 1024) with ENV assignments; OUT.status (status or "incomplete"),
+#     MEM_MB, default 1024) with ENV assignments; OUT.status (exit status, timeout or runner failure),
 #     OUT.stdout, OUT.stderr;
 #   judge EXPECTED_DIR OBS: the observation OBS.* equals the expectation, byte for byte;
 #   build NAME LOG CMD...: run CMD, or print LOG and fail the gate;
@@ -81,7 +81,14 @@ observe() {
   bounded_run -i /dev/null -r "$4" "$3" -- env ${envs[@]+"${envs[@]}"} \
     bash "$root/scripts/checks/lib/limited_exec.sh" "$mem" "$1" \
     >"$2.stdout" 2>"$2.stderr" || rc=$?
-  if bounded_is_incomplete "$rc"; then echo incomplete >"$2.status"; else echo "$rc" >"$2.status"; fi
+  if bounded_is_incomplete "$rc"; then
+    case "$(tail -n 1 "$BOUNDED_LOG")" in
+      "incomplete "*) echo incomplete >"$2.status" ;;
+      *) echo runner-failed >"$2.status" ;;
+    esac
+  else
+    echo "$rc" >"$2.status"
+  fi
 }
 
 judge() {
