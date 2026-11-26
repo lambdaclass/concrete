@@ -61,13 +61,17 @@ run_cmd do
     if (← Lean.collectAxioms theoremName).contains ``Classical.choice then
       logError m!"{theoremName} depends on Classical.choice"
 
-private def pathFor (index : Nat) : IO SourcePath :=
-  match SourcePath.parse (.ofBytes s!"file{index}.con".toUTF8.data.toList) with
+private def fixturePath (name : String) : IO SourcePath :=
+  match SourcePath.parse (.ofBytes name.toUTF8.data.toList) with
   | .ok path => pure path
-  | .error _ => throw (IO.userError s!"invalid fixture path for slot {index}")
+  | .error _ => throw (IO.userError s!"invalid fixture path {name}")
 
-private def loadFiles (count : Nat) (source : SourceText) : IO Project := do
-  let paths ← (List.range count).mapM pathFor
+private def pathFor (index : Nat) : IO SourcePath :=
+  fixturePath s!"file{index}.con"
+
+private def loadFiles (count : Nat) (source : SourceText) (last : List SourcePath := []) : IO Project := do
+  let files ← (List.range count).mapM pathFor
+  let paths := files ++ last
   match checked : SourcePath.Project.check paths with
   | .error error => throw (IO.userError s!"fixture project failed admission: {repr error}")
   | .ok () => return Project.load (paths.map (File.load · source)).toArray (by
@@ -170,44 +174,104 @@ private def checkSpan {project : Project} (id : FileId) (offset : Nat)
     throw (IO.userError s!"incorrect span at file {id.index}, byte {offset}")
   return span
 
-private def spanWork (project : Project) (size : Nat) (rescan : Bool) : IO Unit := do
+private instance : MonadTick (StateM Nat) where
+  tick := modify (· + 1)
+
+-- The counting and production instantiations use the same definitions.
+example (file : File) (offset : Nat) (bounded : offset ≤ file.length) :
+    file.positionAt offset bounded =
+      (File.indexedCoordinate (m := Id) file offset bounded).val := rfl
+
+example (project : Project) (path : SourcePath) :
+    project.findId path = project.findIdM (m := Id) path := rfl
+
+example (project : Project) (id : FileId) (start stop : Nat) :
+    projectSpanAt project id start stop = projectSpanAtM (m := Id) project id start stop := rfl
+
+example (project : Project) (path : SourcePath) (start stop : Nat) :
+    projectSpan project path start stop = projectSpanM (m := Id) project path start stop := rfl
+
+-- Both indexed and planted runs use the same per-span budget predicate.
+private def checkWork {project : Project} (id : FileId) (offset budget : Nat)
+    (result : Option (ScopedSpan project) × Nat) : IO Bool := do
+  discard (checkSpan id offset result.1)
+  return result.2 ≤ budget
+
+private def spanWork (project : Project) (size : Nat) (planted : Bool) : IO Unit := do
+  let mut total := 0
+  let mut rejected := 0
   for offset in [:size] do
-    let span ← checkSpan ⟨0⟩ offset (projectSpanAt project ⟨0⟩ offset (offset + 1))
-    if rescan then
-      let some file := project.fileAt span.fileId
-        | throw (IO.userError "missing file for prefix-rescan control")
-      unless file.source.columnAt offset == span.col do
-        throw (IO.userError "prefix scan disagreed")
+    -- Substitute the counted reference fold at the production issuer’s coordinate access.
+    let issue : StateM Nat (Option (ScopedSpan project)) := if planted then
+      projectSpanAtM project ⟨0⟩ offset (offset + 1) File.prefixCoordinate
+    else
+      projectSpanAtM project ⟨0⟩ offset (offset + 1)
+    let result := issue.run 0
+    if planted then
+      let expected := offset + 1
+      unless result.2 == expected do
+        throw (IO.userError s!"prefix scan charged {result.2} reads at {offset}, expected {expected}")
+    unless ← checkWork ⟨0⟩ offset 2 result do
+      rejected := rejected + 1
+    total := total + result.2
+  let expectedRejected := if planted then size - 2 else 0
+  unless rejected == expectedRejected do
+    throw (IO.userError s!"span work budget rejected {rejected}/{size}, expected {expectedRejected}")
+  unless planted || total == 2 * size do
+    throw (IO.userError s!"indexed span issuance charged {total} reads, expected {2 * size}")
+  IO.println s!"span work (planted={planted}, {size} spans): {total} operations, {rejected} over budget"
 
-private def projectWork (project : Project) (paths : Array SourcePath)
-    (projector : SourcePath → Nat → Nat → Option (ScopedSpan project)) : IO Unit := do
-  for _ in [:32] do
-    for index in [:paths.size] do
-      let some path := paths[index]? | throw (IO.userError "missing fixture path")
-      discard (checkSpan ⟨index⟩ 0 (projector path 0 1))
+-- Replay the former first-match lookup through the same indexed read primitive.
+private def scanProject {m : Type → Type} [Monad m] [MonadTick m]
+    (project : Project) (path : SourcePath) (index : Nat) : Nat → m (Option FileId)
+  | 0 => pure none
+  | fuel + 1 => do
+    if bounded : index < project.entries.size then
+      let entry ← readArray project.entries index bounded
+      if entry.val.path = path then return some ⟨index⟩
+      scanProject project path (index + 1) fuel
+    else return none
 
--- Replay the former production lookup on the same workload.
-private def scanProject (project : Project) (path : SourcePath) (start stop : Nat) :
-    Option (ScopedSpan project) := do
-  let index ← project.entries.findIdx? (fun file => decide (file.path = path))
-  projectSpanAt project ⟨index⟩ start stop
+private def projectWork (project : Project) (paths : Array SourcePath) (planted : Bool) : IO Unit := do
+  let mut total := 0
+  let mut rejected := 0
+  for index in [:paths.size] do
+    let some path := paths[index]? | throw (IO.userError "missing fixture path")
+    let issue : StateM Nat (Option (ScopedSpan project)) := if planted then
+      projectSpanM project path 0 1 (fun query => scanProject project query 0 project.entries.size)
+    else
+      projectSpanM project path 0 1
+    let result := issue.run 0
+    -- For file<n>.con, the seven letters each have one edge, with a possible
+    -- second root edge. Each remaining byte has at most ten digits and a dot
+    -- to compare. Also charge nodes, including the terminal, and both table reads.
+    let bytes := path.raw.bytes.length
+    let budget := bytes + 8 + 11 * (bytes - 7) + 3
+    unless ← checkWork ⟨index⟩ 0 budget result do
+      rejected := rejected + 1
+    total := total + result.2
+  let controlRejected := paths.size / 2 < rejected
+  unless (if planted then controlRejected else rejected == 0) do
+    throw (IO.userError s!"path work budget rejected {rejected}/{paths.size} (planted={planted})")
+  IO.println s!"path work (planted={planted}, {paths.size} spans): {total} operations, {rejected} over budget"
 
-private def elapsed (work : IO Unit) : IO Nat := do
-  let start ← IO.monoNanosNow
-  work
-  return (← IO.monoNanosNow) - start
+private def checkDistinctPrefix (project : Project) (id : FileId) (last missing : SourcePath) : IO Unit := do
+  let result := (projectSpanM (m := StateM Nat) project last 0 1).run 0
+  -- Two root edges and one edge for each remaining byte.
+  let budget := 2 * last.raw.bytes.length + 4
+  unless ← checkWork id 0 budget result do
+    throw (IO.userError s!"distinct-prefix lookup charged {result.2}, budget {budget}")
+  let (absent, work) := (project.findIdM (m := StateM Nat) missing).run 0
+  unless absent.isNone && work == 3 do
+    throw (IO.userError s!"absent-prefix lookup charged {work}, expected a root visit and two comparisons")
+  IO.println s!"distinct/absent prefix: {result.2}/{work} operations with {project.entries.size} files"
 
-private def checkGrowth (label : String) (small large : IO Unit) (planted : Bool) : IO Unit := do
-  let mut samples := #[]
-  for _ in [:3] do
-    let smallTime ← elapsed small
-    let largeTime ← elapsed large
-    samples := samples.push (smallTime, largeTime)
-  let (smallTime, largeTime) := (samples.qsort fun a b => a.2 * b.1 < b.2 * a.1)[1]!
-  IO.println s!"{label}: {smallTime / 1000} → {largeTime / 1000} µs"
-  -- Eight times the work allows fifty percent overhead in the median paired ratio.
-  unless (largeTime ≤ 12 * smallTime) != planted do
-    throw (IO.userError s!"{label} did not distinguish indexed access from rescanning")
+-- Plant the root list produced when insertion keeps replaced edges.
+private def checkDuplicateEdges (count : Nat) : IO Unit := do
+  let edges := List.replicate count ('f'.toNat, 0) ++ [('z'.toNat, count)]
+  let (slot, work) := (lookupEdgeM (m := StateM Nat) 'z'.toNat edges).run 0
+  unless slot == some count && work == count + 1 && work > 2 do
+    throw (IO.userError s!"duplicate-prefix edge scan charged {work}, expected {count + 1}")
 
 def main : IO Unit := do
   checkLexer
@@ -219,17 +283,18 @@ def main : IO Unit := do
   let large ← checkSpan ⟨0⟩ 0 (projectSpanAt long ⟨0⟩ 0 1)
   unless decide (small.toSpan = large.toSpan) && reprStr small == reprStr large do
     throw (IO.userError "the span payload changed when the file grew")
-  checkGrowth "span construction and comparison (2048 → 16384 spans)"
-    (spanWork long 2048 false) (spanWork long 16384 false) false
-  checkGrowth "planted byte-prefix scans (512 → 4096 spans)"
-    (spanWork long 512 true) (spanWork long 4096 true) true
-  let few ← loadFiles 128 (.ofBytes [97])
-  let many ← loadFiles 1024 (.ofBytes [97])
-  checkGrowth "projection by exact path (128 → 1024 files, 32 spans per file)"
-    (projectWork few (few.entries.map File.path) (projectSpan few))
-    (projectWork many (many.entries.map File.path) (projectSpan many)) false
-  let smallPaths := (few.entries.extract 0 32).map File.path
-  let largePaths := (many.entries.extract 0 256).map File.path
-  checkGrowth "former path lookup (32 → 256 files, 32 spans per file)"
-    (projectWork few smallPaths (scanProject few))
-    (projectWork many largePaths (scanProject many)) true
+  spanWork long 2048 false
+  spanWork long 16384 false
+  spanWork long 512 true
+  spanWork long 4096 true
+  let last ← fixturePath "z.con"
+  let missing ← fixturePath "missing.con"
+  let few ← loadFiles 128 (.ofBytes [97]) [last]
+  let many ← loadFiles 1024 (.ofBytes [97]) [last]
+  projectWork few ((few.entries.extract 0 128).map File.path) false
+  projectWork many ((many.entries.extract 0 1024).map File.path) false
+  projectWork few ((few.entries.extract 0 128).map File.path) true
+  projectWork many ((many.entries.extract 0 256).map File.path) true
+  checkDistinctPrefix few ⟨128⟩ last missing
+  checkDistinctPrefix many ⟨1024⟩ last missing
+  checkDuplicateEdges 1024
