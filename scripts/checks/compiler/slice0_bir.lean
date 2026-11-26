@@ -24,7 +24,7 @@ open ConcreteSpec (Trap)
 -- The source and candidate agree on the complete checked-add site entry.
 private def sumSource (a b : Nat) : Concrete.Memory.Program :=
   ⟨[⟨⟨⟨0⟩, Concrete.Memory.u8Layout⟩,
-    .add (.lit a) (.lit b) ⟨⟨0⟩, ⟨59, 64, 3, 12⟩⟩ none⟩], .var ⟨0⟩⟩
+    .add (.lit a) (.lit b) ⟨⟨0⟩, ⟨59, 64, 3, 12, ⟨0⟩⟩⟩ none⟩], .var ⟨0⟩⟩
 
 private def sumPath := "tests/slice0/sum.con"
 private def sumWitness : Concrete.SSA.Witness := [[⟨0⟩]]
@@ -65,7 +65,7 @@ example : Concrete.SSA.validate sumPath (sumSource 200 56)
 private def twoSlots : Concrete.Memory.Program :=
   let sum := sumSource 20 22
   { sum with stores := sum.stores ++ [⟨⟨⟨1⟩, Concrete.Memory.u8Layout⟩,
-      .add (.lit 2) (.lit 3) ⟨⟨1⟩, ⟨65, 70, 4, 3⟩⟩ none⟩] }
+      .add (.lit 2) (.lit 3) ⟨⟨1⟩, ⟨65, 70, 4, 3, ⟨0⟩⟩⟩ none⟩] }
 
 example :
     (match Concrete.SSA.lower sumPath twoSlots with
@@ -290,7 +290,7 @@ def main (args : List String) : IO UInt32 := do
 private def overwrittenSlot : Concrete.Memory.Program :=
   ⟨[⟨⟨⟨0⟩, Concrete.Memory.u8Layout⟩, .copy (.lit 1)⟩,
     ⟨⟨⟨0⟩, Concrete.Memory.u8Layout⟩, .copy (.lit 2)⟩,
-    ⟨⟨⟨1⟩, Concrete.Memory.u8Layout⟩, .add (.lit 1) (.lit 1) ⟨⟨1⟩, ⟨0, 1, 1, 1⟩⟩ none⟩],
+    ⟨⟨⟨1⟩, Concrete.Memory.u8Layout⟩, .add (.lit 1) (.lit 1) ⟨⟨1⟩, ⟨0, 1, 1, 1, ⟨0⟩⟩⟩ none⟩],
     .var ⟨0⟩⟩
 
 example : Concrete.Memory.run overwrittenSlot = .exit 2 := by rfl

@@ -24,7 +24,13 @@ source scripts/checks/lib/has_match.sh
 if [[ ${CONCRETE_TEST_EMIT_ONLY:-0} != 1 ]]; then
   bash scripts/checks/compiler/f31_census.sh
   build lexer-digit-limit "$work/lexer-digit-limit.log" bounded 120 \
+    lake env lean --run scripts/checks/compiler/lexer_digit_limit.lean
   echo "ok   lexer digit limit controls"
+  build lexer-stream-deps "$work/lexer-stream-deps.log" bounded 120 \
+    lake build +ConcreteSpec.Proofs.Ident
+  build lexer-stream "$work/lexer-stream.log" bounded 120 \
+    lake env lean --run scripts/checks/compiler/lexer_stream.lean
+  echo "ok   lexer stream controls"
   build llvm-mutation-controls "$work/llvm-mutation-controls.log" bounded 120 \
     lake env python3 -B scripts/checks/compiler/llvm_mutation_controls.py
   cat "$work/llvm-mutation-controls.log"

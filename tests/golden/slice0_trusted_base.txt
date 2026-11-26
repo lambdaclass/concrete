@@ -12,6 +12,7 @@ theorem Concrete.Parse.table0_checked axioms:
 theorem Concrete.Lex.lex_correct axioms: propext, Classical.choice, Quot.sound
 theorem Concrete.Lex.lexLossless_correct axioms: propext, Classical.choice, Quot.sound
 theorem Concrete.Lex.lexLossless_pieces axioms: propext, Classical.choice, Quot.sound
+theorem Concrete.Lex.PieceStream.pieceFileId axioms: propext, Classical.choice, Quot.sound
 theorem Concrete.Lex.lex_projection axioms: propext, Classical.choice, Quot.sound
 theorem Concrete.Lex.lexLossless_roundTrip axioms: propext, Classical.choice, Quot.sound
 theorem Concrete.Lex.LosslessStream.reconstruct_eq axioms: propext, Classical.choice, Quot.sound

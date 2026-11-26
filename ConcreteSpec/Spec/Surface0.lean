@@ -1,3 +1,4 @@
+import ConcreteSpec.Spec.Ident
 import ConcreteSpec.Spec.LL1
 import ConcreteSpec.Spec.Borrow
 import ConcreteSpec.Spec.Slice1Syntax
@@ -610,6 +611,7 @@ structure Span where
   stop : Nat
   line : Nat
   column : Nat
+  fileId : ConcreteSpec.Core.FileId
   deriving DecidableEq, Repr
 
 inductive TokenValue where
@@ -672,8 +674,8 @@ where
     | .ret _ _ :: next :: _ => .error (.unreachable next.span)
 
 section
-private def sampleSpan : Span := ⟨0, 9, 1, 1⟩
-private def deadSpan : Span := ⟨10, 19, 1, 11⟩
+private def sampleSpan : Span := ⟨0, 9, 1, 1, ⟨0⟩⟩
+private def deadSpan : Span := ⟨10, 19, 1, 11, ⟨0⟩⟩
 private def sampleReturn : Statement := .ret (.integer 1 none sampleSpan) sampleSpan
 
 example : checkBody [] = .error .fallthrough := rfl
@@ -688,22 +690,13 @@ end ConcreteSpec.Surface0
 
 namespace ConcreteSpec.Surface0
 
-/-- Byte offsets are zero-based, while lines and byte columns are one-based
-(decisions.md#foundation-q10). CRLF advances one line. -/
-structure Position where
-  byte : Nat := 0
-  line : Nat := 1
-  column : Nat := 1
-  afterCR : Bool := false
+abbrev Position := ConcreteSpec.Core.Position
 
 def Position.advance (pos : Position) (c : Nat) : Position :=
-  let width := if c < 0x80 then 1 else if c < 0x800 then 2 else if c < 0x10000 then 3 else 4
-  if c == 13 then ⟨pos.byte + width, pos.line + 1, 1, true⟩
-  else if c == 10 then ⟨pos.byte + width, if pos.afterCR then pos.line else pos.line + 1, 1, false⟩
-  else ⟨pos.byte + width, pos.line, pos.column + width, false⟩
+  pos.step c (if c < 0x80 then 1 else if c < 0x800 then 2 else if c < 0x10000 then 3 else 4)
 
-def Position.span (start stop : Position) : Span :=
-  ⟨start.byte, stop.byte, start.line, start.column⟩
+def Position.span (start stop : Position) (fileId : ConcreteSpec.Core.FileId := ⟨0⟩) : Span :=
+  ⟨start.byte, stop.byte, start.line, start.column, fileId⟩
 
 def scalarText (cs : List Nat) : String := String.ofList (cs.map Char.ofNat)
 
@@ -737,20 +730,21 @@ inductive Tokenizes : List Nat → List Nat → List Nat → TokenValue → Prop
       LongestMatch punctuationScalars input (some (spelling, rest)) →
       (scalarText spelling, kind) ∈ punctuation → Tokenizes input spelling rest (.fixed kind)
 
-inductive TokenStream : Position → List Nat → List Token → Prop
-  | eof {pos : Position} {input : List Nat} : Trivia input [] → TokenStream pos input []
+inductive TokenStream (fileId : ConcreteSpec.Core.FileId) : Position → List Nat → List Token → Prop
+  | eof {pos : Position} {input : List Nat} : Trivia input [] → TokenStream fileId pos input []
   | cons {pos : Position} {trivia remaining lexeme rest : List Nat} {value : TokenValue}
       {tokens : List Token} :
       Trivia (trivia ++ remaining) remaining →
       Tokenizes remaining lexeme rest value →
-      TokenStream (lexeme.foldl Position.advance (trivia.foldl Position.advance pos)) rest tokens →
-      TokenStream pos (trivia ++ remaining)
+      TokenStream fileId (lexeme.foldl Position.advance (trivia.foldl Position.advance pos)) rest tokens →
+      TokenStream fileId pos (trivia ++ remaining)
         (⟨value, (trivia.foldl Position.advance pos).span
-          (lexeme.foldl Position.advance (trivia.foldl Position.advance pos))⟩ :: tokens)
+          (lexeme.foldl Position.advance (trivia.foldl Position.advance pos)) fileId⟩ :: tokens)
 
-def Lexes (source : ByteArray) (tokens : List Token) : Prop :=
+def Lexes (source : ByteArray) (tokens : List Token)
+    (fileId : ConcreteSpec.Core.FileId := ⟨0⟩) : Prop :=
   ∃ scalars, Utf8.Decodes source.data.toList scalars ∧
-    (∀ c ∈ scalars, c ≠ 0 ∧ c ≠ 0xFEFF) ∧ TokenStream {} scalars tokens
+    (∀ c ∈ scalars, c ≠ 0 ∧ c ≠ 0xFEFF) ∧ TokenStream fileId {} scalars tokens
 
 private def fixed (kind : Terminal) (span : Span) : Token := ⟨.fixed kind, span⟩
 private def named (name : String) (span : Span) : Token := ⟨.name name, span⟩

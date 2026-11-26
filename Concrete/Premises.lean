@@ -158,6 +158,7 @@ def theorems : List Lean.Name := [
   ``Concrete.Lex.lex_correct,
   ``Concrete.Lex.lexLossless_correct,
   ``Concrete.Lex.lexLossless_pieces,
+  ``Concrete.Lex.PieceStream.pieceFileId,
   ``Concrete.Lex.lex_projection,
   ``Concrete.Lex.lexLossless_roundTrip,
   ``Concrete.Lex.LosslessStream.reconstruct_eq,
