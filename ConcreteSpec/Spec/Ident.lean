@@ -1435,20 +1435,117 @@ theorem SourceText.positionAt_positive (source : SourceText) (offset : Nat) :
     exact ih _ (Position.step_positive pos byte 1 line col).1
       (Position.step_positive pos byte 1 line col).2
 
+-- A byte trie for exact paths. Replacing a child keeps at most one edge for
+-- each byte, so traversal at each node is bounded by the byte alphabet.
+private inductive PathIndex where
+  | node (slot : Option Nat) (children : List (Nat × PathIndex))
+
+private def PathIndex.empty : PathIndex := .node none []
+
+private def PathIndex.lookup : List Nat → PathIndex → Option Nat
+  | [], .node slot _ => slot
+  | b :: rest, .node _ children =>
+    (children.lookup b).bind (lookup rest)
+
+private def PathIndex.insert : List Nat → Nat → PathIndex → PathIndex
+  | [], slot, .node _ children => .node (some slot) children
+  | b :: rest, slot, .node current children =>
+    let child := (children.lookup b).getD .empty
+    .node current ((b, child.insert rest slot) :: children.filter (fun edge => edge.1 != b))
+
+private theorem lookup_filter_other {α : Type} (children : List (Nat × α))
+    (b q : Nat) (different : q ≠ b) :
+    (children.filter (fun edge => edge.1 != b)).lookup q = children.lookup q := by
+  induction children with
+  | nil => rfl
+  | cons edge rest ih =>
+    rcases edge with ⟨key, value⟩
+    by_cases same : key = b
+    · subst key
+      simp [List.lookup_cons, beq_eq_false_iff_ne.mpr different, ih]
+    · simp [List.lookup_cons, same, ih]
+
+private theorem PathIndex.lookup_empty (key : List Nat) : empty.lookup key = none := by
+  cases key <;> rfl
+
+private theorem PathIndex.lookup_insert (key query : List Nat) (slot : Nat)
+    (index : PathIndex) :
+    (index.insert key slot).lookup query =
+      if query = key then some slot else index.lookup query := by
+  induction key generalizing query index with
+  | nil =>
+    cases query <;> cases index <;>
+      simp only [insert, lookup, ite_true, List.cons_ne_nil, ite_false]
+  | cons b rest ih =>
+    cases index with
+    | node current children =>
+      cases query with
+      | nil => rfl
+      | cons q tail =>
+        by_cases same : q = b
+        · subst q
+          have selfMatch : (b == b) = true := beq_iff_eq.mpr rfl
+          simp only [insert, lookup, List.lookup_cons, selfMatch, Option.bind_some, ih,
+            List.cons.injEq, true_and]
+          cases children.lookup b with
+          | none => simp only [Option.getD_none, lookup_empty, Option.bind_none]
+          | some child => rfl
+        · have noMatch : q :: tail ≠ b :: rest := fun eq => same (List.cons.inj eq).1
+          simp only [insert, lookup, List.lookup_cons, beq_eq_false_iff_ne.mpr same,
+            lookup_filter_other _ _ _ same, ite_eq_right noMatch]
+
+
+private def PathIndex.ofFiles (files : List File) (offset : Nat) : PathIndex :=
+  (files.zipIdx offset).foldr
+    (fun (file, slot) index => index.insert file.path.raw.bytes slot) .empty
+
+private theorem PathIndex.lookup_ofFiles (files : List File) (path : SourcePath) (offset : Nat) :
+    (ofFiles files offset).lookup path.raw.bytes =
+      (files.findIdx? (fun file => decide (file.path = path))).map (offset + ·) := by
+  induction files generalizing offset with
+  | nil => cases path.raw.bytes <;> rfl
+  | cons file rest ih =>
+    have exactPath : path.raw.bytes = file.path.raw.bytes ↔ file.path = path := by
+      cases path
+      cases file.path
+      rename_i a _ b _
+      cases a
+      cases b
+      simp [eq_comm]
+    rw [show ofFiles (file :: rest) offset =
+      (ofFiles rest (offset + 1)).insert file.path.raw.bytes offset from rfl]
+    simp only [lookup_insert, exactPath, List.findIdx?_cons]
+    by_cases same : file.path = path
+    · simp [same]
+    · simp [same, ih, Option.map_map, Function.comp_def, Nat.add_right_comm, Nat.add_assoc]
+
 /-- Loaded files with the project admission invariant. The November 16, November 17
 and November 21 path decisions govern this invariant (R-0709). -/
 structure Project where
+  private mk ::
   entries : Array File
   admitted : SourcePath.Project.Reference.Admitted (entries.toList.map File.path)
+  private index : PathIndex
+  private index_eq : index = PathIndex.ofFiles entries.toList 0
+
+def Project.load (entries : Array File)
+    (admitted : SourcePath.Project.Reference.Admitted (entries.toList.map File.path)) : Project :=
+  ⟨entries, admitted, PathIndex.ofFiles entries.toList 0, rfl⟩
+
+def Project.singleton (path : SourcePath) (source : SourceText) : Project :=
+  .load #[File.load path source] (by simp [SourcePath.Project.Reference.Admitted])
 
 def Project.files (project : Project) : List File := project.entries.toList
 
-/-- A span issued by a project table. Construction is confined to this module.
-The project and in-table proof are erased at runtime. Raw coordinates alone
-cannot restore a scoped span under a different table. -/
+/-- Resolve a table-local file ID. The issuing table supplies the exact bytes. -/
+def Project.fileAt (project : Project) (id : FileId) : Option File :=
+  project.entries[id.index]?
+
+/-- A span whose issuing slot resolves to a file validating its entire location.
+The table parameter and issuance proof are erased at runtime. -/
 structure ScopedSpan (origin : Project) extends Span where
   private mk ::
-  private issued : toSpan.fileId.index < origin.entries.size
+  issued : ∃ file, toSpan.LocationOk file.source ∧ origin.fileAt toSpan.fileId = some file
   deriving DecidableEq, Repr
 
 theorem ScopedSpan.ext {origin : Project} {a b : ScopedSpan origin}
@@ -1468,22 +1565,17 @@ Half-open span offsets are ordered. Equal offsets describe an empty span. -/
 def OrderedOffsets (input : Nat × Nat) : Prop :=
   input.1 ≤ input.2
 
-/-- Look up the exact path among admitted files, preserving the supplied bytes. -/
-def Project.findFile (project : Project) (path : SourcePath) : Option File :=
-  project.entries.find? fun file => decide (file.path = path)
-
-/-- Resolve a table-local file ID. The issuing table supplies the exact bytes. -/
-def Project.fileAt (project : Project) (id : FileId) : Option File :=
-  project.entries[id.index]?
-
-/-- Resolve a path once, then use the returned ID for repeated projections. -/
+/-- Resolve an exact path in time proportional to its byte length. -/
 def Project.findId (project : Project) (path : SourcePath) : Option FileId :=
-  (project.entries.findIdx? (fun file => decide (file.path = path))).map FileId.mk
+  (project.index.lookup path.raw.bytes).map FileId.mk
 
 theorem Project.findId_eq (project : Project) (path : SourcePath) :
     project.findId path = (project.files.findIdx? (fun file => decide (file.path = path))).map FileId.mk := by
-  rw [← List.findIdx?_toArray]
-  rfl
+  simp [findId, project.index_eq, PathIndex.lookup_ofFiles, files]
+
+/-- Look up the exact path among admitted files, preserving the supplied bytes. -/
+def Project.findFile (project : Project) (path : SourcePath) : Option File :=
+  (project.findId path).bind project.fileAt
 
 /-- Project an ordered, in-bounds byte range through the file's coordinate index. -/
 def fileSpan (id : FileId) (file : File) (start stop : Nat)
@@ -1495,13 +1587,21 @@ def fileSpan (id : FileId) (file : File) (start stop : Nat)
     exact SourceText.positionAt_positive _ _
   ⟨id, start, stop, ordered, pos.line, pos.column, positive.1, positive.2⟩
 
+theorem fileSpan_location (id : FileId) (file : File) (start stop : Nat)
+    (ordered : start ≤ stop) (within : stop ≤ file.length) :
+    (fileSpan id file start stop ordered (Nat.le_trans ordered within)).LocationOk file.source := by
+  simp [Span.LocationOk, EndInSource, LineMatches, ColumnMatches, fileSpan,
+    file.positionAt_eq start (Nat.le_trans ordered within), SourceText.lineAt,
+    SourceText.columnAt, ← File.length_eq, within]
+
 /-- Issue a span using a resolved file ID, with constant-time file and coordinate access. -/
 def projectSpanAt (project : Project) (id : FileId) (start stop : Nat) : Option (ScopedSpan project) :=
   if slot : id.index < project.entries.size then
     let file := project.entries[id.index]
     if ordered : start ≤ stop then
       if within : stop ≤ file.length then
-        some ⟨fileSpan id file start stop ordered (Nat.le_trans ordered within), slot⟩
+        some ⟨fileSpan id file start stop ordered (Nat.le_trans ordered within),
+          ⟨file, fileSpan_location id file start stop ordered within, Array.getElem?_eq_getElem slot⟩⟩
       else none
     else none
   else none
@@ -1767,61 +1867,29 @@ def tabSpan : Span := ⟨⟨0⟩, 2, 3, by decide, 1, 3, by decide, by decide⟩
 namespace SourcePathSpan
 
 /-- A single-file admitted project containing the tab example. -/
-def tabProject : Project :=
-  ⟨#[File.load mainSourcePath tabSource], by simp [SourcePath.Project.Reference.Admitted]⟩
+def tabProject : Project := .singleton mainSourcePath tabSource
 
 /-- The tab example scoped to the table that issued its file ID. -/
-def scopedTabSpan : ScopedSpan tabProject := ⟨tabSpan, by decide⟩
+def scopedTabSpan : ScopedSpan tabProject :=
+  ⟨tabSpan, File.load mainSourcePath tabSource, by decide, rfl⟩
 
 /-- A tab advances the starting byte column by one. -/
 theorem projectTabSpan : projectSpan tabProject mainSourcePath 2 3 = some scopedTabSpan := by
-  simp only [projectSpan, Project.findId_eq]
   decide
 
 /-- Binding the tab span in the example project returns the loaded tab file. -/
 theorem bindTabSpan : bindSource tabProject tabProject scopedTabSpan = some (File.load mainSourcePath tabSource) := by decide
 
-example : projectSpan tabProject mainSourcePath 3 3 =
-    some ⟨⟨⟨0⟩, 3, 3, by decide, 1, 4, by decide, by decide⟩, by decide⟩ := by
-  simp only [projectSpan, Project.findId_eq]
-  decide
+example : (projectSpan tabProject mainSourcePath 3 3).map ScopedSpan.toSpan =
+    some ⟨⟨0⟩, 3, 3, by decide, 1, 4, by decide, by decide⟩ := by decide
 
 -- The replacement preserves the length and coordinates but changes the spanned byte.
 theorem bindEditedSpan_refused :
     let edited := SourceText.ofBytes [97, 9, 99]
-    let project : Project :=
-      ⟨#[File.load mainSourcePath edited], by simp [SourcePath.Project.Reference.Admitted]⟩
+    let project := Project.singleton mainSourcePath edited
     tabSpan.LocationOk edited ∧ bindSource tabProject project scopedTabSpan = none := by
   decide
 
-namespace Controls
-
-/-- The original tab range with an end beyond the loaded file. -/
-def pastEnd : Span := { tabSpan with endOffset := 4, range_ok := by decide }
-
-/-- Mutant that projects ordered ranges without checking the end bound. -/
-def projectPastEnd (project : Project) (path : SourcePath) (start stop : Nat) : Option (ScopedSpan project) := do
-  let id ← project.findId path
-  if slot : id.index < project.entries.size then
-    let file := project.entries[id.index]
-    if ordered : start ≤ stop then
-      if bounded : start ≤ file.length then some ⟨fileSpan id file start stop ordered bounded, slot⟩
-      else none
-    else none
-  else none
-
-/-- The tab span with only its stored line changed. -/
-def wrongLine : Span := { tabSpan with line := 2, line_pos := by decide }
-
-/-- The tab span with only its stored column changed. -/
-def wrongColumn : Span := { tabSpan with col := 2, col_pos := by decide }
-
--- The deliberately invalid coordinates are confined to the issuing fixture.
-def pastEndScoped : ScopedSpan tabProject := ⟨pastEnd, by decide⟩
-def wrongLineScoped : ScopedSpan tabProject := ⟨wrongLine, by decide⟩
-def wrongColumnScoped : ScopedSpan tabProject := ⟨wrongColumn, by decide⟩
-
-end Controls
 end SourcePathSpan
 
 

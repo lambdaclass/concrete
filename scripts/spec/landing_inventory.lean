@@ -408,7 +408,9 @@ private def completion : PieceId → Completion
       `tabSpan_badCoordinates, `SourcePath.LocalControls.foldedRenderingChangesIdentity],
     laws `ConcreteSpec.Proofs.Ident [
       `ConcreteSpec.Core.SourcePathSpan.projectSpan_correct,
-      `ConcreteSpec.Core.SourcePathSpan.bindSource_correct],
+      `ConcreteSpec.Core.SourcePathSpan.bindSource_correct,
+      `ConcreteSpec.Core.SourcePathSpan.projectLocation_correct,
+      `ConcreteSpec.Core.SourcePathSpan.matchesLocation_correct],
     evidence `ConcreteSpec.Proofs.Ident `ConcreteSpec.Core.SourcePathSpan [
       `projectSpan_safety, `projectSpan_progress, `bindSource_safety, `bindSource_progress,
       `missingFile_refuses, `location_guard_iff]],
@@ -418,14 +420,13 @@ private def completion : PieceId → Completion
         ⟨``ConcreteSpec.Core.SourcePathSpan.endInSource_guard_iff, ``SpanBridge.endInSource⟩,
         ⟨``ConcreteSpec.Core.SourcePathSpan.lineMatches_guard_iff, ``SpanBridge.lineMatches⟩,
         ⟨``ConcreteSpec.Core.SourcePathSpan.columnMatches_guard_iff, ``SpanBridge.columnMatches⟩]
-      namespaces := [specNamespace `Proofs.Ident `Core.SourcePathSpan,
-        specNamespace `Spec.Ident `Core.SourcePathSpan.Controls]
+      namespaces := [specNamespace `Proofs.Ident `Core.SourcePathSpan]
       controls := [
-        control `projectSpan_correct `ProjectionCorrect `projectSpan `projectPastEnd,
+        control `projectLocation_correct `ProjectionLocationCorrect `projectLocation `projectPastEnd,
         control `projectSpan_correct `ProjectionCorrect `projectSpan `projectAtStartOnly,
-        control `bindSource_correct `BindingCorrect `bindSource `bindPastEnd,
-        control `bindSource_correct `BindingCorrect `bindSource `bindIgnoringLine,
-        control `bindSource_correct `BindingCorrect `bindSource `bindIgnoringColumn,
+        control `matchesLocation_correct `LocationCheckCorrect `File.matchesLocation `bindPastEnd,
+        control `matchesLocation_correct `LocationCheckCorrect `File.matchesLocation `bindIgnoringLine,
+        control `matchesLocation_correct `LocationCheckCorrect `File.matchesLocation `bindIgnoringColumn,
         control `bindSource_correct `BindingCorrect `bindSource `bindBeforeEof] }
   | .R => namedEvidence [
     decls `ConcreteSpec.Spec.Rules [`ConcreteSpec.Core.registeredRules,
@@ -1411,12 +1412,11 @@ private def plan : List Piece := [
   { present .F04p "Source-path admission, span projection and source binding Laws and controls" with
     groups := [
       evidence `ConcreteSpec.Proofs.Ident `ConcreteSpec.Core.SourcePathSpan [
-        `ProjectionCorrect, `BindingCorrect],
-      evidence `ConcreteSpec.Spec.Ident `ConcreteSpec.Core.SourcePathSpan.Controls [
-        `pastEnd, `wrongLine, `wrongColumn, `pastEndScoped, `wrongLineScoped, `wrongColumnScoped,
-        `projectPastEnd],
+        `ProjectionCorrect, `BindingCorrect, `ProjectionLocationCorrect, `LocationCheckCorrect,
+        `projectLocation],
       evidence `ConcreteSpec.Proofs.Ident `ConcreteSpec.Core.SourcePathSpan.Controls [
-        `projectAtStartOnly, `bindPastEnd, `bindIgnoringLine, `bindIgnoringColumn, `bindBeforeEof]] },
+        `pastEnd, `wrongLine, `wrongColumn, `projectPastEnd, `projectAtStartOnly,
+        `bindPastEnd, `bindIgnoringLine, `bindIgnoringColumn, `bindBeforeEof]] },
   added .R "Rule registry, prerequisite of F06, F13 and F17"
     "changelog.d/2026-11-13-spec-rule-registry.md; ROADMAP.md R-0615",
   present .F05 "Fixed-width arithmetic and exact-term correspondence",
@@ -1963,8 +1963,7 @@ def verify (env : Environment) (specModules compilerModules : NameSet) (specEvid
   let helperOnly := [{ present .F04p "" with groups := [decls origin [helper]] }]
   -- Exercise F04p's proof reservation using only the helper fixture as evidence.
   let withFixtureOrigin (_ : PieceId) : Completion :=
-    let proofReservations := (completion .F04p).namespaces.filter (·.isProof)
-    reservedEvidence (proofReservations.map fun ns => { ns with origin })
+    reservedEvidence ((completion .F04p).namespaces.map fun ns => { ns with origin })
   let checked := inventory env inScope {} helperOnly #[] withFixtureOrigin
     { rules := [], examples := [] }
   unless checked.errors.size == 2 &&

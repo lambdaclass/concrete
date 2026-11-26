@@ -1,10 +1,12 @@
 import Concrete.Stages
 import ConcreteSpec.Proofs.Ident
+import Lean.Elab.Command
+import Lean.Util.CollectAxioms
 
 open ConcreteSpec.Core SourcePathSpan
 
 private def loadProject (bytes : List UInt8) : Project :=
-  ⟨#[File.load mainSourcePath (.ofBytes bytes)], by simp [SourcePath.Project.Reference.Admitted]⟩
+  Project.singleton mainSourcePath (.ofBytes bytes)
 
 private def editedProject := loadProject [97, 9, 99]
 
@@ -15,7 +17,49 @@ error: Invalid `⟨...⟩` notation: Constructor for `ConcreteSpec.Core.SourcePa
 #guard_msgs in
 example : ScopedSpan editedProject := ⟨scopedTabSpan.toSpan⟩
 
+-- The constructor tactic can still be used for valid issuance, but must
+-- establish the originating file's location rules as well as its presence.
+example : ScopedSpan editedProject := by
+  constructor
+  case toSpan => exact scopedTabSpan.toSpan
+  case issued =>
+    fail_if_success
+      exact (show scopedTabSpan.fileId.index < editedProject.entries.size from by decide)
+    fail_if_success decide
+    exact ⟨File.load mainSourcePath (.ofBytes [97, 9, 99]), by decide, rfl⟩
+
+-- The former normative module exported an unrestricted past-end issuer.
+example : True := by
+  fail_if_success
+    exact (fun (_ : (project : Project) → SourcePath → Nat → Nat → Option (ScopedSpan project)) =>
+      True.intro) Controls.projectPastEnd
+  trivial
+
 example : bindSource tabProject editedProject scopedTabSpan = none := by decide
+
+example (span : ScopedSpan tabProject)
+    (raw : span.toSpan = Controls.pastEnd) : False := by
+  have issued := span.issued
+  rw [raw] at issued
+  obtain ⟨file, valid, found⟩ := issued
+  have fileEq : file = File.load mainSourcePath tabSource := Option.some.inj found.symm
+  subst file
+  exact (by decide : ¬ Controls.pastEnd.LocationOk tabSource) valid
+
+example :
+    let file := File.load mainSourcePath tabSource
+    file.matchesLocation Controls.pastEnd = false ∧
+      file.matchesLocation Controls.wrongLine = false ∧
+      file.matchesLocation Controls.wrongColumn = false := by decide
+
+open Lean in
+run_cmd do
+  for theoremName in [``Controls.bindPastEnd_violates_correct,
+      ``Controls.bindIgnoringLine_violates_correct, ``Controls.bindIgnoringColumn_violates_correct,
+      ``Project.findId_eq, ``projectSpan_correct, ``projectSpan_progress, ``projectSpan_safety,
+      ``bindSource_correct] do
+    if (← Lean.collectAxioms theoremName).contains ``Classical.choice then
+      logError m!"{theoremName} depends on Classical.choice"
 
 private def pathFor (index : Nat) : IO SourcePath :=
   match SourcePath.parse (.ofBytes s!"file{index}.con".toUTF8.data.toList) with
@@ -26,9 +70,9 @@ private def loadFiles (count : Nat) (source : SourceText) : IO Project := do
   let paths ← (List.range count).mapM pathFor
   match checked : SourcePath.Project.check paths with
   | .error error => throw (IO.userError s!"fixture project failed admission: {repr error}")
-  | .ok () => return ⟨(paths.map (File.load · source)).toArray,
-      by simpa [List.map_map, Function.comp_def, File.load] using
-        SourcePath.Project.check_safety paths checked⟩
+  | .ok () => return Project.load (paths.map (File.load · source)).toArray (by
+      simpa [List.map_map, Function.comp_def, File.load] using
+        SourcePath.Project.check_safety paths checked)
 
 private def checkLexer : IO Unit := do
   let src := "a\r\nb\rc\nd".toUTF8
@@ -43,6 +87,10 @@ private def checkLexer : IO Unit := do
 private def checkCompilerFiles : IO Unit := do
   let source := SourceText.ofBytes "fn main() -> u8 { return 20 + 22; }".toUTF8.data.toList
   let project ← loadFiles 2 source
+  let edited := SourceText.ofBytes "fn main() -> u8 { return 20 + 23; }".toUTF8.data.toList
+  let editedProject ← loadFiles 2 edited
+  if (Concrete.Stages.compileFile project ⟨2⟩).isOk then
+    throw (IO.userError "compiler accepted an out-of-range file ID")
   let mut sites := []
   for index in [:2] do
     let fileId : FileId := ⟨index⟩
@@ -57,10 +105,18 @@ private def checkCompilerFiles : IO Unit := do
     unless decide (token.span = parsed ∧ parsed = site.operator ∧ statement.fileId = fileId) do
       throw (IO.userError "parser or elaborator changed the source span")
     let op := site.operator
-    let some projected := projectSpanAt project op.fileId op.start op.stop
+    let some projected := out.operatorSpan 0
       | throw (IO.userError "operator range could not be projected")
-    let some bound := bindSource project project projected
+    let some bound := bindSource out.project project projected
       | throw (IO.userError "operator range could not be bound")
+    -- Reissuing the raw range in the edited table reproduces the old false acceptance.
+    let some reissued := projectSpanAt editedProject op.fileId op.start op.stop
+      | throw (IO.userError "edited fixture changed the operator range")
+    unless decide (reissued.toSpan = projected.toSpan) &&
+        (bindSource editedProject editedProject reissued).isSome do
+      throw (IO.userError "edited fixture did not reproduce raw-range rebinding")
+    unless (bindSource out.project editedProject projected).isNone do
+      throw (IO.userError "compiled operator span rebound to changed bytes at the same path")
     let expected ← pathFor index
     unless decide (op.fileId = fileId ∧ bound.path = expected ∧
         op.line = projected.line ∧ op.column = projected.col) do
@@ -71,8 +127,24 @@ private def checkCompilerFiles : IO Unit := do
       first.line = second.line ∧ first.column = second.column) do
     throw (IO.userError "identical text in different files must have distinct operator spans")
 
-private def checkSpan (project : Project) (id : FileId) (offset : Nat) : IO (ScopedSpan project) := do
-  let some span := projectSpanAt project id offset (offset + 1)
+private def checkSingleFile : IO Unit := do
+  let source := "fn main() -> u8 { return 20 + 22; }".toUTF8
+  let edited := "fn main() -> u8 { return 20 + 23; }".toUTF8
+  let .ok input := Concrete.Stages.Input.load "main.con" source
+    | throw (IO.userError "single-file loader refused the source")
+  let .ok replacement := Concrete.Stages.Input.load "main.con" edited
+    | throw (IO.userError "single-file loader refused the edited source")
+  let .ok out := Concrete.Stages.compile input
+    | throw (IO.userError "compiler refused the single-file source")
+  let some span := out.operatorSpan 0
+    | throw (IO.userError "single-file compile lost the elaborated operator site")
+  unless (bindSource out.project input.project span).isSome &&
+      (bindSource out.project replacement.project span).isNone do
+    throw (IO.userError "single-file compile lost the issuing source bytes")
+
+private def checkSpan {project : Project} (id : FileId) (offset : Nat)
+    (result : Option (ScopedSpan project)) : IO (ScopedSpan project) := do
+  let some span := result
     | throw (IO.userError s!"missing span at file {id.index}, byte {offset}")
   let expected : Span :=
     ⟨id, offset, offset + 1, Nat.le_succ _, 1, offset + 1, Nat.zero_lt_succ _, Nat.zero_lt_succ _⟩
@@ -82,29 +154,25 @@ private def checkSpan (project : Project) (id : FileId) (offset : Nat) : IO (Sco
 
 private def spanWork (project : Project) (size : Nat) (rescan : Bool) : IO Unit := do
   for offset in [:size] do
-    let span ← checkSpan project ⟨0⟩ offset
+    let span ← checkSpan ⟨0⟩ offset (projectSpanAt project ⟨0⟩ offset (offset + 1))
     if rescan then
       let some file := project.fileAt span.fileId
         | throw (IO.userError "missing file for prefix-rescan control")
       unless file.source.columnAt offset == span.col do
         throw (IO.userError "prefix scan disagreed")
 
-private def projectWork (project : Project) (paths : Array SourcePath) (files : List File)
-    (scan : Bool) : IO Unit := do
+private def projectWork (project : Project) (paths : Array SourcePath)
+    (projector : SourcePath → Nat → Nat → Option (ScopedSpan project)) : IO Unit := do
   for _ in [:32] do
     for index in [:paths.size] do
-      let id : FileId := ⟨index⟩
-      if scan then
-        -- Replay both passes of the former per-span path lookup.
-        let some path := paths[index]? | throw (IO.userError "missing fixture path")
-        let matchPath := fun file : File => decide (file.path = path)
-        let some found := files.findIdx? matchPath
-          | throw (IO.userError "path search missed the issuing file")
-        let some file := files[found]?
-          | throw (IO.userError "list lookup missed the issuing file")
-        unless found == index && decide (file.path = path) do
-          throw (IO.userError "path search found the wrong file")
-      discard (checkSpan project id 0)
+      let some path := paths[index]? | throw (IO.userError "missing fixture path")
+      discard (checkSpan ⟨index⟩ 0 (projector path 0 1))
+
+-- Replay the former production lookup on the same workload.
+private def scanProject (project : Project) (path : SourcePath) (start stop : Nat) :
+    Option (ScopedSpan project) := do
+  let index ← project.entries.findIdx? (fun file => decide (file.path = path))
+  projectSpanAt project ⟨index⟩ start stop
 
 private def elapsed (work : IO Unit) : IO Nat := do
   let start ← IO.monoNanosNow
@@ -126,10 +194,11 @@ private def checkGrowth (label : String) (small large : IO Unit) (planted : Bool
 def main : IO Unit := do
   checkLexer
   checkCompilerFiles
+  checkSingleFile
   let short := loadProject [97]
   let long := loadProject (List.replicate 32768 97)
-  let small ← checkSpan short ⟨0⟩ 0
-  let large ← checkSpan long ⟨0⟩ 0
+  let small ← checkSpan ⟨0⟩ 0 (projectSpanAt short ⟨0⟩ 0 1)
+  let large ← checkSpan ⟨0⟩ 0 (projectSpanAt long ⟨0⟩ 0 1)
   unless decide (small.toSpan = large.toSpan) && reprStr small == reprStr large do
     throw (IO.userError "the span payload changed when the file grew")
   checkGrowth "span construction and comparison (2048 → 16384 spans)"
@@ -138,11 +207,11 @@ def main : IO Unit := do
     (spanWork long 512 true) (spanWork long 4096 true) true
   let few ← loadFiles 128 (.ofBytes [97])
   let many ← loadFiles 1024 (.ofBytes [97])
-  checkGrowth "project projection (128 → 1024 files, 32 spans per file)"
-    (projectWork few (few.entries.map File.path) [] false)
-    (projectWork many (many.entries.map File.path) [] false) false
-  let smallFiles := few.files.take 32
-  let largeFiles := many.files.take 256
-  checkGrowth "planted path searches and list indexing (32 → 256 files, 32 spans per file)"
-    (projectWork few (smallFiles.map File.path).toArray smallFiles true)
-    (projectWork many (largeFiles.map File.path).toArray largeFiles true) true
+  checkGrowth "projection by exact path (128 → 1024 files, 32 spans per file)"
+    (projectWork few (few.entries.map File.path) (projectSpan few))
+    (projectWork many (many.entries.map File.path) (projectSpan many)) false
+  let smallPaths := (few.entries.extract 0 32).map File.path
+  let largePaths := (many.entries.extract 0 256).map File.path
+  checkGrowth "former path lookup (32 → 256 files, 32 spans per file)"
+    (projectWork few smallPaths (scanProject few))
+    (projectWork many largePaths (scanProject many)) true

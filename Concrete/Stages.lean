@@ -6,12 +6,35 @@ import Concrete.Backend.LCB
 
 namespace Concrete.Stages
 
+open ConcreteSpec.Core SourcePathSpan
+
+/-- A compilation input resolved against the project table that owns its file ID. -/
 structure Input where
-  path : String
-  source : ByteArray
-  fileId : ConcreteSpec.Core.FileId := ⟨0⟩
+  project : Project
+  fileId : FileId
+  file : File
+  loaded : project.fileAt fileId = some file
+
+def Input.path (input : Input) : String := input.file.path.render.text
+
+def Input.source (input : Input) : ByteArray := ⟨input.file.source.toBytes.toArray⟩
+
+/-- Resolve the exact file that supplies this compilation's bytes. -/
+def Input.resolve (project : Project) (fileId : FileId) : Except Refusal Input :=
+  match found : project.fileAt fileId with
+  | none => .error (.internal s!"unknown project file ID {fileId.index}")
+  | some file => .ok ⟨project, fileId, file, found⟩
+
+/-- Load a single source file using the same table representation as multi-file builds. -/
+def Input.load (path : String) (bytes : ByteArray) : Except Refusal Input := do
+  let .ok path := SourcePath.parse (.ofBytes path.toUTF8.data.toList)
+    | throw (.syntaxError "expected a canonical project-relative source path")
+  Input.resolve (.singleton path (.ofBytes bytes.data.toList)) ⟨0⟩
 
 structure Output where
+  private mk ::
+  project : Project
+  fileId : FileId
   tokens : List ConcreteSpec.Surface0.Token
   ast : ConcreteSpec.Surface0.Program
   core : Elab.Output
@@ -19,6 +42,15 @@ structure Output where
   mir : MIR.Program
   memory : Memory.Program
   bir : BIR.Program
+
+/-- Resolve an actual elaborated operator site against the table used to compile it. -/
+def Output.operatorSpan (out : Output) (index : Nat) : Option (ScopedSpan out.project) := do
+  let site ← out.core.sites[index]?
+  let op := site.operator
+  if op.fileId = out.fileId then
+    let projected ← projectSpanAt out.project out.fileId op.start op.stop
+    if projected.line = op.line ∧ projected.col = op.column then some projected else none
+  else none
 
 private def lex (input : Input) := Lex.lex input.source input.fileId
 
@@ -59,15 +91,22 @@ private def stages (path : String) :=
 
 def compile (input : Input) : Except Refusal Output := do
   let ((((((( _, tokens), ast), core), admitted), mir), mem), bir) ← (stages input.path).run input
-  return ⟨tokens, ast, core, admitted.tokens, mir, mem, bir⟩
+  return ⟨input.project, input.fileId, tokens, ast, core, admitted.tokens, mir, mem, bir⟩
 
 /-- Compile the exact bytes in a resolved slot of the shared project table. -/
-def compileFile (project : ConcreteSpec.Core.SourcePathSpan.Project)
-    (fileId : ConcreteSpec.Core.FileId) : Except Refusal Output := do
-  let some file := project.fileAt fileId
-    | throw (.internal s!"unknown project file ID {fileId.index}")
-  let path := file.path.render.text
-  compile ⟨path, ⟨file.source.toBytes.toArray⟩, fileId⟩
+def compileFile (project : Project) (fileId : FileId) : Except Refusal Output := do
+  compile (← Input.resolve project fileId)
+
+/-- Successful compilation retains the issuing project used on the lexical edge. -/
+theorem compile_project {input : Input} {out : Output} (h : compile input = .ok out) :
+    out.project = input.project ∧ out.fileId = input.fileId := by
+  cases result : (stages input.path).run input with
+  | error e => simp [compile, result, bind, Except.bind] at h
+  | ok value =>
+    rcases value with ⟨⟨⟨⟨⟨⟨⟨_, tokens⟩, ast⟩, core⟩, admitted⟩, mir⟩, mem⟩, bir⟩
+    simp [compile, result, bind, Except.bind, pure, Except.pure] at h
+    subst out
+    exact ⟨rfl, rfl⟩
 
 /-- The token list recorded by successful compilation satisfies the surface lexical relation. -/
 theorem compile_lexes {input : Input} {out : Output} (h : compile input = .ok out) :
@@ -98,7 +137,7 @@ theorem compile_of_edges (input : Input) (tokens : List ConcreteSpec.Surface0.To
     (hLower : MIR.lower admitted = .ok mir)
     (hMem : Memory.lower mir = mem)
     (hSSA : SSA.lower input.path mem = .ok bir) :
-    compile input = .ok ⟨tokens, ast, core, admitted.tokens, mir, mem, bir⟩ := by
+    compile input = .ok ⟨input.project, input.fileId, tokens, ast, core, admitted.tokens, mir, mem, bir⟩ := by
   simp [compile, stages, Pipeline.run, lex, memory, bind, Except.bind,
     hLex, hParse, hElab, hAdmit, hLower, hMem, hSSA] <;> rfl
 
