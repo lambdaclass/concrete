@@ -72,16 +72,7 @@ Legacy-only spellings such as `alloc_array`, `free_array`, `realloc_array`, `vec
 `string_length`, `string_len`, and `String_len` remain ordinary identifiers
 (decided-2026-11-23-slice0-and-roadmap-answers, answer 2a, and the 2026-11-24 owner
 clarification on builtin name reservation). -/
-def intrinsicNames : List String :=
-  ["abort", "alloc", "destroy", "discard", "sizeof", "alignof", "read_owned", "get_args", "byte_at",
-   "string_concat", "string_slice", "string_substr", "string_trim", "int_to_string",
-   "bool_to_string", "float_to_string", "string_push_char", "string_append", "string_append_int",
-   "string_append_bool", "string_reserve",
-   "wrapping_add", "wrapping_sub", "wrapping_mul",
-   "saturating_add", "saturating_sub", "saturating_mul",
-   "checked_add", "checked_sub", "checked_mul", "checked_div", "checked_rem", "checked_shl",
-   "checked_shr", "checked_neg",
-   "try_convert", "truncate", "reinterpret", "trunc", "round", "floor", "ceil"]
+abbrev intrinsicNames : List String := ConcreteSpec.Surface0.intrinsicNames
 
 /-- A binding may not reuse a local already in scope. Decision: OD67 (SCOPE-1). -/
 def FreshLocal (input : String × List String) : Prop := input.1 ∉ input.2

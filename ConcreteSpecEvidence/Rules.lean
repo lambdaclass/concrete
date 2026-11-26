@@ -1,3 +1,9 @@
+import ConcreteSpec.Spec.LL1
+import ConcreteSpec.Spec.Outcome
+import ConcreteSpec.Spec.Slice0
+import ConcreteSpec.Spec.Slice0Rules
+import ConcreteSpec.Spec.Statics
+import ConcreteSpec.Spec.Surface0
 import ConcreteSpec.Spec.Basics
 import ConcreteSpec.Spec.Hybrid
 import ConcreteSpec.Spec.Scalar
@@ -18,7 +24,7 @@ namespace Slice0Rules
 
 open ConcreteSpec.Surface0
 
-private def span : Surface0.Span := ⟨0, 1, 1, 1, ⟨0⟩⟩
+private def span : Surface0.Span := ⟨0, 1, 1, 1, ⟨1⟩⟩
 private def returned : Statement := .ret (.integer 0 none span) (statementSpan span span)
 private def parsedProgram : Surface0.Program := ⟨"main", span, [returned]⟩
 private def parsedTokens : List Token :=

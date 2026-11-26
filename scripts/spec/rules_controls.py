@@ -17,7 +17,7 @@ base = (root / 'ConcreteSpec/Spec/Rules.lean').read_text().replace(
     'import ConcreteSpec.Spec.Ident', 'import ConcreteSpec.Spec.Ident\nimport Lean')
 # Isolate synthetic fixtures from production registrations and conformance declarations.
 # Keep the actual registry types and evidence wrappers, so every control exercises them.
-base = re.sub(r'namespace Slice0Rules\n.*?(?=/-- Diagnostic rule identities)', '',
+base = re.sub(r'/-- Refusal categories.*?(?=/-- Diagnostic rule identities)', '',
               base, flags=re.S)
 base = re.sub(r'def rulesForSlice .*?(?=\n/--)',
               'def rulesForSlice (_ : SliceId) : Option (List RegisteredRule) := none\n',
@@ -128,7 +128,7 @@ for name, prelude, carrier, value in [
 for rule_name, proof_name in [('Lexed', 'lexRefused'), ('LocalsUsed', 'localsUsedRefused')]:
     coverage = tmp / f'missing-{rule_name}-evidence.lean'
     coverage.write_text(
-        'import ConcreteSpec.Spec.Rules\nimport Lean\nopen Lean Elab Command\n' +
+        'import ConcreteSpecEvidence.Rules\nimport Lean\nopen Lean Elab Command\n' +
         exporter.split('-- EXPORTER ENTRY\n', 1)[0] +
         '#eval exportRules (registeredRuleExamples.filter\n'
         f'  (fun e => e.declaration != ``Slice0Rules.{proof_name}))\n')
