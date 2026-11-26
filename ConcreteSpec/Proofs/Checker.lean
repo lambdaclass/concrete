@@ -222,13 +222,13 @@ theorem stmtOut_iff {Δ : Decls} {Γ Γ' : Ctx} {s : Stmt} :
     | let_ b t e =>
       cases b with
       | wild =>
-        simp only [stmtOut] at h
+        simp only [stmtOut, stmtOutWith] at h
         split at h
         · rename_i hc
           exact .letWild (tyOf_iff.mp hc.1) hc.2.1 hc.2.2 (uses_iff.mp h)
         · cases h
       | name x =>
-          simp only [stmtOut] at h
+          simp only [stmtOut, stmtOutWith] at h
           split at h
           · rename_i ht
             split at h
@@ -239,7 +239,7 @@ theorem stmtOut_iff {Δ : Decls} {Γ Γ' : Ctx} {s : Stmt} :
             · cases h
           · cases h
     | letStruct s pat e =>
-      simp only [stmtOut] at h
+      simp only [stmtOut, stmtOutWith] at h
       split at h
       · rename_i ht
         split at h
@@ -259,10 +259,10 @@ theorem stmtOut_iff {Δ : Decls} {Γ Γ' : Ctx} {s : Stmt} :
       · cases h
   · intro h
     cases h with
-    | let_ ht hk hu hf => simp [stmtOut, tyOf_iff.mpr ht, hk, uses_iff.mpr hu, hf]
-    | letWild ht hk hcopy hu => simp [stmtOut, tyOf_iff.mpr ht, hk, hcopy, uses_iff.mpr hu]
+    | let_ ht hk hu hf => simp [stmtOut, stmtOutWith, tyOf_iff.mpr ht, hk, uses_iff.mpr hu, hf]
+    | letWild ht hk hcopy hu => simp [stmtOut, stmtOutWith, tyOf_iff.mpr ht, hk, hcopy, uses_iff.mpr hu]
     | letStruct ht hk hd hp hu hf =>
-      simp [stmtOut, tyOf_iff.mpr ht, hk, hd, patOkB_iff.mpr hp, uses_iff.mpr hu, hf]
+      simp [stmtOut, stmtOutWith, tyOf_iff.mpr ht, hk, hd, patOkB_iff.mpr hp, uses_iff.mpr hu, hf]
 
 theorem bodyOkB_iff {Δ : Decls} :
     ∀ {Γ : Ctx} {ss : List Stmt} {r : Terminator}, bodyOkB Δ Γ ss r = true ↔ BodyOk Δ Γ ss r

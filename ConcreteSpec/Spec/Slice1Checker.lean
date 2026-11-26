@@ -93,10 +93,10 @@ def patOkB (d : StructDecl) (pat : List (Name × Binder)) : Bool :=
   pat.all (fun p => (AList.lookup d.fields p.1).isSome) &&
   d.fields.all (fun q => (AList.lookup pat q.1).isSome)
 
-/-- The context after a statement, if the statement is accepted. -/
-def stmtOut (Δ : Decls) (Γ : Ctx) : Stmt → Option Ctx
+/-- Statement checks with the arithmetic-evidence test supplied separately. -/
+def stmtOutWith (Δ : Decls) (Γ : Ctx) (hasEvidence : Expr → Bool) : Stmt → Option Ctx
   | .let_ (.name x) t e =>
-    if tyOf Δ Γ.tys e = some t ∧ admitted Γ e = true then
+    if tyOf Δ Γ.tys e = some t ∧ hasEvidence e = true then
       match uses Δ Γ e with
       | some Γ₁ => if Fresh Γ₁ x then
           some ((x, { ty := t, live := true, used := false, known := knownExpr Γ e,
@@ -105,10 +105,10 @@ def stmtOut (Δ : Decls) (Γ : Ctx) : Stmt → Option Ctx
       | none => none
     else none
   | .let_ .wild t e =>
-    if tyOf Δ Γ.tys e = some t ∧ admitted Γ e = true ∧ t.isCopy Δ = true then uses Δ Γ e
+    if tyOf Δ Γ.tys e = some t ∧ hasEvidence e = true ∧ t.isCopy Δ = true then uses Δ Γ e
     else none
   | .letStruct s pat e =>
-    if tyOf Δ Γ.tys e = some (.struct s) ∧ admitted Γ e = true then
+    if tyOf Δ Γ.tys e = some (.struct s) ∧ hasEvidence e = true then
       match findDecl Δ s with
       | some d => if patOkB d pat then
           match uses Δ Γ e with
@@ -117,6 +117,10 @@ def stmtOut (Δ : Decls) (Γ : Ctx) : Stmt → Option Ctx
         else none
       | none => none
     else none
+
+/-- The context after a statement, if the statement is accepted. -/
+def stmtOut (Δ : Decls) (Γ : Ctx) : Stmt → Option Ctx :=
+  stmtOutWith Δ Γ (admitted Γ)
 
 /-- The executable form of `BodyOk`. -/
 def bodyOkB (Δ : Decls) (Γ : Ctx) : List Stmt → Terminator → Bool

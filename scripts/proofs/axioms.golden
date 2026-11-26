@@ -5302,38 +5302,70 @@ ConcreteSpec.Expr.atom.sizeOf_spec
 ConcreteSpec.Expr.mk.inj	
 ConcreteSpec.Expr.mk.injEq	propext
 ConcreteSpec.Expr.mk.sizeOf_spec	
-ConcreteSpec.FailedObligation.AddWitness.mk.inj	
-ConcreteSpec.FailedObligation.AddWitness.mk.injEq	propext
-ConcreteSpec.FailedObligation.AddWitness.mk.sizeOf_spec	
-ConcreteSpec.FailedObligation.ClosedAdd.mk.inj	
-ConcreteSpec.FailedObligation.ClosedAdd.mk.injEq	propext
-ConcreteSpec.FailedObligation.ClosedAdd.mk.sizeOf_spec	
-ConcreteSpec.FailedObligation.ClosedAddReport.mk.inj	
-ConcreteSpec.FailedObligation.ClosedAddReport.mk.injEq	propext
-ConcreteSpec.FailedObligation.ClosedAddReport.mk.sizeOf_spec	
+ConcreteSpec.FailedObligation.Bounds.mk.inj	
+ConcreteSpec.FailedObligation.Bounds.mk.injEq	propext
+ConcreteSpec.FailedObligation.Bounds.mk.sizeOf_spec	
+ConcreteSpec.FailedObligation.Obligation.mk.inj	
+ConcreteSpec.FailedObligation.Obligation.mk.injEq	propext
+ConcreteSpec.FailedObligation.Obligation.mk.sizeOf_spec	
+ConcreteSpec.FailedObligation.Report.mk.inj	
+ConcreteSpec.FailedObligation.Report.mk.injEq	propext
+ConcreteSpec.FailedObligation.Report.mk.sizeOf_spec	
 ConcreteSpec.FailedObligation.SearchResult.noWitness.inj	
 ConcreteSpec.FailedObligation.SearchResult.noWitness.injEq	propext
 ConcreteSpec.FailedObligation.SearchResult.noWitness.sizeOf_spec	
 ConcreteSpec.FailedObligation.SearchResult.refutedReplayed.inj	
 ConcreteSpec.FailedObligation.SearchResult.refutedReplayed.injEq	propext
 ConcreteSpec.FailedObligation.SearchResult.refutedReplayed.sizeOf_spec	
-ConcreteSpec.FailedObligation.instDecidableEqAddWitness.decEq._proof_1	
-ConcreteSpec.FailedObligation.instDecidableEqAddWitness.decEq._proof_2	
-ConcreteSpec.FailedObligation.instDecidableEqAddWitness.decEq._proof_3	
-ConcreteSpec.FailedObligation.instDecidableEqClosedAdd.decEq._proof_1	
-ConcreteSpec.FailedObligation.instDecidableEqClosedAdd.decEq._proof_2	
-ConcreteSpec.FailedObligation.instDecidableEqClosedAdd.decEq._proof_3	
-ConcreteSpec.FailedObligation.instDecidableEqClosedAddReport.decEq._proof_1	
-ConcreteSpec.FailedObligation.instDecidableEqClosedAddReport.decEq._proof_2	
-ConcreteSpec.FailedObligation.instDecidableEqClosedAddReport.decEq._proof_3	
-ConcreteSpec.FailedObligation.instDecidableEqClosedAddReport.decEq._proof_4	
-ConcreteSpec.FailedObligation.instDecidableEqClosedAddReport.decEq._proof_5	
+ConcreteSpec.FailedObligation.Witness.mk.inj	
+ConcreteSpec.FailedObligation.Witness.mk.injEq	propext
+ConcreteSpec.FailedObligation.Witness.mk.sizeOf_spec	
+ConcreteSpec.FailedObligation.boundaryValues.eq_1	Classical.choice Quot.sound propext
+ConcreteSpec.FailedObligation.boundaryValues_bounds	Classical.choice Quot.sound propext
+ConcreteSpec.FailedObligation.boundaryValues_endpoints	Classical.choice Quot.sound propext
+ConcreteSpec.FailedObligation.boundaryValues_nodup	Classical.choice Quot.sound propext
+ConcreteSpec.FailedObligation.diagnoseClosed_refused	Quot.sound propext
+ConcreteSpec.FailedObligation.diagnoseClosed_refused._simp_1_1	Quot.sound propext
+ConcreteSpec.FailedObligation.diagnoseClosed_sound	Quot.sound propext
+ConcreteSpec.FailedObligation.instDecidableEqBounds.decEq._proof_1	
+ConcreteSpec.FailedObligation.instDecidableEqBounds.decEq._proof_2	
+ConcreteSpec.FailedObligation.instDecidableEqBounds.decEq._proof_3	
+ConcreteSpec.FailedObligation.instDecidableEqObligation.decEq._proof_1	
+ConcreteSpec.FailedObligation.instDecidableEqObligation.decEq._proof_2	
+ConcreteSpec.FailedObligation.instDecidableEqObligation.decEq._proof_3	
+ConcreteSpec.FailedObligation.instDecidableEqObligation.decEq._proof_4	
+ConcreteSpec.FailedObligation.instDecidableEqObligation.decEq._proof_5	
+ConcreteSpec.FailedObligation.instDecidableEqObligation.decEq._proof_6	
+ConcreteSpec.FailedObligation.instDecidableEqObligation.decEq._proof_7	
+ConcreteSpec.FailedObligation.instDecidableEqReport.decEq._proof_1	
+ConcreteSpec.FailedObligation.instDecidableEqReport.decEq._proof_2	
+ConcreteSpec.FailedObligation.instDecidableEqReport.decEq._proof_3	
+ConcreteSpec.FailedObligation.instDecidableEqReport.decEq._proof_4	
+ConcreteSpec.FailedObligation.instDecidableEqReport.decEq._proof_5	
 ConcreteSpec.FailedObligation.instDecidableEqSearchResult.decEq._proof_1	
 ConcreteSpec.FailedObligation.instDecidableEqSearchResult.decEq._proof_2	
 ConcreteSpec.FailedObligation.instDecidableEqSearchResult.decEq._proof_3	
 ConcreteSpec.FailedObligation.instDecidableEqSearchResult.decEq._proof_4	
 ConcreteSpec.FailedObligation.instDecidableEqSearchResult.decEq._proof_5	
 ConcreteSpec.FailedObligation.instDecidableEqSearchResult.decEq._proof_6	
+ConcreteSpec.FailedObligation.instDecidableEqWitness.decEq._proof_1	
+ConcreteSpec.FailedObligation.instDecidableEqWitness.decEq._proof_2	
+ConcreteSpec.FailedObligation.instDecidableEqWitness.decEq._proof_3	
+ConcreteSpec.FailedObligation.instDecidableEqWitness.decEq._proof_4	
+ConcreteSpec.FailedObligation.search.go.eq_1	
+ConcreteSpec.FailedObligation.search.go.eq_2	
+ConcreteSpec.FailedObligation.search.go.eq_def	
+ConcreteSpec.FailedObligation.search_exhausted	Quot.sound propext
+ConcreteSpec.FailedObligation.search_exhausted._proof_1_10	Quot.sound propext
+ConcreteSpec.FailedObligation.search_exhausted._proof_1_4	Quot.sound propext
+ConcreteSpec.FailedObligation.search_exhausted._proof_1_5	Quot.sound propext
+ConcreteSpec.FailedObligation.search_exhausted._proof_1_6	Quot.sound propext
+ConcreteSpec.FailedObligation.search_exhausted._proof_1_7	Quot.sound propext
+ConcreteSpec.FailedObligation.search_exhausted._proof_1_8	Quot.sound propext
+ConcreteSpec.FailedObligation.search_refuted	Quot.sound propext
+ConcreteSpec.FailedObligation.search_refuted._proof_1_4	Quot.sound propext
+ConcreteSpec.FailedObligation.search_refuted._proof_1_6	Quot.sound propext
+ConcreteSpec.FailedObligation.search_refuted._proof_1_7	Quot.sound propext
 ConcreteSpec.FieldsTy.covers	
 ConcreteSpec.FieldsTy.nodup	
 ConcreteSpec.FieldsTy.typed	
@@ -6256,8 +6288,9 @@ ConcreteSpec.runBody_reaches_finish	Quot.sound propext
 ConcreteSpec.runBody_safe	Quot.sound propext
 ConcreteSpec.runBody_sound	propext
 ConcreteSpec.stmtOut.eq_1	propext
-ConcreteSpec.stmtOut.eq_2	propext
-ConcreteSpec.stmtOut.eq_3	propext
+ConcreteSpec.stmtOutWith.eq_1	propext
+ConcreteSpec.stmtOutWith.eq_2	propext
+ConcreteSpec.stmtOutWith.eq_3	propext
 ConcreteSpec.stmtOut_iff	Quot.sound propext
 ConcreteSpec.tyOf._sparseCasesOn_1.else_eq	propext
 ConcreteSpec.tyOf.eq_1	propext
@@ -6336,6 +6369,61 @@ Option.instBEq.eq_1
 Prod.fst.eq_1	
 Prod.snd.eq_1	
 Pure.pure.eq_1	
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.RejectedAdd.mk.inj	
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.RejectedAdd.mk.injEq	propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.RejectedAdd.mk.sizeOf_spec	
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.candidateReplay.eq_1	
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.coreType_inRange	propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.diagnose_search	Quot.sound propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.diagnose_search._simp_1_1	Quot.sound propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.eraseDups_nodup	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.firstRejectedAdd._sparseCasesOn_3.else_eq	propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.firstRejectedAdd._sparseCasesOn_4.else_eq	propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.firstRejectedAdd._sparseCasesOn_5.else_eq	propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.firstRejectedAdd._sparseCasesOn_6.else_eq	propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.firstRejectedAdd.eq_1	propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.firstRejectedAdd.eq_2	propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.firstRejectedAdd.eq_3	Quot.sound propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.firstRejectedAdd.eq_def	propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.firstRejectedAdd.match_1.eq_1	
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.firstRejectedAdd.match_11.eq_1	
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.firstRejectedAdd.match_11.eq_2	
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.firstRejectedAdd.match_3.eq_1	propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.firstRejectedAdd.match_3.eq_2	propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.firstRejectedAdd.match_9.eq_1	
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.firstRejectedAdd.match_9.eq_2	
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.firstRejectedAdd_refuses	Quot.sound propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.reachStatement._sparseCasesOn_1.else_eq	propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.reachStatement._sparseCasesOn_4.else_eq	propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.reachStatement._sparseCasesOn_5.else_eq	propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.reachStatement.eq_1	propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.reachStatement.eq_2	propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.reachStatement.eq_3	propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.reachStatement.eq_def	propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.reachStatement.match_1.eq_1	propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.reachStatement.match_1.eq_2	propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.reachStatement.match_4.eq_1	propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.reachStatement.match_4.eq_2	propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.reachStatement.match_4.eq_3	propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.reachStatement_trap	propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.replay._sparseCasesOn_1.else_eq	propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.replay._sparseCasesOn_4.else_eq	propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.replay.match_1.eq_1	propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.replay.match_1.eq_2	propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.replay.match_4.eq_1	propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.replay.match_4.eq_2	propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.replay.match_7.eq_1	propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.replay.match_7.eq_2	propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.replay_sound	Quot.sound propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.replay_sound._simp_1_1	Quot.sound propext
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.search.go.match_1.eq_1	
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.search.go.match_1.eq_2	
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.search.go.match_3.eq_1	
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.search.go.match_3.eq_2	
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.search.go.match_5.eq_1	
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.FailedObligation.search.go.match_5.eq_2	
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.useAtoms.match_1.eq_1	
+_private.ConcreteSpec.Diagnostics.FailedObligation.0.ConcreteSpec.useAtoms.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Accounting.0.ConcreteSpec.Core.Leak.Evidence.resetBytes.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Accounting.0.ConcreteSpec.Core.Leak.Evidence.resetBytes.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Accounting.0.ConcreteSpec.Core.Leak.Evidence.run.match_1.eq_1	
@@ -6458,9 +6546,9 @@ _private.ConcreteSpec.Proofs.Checker.0.ConcreteSpec.bodyOkB.match_1.eq_2
 _private.ConcreteSpec.Proofs.Checker.0.ConcreteSpec.bodyOkB.match_1.eq_3	
 _private.ConcreteSpec.Proofs.Checker.0.ConcreteSpec.fieldsOkB.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Checker.0.ConcreteSpec.fieldsOkB.match_1.eq_2	
-_private.ConcreteSpec.Proofs.Checker.0.ConcreteSpec.stmtOut.match_1.eq_1	
-_private.ConcreteSpec.Proofs.Checker.0.ConcreteSpec.stmtOut.match_1.eq_2	
-_private.ConcreteSpec.Proofs.Checker.0.ConcreteSpec.stmtOut.match_1.eq_3	
+_private.ConcreteSpec.Proofs.Checker.0.ConcreteSpec.stmtOutWith.match_1.eq_1	
+_private.ConcreteSpec.Proofs.Checker.0.ConcreteSpec.stmtOutWith.match_1.eq_2	
+_private.ConcreteSpec.Proofs.Checker.0.ConcreteSpec.stmtOutWith.match_1.eq_3	
 _private.ConcreteSpec.Proofs.Checker.0.ConcreteSpec.tyOf.match_1.eq_1	propext
 _private.ConcreteSpec.Proofs.Checker.0.ConcreteSpec.tyOf.match_1.eq_2	propext
 _private.ConcreteSpec.Proofs.Checker.0.ConcreteSpec.tyOf.match_4.eq_1	
