@@ -67,9 +67,7 @@ private def compress (h : Array UInt32) (p : ByteArray) (off : Nat) : Array UInt
   return #[h[0]! + a, h[1]! + b, h[2]! + c, h[3]! + d,
            h[4]! + e, h[5]! + f, h[6]! + g, h[7]! + hh]
 
-/-- SHA-256 of a byte message. Refuse lengths outside the FIPS 180-4 64-bit bit length. -/
-def hash (msg : ByteArray) : Option ByteArray := Id.run do
-  if msg.size ≥ 2^61 then return none
+private def hashBytes (msg : ByteArray) : ByteArray := Id.run do
   let p := pad msg
   let mut h : Array UInt32 := #[0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
                                 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19]
@@ -79,6 +77,14 @@ def hash (msg : ByteArray) : Option ByteArray := Id.run do
   for x in h do
     out := out.push (x >>> 24).toUInt8 |>.push (x >>> 16).toUInt8
              |>.push (x >>> 8).toUInt8 |>.push x.toUInt8
-  return some out
+  return out
+
+/-- SHA-256 of a byte message. Refuse lengths outside the FIPS 180-4 64-bit bit length. -/
+def hash (msg : ByteArray) : Option ByteArray :=
+  if msg.size ≥ 2^61 then none else some (hashBytes msg)
+
+theorem hash_eq_none_iff {msg : ByteArray} : hash msg = none ↔ msg.size ≥ 2^61 := by
+  unfold hash
+  split <;> simp_all
 
 end Concrete.Artifact.Sha256

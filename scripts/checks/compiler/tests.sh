@@ -36,6 +36,7 @@ if [[ ${CONCRETE_TEST_EMIT_ONLY:-0} != 1 ]]; then
       'cd "$1" && exec lean --run "$2"' _ "$encoding_dir" \
       "$root/scripts/checks/compiler/artifact_encoding.lean"
   done
+  test -s "$work/artifact-utc/vectors"
   cmp "$work/artifact-utc/vectors" "$work/artifact-pacific/vectors"
   echo "ok   canonical artifact bytes and SHA-256 goldens in two environments, payload substitutions"
   bash scripts/checks/compiler/f31_census.sh
