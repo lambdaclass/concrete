@@ -5,7 +5,7 @@ import ConcreteSpec.Spec.ProjectPolicy
 /-! Project-file I/O at the compiler boundary. Wire decoding is held until the schema review. -/
 
 namespace Concrete.Driver.Project
-open ConcreteSpec.Core (RuleId PackageId FnId)
+open ConcreteSpec.Core (PackageId FnId)
 open ConcreteSpec.Project
 
 def manifestByteLimit : Nat := 64 * 1024
@@ -21,7 +21,14 @@ inductive Refusal where
   | schemaPending
   deriving DecidableEq, Repr
 
-def Refusal.ruleId (_ : Refusal) : RuleId := manifestRule
+/-- Driver diagnostics for the pre-admission boundary. -/
+def Refusal.code : Refusal → String
+  | .read _ => "MANIFEST-READ"
+  | .size => "MANIFEST-SIZE"
+  | .encoding => "MANIFEST-ENCODING"
+  | .depth => "MANIFEST-DEPTH"
+  | .malformed => "MANIFEST-SYNTAX"
+  | .schemaPending => "MANIFEST-SCHEMA"
 
 def Refusal.message : Refusal → String
   | .read detail => s!"cannot read Concrete.toml ({detail})"
@@ -105,10 +112,6 @@ inductive ScopeRefusal where
   | unresolved (package : PackageId)
   | policy (refusal : PolicyRefusal)
   deriving Repr
-
-def ScopeRefusal.ruleId : ScopeRefusal → RuleId
-  | .unresolved _ => manifestRule
-  | .policy refusal => refusal.ruleId
 
 def checkScope (inherited : List Requirement) : Scope → Except ScopeRefusal (List Coverage)
   | .unresolved name => .error (.unresolved name)

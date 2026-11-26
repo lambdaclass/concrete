@@ -25,6 +25,10 @@ private def requireRefusal (clause : Clause) (bad : FunctionFacts) (source : Evi
     expect "policy source" (decide (detail.source = source))
     expect "policy reason" (decide (detail.violation = reason))
 
+#eval expect "pending admission has no specification rule"
+  (!ConcreteSpec.Core.registeredRules.any fun rule =>
+    rule.name.toString == "ConcreteSpec.Project.ManifestAdmitted")
+
 #eval show IO Unit from do
   let requests := predictable [] ++ [⟨.terminates, []⟩, ⟨.stackBound, []⟩, ⟨.maxStackBytes 32, []⟩]
   expect "all clauses accept established facts" ((Project.checkScope [] (.resolved requests [facts] [])).isOk)
@@ -101,9 +105,27 @@ private def requireRefusal (clause : Clause) (bad : FunctionFacts) (source : Evi
   expect "combined header and dotted path exceeds limit"
     (decide (Project.parseManifest (nested 9) = .error .depth))
   let inlineAt := fun n => "[" ++ segments 8 ++ "]\nx = {" ++ segments n ++ " = true}\n"
-  expect "combined inline table path at limit" (Project.parseManifest (inlineAt 7)).isOk
+  expect "combined inline table path at limit" (Project.parseManifest (inlineAt 6)).isOk
   expect "depth includes inline table keys"
-    (decide (Project.parseManifest (inlineAt 8) = .error .depth))
+    (decide (Project.parseManifest (inlineAt 7) = .error .depth))
+  for (table, cost) in [("{}", 1), ("{ y = true }", 2)] do
+    for extra in [0, 1] do
+      let n := Project.manifestDepthLimit - cost + extra
+      let arrays := n - 1
+      for text in [segments n ++ " = " ++ table,
+          "[" ++ segments (n - 1) ++ "]\nx = " ++ table,
+          "x = " ++ String.ofList (List.replicate arrays '[') ++ table ++
+            String.ofList (List.replicate arrays ']')] do
+        expect ("inline table at depth boundary: " ++ text)
+          (decide (Project.parseManifest text = if extra == 0 then .ok () else .error .depth))
+  for text in ["a.b = 1\n[a]\nc = 2\n", "[a]\nb.c = 1\n[a.b]\nd = 2\n",
+      "[a.b]\nx = 1\n[a]\nb.y = 2\n", "x = 00", "x = -01", "# " ++ String.singleton (Char.ofNat 0),
+      "# " ++ String.singleton (Char.ofNat 1), "x = \"\"\"a\\\n \r b\"\"\""] do
+    expect ("malformed manifest: " ++ reprStr text)
+      (decide (Project.parseManifest text = .error .malformed))
+  for text in ["[a.b]\nx = 1\n[a]\nc = 2\n", "a.b = 1\na.c = 2\n[a.d]\ne = 3\n",
+      "x = 0\ny = -10\n#\t comment", "x = \"\"\"a\\\r\n \t\r\n b\"\"\""] do
+    expect ("valid manifest: " ++ reprStr text) (Project.parseManifest text).isOk
   expect "quoted dots are one segment"
     (Project.parseManifest ("\"" ++ segments 20 ++ "\".a = true\n")).isOk
   expect "duplicate decoded key"

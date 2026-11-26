@@ -36,7 +36,7 @@ def registeredRules : List RuleId :=
   [⟨``SourcePathSpan.FilePresent, 1⟩, ⟨``SourcePathSpan.OrderedOffsets, 1⟩,
    ⟨``SourcePathSpan.EndInSource, 1⟩, ⟨``SourcePathSpan.LineMatches, 1⟩,
    ⟨``SourcePathSpan.ColumnMatches, 1⟩, Project.languagePinRule, Project.clauseRule,
-   Project.tableVersionRule, Project.manifestRule]
+   Project.tableVersionRule]
 
 /-- Acceptance evidence applies the owning rule's judgment to a concrete input.
 The exporter recognizes this proposition's elaborated type, without unfolding the wrapper. -/
@@ -594,8 +594,6 @@ theorem assumptionsVersionRefused : RuleRefused TableVersionsAccepted (tables, 1
   unfold RuleRefused
   decide
 
-theorem manifestAccepted : RuleAccepted ManifestAdmitted true := by unfold RuleAccepted; decide
-theorem manifestRefused : RuleRefused ManifestAdmitted false := by unfold RuleRefused; decide
 
 end ProjectRegistry
 namespace Slice1Registry
@@ -737,8 +735,6 @@ def registeredRuleExamples : List RuleExample :=
    ⟨``Project.ClauseAccepted, ``ProjectRegistry.unknownRefused⟩,
    ⟨``Project.TableVersionsAccepted, ``ProjectRegistry.versionsAccepted⟩,
    ⟨``Project.TableVersionsAccepted, ``ProjectRegistry.policyVersionRefused⟩,
-   ⟨``Project.TableVersionsAccepted, ``ProjectRegistry.assumptionsVersionRefused⟩,
-   ⟨``Project.ManifestAdmitted, ``ProjectRegistry.manifestAccepted⟩,
-   ⟨``Project.ManifestAdmitted, ``ProjectRegistry.manifestRefused⟩]
+   ⟨``Project.TableVersionsAccepted, ``ProjectRegistry.assumptionsVersionRefused⟩]
 
 end ConcreteSpec.Core

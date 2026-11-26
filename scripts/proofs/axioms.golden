@@ -3642,8 +3642,6 @@ ConcreteSpec.Core.ProjectRegistry.allocationRefused	propext
 ConcreteSpec.Core.ProjectRegistry.assumptionsVersionRefused	
 ConcreteSpec.Core.ProjectRegistry.clauseAccepted	propext
 ConcreteSpec.Core.ProjectRegistry.function._proof_1	propext
-ConcreteSpec.Core.ProjectRegistry.manifestAccepted	
-ConcreteSpec.Core.ProjectRegistry.manifestRefused	
 ConcreteSpec.Core.ProjectRegistry.missingPinRefused	
 ConcreteSpec.Core.ProjectRegistry.pinAccepted	
 ConcreteSpec.Core.ProjectRegistry.policyVersionRefused	

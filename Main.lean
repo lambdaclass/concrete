@@ -11,7 +11,11 @@ private def report (refusal : Refusal) : IO UInt32 := do
   IO.eprintln s!"{refusal.code}: {refusal.message}"
   return 1
 
-private def build (source dir : System.FilePath) (backend : Option String) : IO UInt32 := do
+private def build (source requestedDir : System.FilePath) (backend : Option String) : IO UInt32 := do
+  let dir := System.FilePath.mk
+    (String.ofList (requestedDir.toString.toList.reverse.dropWhile (· == '/')).reverse)
+  let some name := dir.fileName
+    | return ← report (.internal "output must name a directory")
   let loc : BIR.Loc := ⟨source.toString, 1, 1⟩
   unless loc.wf && source.extension == some "con" do
     return ← report (.syntaxError "expected a project-relative .con path")
@@ -22,8 +26,7 @@ private def build (source dir : System.FilePath) (backend : Option String) : IO 
   let version ← match ← Driver.Project.checkInvocation (root / "Concrete.toml") with
     | .ok version => pure version
     | .error refusal =>
-      let rule := refusal.ruleId
-      IO.eprintln s!"{rule.name}@{rule.rev}: {refusal.message}"
+      IO.eprintln s!"{refusal.code}: {refusal.message}"
       return 1
   let bytes ← IO.FS.readBinFile path
   let compiled : Except Refusal (Stages.Output × Option LeanCompilerBackend.Verified.Source.Function) := do
@@ -33,11 +36,15 @@ private def build (source dir : System.FilePath) (backend : Option String) : IO 
   match compiled with
   | .error e => report e
   | .ok (out, lcbInput) =>
-    let helper := "scripts/checks/lib/slice0_native.sh"
+    -- Lake installs concrete in .lake/build/bin under the compiler's own checkout.
+    let executable ← IO.FS.realPath (← IO.appPath)
+    let some installation := executable.parent >>= (·.parent) >>= (·.parent) >>= (·.parent)
+      | throw (IO.userError "cannot locate the compiler installation")
+    let helper := (installation / "scripts/checks/lib/slice0_native.sh").toString
     let (lcb, asm) ← match lcbInput with
       | none => pure ("-", none)
       | some f => do
-        let lcb ← IO.FS.realPath ".lake/packages/lean-compiler-backend/.lake/build/bin/lcb"
+        let lcb ← IO.FS.realPath (installation / ".lake/packages/lean-compiler-backend/.lake/build/bin/lcb")
         let host ← IO.Process.run { cmd := "bash", args := #[helper, "target"] }
         let some target := LCB.Target.ofName host.trimAscii.toString
           | throw (IO.userError s!"unsupported target: {host}")
@@ -73,7 +80,12 @@ private def build (source dir : System.FilePath) (backend : Option String) : IO 
         unless text == (← IO.FS.readFile (stage / "lcb_body.s")) &&
             Runtime.qbe out.bir.sites == (← IO.FS.readFile (stage / "lcb_rt.ssa")) do
           return ← report (.internal "LCB link inputs changed during native build")
-      IO.FS.rename stage dir
+      let verified ← IO.Process.output
+        { cmd := "bash", args := #[helper, "verify", stage.toString, lcb] ++ backend.toArray }
+      if verified.exitCode != 0 then
+        IO.eprint verified.stderr
+        return verified.exitCode
+      IO.FS.rename stage (parent / name)
       IO.println s!"language-rules version {version.major}.{version.minor}"
       return 0
     finally

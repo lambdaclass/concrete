@@ -16,11 +16,56 @@ control=0
 if [ "${1:-}" = control ] && [ "$#" = 2 ]; then control=1; set -- "$2" -; fi
 # The public driver invokes bound mode only inside its private publication staging directory.
 bound=0
-if [ "${1:-}" = bound ]; then bound=1; shift; fi
+verify=0
+case "${1:-}" in
+  bound) bound=1; shift ;;
+  verify) verify=1; shift ;;
+esac
 # `sanitize` builds only llvm.san.exe: the LLVM example with ASan (README gate 10; no UBSan, see there).
 [ "$#" = 2 ] || { [ "$#" = 3 ] && [[ "$3" = llvm || "$3" = lcb || "$3" = sanitize ]]; } ||
-  { echo 'usage: slice0_native.sh DIRECTORY LCB [llvm|lcb|sanitize] | control DIRECTORY | bound STAGING-DIRECTORY LCB [llvm|lcb] | target' >&2; exit 2; }
+  { echo 'usage: slice0_native.sh DIRECTORY LCB [llvm|lcb|sanitize] | control DIRECTORY | {bound|verify} STAGING-DIRECTORY LCB [llvm|lcb] | target' >&2; exit 2; }
+if [ "${3:-}" = sanitize ] && { [ "$bound" = 1 ] || [ "$verify" = 1 ]; }; then
+  echo 'slice0_native: sanitize requires monolithic LLVM input' >&2
+  exit 2
+fi
 lcb=$2
+if [ "$verify" = 1 ]; then
+  # Replay the complete retained build with the independently configured, pinned compiler.
+  # Compare fixed inventories and their contents. A successful exit from the candidate
+  # linker confers no authority to add an image to the publication.
+  : "${CONCRETE_SLICE0_REFERENCE_CLANG:?run inside nix develop}"
+  [[ "$CONCRETE_SLICE0_REFERENCE_CLANG" = /* ]] || exit 2
+  stage=$(cd -- "$1" && pwd -P)
+  replay=$(mktemp -d "$(dirname -- "$stage")/.concrete-replay.XXXXXXXX")
+  trap 'rm -rf -- "$replay"' EXIT
+  backends=()
+  if [ "${3:-}" != lcb ]; then
+    cp -- "$stage/component.ll" "$stage/launcher.ll" "$replay/"
+    backends+=(llvm)
+  fi
+  if [ "${3:-}" != llvm ]; then
+    cp -- "$stage/lcb_body.s" "$stage/lcb_rt.ssa" "$replay/"
+    backends+=(lcb)
+  fi
+  CONCRETE_SLICE0_CLANG="$CONCRETE_SLICE0_REFERENCE_CLANG" \
+    bash "${BASH_SOURCE[0]}" bound "$replay" "$lcb" "${@:3}"
+  cd -- "$stage"
+  for backend in "${backends[@]}"; do
+    inventory="$backend.link.sha256"
+    if ! cmp -s -- "$replay/$inventory" "$inventory"; then
+      echo "slice0_native: $backend retained build differs from pinned replay" >&2
+      exit 1
+    fi
+    sha256sum --quiet -c "$replay/$inventory"
+    if [ ! -x "$backend.exe" ]; then
+      echo "slice0_native: $backend image is not executable" >&2
+      exit 1
+    fi
+  done
+  # Enforce the retained file set as well as the digests, including rejecting symlinks.
+  diff -qr --no-dereference -- "$replay" "$stage" >&2
+  exit
+fi
 cd -- "$1"
 # Fixed epoch rather than wall clock or caller environment. No debug data is requested, and
 # prefix maps also cover future debug additions. Separate objects avoid random linker temp names.

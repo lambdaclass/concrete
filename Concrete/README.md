@@ -15,8 +15,10 @@ Set `output` to a new build directory. The default writes `llvm.exe` and `lcb.ex
 Use `--backend llvm` or `--backend lcb` for a single executable. The driver uses the pinned
 native build helper and the LCB executable built by Lake. It compiles and links in a private
 directory beside the destination, checks that the retained link inputs match the generated inputs,
-and publishes by renaming the directory. The build prints the selected standalone language-rules
-version upon success. Each backend retains a SHA-256 inventory of its inputs, objects and image.
+and replays the retained native build with the pinned reference clang before publishing by
+renaming the directory. The Lake-built CLI locates the native helper and LCB relative to its own
+installation. The build prints the selected standalone language-rules version upon success.
+Each backend retains a SHA-256 inventory of its inputs, objects and image.
 
 ### Slice 1 driver follow-ups
 
@@ -24,9 +26,11 @@ version upon success. Each backend retains a SHA-256 inventory of its inputs, ob
   R-0603 own the project decoder, its approved key spellings and revisions,
   project and dependency identity resolution, and the CI requirement for a recorded assumption
   diff. The current recognizer bounds bytes and decoded nesting in the TOML syntax used by the
-  fixtures. Project build admission remains closed pending the schema. The Lean policy checker
+  fixtures. R-0589 owns full TOML conformance, including arrays of tables, and the admission
+  judgment. Until then, a present manifest produces a structured driver refusal. The Lean policy checker
   can exercise typed requirements against slice 0 MIR and returns per-function coverage. It reports
   missing stack evidence explicitly. Inherited policy conjunction has a regression control.
+  Independent compiler fact derivations and their soundness belong to R-0575.
   The general inherited-scope proof and registry examples for the remaining clause variants
   stay under R-0576. Typed assumption identities and set diffs are available for the future
   revision-aware CI reader.
@@ -35,11 +39,13 @@ version upon success. Each backend retains a SHA-256 inventory of its inputs, ob
   The Core replay boundary accepts a supplied startup configuration and oracle and returns
   the evaluator's events, ending and residual state. Compare the same checked
   slice 1 source through the reference and native paths under R-0698 once the native pipeline
-  accepts the slice 1 constructs and explicit abort.
+  accepts the slice 1 constructs and explicit abort. R-0586 also owns validation of grant identity
+  uniqueness before issuing grants.
 - [Q8.6](../docs/decisions.md#decided-2026-11-05-core) requires the full retained dependency
-  closure. The current native inventory covers the emitted files and the image. Discovering and
-  binding the loader and host dependency closure, and independently checking the linked image
-  against the build record, are outstanding launcher qualification work.
+  closure. R-0509 owns qualification of the loader and host dependency closure and the trusted
+  toolchain inventory. The current replay covers the emitted inputs, objects and image. R-0578
+  owns sharing the typed launcher input boundary with LCB. R-0509 also owns coverage of the
+  CLI root in the environment-level axiom and example scans.
 
 `scripts/checks/compiler/tests.sh` also compiles the `con:` manifest rows. For trap rows it
 first checks that admission refuses, then runs the same lowering stages without discharged

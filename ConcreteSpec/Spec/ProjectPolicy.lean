@@ -26,9 +26,10 @@ inductive LanguageSelection where
 
 /-- A single-file invocation selects the sole supported rules version. A manifest must supply
 that same version explicitly. The slice's compiler supplies its supported identity.
-The selection behavior was approved in the delegated slice 1 decision (item 4,
-2026-11-25). R-0603 and docs/decisions.md#decided-project-concrete-toml track the
-project configuration and its remaining schema work. -/
+Item 4, “Language-rules version”, records the selection behavior in
+`a089cdf2444b236b8e24940eceea9e910d2ddbd8:docs/decisions.md` on
+`origin/wip/record-2026-11-25-slice1`, under `decided-2026-11-25-slice1-delegated`.
+R-0603 and docs/decisions.md#decided-project-concrete-toml track the remaining schema work. -/
 def LanguagePinAccepted (request : LanguageRulesVersion × LanguageSelection) : Prop :=
   match request.2 with
   | .standalone => True
@@ -41,16 +42,6 @@ instance (request : LanguageRulesVersion × LanguageSelection) :
   | (supported, .project pin) => inferInstanceAs (Decidable (pin = some supported))
 
 def languagePinRule : RuleId := ⟨``LanguagePinAccepted, 1⟩
-
-/-- A project invocation may proceed only with an available, valid and interpreted
-configuration (R-0589, docs/decisions.md#decided-project-concrete-toml).
-An absent entry is governed separately by the language selection rule. -/
-def ManifestAdmitted (ready : Bool) : Prop := ready = true
-
-instance (ready : Bool) : Decidable (ManifestAdmitted ready) :=
-  inferInstanceAs (Decidable (ready = true))
-
-def manifestRule : RuleId := ⟨``ManifestAdmitted, 1⟩
 
 inductive PinRefusal where
   | missing

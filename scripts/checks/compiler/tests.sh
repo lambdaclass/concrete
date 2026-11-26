@@ -86,8 +86,6 @@ check_backend_limit() {
   if [ "$project" != "$root" ]; then
     mkdir -p "$d/project/$(dirname "$path")"
     cp -- "$project/$path" "$d/project/$path"
-    ln -s "$root/scripts" "$d/project/scripts"
-    ln -s "$root/.lake" "$d/project/.lake"
     project="$d/project"
   fi
   cli=(bash -c 'cd "$1" && shift && exec "$@"' _ "$project" "$root/.lake/build/bin/concrete")
@@ -199,43 +197,73 @@ if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" != 1 ]; then
         ln -s other.toml "$project_file"
         expected='cannot read Concrete.toml (expected a regular file)' ;;
     esac
+    case "$manifest_case" in
+      directory|symlink) code=READ ;;
+      malformed) code=SYNTAX ;;
+      *) code=${manifest_case^^} ;;
+    esac
     rc=0
-    bounded "$native_secs" "${cli[@]}" build answer.con -o output --backend llvm \
+    bounded "$native_secs" "${cli[@]}" build answer.con -o output/ --backend llvm \
       >"$project_dir/stdout" 2>"$project_dir/stderr" || rc=$?
     test "$rc" = 1
     test ! -e "$project_dir/output"
     test ! -s "$project_dir/stdout"
-    has_match -Fx "ConcreteSpec.Project.ManifestAdmitted@1: $expected" <"$project_dir/stderr"
+    has_match -Fx "MANIFEST-$code: $expected" <"$project_dir/stderr"
     if [ "$manifest_case" = directory ]; then rmdir "$project_file"; else rm -- "$project_file"; fi
   done
   echo "ok   malformed, over-limit, non-file and pending-schema inputs refuse before output"
-  ln -s "$root/scripts" "$project_dir/scripts"
-  build "standalone bound launcher" "$project_dir/build.log" bounded "$native_secs" "${cli[@]}" \
-    build answer.con -o output --backend llvm
-  has_match -Fx 'language-rules version 0.1' <"$project_dir/build.log"
-  (cd "$project_dir/output" && sha256sum -c llvm.link.sha256)
-  observe "$project_dir/output/llvm.exe" "$project_dir/native" 10 20
-  test "$(cat "$project_dir/native.status")" = 42
-  test ! -s "$project_dir/native.stdout"
-  test ! -s "$project_dir/native.stderr"
+  check_bound_build() {
+    local dest=$1
+    shift
+    build "standalone bound launcher ($dest)" "$project_dir/$dest.log" bounded "$native_secs" "${cli[@]}" \
+      build answer.con -o "$dest/" "$@"
+    has_match -Fx 'language-rules version 0.1' <"$project_dir/$dest.log"
+  }
+  check_bound_image() {
+    local dest=$1
+    local backend=$2
+    (cd "$project_dir/$dest" && sha256sum -c "$backend.link.sha256")
+    observe "$project_dir/$dest/$backend.exe" "$project_dir/native" 10 20
+    test "$(cat "$project_dir/native.status")" = 42
+    test ! -s "$project_dir/native.stdout"
+    test ! -s "$project_dir/native.stderr"
+  }
+  check_bound_build output
+  check_bound_image output llvm
+  check_bound_image output lcb
+  mkdir -p "$project_dir/scripts/checks/lib" "$project_dir/.lake/packages/lean-compiler-backend/.lake/build/bin"
+  for local_tool in scripts/checks/lib/slice0_native.sh .lake/packages/lean-compiler-backend/.lake/build/bin/lcb; do
+    printf '#!/usr/bin/env bash\ntouch project-tool-ran\nexit 99\n' >"$project_dir/$local_tool"
+    chmod +x "$project_dir/$local_tool"
+  done
+  check_bound_build lcb-only --backend lcb
+  check_bound_image lcb-only lcb
+  check_bound_build llvm-only --backend llvm
+  check_bound_image llvm-only llvm
+  test ! -e "$project_dir/project-tool-ran"
 
   cat >"$project_dir/clang-control" <<'EOF'
 #!/usr/bin/env bash
 set -eu
 for arg in "$@"; do
-  if [ "$arg" = launcher.ll ]; then
-    case "$CONTROL" in
-      fail) exit 79 ;;
-      substitute-ir) cp -- "$REPLACEMENT/launcher.ll" launcher.ll ;;
-      substitute-object) cp -- "$REPLACEMENT/component.o" component.o ;;
-    esac
-  fi
+  case "$CONTROL:$arg" in
+    fail:launcher.ll|lcb-fail:lcb_rt.s) exit 79 ;;
+    substitute-ir:launcher.ll) cp -- "$REPLACEMENT/launcher.ll" launcher.ll ;;
+    substitute-object:launcher.ll) cp -- "$REPLACEMENT/component.o" component.o ;;
+    substitute-llvm-image:llvm.exe) cp -- "$REPLACEMENT/llvm.exe" llvm.exe; exit 0 ;;
+    substitute-lcb-image:lcb.exe) cp -- "$REPLACEMENT/llvm.exe" lcb.exe; exit 0 ;;
+    substitute-lcb-object:lcb.exe) "$REAL_CLANG" "$@"; cp -- lcb_rt.o lcb_body.o; exit 0 ;;
+    late-llvm-input:lcb.exe) cp -- "$REPLACEMENT/launcher.ll" launcher.ll ;;
+    late-lcb-input:launcher.ll) printf '\n' >>lcb_body.s ;;
+    late-inventory:lcb.exe) rm -- llvm.link.sha256 ;;
+  esac
 done
 exec "$REAL_CLANG" "$@"
 EOF
   # The native helper clears the tool environment. Bake control parameters into its
   # private wrapper rather than relying on ambient flags for the real invocation.
-  for control in fail substitute-ir substitute-object; do
+  for control in fail lcb-fail substitute-ir substitute-object substitute-llvm-image substitute-lcb-image \
+      substitute-lcb-object late-llvm-input late-lcb-input late-inventory; do
     wrapper="$project_dir/clang-$control"
     {
       printf '#!/usr/bin/env bash\nCONTROL=%q\nREPLACEMENT=%q\nREAL_CLANG=%q\n' \
@@ -243,18 +271,32 @@ EOF
       tail -n +2 "$project_dir/clang-control"
     } >"$wrapper"
     chmod +x "$wrapper"
+    case "$control" in
+      lcb-fail|substitute-lcb-*) backend_args=(--backend lcb) ;;
+      late-*) backend_args=() ;;
+      *) backend_args=(--backend llvm) ;;
+    esac
     rc=0
     CONCRETE_SLICE0_CLANG="$wrapper" bounded "$native_secs" "${cli[@]}" \
-      build answer.con -o "$control" --backend llvm \
+      build answer.con -o "$control/" "${backend_args[@]}" \
       >"$project_dir/$control.log" 2>&1 || rc=$?
     test ! -e "$project_dir/$control"
-    if [ "$control" = fail ]; then
+    if [[ "$control" = *fail ]]; then
       test "$rc" = 79
     else
       test "$rc" = 1
       case "$control" in
         substitute-ir) has_match -F 'launcher.ll: FAILED' <"$project_dir/$control.log" ;;
         substitute-object) has_match -F 'component.o: FAILED' <"$project_dir/$control.log" ;;
+        substitute-lcb-object) has_match -F 'lcb_body.o: FAILED' <"$project_dir/$control.log" ;;
+        substitute-llvm-image|late-inventory)
+          has_match -F 'llvm retained build differs from pinned replay' <"$project_dir/$control.log" ;;
+        substitute-lcb-image)
+          has_match -F 'lcb retained build differs from pinned replay' <"$project_dir/$control.log" ;;
+        late-llvm-input)
+          has_match -F 'LLVM link inputs changed during native build' <"$project_dir/$control.log" ;;
+        late-lcb-input)
+          has_match -F 'LCB link inputs changed during native build' <"$project_dir/$control.log" ;;
       esac
     fi
   done

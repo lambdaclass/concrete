@@ -2413,6 +2413,9 @@ _private.Concrete.Backend.Runtime.0.Concrete.Backend.Runtime.siteBytes.eq_1	prop
 _private.Concrete.Driver.Launcher.0.Concrete.Driver.Launcher.LLVMInputs.mk.inj	
 _private.Concrete.Driver.Launcher.0.Concrete.Driver.Launcher.LLVMInputs.mk.injEq	propext
 _private.Concrete.Driver.Launcher.0.Concrete.Driver.Launcher.LLVMInputs.mk.sizeOf_spec	
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.Definitions.mk.inj	
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.Definitions.mk.injEq	propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.Definitions.mk.sizeOf_spec	
 _private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.Token.bare.inj	
 _private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.Token.bare.injEq	propext
 _private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.Token.bare.sizeOf_spec	
@@ -2452,6 +2455,7 @@ _private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.inlineTable.m
 _private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.inlineTable.match_5.eq_1	propext
 _private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.inlineTable.match_5.eq_2	propext
 _private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.inlineTable.match_5.eq_3	propext
+_private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.inlineTable.match_5.eq_4	propext
 _private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.match_1.eq_1	propext
 _private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.match_1.eq_2	propext
 _private.Concrete.Driver.Manifest.0.Concrete.Driver.Manifest.value.match_1.eq_3	propext
