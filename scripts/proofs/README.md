@@ -332,37 +332,52 @@ above; the harness owns its commit. Measured source SHA-256 values:
 Run `scripts/proofs/nonvacuity.sh` inside `nix develop` for the B0b audit or
 pass `--controls` for the control suite. The audit compares the source tree
 with the imported specification modules, counts authored `Law` theorems, and
-kernel-compares each registered theorem's type with the derived joint
-applicability proposition. It reports missing registrations and refuses shapes
+kernel-compares each registered proof with the derived joint applicability
+proposition. A registered closed application supplies its actual arguments.
+The checker constructs and kernel-checks the existential from those
+arguments, without taking evidence from the application's result. The
+source declaration does not enter the Law census. The audit reports missing
+registrations and refuses shapes
 with no supported applicability interpretation. The full audit is required for
 B0b and remains open in [ISS-0104](../../ISSUES.tsv).
 
+An existential conclusion with nested applicability keeps its original body
+and its derived premises at the same witness. Proof-valued existential
+domains are inspected for nested telescopes. Independent conjunction cases
+over data can use different inputs when they have no shared premise.
+Propositional equality is checked like a biconditional, and double negation
+retains the inner obligation. Unsupported contracts fail closed.
+
 The exact closed empty-list store, wildcard, combined, and trap counterfeits
 from `fixtures/N2-Typed-Contracts.lean` at archived revision
-`8563ea20158be606aad867dac3f798b5dd1ef1b3` are runnable controls in
-`nonvacuity.lean`. Reduction could erase the unselected branch and accept
-`True` as a witness, so applicability checks the original match form and
-reports unsupported branch selection. Nested conjunctions and existentials
-preserve their positive telescopes. A biconditional requires both antecedents
-and their nested premises. Disjunctions with branch premises, conditional
-results and opaque contract shapes require further coverage work.
+`8563ea20158be606aad867dac3f798b5dd1ef1b3` are runnable controls.
+The checker keeps the original discriminator and requires selection of a
+substantive arm. For `Exec.evalArgs` that arm must also have a nonempty
+operand list, since the empty list succeeds without running an operand.
+The success and trap Laws have registered witnesses that run operands in
+the instrumented interpreter. The counterfeit types can no longer receive
+credit from `True`.
 
-The old projection fixtures share `∀ n, (n < n + 1 ∧ True) → n < n + 1`.
-Its premises are jointly realizable at `n = 2`. The controls replay the
-archived projection, carrier, cast, matcher and recursive proof terms as
-candidate evidence and reject their types. The control with the explicit
-existential witness for that same telescope passes. Detecting whether the
-Law's own proof obtains its conclusion through the projected premise is a
-separate proof-body provenance obligation under R-0219. The old forged-metadata,
-fieldless-subject and erased-application probes also concern proof or subject
-provenance. The applicability audit derives the obligation from the imported
-Law's type and gives examples, subject metadata and reserved example names no
-authority to change it.
+The old subtype, packed conjunction, product and sigma projection, Boolean
+and natural cases, matcher, nested matcher, cast and let, nested existential
+field, and recursive induction fixtures have a shared satisfiable telescope
+`∀ n, (n < n + 1 ∧ True) → n < n + 1`. An explicit witness at `n = 2`
+passes applicability. Whether the Law's proof actually routes evidence through
+the tested premise remains an R-0219 proof-body provenance obligation, as do
+the original fieldless subject, erased application, and missing rooted subject
+probes. The metadata control checks that forged subject metadata leaves the
+derived applicability proposition unchanged. The census and registration
+controls reject reserved synthetic examples as sources of coverage.
 
-The N8a let and helper-chain controls offer exact existential types and are
-refused because their proofs reach the impossible supplier axiom. For witnesses
-with standard axioms, the audit reports dependencies reachable from the
-statement and any additional theorem dependencies. Overlap between type and proof dependencies leaves exclusive type provenance unresolved.
-Acceptance remains held pending the owner question on primitives. The old
-Law/Planted supplied-contradiction policy and proof-body analysis budgets
-also remain open.
+The N8a let and helper-chain controls, and the reachable joint-helper
+counterfeit, supply exact witness types. Their proofs reach user axioms and
+are refused. The named standard axiom `propext` is admitted for an explicit
+applicability witness under the authoritative proof policy. Other primitive
+dependencies remain visible as incomplete, including when they are reachable
+from the statement. The stopped solver's primitive-transfer policy,
+supplied-contradiction policy, and proof-body analysis budget remain open
+under R-0219.
+
+[ISS-0104](../../ISSUES.tsv) tracks remaining registrations, unsupported
+contract shapes, B0b gate wiring, and sharing orphan cleanup. The audit
+continues to fail when any Law is missing coverage.

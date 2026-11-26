@@ -26,47 +26,125 @@ private def combinePremises (left right : Expr) : Expr :=
   else if right.isConstOf ``True then left
   else mkApp2 (mkConst ``And) left right
 
-/-- Read the positive contract before substituting any witness arguments. Unfold
-aliases one layer at a time: weak-head reduction can select a concrete match
-branch and erase the very obligation we need to witness. -/
-private partial def jointPremises (type : Expr) : MetaM Expr := withIncRecDepth do
+private def closePremises (args : Array Expr) (body : Expr) : MetaM Expr :=
+  args.foldrM (fun arg result => do mkAppM ``Exists #[← mkLambdaFVars #[arg] result]) body
+
+-- Only unfold a definition at the head. Never reduce its discriminant.
+private def unfoldContractAlias (type : Expr) : MetaM (Option Expr) := do
+  let .const head levels := type.getAppFn | return none
+  let env ← getEnv
+  if isMatcherLikeCore env head || [``ite, ``dite].contains head then return none
+  let some (.defnInfo info) := env.find? head | return none
+  return some (mkAppN (info.value.instantiateLevelParams info.levelParams levels) type.getAppArgs)
+
+/-- Recognize literal logical fallbacks without reducing a conditional. -/
+private partial def literalTruth? (body : Expr) : MetaM (Option Bool) := withIncRecDepth do
+  let body := body.consumeMData.headBeta
+  if body.isConstOf ``True then return some true
+  if body.isConstOf ``False then return some false
+  if body.isAppOfArity ``Not 1 then
+    return (← literalTruth? body.getAppArgs[0]!).map (! ·)
+  if body.isAppOfArity ``And 2 || body.isAppOfArity ``Or 2 then
+    let args := body.getAppArgs
+    let disjunctive := body.isAppOf ``Or
+    let left ← literalTruth? args[0]!
+    let right ← literalTruth? args[1]!
+    if left == some disjunctive || right == some disjunctive then
+      return some disjunctive
+    if left == some (!disjunctive) && right == some (!disjunctive) then
+      return some (!disjunctive)
+    return none
+  if let .letE _ _ value rest _ := body then
+    return ← literalTruth? (rest.instantiate1 value)
+  if let some unfolded ← unfoldContractAlias body then
+    return ← literalTruth? unfolded
+  return none
+
+private partial def argumentList? (expr : Expr) : MetaM (Option Expr) := withIncRecDepth do
+  let expr := expr.consumeMData.headBeta
+  if expr.isAppOfArity ``ConcreteSpec.Core.Exec.evalArgs 4 then
+    return expr.getAppArgs.back?
+  if let .letE _ _ value body _ := expr then
+    return ← argumentList? (body.instantiate1 value)
+  if let some unfolded ← unfoldContractAlias expr then
+    return ← argumentList? unfolded
+  return none
+
+/-- Inspect the contract without reducing a match on its actual discriminant.
+For a Law conclusion that chooses a witness, require the original body and
+the nested applicability obligation at the very same witness. -/
+private partial def jointPremises (type : Expr) (anchored : Bool := false)
+    (negative : Bool := false) : MetaM Expr := withIncRecDepth do
   let type := type.consumeMData.headBeta
   if type.isForall then
+    if negative then throwError "unsupported negated telescope: {type}"
     return ← forallTelescope type fun args conclusion => do
-      let mut result ← jointPremises conclusion
-      for arg in args.reverse do
-        result ← mkAppM ``Exists #[← mkLambdaFVars #[arg] result]
-      return result
+      -- Independent cases can have distinct inputs. Once a theorem has
+      -- stated a shared premise (or chosen an existential), keep that
+      -- subject fixed across the conjunction.
+      let mut shared := anchored
+      for arg in args do
+        if ← isProp (← inferType arg) then shared := true
+      let conclusion := conclusion.consumeMData.headBeta
+      if !shared && conclusion.isAppOfArity ``And 2 then
+        let left ← jointPremises conclusion.getAppArgs[0]!
+        let right ← jointPremises conclusion.getAppArgs[1]!
+        if !left.isConstOf ``True && !right.isConstOf ``True then
+          return combinePremises (← closePremises args left) (← closePremises args right)
+        return ← closePremises args (combinePremises left right)
+      closePremises args (← jointPremises conclusion shared)
   if let .letE _ _ value body _ := type then
-    return ← jointPremises (body.instantiate1 value)
-  let .const head levels := type.getAppFn
+    return ← jointPremises (body.instantiate1 value) anchored negative
+  if let .proj ``Membership 0 instanceValue := type.getAppFn then
+    let projection ← whnf type.getAppFn
+    if projection != type.getAppFn then
+      return ← jointPremises (mkAppN projection type.getAppArgs) anchored negative
+    throwError "unsupported membership instance: {instanceValue}"
+  let .const head _ := type.getAppFn
     | throwError "unsupported conclusion head: {type}"
   let args := type.getAppArgs
+  if head == ``Not && args.size == 1 then
+    return ← jointPremises args[0]! anchored (!negative)
+  if head == ``Ne && args.size == 3 then
+    if !(← isDefEq args[0]! (.sort .zero)) then return mkConst ``True
   if head == ``And && args.size == 2 then
-    let left ← jointPremises args[0]!
-    let right ← jointPremises args[1]!
+    let left ← jointPremises args[0]! anchored negative
+    let right ← jointPremises args[1]! anchored negative
+    unless !negative || (left.isConstOf ``True && right.isConstOf ``True) do
+      throwError "unsupported negated conjunction: {type}"
     return combinePremises left right
   if head == ``Or && args.size == 2 then
-    let left ← jointPremises args[0]!
-    let right ← jointPremises args[1]!
-    unless left.isConstOf ``True && right.isConstOf ``True do
-      throwError "unsupported conclusion head: disjunction with branch premises"
-    return mkConst ``True
+    let left ← jointPremises args[0]! anchored negative
+    let right ← jointPremises args[1]! anchored negative
+    if left.isConstOf ``True && right.isConstOf ``True then return mkConst ``True
+    if negative then throwError "unsupported negated disjunction: {type}"
+    return mkApp2 (mkConst ``Or) (combinePremises args[0]! left)
+      (combinePremises args[1]! right)
   if head == ``Exists && args.size == 2 then
+    if negative then throwError "unsupported negated existential: {type}"
     return ← withLocalDeclD `witness args[0]! fun witness => do
-      let body ← jointPremises (mkApp args[1]! witness)
-      if body.isConstOf ``True then return body
-      return ← mkAppM ``Exists #[← mkLambdaFVars #[witness] body]
-  if head == ``Iff && args.size == 2 then
-    -- Both directions contribute an antecedent. Retain any premises that
-    -- the antecedents themselves contain in positive positions.
-    let left ← jointPremises args[0]!
-    let right ← jointPremises args[1]!
-    return combinePremises (mkApp2 (mkConst ``And) args[0]! args[1]!)
-      (combinePremises left right)
-  -- Negative conclusions supply no positive applicability assumptions.
-  if [``True, ``False, ``Eq, ``HEq, ``Not, ``Ne, ``Nat.le, ``Nat.lt,
-      ``Int.le, ``Int.lt].contains head then
+      let original := (mkApp args[1]! witness).headBeta
+      let premises ← jointPremises original true
+      -- A proposition-valued binder itself carries a proof. Inspect its
+      -- domain as well so the proof cannot hide a vacuous contract.
+      let domain ← if ← isProp args[0]! then jointPremises args[0]! true
+        else pure (mkConst ``True)
+      let body := if premises.isConstOf ``True then premises
+        else combinePremises original premises
+      return combinePremises domain (← closePremises #[witness] body)
+  let propositionEq ← if head == ``Eq && args.size == 3 then
+    isDefEq args[0]! (.sort .zero) else pure false
+  if (head == ``Iff && args.size == 2) || propositionEq then
+    if negative then throwError "unsupported negated propositional equivalence: {type}"
+    let left := args[args.size - 2]!
+    let right := args.back!
+    let premises ← combinePremises <$> jointPremises left anchored <*> jointPremises right anchored
+    return combinePremises (mkApp2 (mkConst ``And) left right) premises
+  if head == ``HEq && args.size == 4 then
+    if (← isDefEq args[0]! (.sort .zero)) || (← isDefEq args[2]! (.sort .zero)) then
+      throwError "unsupported heterogeneous propositional equality: {type}"
+  if [``True, ``False, ``Eq, ``HEq, ``Nat.le, ``Nat.lt, ``Int.le, ``Int.lt,
+      ``List.Mem, ``List.Perm].contains head then
     return mkConst ``True
   if [``LE.le, ``LT.lt].contains head && args.size == 4 &&
       (args[0]!.isConstOf ``Nat || args[0]!.isConstOf ``Int) then
@@ -76,29 +154,66 @@ private partial def jointPremises (type : Expr) : MetaM Expr := withIncRecDepth 
       if head == ``LE.le then ``Int.instLEInt else ``Int.instLTInt
     if ← isDefEq args[1]! (mkConst standard) then return mkConst ``True
   if head == ``List.Pairwise && args.size == 3 then
-    -- A standard list predicate can still be instantiated with a relation
-    -- that hides a telescope. Check the relation under its own binders.
     let relation ← withLocalDeclD `first args[0]! fun first =>
       withLocalDeclD `second args[0]! fun second =>
-        jointPremises (mkApp2 args[1]! first second)
+        jointPremises (mkApp2 args[1]! first second) anchored negative
     if relation.isConstOf ``True then return relation
     throwError "unsupported premises in pairwise relation"
   let env ← getEnv
+  let conditional := if let some info := getMatcherInfoCore? env head then
+      if args.size == info.arity then
+        some (info.getAltRange.toArray, info.getDiscrRange.toArray)
+      else none
+    else if let some (.recInfo info) := env.find? head then
+      if args.size == info.getMajorIdx + 1 && info.numMotives == 1 &&
+          info.numIndices == 0 && info.rules.length == info.numMinors then
+        some ((List.range info.numMinors).toArray.map (info.getFirstMinorIdx + ·),
+          #[info.getMajorIdx])
+      else none
+    else if head == ``ite && args.size == 5 then some (#[3, 4], #[1])
+    else if head == ``dite && args.size == 5 then some (#[3, 4], #[1])
+    else none
+  if let some (arms, discriminants) := conditional then
+    let mut guarded := args
+    for i in arms do
+      let arm ← forallTelescopeReducing (← inferType args[i]!) fun fields _ => do
+        let body := (mkAppN args[i]! fields).headBeta
+        unless ← isProp body do
+          throwError "unsupported conditional arm: {body}"
+        -- A recursive minor premise reduces through previous results.
+        -- Rewriting such a premise needs an explicit applicability interface.
+        if let some (.recInfo info) := env.find? head then
+          if fields.size != info.rules[i - info.getFirstMinorIdx]!.nfields then
+            throwError "unsupported recursive conditional conclusion: {head}"
+        let result ← if (← literalTruth? body).isSome then pure (mkConst ``False)
+          else jointPremises body anchored negative
+        mkLambdaFVars fields result
+      guarded := guarded.set! i arm
+    let mut result := mkAppN type.getAppFn guarded
+    check result
+    unless ← isProp result do throwError "unsupported conditional motive: {head}"
+    for i in discriminants do
+      if let some operands ← argumentList? args[i]! then
+        -- A nil argument list executes neither operand semantics nor
+        -- instrumentation, even when the success arm is selected.
+        let .app (.const ``List _) element ← whnf (← inferType operands)
+          | throwError "expected a list of operands: {operands}"
+        let nil ← mkAppOptM ``List.nil #[some element]
+        result := combinePremises (← mkAppM ``Ne #[operands, nil]) result
+    return result
   if ((env.find? head).any fun info => match info with
       | .recInfo _ => true
       | _ => false) || isMatcherLikeCore env head || [``ite, ``dite].contains head then
     throwError "unsupported conditional conclusion: {head}"
-  if let some (.defnInfo info) := env.find? head then
-    let value := info.value.instantiateLevelParams info.levelParams levels
-    return ← jointPremises (mkAppN value args)
-  -- Other connectives and inductive predicates need a defined applicability
-  -- interface. Their arguments or constructors can hide arbitrary propositions.
+  if let some unfolded ← unfoldContractAlias type then
+    return ← jointPremises unfolded anchored negative
   throwError "unsupported conclusion head: {head}"
 
 /-- Bind the census to the source population. An unimported module would
 otherwise remove its Laws from the denominator. -/
 private def checkModuleCoverage (env : Environment) (root : System.FilePath) : MetaM Unit := do
-  let source := (#[root / "ConcreteSpec.lean"] ++ (← System.FilePath.walkDir (root / "ConcreteSpec")))
+  let entry := root / "ConcreteSpec.lean"
+  let source := ((if ← entry.pathExists then #[entry] else #[]) ++ (← System.FilePath.walkDir (root / "ConcreteSpec")))
     |>.filter (fun path => path.extension == some "lean")
   let imported := env.header.moduleNames.filterMap fun name =>
     if name.getRoot == `ConcreteSpec then some (modToFilePath root name "lean") else none
@@ -118,10 +233,11 @@ private def checkWitness (law : TheoremVal) (expected : Expr) (witness : Name) :
   | .error _ => throwError "kernel could not compare the witness type with the joint premises"
   | .ok false => return some "witness does not establish the joint premises"
   | .ok true => pure ()
-  -- Kernel-only admission for this gate. Pending primitive provenance decisions
-  -- from the stopped checker cannot turn an axiom-bearing witness into a pass.
+  -- The existing authoritative proof policy permits propositional
+  -- extensionality. The old proof-body transfer policy concerns a different
+  -- audit: an explicit witness receives no credit for user axioms or choice.
   let axioms ← collectAxioms witness
-  unless axioms.isEmpty do
+  unless (axioms.filter (· != ``propext)).isEmpty do
     let mut typeAxioms : NameSet := {}
     for constant in actual.getUsedConstants do
       for axiomName in (← collectAxioms constant) do
@@ -131,15 +247,64 @@ private def checkWitness (law : TheoremVal) (expected : Expr) (witness : Name) :
       s!"type dependencies {typeAxioms.toArray.qsort Name.lt}; additional dependencies {additional}")
   return none
 
-private def audit (inScope : Name → Bool) (witnesses : List (Name × Name)) :
+private inductive Evidence where
+  | theoremProof (name : Name)
+  | closedApplication (name : Name)
+
+/-- Build the existential using only the actual call arguments. The application
+result and the enclosing example proof supply no applicability evidence. -/
+private partial def packApplication (expected : Expr) (inputs : List Expr) :
+    MetaM (Option Expr) := withIncRecDepth do
+  let expected ← whnf expected
+  match inputs with
+  | [] => return if expected.isConstOf ``True then some (mkConst ``True.intro) else none
+  | input :: remaining =>
+    let .const ``Exists levels := expected.getAppFn | return none
+    let args := expected.getAppArgs
+    let some body ← packApplication (mkApp args[1]! input) remaining | return none
+    return some (mkAppN (mkConst ``Exists.intro levels) (args ++ #[input, body]))
+
+private def checkApplication (law : TheoremVal) (expected : Expr) (name : Name) :
+    MetaM (Option String) := do
+  let env ← getEnv
+  if (privateToUserName name).isInternal then return some "generated application source theorem"
+  let some (.thmInfo source) := env.find? name | return some "missing application source theorem"
+  unless source.levelParams.length == law.levelParams.length do
+    return some "unsupported witness universe parameters"
+  let levels := law.levelParams.map Level.param
+  let proof := source.value.instantiateLevelParams source.levelParams levels
+  let arity ← forallTelescope law.type fun args _ => pure args.size
+  let some call := proof.find? fun e =>
+    e.getAppFn == mkConst law.name levels && e.getAppNumArgs == arity && !e.hasLooseBVars
+    | return some "application source has no closed call of the Law"
+  let some witness ← packApplication expected call.getAppArgs.toList
+    | return some "application does not establish the joint premises"
+  let .ok actual := Kernel.check env {} witness
+    | throwError "kernel could not check the constructed witness"
+  match Kernel.isDefEq env {} actual expected with
+  | .error _ => throwError "kernel could not compare the constructed witness with the joint premises"
+  | .ok false => return some "application does not establish the joint premises"
+  | .ok true => pure ()
+  let mut axioms : NameSet := {}
+  for constant in witness.getUsedConstants do
+    for axiomName in ← collectAxioms constant do
+      axioms := axioms.insert axiomName
+  let unsupported := axioms.toArray.filter (· != ``propext)
+  if unsupported.isEmpty then return none
+  return some s!"unsupported application witness axioms {unsupported.qsort Name.lt}"
+
+private def audit (inScope : Name → Bool) (witnesses : List (Name × Name))
+    (applications : List (Name × Name) := []) :
     MetaM (Array String × Array String × Nat × Nat) := do
   let env ← getEnv
-  let mut registrations : NameMap Name := {}
+  let mut registrations : NameMap Evidence := {}
   let mut errors := #[]
   let mut excluded := #[]
   let mut laws := 0
   let mut covered := 0
-  for (law, witness) in witnesses do
+  let evidence := (witnesses.map fun (law, name) => (law, Evidence.theoremProof name)) ++
+    (applications.map fun (law, name) => (law, Evidence.closedApplication name))
+  for (law, witness) in evidence do
     if registrations.contains law then
       errors := errors.push s!"duplicate witness registration: {law}"
     registrations := registrations.insert law witness
@@ -161,7 +326,8 @@ private def audit (inScope : Name → Bool) (witnesses : List (Name × Name)) :
       let problem ← withoutModifyingState do
         let expected ← jointPremises law.type
         match witness with
-        | some proof => checkWitness law expected proof
+        | some (.theoremProof proof) => checkWitness law expected proof
+        | some (.closedApplication source) => checkApplication law expected source
         | none => pure none
       if let some message := problem then
         errors := errors.push s!"{name}: {message}"
@@ -205,12 +371,13 @@ theorem knownPremise : ∃ (record : PremiseRecord) (_ : record.spec = specVersi
 
 theorem premiseReadIff :
     ∃ (reader : SpecVersion) (record : EncodedPremise) (decoded : PremiseRecord),
-      record.read reader = some decoded ∧
+      (record.read reader = some decoded ∧
         (record.spec = reader ∧ reader = specVersion ∧
           ∃ kind : PremiseKind, kind.encode = record.category ∧
-            decoded = ⟨kind, record.scope, record.spec⟩) :=
+            decoded = ⟨kind, record.scope, record.spec⟩)) ∧
+      (∃ _ : PremiseKind, True) :=
   ⟨specVersion, Vacuity.stackRecord.encode, Vacuity.stackRecord,
-    rfl, rfl, rfl, .stack, rfl, rfl⟩
+    ⟨rfl, rfl, rfl, .stack, rfl, rfl⟩, ⟨.stack, trivial⟩⟩
 
 theorem unknownPremise :
     ∃ (_ : SpecVersion) (record : EncodedPremise)
@@ -248,6 +415,30 @@ theorem checkedWrapping :
 theorem checkedShift :
     ∃ (ty : IntTy) (a count result : Int) (_ : checked ty .shl a count = .ok result), True :=
   ⟨.i8, 7, 2, 28, rfl, trivial⟩
+
+theorem checkedUnsignedShift :
+    ∃ (ty : IntTy) (_ : ty.signed = false) (a count result : Int)
+      (_ : ty.InRange a) (_ : checked ty .shr a count = .ok result), True :=
+  ⟨.u8, rfl, 8, 1, 4, by decide, rfl, trivial⟩
+
+theorem losslessSameWidth :
+    ∃ s t : IntTy, (Lossless s t ∧ (∀ n, s.InRange n → t.InRange n)) ∧
+      (∃ (n : Int) (_ : s.InRange n), True) :=
+  ⟨.i8, .i8, ⟨by decide, fun _ h => h⟩, 7, by decide, trivial⟩
+
+theorem checkedNegation :
+    ∃ (ty : IntTy) (a r : Int) (_ : ty.InRange a),
+      (checkedNeg ty a = .ok r ∧
+        (r = -a ∧ if ty.signed = true then a ≠ ty.min else a = 0)) ∧
+      (if ty.signed = true then True else True) :=
+  ⟨.i8, 5, -5, by decide, ⟨rfl, rfl, by decide⟩, trivial⟩
+
+theorem checkedNegationFailure :
+    ∃ (ty : IntTy) (a : Int) (err : ArithmeticError) (_ : ty.InRange a),
+      (checkedNeg ty a = .error err ∧
+        (err = .overflow ∧ ¬ (if ty.signed = true then a ≠ ty.min else a = 0))) ∧
+      (if ty.signed = true then True else True) :=
+  ⟨.i8, -128, .overflow, by decide, ⟨rfl, rfl, by decide⟩, trivial⟩
 
 theorem belowRange : ∃ (ty : IntTy) (n : Int) (_ : n < ty.min), True :=
   ⟨.i8, -129, by decide, trivial⟩
@@ -355,12 +546,147 @@ theorem allocationZero : ∃ (m : Memory) (_ : ∀ l, (m l).WF) (_ : LineageId),
   ⟨entryMemory, entryMemoryWF, ⟨0⟩, trivial⟩
 
 theorem freeWithinLive :
-    ∃ (m : Memory) (l : LineageId) (bytes : Nat) (_ : bytes ≤ (m l).live)
-      (_ : Memory) (other : LineageId) (_ : other ≠ l), True :=
-  ⟨entryMemory, ⟨0⟩, 1, by decide, Memory.set entryMemory ⟨0⟩ (reportEntry.free 1),
-    ⟨1⟩, by decide, trivial⟩
+    ∃ (m : Memory) (l : LineageId) (bytes : Nat) (_ : bytes ≤ (m l).live) (m' : Memory),
+      (apply m (.free l bytes) = some m' ∧
+        (m' l).requested = (m l).requested ∧ (m' l).live + bytes = (m l).live ∧
+        (m' l).peak = (m l).peak ∧ (m' l).functionPeak = (m l).functionPeak ∧
+        (∀ other, other ≠ l → m' other = m other)) ∧
+      (∃ (other : LineageId) (_ : other ≠ l), True) := by
+  refine ⟨entryMemory, ⟨0⟩, 1, by decide, Memory.set entryMemory ⟨0⟩ (reportEntry.free 1),
+    ⟨rfl, rfl, rfl, rfl, rfl, ?_⟩, ⟨⟨1⟩, by decide, trivial⟩⟩
+  intro other different
+  exact ite_eq_right different
+
+theorem resetLiveAccount :
+    ∃ (m : Memory) (l : LineageId) (m' : Memory),
+      (apply m (.reset l) = some m' ∧
+        ResetConservation (m l) (m' l) (resetOutflow l m (.reset l)) ∧
+        (∀ other, other ≠ l → m' other = m other)) ∧
+      (∃ (other : LineageId) (_ : other ≠ l), True) := by
+  refine ⟨entryMemory, ⟨0⟩, Memory.set entryMemory ⟨0⟩ reportEntry.reset,
+    ⟨rfl, ⟨rfl, rfl, rfl, rfl, rfl⟩, ?_⟩, ⟨⟨1⟩, by decide, trivial⟩⟩
+  intro other different
+  exact ite_eq_right different
+
+theorem runFreeWithinLive :
+    ∃ (m : Memory) (actions : List Action) (_ : ∀ l, (m l).WF)
+      (_ : (run m actions).isSome = true) (m' : Memory),
+      (run m actions = some m' ∧ (∀ l, (m' l).WF)) ∧ (∃ _ : LineageId, True) := by
+  refine ⟨entryMemory, [.free ⟨0⟩ 1], entryMemoryWF, rfl,
+    Memory.set entryMemory ⟨0⟩ (reportEntry.free 1), ⟨rfl, ?_⟩, ⟨⟨0⟩, trivial⟩⟩
+  intro l
+  by_cases equal : l = ⟨0⟩
+  · subst l
+    exact ⟨by decide, by decide⟩
+  · show (if l = ⟨0⟩ then reportEntry.free 1 else entryMemory l).WF
+    rw [ite_eq_right equal]
+    exact entryMemoryWF l
 
 end Accounting
+
+section Erasure
+open ConcreteSpec.Core.Own ConcreteSpec.Core.Own.Examples
+
+-- This fixture uses the existing concrete evaluator and permission
+-- transitions. Primitive actions are outside argument evaluation.
+private abbrev argumentOps : Exec.Operands where
+  Val := Int
+  Expr := E
+  Ty := Unit
+  Store := Int
+  Prim := Unit
+  Event := Unit
+  unitVal := 0
+  unitTy := ()
+  isCopy := fun _ => false
+  eval := erasedEval
+  life := fun _ s => some s
+  test := fun _ => none
+  allows := fun _ _ _ _ => false
+
+theorem evalArgsOk :
+    ∃ (O : Exec.Operands) (types : Var → Option Descriptor)
+      (permit : AList Var O.Val → O.Expr → Own.State → Option Own.State)
+      (locals : AList Var O.Val) (args : List O.Expr) (s : Store O.Store),
+      args ≠ [] ∧ (match Exec.evalArgs (instrumentOperands O types permit) locals s args with
+        | .ok _ => True
+        | _ => False) :=
+  ⟨argumentOps, types, permitE, [(x, 7)], [.read x, .move x], ⟨0, initial⟩,
+    List.cons_ne_nil _ _, trivial⟩
+
+theorem evalArgsTrap :
+    ∃ (O : Exec.Operands) (types : Var → Option Descriptor)
+      (permit : AList Var O.Val → O.Expr → Own.State → Option Own.State)
+      (locals : AList Var O.Val) (args : List O.Expr) (s : Store O.Store),
+      args ≠ [] ∧ (match Exec.evalArgs (instrumentOperands O types permit) locals s args with
+        | .trap _ => True
+        | _ => False) :=
+  ⟨argumentOps, types, permitE, [(x, 7)], [.move x, .fail .overflow], ⟨0, initial⟩,
+    List.cons_ne_nil _ _, trivial⟩
+
+end Erasure
+
+section Hybrid
+open ConcreteSpec.Core.Hybrid
+
+theorem materializeReuse :
+    ∃ (_ : Target) (st : Hybrid.State) (p : Place) (t : CTy) (r : Range)
+      (_ : st.places p = some ⟨t, .materialized r⟩)
+      (_ : AddrSpace) (_base _align : Nat) (_ : List Mem.MByte), True :=
+  ⟨linuxX8664, Audit.before, ⟨0⟩, .int .u8, Audit.range, rfl, ⟨0⟩, 60, 1, [], trivial⟩
+
+theorem admittedEncoding :
+    ∃ (_ : Target) (v : Value) (_ : v.Storable), True :=
+  ⟨linuxX8664, .int .u8 1, by decide, trivial⟩
+
+theorem refusedEncoding :
+    ∃ (_ : Target) (v : Value) (_ : ¬ v.Storable), True :=
+  ⟨linuxX8664, .bool true, by decide, trivial⟩
+
+theorem structuredRead :
+    ∃ (_ : Target) (st : Hybrid.State) (p : Place) (t : CTy) (v : Value)
+      (_ : st.places p = some ⟨t, .structured v⟩) (_ : v.ty = t) (_ : v.Storable), True :=
+  ⟨linuxX8664, Audit.structState, ⟨0⟩, .int .u8, .int .u8 1, rfl, rfl, by decide, trivial⟩
+
+theorem decodedByte :
+    ∃ (tgt : Target) (t : CTy) (bytes : List Mem.MByte),
+      (match decode tgt t bytes with
+      | some value => match value with
+        | .int _ _ => True
+        | _ => False
+      | none => False) :=
+  ⟨linuxX8664, .int .u8, [.init 1 none], trivial⟩
+
+end Hybrid
+
+theorem nonCopyDeclaration :
+    ∃ (U : ConstTypes) (ds : List (ConstDecl U)) (d : ConstDecl U)
+      (_ : d ∈ ds) (_ : U.isCopy d.ty = false), True :=
+  ⟨ConstDemo.U, copyAuditDecls, ⟨ConstDemo.cid "S", .text, .bool true⟩,
+    List.Mem.tail _ (List.Mem.head _), rfl, trivial⟩
+
+section Exec
+open ConcreteSpec.Core.Exec
+
+theorem stepRet :
+    ∃ (O : Operands) (_ : Program O) (e : O.Expr) (_ : SiteId)
+      (L : AList Var O.Val) (st st' : O.Store) (_ : List (Frame O)) (v : O.Val)
+      (_ : O.eval L st e = .ok (v, st')), True :=
+  ⟨Demo.ops, Demo.prog, .arith .add (.move Demo.p) .counter, Demo.s, [(Demo.p, 7)],
+    ⟨0, [[]]⟩, Demo.DState.onTop (Demo.p :: ·) ⟨0, [[]]⟩,
+    [.scope ⟨1⟩ [Demo.p] [⟨Demo.bumpF, [], Demo.s⟩]], 7, rfl, trivial⟩
+
+end Exec
+
+theorem keysOutsideEdit :
+    ∃ (before after : FnId → List KeyConstruct) (_ _ : FnId → Nat) (edited : FnId)
+      (_ : ∀ f, f ≠ edited → after f = before f)
+      (f : FnId) (_ : f ≠ edited), True := by
+  refine ⟨fun _ => [], fun f => if f = Vacuity.function then [Vacuity.unnamedLoop] else [],
+    Vacuity.startSitesBefore, Vacuity.startSitesAfter, Vacuity.function, ?_,
+    Vacuity.otherFunction, by decide, trivial⟩
+  intro f outside
+  exact ite_eq_right outside
 
 end SpecWitness
 
@@ -379,6 +705,20 @@ private def specWitnesses : List (Name × Name) :=
    (``ConcreteSpec.Core.EncodedPremise.read_encode, ``SpecWitness.knownPremise),
    (``ConcreteSpec.Core.EncodedPremise.read_iff, ``SpecWitness.premiseReadIff),
    (``ConcreteSpec.Core.EncodedPremise.read_unknown, ``SpecWitness.unknownPremise),
+   (``ConcreteSpec.Core.Own.evalArgs_ok_erasure, ``SpecWitness.evalArgsOk),
+   (``ConcreteSpec.Core.Own.evalArgs_trap_erasure, ``SpecWitness.evalArgsTrap),
+   (``ConcreteSpec.Core.Hybrid.materialize_reuse, ``SpecWitness.materializeReuse),
+   (``ConcreteSpec.Core.typeConsts_refuses_nonCopy, ``SpecWitness.nonCopyDeclaration),
+   (``ConcreteSpec.Core.Exec.step_ret, ``SpecWitness.stepRet),
+   (``ConcreteSpec.Core.KeyConstruct.assignProgramTables_outsideEdit, ``SpecWitness.keysOutsideEdit),
+   (``ConcreteSpec.Core.Hybrid.rep_roundtrip, ``SpecWitness.admittedEncoding),
+   (``ConcreteSpec.Core.Hybrid.encode_refuses_unadmitted, ``SpecWitness.refusedEncoding),
+   (``ConcreteSpec.Core.Hybrid.read_structured, ``SpecWitness.structuredRead),
+   (``ConcreteSpec.Core.Hybrid.decode_valid, ``SpecWitness.decodedByte),
+   (``ConcreteSpec.Core.toBits_shr_unsigned, ``SpecWitness.checkedUnsignedShift),
+   (``ConcreteSpec.Core.lossless_iff, ``SpecWitness.losslessSameWidth),
+   (``ConcreteSpec.Core.checkedNeg_error_iff, ``SpecWitness.checkedNegationFailure),
+   (``ConcreteSpec.Core.checkedNeg_ok_arithmetic, ``SpecWitness.checkedNegation),
    (``ConcreteSpec.Core.checked_inRange, ``SpecWitness.checkedAddition),
    (``ConcreteSpec.Core.toBits_lt, ``SpecWitness.integer),
    (``ConcreteSpec.Core.wrap_inRange, ``SpecWitness.integer),
@@ -389,6 +729,7 @@ private def specWitnesses : List (Name × Name) :=
    (``ConcreteSpec.Core.saturate_of_inRange, ``SpecWitness.inRange),
    (``ConcreteSpec.Core.bitwise_inRange, ``SpecWitness.bitwise),
    (``ConcreteSpec.Core.toBits_bitwise, ``SpecWitness.bitwise),
+   (``ConcreteSpec.Core.bitNot_inRange, ``SpecWitness.integer),
    (``ConcreteSpec.Core.toBits_bitNot, ``SpecWitness.integer),
    (``ConcreteSpec.Core.toBits_wrap, ``SpecWitness.integer),
    (``ConcreteSpec.Core.toBits_ofBits, ``SpecWitness.bitsInWidth),
@@ -411,9 +752,99 @@ private def specWitnesses : List (Name × Name) :=
    (``ConcreteSpec.Rep.rep_roundtrip, ``SpecWitness.representationRoundtrip),
    (``ConcreteSpec.Core.Leak.Account.alloc_zero, ``SpecWitness.accountWF),
    (``ConcreteSpec.Core.Leak.apply_alloc_zero, ``SpecWitness.allocationZero),
+   (``ConcreteSpec.Core.Leak.reset_conservation, ``SpecWitness.resetLiveAccount),
+   (``ConcreteSpec.Core.Leak.run_wf, ``SpecWitness.runFreeWithinLive),
    (``ConcreteSpec.Core.Leak.free_conservation, ``SpecWitness.freeWithinLive),
    (``ConcreteSpec.Core.ConstOrderIndependent, ``SpecWitness.constantOrder),
    (``ConcreteSpec.Core.cycle_excludes_dependencyOrder, ``SpecWitness.dependencyCycle)]
+
+-- These source theorems supply concrete arguments to a named Law. They
+-- are never counted in the Law inventory.
+private def applicationWitnesses : List (Name × Name) :=
+  [(``ConcreteSpec.Core.Exec.entry_refusal_report,
+    ``ConcreteSpec.Core.Exec.LifecycleEvidence.entry_report_instance),
+   (``ConcreteSpec.Core.Exec.evalArgs_first_trap,
+    ``ConcreteSpec.Core.Exec.CleanupEvidence.evalArgs_first_trap_example),
+   (``ConcreteSpec.Core.Exec.lookup_restrict,
+    ``ConcreteSpec.Core.Exec.CoreEvidence.lookup_restrict_instance),
+   (``ConcreteSpec.Core.Exec.mapDestroyOrder_entry,
+    ``ConcreteSpec.Core.Exec.DestructionEvidence.map_entry_instance),
+   (``ConcreteSpec.Core.Exec.mapDestroyOrder_storage,
+    ``ConcreteSpec.Core.Exec.DestructionEvidence.map_storage_instance),
+   (``ConcreteSpec.Core.Exec.refused_stops,
+    ``ConcreteSpec.Core.Exec.LifecycleEvidence.refused_stop_instance),
+   (``ConcreteSpec.Core.Exec.restrict_dom_drops,
+    ``ConcreteSpec.Core.Exec.CoreEvidence.restrict_dom_drops_instance),
+   (``ConcreteSpec.Core.Exec.seqDestroyOrder_elem,
+    ``ConcreteSpec.Core.Exec.DestructionEvidence.sequence_element_instance),
+   (``ConcreteSpec.Core.Exec.seqDestroyOrder_storage,
+    ``ConcreteSpec.Core.Exec.DestructionEvidence.sequence_storage_instance),
+   (``ConcreteSpec.Core.Exec.step_return_caller,
+    ``ConcreteSpec.Core.Exec.CoreEvidence.step_return_caller_instance),
+   (``ConcreteSpec.Core.Hybrid.materialize_idempotent,
+    ``ConcreteSpec.Core.Hybrid.Audit.materialize_idempotent_example_secondCall),
+   (``ConcreteSpec.Core.Hybrid.write_frame,
+    ``ConcreteSpec.Core.Hybrid.Audit.Frame.write_frame_example_otherPlace),
+   (``ConcreteSpec.Core.KeyConstruct.assignFunctionTable_named_scope,
+    ``ConcreteSpec.Core.Vacuity.assignFunctionTable_named_scope_example_namedNested),
+   (``ConcreteSpec.Core.KeyConstruct.assignFunctionTable_pin,
+    ``ConcreteSpec.Core.Vacuity.assignFunctionTable_pin_example_nestedBody),
+   (``ConcreteSpec.Core.KeyConstruct.assignFunctionTable_rename_named,
+    ``ConcreteSpec.Core.Vacuity.assignFunctionTable_rename_named_example_namedCall),
+   (``ConcreteSpec.Core.KeyConstruct.collectKeysIn_complete,
+    ``ConcreteSpec.Core.Vacuity.collectKeysIn_sound_example_nestedBody),
+   (``ConcreteSpec.Core.KeyConstruct.descendant_insert_differentKind,
+    ``ConcreteSpec.Core.Vacuity.descendant_insert_differentKind_example_nestedBody),
+   (``ConcreteSpec.Core.KeyConstruct.descendant_insert_named,
+    ``ConcreteSpec.Core.Vacuity.descendant_insert_named_example_nestedBody),
+   (``ConcreteSpec.Core.KeyConstruct.descendant_pin_other,
+    ``ConcreteSpec.Core.Vacuity.descendant_pin_other_example_nestedBody),
+   (``ConcreteSpec.Core.KeyConstruct.descendant_rename_other,
+    ``ConcreteSpec.Core.Vacuity.descendant_rename_other_example_nestedBody),
+   (``ConcreteSpec.Core.KeyConstruct.key_insert_differentKind,
+    ``ConcreteSpec.Core.Vacuity.key_insert_differentKind_example_unnamedBinding),
+   (``ConcreteSpec.Core.KeyConstruct.key_insert_named,
+    ``ConcreteSpec.Core.Vacuity.key_insert_named_example_unnamedBinding),
+   (``ConcreteSpec.Core.KeyConstruct.key_pin_other,
+    ``ConcreteSpec.Core.Vacuity.key_pin_other_example_unnamedBinding),
+   (``ConcreteSpec.Core.KeyConstruct.key_rename_other,
+    ``ConcreteSpec.Core.Vacuity.key_rename_other_example_namedBinding),
+   (``ConcreteSpec.Core.KeyConstruct.pathAt_insert_after,
+    ``ConcreteSpec.Core.Vacuity.pathAt_insert_after_example_nestedBody),
+   (``ConcreteSpec.Core.KeyConstruct.pathAt_insert_differentKind,
+    ``ConcreteSpec.Core.Vacuity.pathAt_insert_differentKind_example_nestedBody),
+   (``ConcreteSpec.Core.KeyConstruct.pathAt_insert_named,
+    ``ConcreteSpec.Core.Vacuity.pathAt_insert_named_example_nestedBody),
+   (``ConcreteSpec.Core.LoadedModules.load_refusal_sound,
+    ``ConcreteSpec.Core.Vacuity.load_refusal_sound_example_collidingTop),
+   (``ConcreteSpec.Core.Mem.access_after_free,
+    ``ConcreteSpec.Core.Mem.Audit.access_after_free_example_freed),
+   (``ConcreteSpec.Core.Mem.access_no_provenance,
+    ``ConcreteSpec.Core.Mem.Audit.access_no_provenance_example_nonzero),
+   (``ConcreteSpec.Core.Mem.access_success,
+    ``ConcreteSpec.Core.Mem.Audit.access_success_example_interior),
+   (``ConcreteSpec.Core.Mem.alloc_block,
+    ``ConcreteSpec.Core.Mem.Audit.alloc_block_example_first),
+   (``ConcreteSpec.Core.Mem.alloc_failure,
+    ``ConcreteSpec.Core.Mem.Audit.alloc_failure_example_align),
+   (``ConcreteSpec.Core.Mem.decodeInt_encodeInt,
+    ``ConcreteSpec.Core.Mem.Audit.decodeInt_encodeInt_example_i8),
+   (``ConcreteSpec.Core.Mem.decodeInt_inRange,
+    ``ConcreteSpec.Core.Mem.Audit.decodeInt_inRange_example_i8),
+   (``ConcreteSpec.Core.Mem.expose_load,
+    ``ConcreteSpec.Core.Mem.Audit.expose_load_example_samePtr),
+   (``ConcreteSpec.Core.Mem.expose_success,
+    ``ConcreteSpec.Core.Mem.Audit.expose_success_example_live),
+   (``ConcreteSpec.Core.Mem.load_prefix,
+    ``ConcreteSpec.Core.Mem.Audit.load_prefix_example_twoToOne),
+   (``ConcreteSpec.Core.Mem.store_load_other,
+    ``ConcreteSpec.Core.Mem.Audit.store_load_other_example_disjointProv),
+   (``ConcreteSpec.Core.Mem.store_other_block,
+    ``ConcreteSpec.Core.Mem.Audit.store_other_block_example_otherBlock),
+   (``ConcreteSpec.Core.SpecializationTable.canonicalize_edge_sound,
+    ``ConcreteSpec.Core.Vacuity.canonicalize_edge_sound_example_edgeZero),
+   (``ConcreteSpec.Core.SpecializationTable.canonicalize_nodup,
+    ``ConcreteSpec.Core.Vacuity.canonicalize_nodup_example_requestZero)]
 
 private def auditSpecification (root : System.FilePath) :
     MetaM (Array String × Array String × Nat × Nat) := do
@@ -421,7 +852,7 @@ private def auditSpecification (root : System.FilePath) :
   checkModuleCoverage env root
   audit (fun n =>
     (env.getModuleIdxFor? n).any (fun i =>
-      env.header.moduleNames[i.toNat]?.any (fun m => m.getRoot == `ConcreteSpec))) specWitnesses
+      env.header.moduleNames[i.toNat]?.any (fun m => m.getRoot == `ConcreteSpec))) specWitnesses applicationWitnesses
 
 namespace Control
 
@@ -476,6 +907,68 @@ theorem nestedIff : (False → True) ↔ True :=
 
 theorem splitAnd : (∃ (n : Nat) (_ : n = 0), True) ∧ True :=
   ⟨⟨0, rfl, trivial⟩, trivial⟩
+
+/-- Law: the outer result cannot be detached from the inner antecedent. -/
+theorem detached : ∃ n : Nat, n = 0 ∧ (n = 1 → False) :=
+  ⟨0, rfl, by decide⟩
+
+theorem detachedWitness : ∃ (n : Nat) (_ : n = 1), True :=
+  ⟨1, rfl, trivial⟩
+
+/-- Law: a universally quantified constraint fixes the witness function. -/
+theorem detachedFunction :
+    ∃ f : Nat → Option Nat, (∀ x, f x = none) ∧ (∀ x y, f x = some y → False) :=
+  ⟨fun _ => none, fun _ => rfl, fun _ _ h => nomatch h⟩
+
+theorem detachedFunctionWitness :
+    ∃ f : Nat → Option Nat, (∃ _ : Nat, True) ∧
+      (∃ (x y : Nat) (_ : f x = some y), True) :=
+  ⟨fun _ => some 0, ⟨0, trivial⟩, ⟨0, 0, rfl, trivial⟩⟩
+
+/-- Law: the proof-valued existential binder contains a vacuous telescope. -/
+theorem proofDomain : ∃ (_ : ∀ n : Nat, n = 0 → n = 1 → False), True :=
+  ⟨contradictory, trivial⟩
+
+/-- Law: double negation does not erase the underlying telescope. -/
+theorem doubleNegated : ¬ ¬ (∀ n : Nat, n = 0 → n = 1 → False) :=
+  fun h => h contradictory
+
+/-- Law: equality of propositions cannot conceal a vacuous telescope. -/
+theorem propositionEquality :
+    (∀ n : Nat, n = 0 → n = 1 → False) = (∀ n : Nat, n = 0 → n = 1 → False) := rfl
+
+/-- Law: extensional equality cannot hide a proof-valued antecedent. -/
+theorem propositionEqualityTrue : (False → True) = True :=
+  propext ⟨fun _ => trivial, fun _ _ => trivial⟩
+
+/-- Law: both the result constraint and the nested antecedent hold at one value. -/
+theorem attached : ∃ n : Nat, n = 1 ∧ (n = 1 → n = 1) :=
+  ⟨1, rfl, id⟩
+
+theorem attachedWitness :
+    ∃ n : Nat, (n = 1 ∧ (n = 1 → n = 1)) ∧ (∃ (_ : n = 1), True) :=
+  ⟨1, ⟨rfl, id⟩, rfl, trivial⟩
+
+/-- Law: independent branches each have a real input. -/
+theorem disjoint (n : Nat) : (n = 0 → n = 0) ∧ (n = 1 → n = 1) :=
+  ⟨id, id⟩
+
+theorem disjointWitness :
+    (∃ (n : Nat) (_ : n = 0), True) ∧ (∃ (n : Nat) (_ : n = 1), True) :=
+  ⟨⟨0, rfl, trivial⟩, ⟨1, rfl, trivial⟩⟩
+
+/-- Law: a compound tautological fallback does not establish applicability. -/
+theorem vacuousFallback : if (0 : Nat) = 1 then (1 : Nat) = 1 else True ∧ True :=
+  ⟨trivial, trivial⟩
+
+/-- Law: the substantive branch of an if can be reached. -/
+theorem reachableIf (n : Nat) : if n = 1 then n = n else True := by
+  split
+  · rfl
+  · trivial
+
+theorem reachableIfWitness : ∃ n : Nat, (if n = 1 then True else False) :=
+  ⟨1, trivial⟩
 
 opaque HiddenResult : Prop := False → True
 axiom hiddenProof : HiddenResult
@@ -533,59 +1026,13 @@ theorem counterfeitTrapBranchEmpty : (match Exec.evalArgs (instrumentOperands er
     | _ => True) :=
   @evalArgs_trap_erasure erasedOps ConcreteSpec.Core.Own.Examples.types permitE [(x, 7)] [] ⟨0, initial⟩
 
--- N2's proof-body projection cases all used this satisfiable telescope.
--- The occurrence of h.1 in the theorem body gives no witness credit.
+-- The archived projection cases use this satisfiable telescope. This control
+-- checks applicability and metadata independence; see R-0219 for body provenance.
 /-- Law: telescope shared by the recovered projection fixtures. -/
 theorem growth (n : Nat) (h : n < n + 1 ∧ True) : n < n + 1 := h.1
 
 theorem growthPremises : ∃ (n : Nat) (_ : n < n + 1 ∧ True), True :=
   ⟨2, ⟨by decide, trivial⟩, trivial⟩
-
-namespace Projection
-
-theorem subtype_proj (n : Nat) (h : n < n + 1 ∧ True) : n < n + 1 :=
-  (⟨0, h.1⟩ : {_k : Nat // n < n + 1}).2
-
-theorem packed_and_refl (n : Nat) (h : n < n + 1 ∧ True) : n < n + 1 :=
-  (⟨h.1, Nat.le.refl⟩ : n < n + 1 ∧ n ≤ n).1
-
-theorem pprod_proj (n : Nat) (h : n < n + 1 ∧ True) : n < n + 1 :=
-  (⟨0, h.1⟩ : PProd Nat (n < n + 1)).2
-
-theorem psigma_proj (n : Nat) (h : n < n + 1 ∧ True) : n < n + 1 :=
-  (⟨0, h.1⟩ : PSigma (fun _ : Nat => n < n + 1)).2
-
-theorem sigma_carrier (n : Nat) (h : n < n + 1 ∧ True) : n < n + 1 :=
-  (⟨0, (⟨h.1⟩ : PLift (n < n + 1))⟩ : Sigma (fun _ : Nat => PLift (n < n + 1))).2.down
-
-theorem cases_bool (n : Nat) (h : n < n + 1 ∧ True) : n < n + 1 :=
-  Bool.casesOn true h.1 h.1
-
-theorem cases_nat (n : Nat) (h : n < n + 1 ∧ True) : n < n + 1 :=
-  Nat.casesOn (motive := fun _ => n < n + 1) n h.1 (fun _ => h.1)
-
-theorem matcher (n : Nat) (h : n < n + 1 ∧ True) : n < n + 1 :=
-  match n == 0 with | true => h.1 | false => h.1
-
-theorem nested_matcher (n : Nat) (h : n < n + 1 ∧ True) : n < n + 1 :=
-  match n == 0 with
-  | true => h.1
-  | false => match n == 1 with
-    | true => h.1
-    | false => h.1
-
-theorem cast_let (n : Nat) (h : n < n + 1 ∧ True) : n < n + 1 :=
-  let carrier : {_k : Nat // n < n + 1} := ⟨0, h.1⟩; Eq.mp rfl carrier.2
-
-theorem nested_exists_field (n : Nat) (h : n < n + 1 ∧ True) : n < n + 1 :=
-  Exists.elim
-    (if n == 0 then (⟨0, ⟨h.1, Nat.lt_succ_self n⟩⟩ : ∃ _ : Nat, n < n + 1 ∧ n < n + 1)
-      else ⟨0, ⟨h.1, Nat.lt_succ_self n⟩⟩) (fun _ hp => hp.1)
-
-theorem recursive_ih_transfer (n : Nat) (h : n < n + 1 ∧ True) : n < n + 1 :=
-  Nat.rec (motive := fun _ => (n < n + 1) → n < n + 1) (fun hp => hp) (fun _ ih _ => ih h.1) n (Nat.lt_succ_self n)
-
-end Projection
 
 -- N8a's impossible suppliers are refused even when cast into the exact
 -- existential type, through the same let and helper-chain proof bodies.
@@ -603,6 +1050,47 @@ theorem emptyThroughLet : ∃ _ : Empty, True := by
 
 theorem emptyThroughChain : ∃ _ : Empty, True := (bad1 impossible).elim
 
+-- Replay the reachable helper as a proof of the exact premise, with both
+-- a dead arm and a contradictory reached arm in the same witness.
+axiom opaqueP : Prop
+axiom hp : opaqueP
+axiom hn : ¬ opaqueP
+
+theorem branchDischarge (_k : Nat) (bad : Bool) (p : Prop) (positive : p)
+    (negative : ¬p) : 2 = (2 : Nat) := by
+  cases bad
+  · rfl
+  · exact False.elim (negative positive)
+
+/-- Law: the premise from the archived reachable joint-helper fixture. -/
+theorem helperGrowth (n : Nat) (h : ∀ _k : Nat, n = 2) : n < n + 1 :=
+  (h 0).symm ▸ Nat.lt_succ_self 2
+
+theorem throughReachableHelper : ∃ (n : Nat) (_ : ∀ _k : Nat, n = 2), True :=
+  ⟨2, fun k => Eq.trans (branchDischarge k false opaqueP hp hn)
+    (branchDischarge k true opaqueP hp hn), trivial⟩
+
+theorem independentHelperWitness : ∃ (n : Nat) (_ : ∀ _k : Nat, n = 2), True :=
+  ⟨2, fun _ => rfl, trivial⟩
+
+theorem directHelperApplication : 2 < (2 : Nat) + 1 :=
+  helperGrowth 2 (fun _ => rfl)
+
+theorem contradictoryHelperApplication : 2 < (2 : Nat) + 1 :=
+  helperGrowth 2 (fun k => Eq.trans (branchDischarge k false opaqueP hp hn)
+    (branchDischarge k true opaqueP hp hn))
+
+theorem unrelatedHelperResult : 2 < (2 : Nat) + 1 := Nat.lt_succ_self 2
+
+/-- Law: the list has operands but only the fallback arm is selected. -/
+theorem nonemptyWrongArm :
+    (match Exec.evalArgs (instrumentOperands erasedOps ConcreteSpec.Core.Own.Examples.types permitE)
+        [(x, 7)] ⟨0, initial⟩ [.fail .overflow] with
+      | .ok (vs, t) => Exec.evalArgs erasedOps [(x, 7)] 0 [.fail .overflow] = .ok (vs, erase t)
+      | _ => True) :=
+  @evalArgs_ok_erasure erasedOps ConcreteSpec.Core.Own.Examples.types permitE
+    [(x, 7)] [.fail .overflow] ⟨0, initial⟩
+
 end Historical
 
 end Control
@@ -616,6 +1104,15 @@ private def moduleCensusControl : MetaM Unit := do
         IO.FS.createDirAll path.parent.get!
         IO.FS.writeFile path ""
     checkModuleCoverage env root
+    let stale := root / "ConcreteSpec.lean"
+    IO.FS.removeFile stale
+    let error ← try
+      checkModuleCoverage env root
+      pure ""
+    catch e => e.toMessageData.toString
+    unless error.contains s!"stale modules [{stale}]" do
+      throwError "stale module control: {error}"
+    IO.FS.writeFile stale ""
     let path := root / "ConcreteSpec" / "UnimportedLaw.lean"
     IO.FS.writeFile path "/-- Law: omitted module control. -/\ntheorem unimported : True := trivial\n"
     let error ← try
@@ -650,18 +1147,27 @@ private def controls : MetaM Unit := do
   unless errors == #["missing joint-premise coverage: Nonvacuity.Control.realizable"] do
     throwError "omitted law control: {errors}"
   for (law, witness, diagnostic) in [
-    (``Control.Historical.counterfeitEmptyOk, ``Control.unconditional, "unsupported conditional conclusion"),
-    (``Control.Historical.counterfeitEmptyStore, ``Control.unconditional, "unsupported conditional conclusion"),
-    (``Control.Historical.counterfeitEmptyWildcard, ``Control.unconditional, "unsupported conditional conclusion"),
-    (``Control.Historical.counterfeitTrapBranchEmpty, ``Control.unconditional, "unsupported conditional conclusion"),
+    (``Control.Historical.counterfeitEmptyOk, ``Control.unconditional, "witness does not establish the joint premises"),
+    (``Control.Historical.counterfeitEmptyStore, ``Control.unconditional, "witness does not establish the joint premises"),
+    (``Control.Historical.counterfeitEmptyWildcard, ``Control.unconditional, "witness does not establish the joint premises"),
+    (``Control.Historical.counterfeitTrapBranchEmpty, ``Control.unconditional, "witness does not establish the joint premises"),
     (``ConcreteSpec.Core.ConstOrderIndependent, ``SpecWitness.constantOrderOuterOnly, "witness does not establish the joint premises"),
+    (``Control.Historical.nonemptyWrongArm, ``Control.unconditional, "witness does not establish the joint premises"),
+    (``Control.vacuousFallback, ``Control.unconditional, "witness does not establish the joint premises"),
+    (``Control.detached, ``Control.detachedWitness, "witness does not establish the joint premises"),
+    (``Control.detachedFunction, ``Control.detachedFunctionWitness, "witness does not establish the joint premises"),
+    (``Control.proofDomain, ``Control.unconditional, "witness does not establish the joint premises"),
+    (``Control.doubleNegated, ``Control.unconditional, "witness does not establish the joint premises"),
+    (``Control.propositionEqualityTrue, ``Control.unconditional, "witness does not establish the joint premises"),
+    (``Control.propositionEquality, ``Control.unconditional, "witness does not establish the joint premises"),
     (``Control.nestedAnd, ``Control.unconditional, "witness does not establish the joint premises"),
     (``Control.nestedAnd, ``Control.splitAnd, "witness does not establish the joint premises"),
-    (``Control.nestedOr, ``Control.someNat, "unsupported conclusion head"),
+    (``Control.nestedOr, ``Control.someNat, "witness does not establish the joint premises"),
     (``Control.nestedStructure, ``Control.unconditional, "unsupported conclusion head"),
     (``Control.nestedExists, ``Control.unconditional, "witness does not establish the joint premises"),
     (``Control.nestedIff, ``Control.unconditional, "witness does not establish the joint premises"),
     (``Control.contradictory, ``Control.split, "witness does not establish the joint premises"),
+    (``Control.Historical.helperGrowth, ``Control.Historical.throughReachableHelper, "unsupported witness axioms"),
     (``Control.Historical.emptyArgument, ``Control.Historical.emptyThroughLet, "unsupported witness axioms"),
     (``Control.Historical.emptyArgument, ``Control.Historical.emptyThroughChain, "unsupported witness axioms"),
     (``Control.contradictory, ``Control.unsound, "unsupported witness axioms"),
@@ -672,6 +1178,31 @@ private def controls : MetaM Unit := do
     let (errors, _, _, _) ← audit (· == law) [(law, witness)]
     unless errors.size == 1 && (errors[0]?.getD "").contains diagnostic do
       throwError "negative control {law}: {errors}"
+  for (law, witness) in [(``Control.attached, ``Control.attachedWitness),
+      (``Control.reachableIf, ``Control.reachableIfWitness),
+      (``Control.disjoint, ``Control.disjointWitness),
+      (``Control.Historical.helperGrowth, ``Control.Historical.independentHelperWitness),
+      (``ConcreteSpec.Core.Own.evalArgs_ok_erasure, ``SpecWitness.evalArgsOk),
+      (``ConcreteSpec.Core.Own.evalArgs_trap_erasure, ``SpecWitness.evalArgsTrap),
+      (``ConcreteSpec.Core.bitNot_inRange, ``SpecWitness.integer)] do
+    let (errors, _, covered, _) ← audit (· == law) [(law, witness)]
+    unless errors.isEmpty && covered == 1 do
+      throwError "positive applicability control {law}: {errors}"
+  let helper := ``Control.Historical.helperGrowth
+  let (errors, _, covered, _) ← audit (· == helper) []
+    [(helper, ``Control.Historical.directHelperApplication)]
+  unless errors.isEmpty && covered == 1 do
+    throwError "closed application control: {errors}"
+  for (source, diagnostic) in [
+    (``Control.Historical.contradictoryHelperApplication, "unsupported application witness axioms"),
+    (``Control.Historical.unrelatedHelperResult, "no closed call of the Law")] do
+    let (errors, _, covered, _) ← audit (· == helper) [] [(helper, source)]
+    unless covered == 0 && errors.size == 1 && (errors[0]?.getD "").contains diagnostic do
+      throwError "closed application refusal {source}: {errors}"
+  let member := ``ConcreteSpec.Core.KeyConstruct.collectKeysIn_complete
+  let (errors, _, covered, _) ← audit (· == member) [] (applicationWitnesses.filter (·.1 == member))
+  unless errors.isEmpty && covered == 1 do
+    throwError "list membership applicability control: {errors}"
   let invalid := ``Control.lawOnDefinition
   let (errors, _, _, _) ← audit (· == invalid) []
   unless errors.contains s!"Law tag on non-theorem: {invalid}" do
@@ -697,23 +1228,6 @@ private def controls : MetaM Unit := do
   let (errors, _, covered, _) ← audit (· == growth) [(growth, ``Control.Historical.growthPremises)]
   unless errors.isEmpty && covered == 1 do
     throwError "historical projection telescope control: {errors}"
-  for candidate in [
-    ``Control.Historical.Projection.subtype_proj,
-    ``Control.Historical.Projection.packed_and_refl,
-    ``Control.Historical.Projection.pprod_proj,
-    ``Control.Historical.Projection.psigma_proj,
-    ``Control.Historical.Projection.sigma_carrier,
-    ``Control.Historical.Projection.cases_bool,
-    ``Control.Historical.Projection.cases_nat,
-    ``Control.Historical.Projection.matcher,
-    ``Control.Historical.Projection.nested_matcher,
-    ``Control.Historical.Projection.cast_let,
-    ``Control.Historical.Projection.nested_exists_field,
-    ``Control.Historical.Projection.recursive_ih_transfer] do
-    let (errors, _, covered, _) ← audit (· == growth) [(growth, candidate)]
-    unless covered == 0 && errors.size == 1 &&
-        (errors[0]?.getD "").contains "witness does not establish the joint premises" do
-      throwError "historical projection control {candidate}: {errors}"
   let excluded := [``Control.helper, ``Control.representation, ``Control.instanceEvidence,
     ``Control.planted]
   let scope := fun n => positiveScope n || excluded.contains n
