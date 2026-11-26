@@ -15,6 +15,8 @@ import Concrete.Elab
 import Concrete.Admission
 import Concrete.MIR
 import Concrete.Memory
+import Concrete.CFG
+import Concrete.Memory.Lowering
 import Concrete.SSA
 import Concrete.Stages
 import Concrete.Theorem
