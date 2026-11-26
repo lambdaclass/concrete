@@ -8,9 +8,8 @@ The rule (also the manifest's header): a row's first field is a space-separated 
 path is governed by the row that lists its longest prefix (a listed path equal to it, or a listed
 directory containing it); legacy/P is governed as P. Rows carry a status (open | resolved)
 about the legacy/ copy only (a retained row's root file is never deleted through the manifest). No path may be listed twice, so the governing row is unique. A path with
-no listed prefix is uncovered, which `check` reports. Lives in scripts/land because the deletion
-check of the legacy/ move will read deletion authority from `govern`, and the gate that holds the
-manifest to the tree (scripts/checks/retention_manifest.sh) uses the same code.
+no listed prefix is uncovered, which `check` reports. The retention_manifest.sh gate
+uses this parser to check the manifest against the tree.
 """
 import sys
 
