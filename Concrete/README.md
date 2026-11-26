@@ -32,6 +32,8 @@ mismatch or unavailable lookup information stops publication. A pre-commit failu
 returns `TOOL-FAILURE` with exit 2 and leaves existing outputs in place. Missing output directories
 are created only when publication commits. The parent-directory lock serializes commits by
 cooperating CLI builds sharing that parent, including builds selecting different backends.
+If a cooperating build installs a missing ancestor while another waits for the lock, the waiting
+build locks the newly installed parent and rechecks the destination before taking its snapshot.
 
 The exchange is atomic for the directory name. A reader opening several files across the
 exchange may see different generations. The output directory inode changes, and carrying forward

@@ -1,7 +1,7 @@
 """Prepare and atomically publish the slice-0 CLI's native build outputs."""
 
 from array import array
-from contextlib import contextmanager, nullcontext, suppress
+from contextlib import ExitStack, contextmanager, nullcontext, suppress
 import ctypes
 import errno
 import fcntl
@@ -31,7 +31,8 @@ def output_directory(output, *, guard_project=True, allow_missing=False):
             check_project_directory(output, fd)
         yield fd
     finally:
-        os.close(fd)
+        with suppress(OSError):
+            os.close(fd)
 
 
 def check_project_directory(output, fd):
@@ -187,32 +188,43 @@ def exchange(parent_fd, candidate, output):
 
 
 def resolve_parent(path):
-    """Resolve existing ancestors in filesystem order and retain a missing suffix."""
-    anchor = Path(path.anchor) if path.is_absolute() else Path.cwd()
-    parts = path.parts[1:] if path.is_absolute() else path.parts
-    for index, part in enumerate(parts):
-        child = anchor / part
+    """Find the deepest existing directory using whole-path kernel lookups."""
+    missing = []
+    while True:
         try:
-            child.lstat()
+            os.lstat(path)
         except FileNotFoundError:
-            missing = parts[index:]
-            if ".." in missing:
-                raise
-            return anchor, missing
-        if not stat.S_ISDIR(child.stat().st_mode):
-            raise NotADirectoryError(errno.ENOTDIR, os.strerror(errno.ENOTDIR), child)
-        anchor = child.resolve(strict=True)
-    return anchor, ()
+            path, part = os.path.split(path)
+            if part != ".":
+                missing.append(part)
+            path = path or "."
+            continue
+        # Follow the final component separately from the missing-entry test:
+        # a dangling symlink is a lookup error, not a directory to create.
+        if not stat.S_ISDIR(os.stat(path).st_mode):
+            raise NotADirectoryError(errno.ENOTDIR, os.strerror(errno.ENOTDIR), path)
+        if ".." in missing:
+            raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), path)
+        return Path(path).resolve(strict=True), tuple(reversed(missing))
 
 
 def publication_path(output):
-    # A terminal ".." must participate in filesystem resolution, too.
-    if output.name == ".." or not output.name:
-        parent, missing = resolve_parent(output)
+    supplied = os.fspath(output) or "."
+    # Check the supplied spelling as a whole before shortening it, so the
+    # kernel enforces path length and cumulative symlink traversal limits.
+    with suppress(FileNotFoundError):
+        os.lstat(supplied)
+    # Strip terminal separators and dots so they cannot hide a final symlink.
+    path = supplied.rstrip("/") or "/"
+    while path.endswith("/."):
+        path = path[:-2].rstrip("/") or "/"
+    prefix, name = os.path.split(path)
+    if name in ("", ".", ".."):
+        directory, missing = resolve_parent(path)
         assert not missing
-        return parent.parent, (parent.name or ".",)
-    parent, missing = resolve_parent(output.parent)
-    return parent, (*missing, output.name)
+        return directory.parent, (directory.name or ".",)
+    parent, missing = resolve_parent(prefix or ".")
+    return parent, (*missing, name)
 
 
 def prepare(output, names):
@@ -273,18 +285,42 @@ def build_candidate(candidate, staging, names, *, output_fd=None, replaced=()):
         shutil.copystat(".", candidate)
 
 
-def publish(output, staging, names):
+def check_parent_descent(fd, components, current_parent):
+    with ExitStack() as opened:
+        for component in components:
+            fd = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+            opened.callback(os.close, fd)
+        return os.path.samestat(os.fstat(fd), current_parent.stat())
+
+
+@contextmanager
+def locked_parent(output):
     parent, suffix = publication_path(output)
-    output = parent.joinpath(*suffix)
-    # Lock the existing ancestor across the snapshot and commit.
-    parent_fd = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
-    try:
-        fcntl.flock(parent_fd, fcntl.LOCK_EX)
-        # A concurrent build can have installed part or all of a missing path
-        # while this process waited for the lock.
-        current_parent, current_suffix = publication_path(output)
-        if (current_parent, current_suffix) != (parent, suffix):
-            raise ValueError(f"build output parent changed during publication: {output}")
+    while True:
+        with output_directory(parent, guard_project=False) as fd:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            current_parent, current_suffix = publication_path(output)
+            if (current_parent, current_suffix) == (parent, suffix):
+                if not os.path.samestat(os.fstat(fd), parent.stat()):
+                    raise ValueError(f"build output parent changed during publication: {output}")
+                yield fd, parent, suffix
+                return
+
+            # A cooperating publisher can install missing directories while
+            # this lock is pending. Retry only down the original suffix,
+            # verifying each new directory relative to the locked handle.
+            depth = len(suffix) - len(current_suffix)
+            if (depth <= 0 or current_suffix != suffix[depth:]
+                    or current_parent != parent.joinpath(*suffix[:depth])
+                    or not check_parent_descent(fd, suffix[:depth], current_parent)):
+                raise ValueError(f"build output parent changed during publication: {output}")
+            parent, suffix = current_parent, current_suffix
+
+
+def publish(output, staging, names):
+    staging = staging.absolute()
+    with locked_parent(output) as (parent_fd, parent, suffix):
+        output = parent.joinpath(*suffix)
         destination = output_directory(output, allow_missing=True) if len(suffix) == 1 else nullcontext()
         with destination as output_fd:
             rules = lookup_rules_probe()
@@ -310,21 +346,15 @@ def publish(output, staging, names):
             if not os.path.samestat(current, os.fstat(output_fd)):
                 raise ValueError(f"build output directory changed during publication: {output}")
         exchange(parent_fd, candidate, first)
-    finally:
-        # Closing a read-only lock descriptor cannot undo a committed publication.
-        with suppress(OSError):
-            os.close(parent_fd)
 
 
 def main(args):
     operation, directory, *names = args
-    # Strip trailing separators and dot components so they cannot hide a symlink.
-    output = Path(directory)
     if operation == "prepare":
-        print(prepare(output, names))
+        print(prepare(directory, names))
     elif operation == "publish":
         staging, *names = names
-        publish(output, Path(staging), names)
+        publish(directory, Path(staging), names)
     else:
         raise ValueError(f"unknown build publication operation: {operation}")
 
