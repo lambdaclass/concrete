@@ -1,7 +1,7 @@
 """Prepare and atomically publish the slice-0 CLI's native build outputs."""
 
 from array import array
-from contextlib import contextmanager, suppress
+from contextlib import ExitStack, contextmanager, nullcontext, suppress
 import ctypes
 import errno
 import fcntl
@@ -14,18 +14,25 @@ import tempfile
 
 
 @contextmanager
-def output_directory(output):
+def output_directory(output, *, guard_project=True, allow_missing=False):
     try:
         fd = os.open(output, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    except FileNotFoundError:
+        if not allow_missing:
+            raise
+        yield None
+        return
     except OSError as error:
         if error.errno in (errno.ENOTDIR, errno.ELOOP):
             raise ValueError(f"build output directory must be a real directory: {output}") from error
         raise
     try:
-        check_project_directory(output, fd)
+        if guard_project:
+            check_project_directory(output, fd)
         yield fd
     finally:
-        os.close(fd)
+        with suppress(OSError):
+            os.close(fd)
 
 
 def check_project_directory(output, fd):
@@ -119,8 +126,7 @@ def macos_lookup_rules(fd):
     return os.fstat(fd).st_dev, not bool(result[1] & case_sensitive)
 
 
-def check_lookup_rules(output_fd, output, staging):
-    """Verify inheritance can reproduce the entire output tree before copying."""
+def lookup_rules_probe():
     if sys.platform == "linux":
         with open("/proc/self/mountinfo") as info:
             mount_types = {
@@ -140,6 +146,11 @@ def check_lookup_rules(output_fd, output, staging):
         except (OSError, ValueError, AttributeError) as error:
             raise ValueError(f"cannot determine name-lookup rules for {path}: {error}") from error
 
+    return rules
+
+
+def check_lookup_tree(fd, path, expected, rules):
+    """Verify inheritance can reproduce the entire output tree before copying."""
     def check_tree(fd, path):
         if rules(fd, path) != expected:
             raise ValueError(f"name-lookup rules differ between staging and build output: {path}")
@@ -153,23 +164,18 @@ def check_lookup_rules(output_fd, output, staging):
                         os.close(child)
 
     directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
-    staging_fd = os.open(staging, directory_flags)
-    try:
-        expected = rules(staging_fd, staging)
-    finally:
-        os.close(staging_fd)
-    check_tree(output_fd, output)
+    check_tree(fd, path)
 
 
-def exchange(parent_fd, candidate, output):
-    """Exchange two directories with one filesystem operation."""
+def rename_directory(parent_fd, candidate, output, *, replace):
+    """Publish with an atomic exchange or an exclusive first installation."""
     libc = ctypes.CDLL(None, use_errno=True)
     if sys.platform == "linux":
-        rename, flags = libc.renameat2, 2  # RENAME_EXCHANGE
+        rename, flags = libc.renameat2, 2 if replace else 1  # RENAME_EXCHANGE / RENAME_NOREPLACE
     elif sys.platform == "darwin":
-        rename, flags = libc.renameatx_np, 2  # RENAME_SWAP
+        rename, flags = libc.renameatx_np, 2 if replace else 4  # RENAME_SWAP / RENAME_EXCL
     else:
-        raise ValueError("atomic build directory exchange is unavailable on this platform")
+        raise ValueError("atomic build directory publication is unavailable on this platform")
     rename.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
     rename.restype = ctypes.c_int
     if rename(parent_fd, os.fsencode(candidate), parent_fd, os.fsencode(output), flags):
@@ -177,15 +183,71 @@ def exchange(parent_fd, candidate, output):
         raise OSError(error, os.strerror(error), output)
 
 
+def exchange(parent_fd, candidate, output):
+    rename_directory(parent_fd, candidate, output, replace=True)
+
+
+def resolve_parent(path):
+    """Find the deepest existing directory using whole-path kernel lookups."""
+    missing = []
+    while True:
+        try:
+            os.lstat(path)
+        except FileNotFoundError:
+            path, part = os.path.split(path)
+            if part != ".":
+                missing.append(part)
+            path = path or "."
+            continue
+        # Follow the final component separately from the missing-entry test:
+        # a dangling symlink is a lookup error, not a directory to create.
+        if not stat.S_ISDIR(os.stat(path).st_mode):
+            raise NotADirectoryError(errno.ENOTDIR, os.strerror(errno.ENOTDIR), path)
+        if ".." in missing:
+            raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), path)
+        return Path(path).resolve(strict=True), tuple(reversed(missing))
+
+
+def publication_path(output):
+    supplied = os.fspath(output) or "."
+    # Check the supplied spelling as a whole before shortening it, so the
+    # kernel enforces path length and cumulative symlink traversal limits.
+    with suppress(FileNotFoundError):
+        os.lstat(supplied)
+    # Strip terminal separators and dots so they cannot hide a final symlink.
+    path = supplied.rstrip("/") or "/"
+    while path.endswith("/."):
+        path = path[:-2].rstrip("/") or "/"
+    prefix, name = os.path.split(path)
+    if name in ("", ".", ".."):
+        directory, missing = resolve_parent(path)
+        assert not missing
+        return directory.parent, (directory.name or ".",)
+    parent, missing = resolve_parent(prefix or ".")
+    return parent, (*missing, name)
+
+
 def prepare(output, names):
-    output.parent.mkdir(parents=True, exist_ok=True)
+    parent, suffix = publication_path(output)
+    output = parent.joinpath(*suffix)
+    rules = lookup_rules_probe()
+    with output_directory(parent, guard_project=False) as parent_fd:
+        expected = rules(parent_fd, parent)
+        if len(suffix) == 1:
+            with output_directory(output, allow_missing=True) as fd:
+                if fd is not None:
+                    check_destinations(output, fd, names)
+                    check_lookup_tree(fd, output, expected, rules)
+    staging = Path(tempfile.mkdtemp(prefix=".concrete-build.", dir=parent))
     try:
-        output.mkdir()
-    except FileExistsError:
-        pass
-    with output_directory(output) as fd:
-        check_destinations(output, fd, names)
-    return tempfile.mkdtemp(prefix=".concrete-build.", dir=output.parent)
+        with output_directory(staging, guard_project=False) as staging_fd:
+            if rules(staging_fd, staging) != expected:
+                raise ValueError(f"name-lookup rules differ between staging and build output: {staging}")
+    except Exception:
+        with suppress(OSError):
+            staging.rmdir()
+        raise
+    return staging
 
 
 def carry_forward(source, destination, *, replaced=()):
@@ -206,55 +268,93 @@ def carry_forward(source, destination, *, replaced=()):
                 os.link(entry.path, target)
 
 
-def publish(output, staging, names):
-    # Lock the parent inode, which stays in place across exchanges. Concurrent
-    # builds take their snapshot from the latest committed output directory.
-    parent_fd = os.open(output.parent, os.O_RDONLY | os.O_DIRECTORY)
-    try:
-        fcntl.flock(parent_fd, fcntl.LOCK_EX)
-        with output_directory(output) as output_fd:
-            existing = check_destinations(output, output_fd, names)
-            check_lookup_rules(output_fd, output, staging)
-            replaced = replaced_entries(output_fd, existing)
-            candidate = staging / "candidate"
-            candidate.mkdir()
-            for name in names:
-                source = staging / name
-                if not stat.S_ISREG(source.lstat().st_mode):
-                    raise ValueError(f"expected a regular build output: {name}")
-                # Reserve every artifact name under the candidate's lookup
-                # rules before copying any old entry or moving an artifact.
-                os.close(os.open(candidate / name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))
+def build_candidate(candidate, staging, names, *, output_fd=None, replaced=()):
+    candidate.mkdir(parents=True)
+    for name in names:
+        source = staging / name
+        if not stat.S_ISREG(source.lstat().st_mode):
+            raise ValueError(f"expected a regular build output: {name}")
+        # Reserve all names before copying any old entry or moving an artifact.
+        os.close(os.open(candidate / name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))
+    if output_fd is not None:
+        os.fchdir(output_fd)
+        carry_forward(".", candidate, replaced=replaced)
+    for name in names:
+        (staging / name).rename(candidate / name)
+    if output_fd is not None:
+        shutil.copystat(".", candidate)
 
-            # Anchor the snapshot to the directory opened with O_NOFOLLOW.
-            # Release the snapshot directory before attempting the exchange.
-            os.fchdir(output_fd)
-            carry_forward(".", candidate, replaced=replaced)
-            for name in names:
-                (staging / name).rename(candidate / name)
-            shutil.copystat(".", candidate)
+
+def check_parent_descent(fd, components, current_parent):
+    with ExitStack() as opened:
+        for component in components:
+            fd = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+            opened.callback(os.close, fd)
+        return os.path.samestat(os.fstat(fd), current_parent.stat())
+
+
+@contextmanager
+def locked_parent(output):
+    parent, suffix = publication_path(output)
+    while True:
+        with output_directory(parent, guard_project=False) as fd:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            current_parent, current_suffix = publication_path(output)
+            if (current_parent, current_suffix) == (parent, suffix):
+                if not os.path.samestat(os.fstat(fd), parent.stat()):
+                    raise ValueError(f"build output parent changed during publication: {output}")
+                yield fd, parent, suffix
+                return
+
+            # A cooperating publisher can install missing directories while
+            # this lock is pending. Retry only down the original suffix,
+            # verifying each new directory relative to the locked handle.
+            depth = len(suffix) - len(current_suffix)
+            if (depth <= 0 or current_suffix != suffix[depth:]
+                    or current_parent != parent.joinpath(*suffix[:depth])
+                    or not check_parent_descent(fd, suffix[:depth], current_parent)):
+                raise ValueError(f"build output parent changed during publication: {output}")
+            parent, suffix = current_parent, current_suffix
+
+
+def publish(output, staging, names):
+    staging = staging.absolute()
+    with locked_parent(output) as (parent_fd, parent, suffix):
+        output = parent.joinpath(*suffix)
+        destination = output_directory(output, allow_missing=True) if len(suffix) == 1 else nullcontext()
+        with destination as output_fd:
+            rules = lookup_rules_probe()
+            with output_directory(staging, guard_project=False) as staging_fd:
+                expected = rules(staging_fd, staging)
+            if rules(parent_fd, parent) != expected:
+                raise ValueError(f"name-lookup rules differ between staging and build output: {parent}")
+            candidate = staging / "candidate"
+            first = suffix[0]
+            if output_fd is None:
+                # Build missing ancestors privately and install the entire suffix
+                # in one operation, with exclusive creation of its first entry.
+                build_candidate(candidate.joinpath(*suffix[1:]), staging, names)
+                rename_directory(parent_fd, candidate, first, replace=False)
+                return
+
+            existing = check_destinations(output, output_fd, names)
+            check_lookup_tree(output_fd, output, expected, rules)
+            replaced = replaced_entries(output_fd, existing)
+            build_candidate(candidate, staging, names, output_fd=output_fd, replaced=replaced)
             os.fchdir(parent_fd)
-            current = os.stat(output.name, dir_fd=parent_fd, follow_symlinks=False)
+            current = os.stat(first, dir_fd=parent_fd, follow_symlinks=False)
             if not os.path.samestat(current, os.fstat(output_fd)):
                 raise ValueError(f"build output directory changed during publication: {output}")
-        exchange(parent_fd, candidate.relative_to(output.parent), output.name)
-    finally:
-        # Closing a read-only lock descriptor cannot undo a committed exchange.
-        with suppress(OSError):
-            os.close(parent_fd)
+        exchange(parent_fd, candidate, first)
 
 
 def main(args):
     operation, directory, *names = args
-    # Strip trailing separators and dot components so they cannot hide a symlink.
-    output = Path(os.path.abspath(directory))
-    parent = output.parent.resolve()
-    output = parent / output.name
     if operation == "prepare":
-        print(prepare(output, names))
+        print(prepare(directory, names))
     elif operation == "publish":
         staging, *names = names
-        publish(output, Path(staging), names)
+        publish(directory, Path(staging), names)
     else:
         raise ValueError(f"unknown build publication operation: {operation}")
 

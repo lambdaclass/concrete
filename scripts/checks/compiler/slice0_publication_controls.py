@@ -1,8 +1,9 @@
-"""Exercise publication with actual or simulated case-insensitive lookups."""
+"""Exercise publication path resolution, concurrent commits and name lookup rules."""
 
 from contextlib import ExitStack, nullcontext
 import os
 import errno
+import fcntl
 from pathlib import Path
 import shutil
 import subprocess
@@ -214,11 +215,162 @@ def check_staging_collision(root, *, nested):
     print(f"ok   exclusive creation refuses {root.name} before moves")
 
 
+def check_path_resolution(root):
+    nested = root / "target" / "nested"
+    nested.mkdir(parents=True)
+    (root / "link").symlink_to("target/nested")
+    names = ["llvm.o"]
+    output = root / "target"
+    staging = publisher.prepare(root / "link/..", names)
+    (staging / "llvm.o").write_text("terminal dot-dot")
+    publisher.publish(root / "link/..", staging, names)
+    assert (output / "llvm.o").read_text() == "terminal dot-dot"
+
+    missing = root / "missing/../target"
+    staging = publisher.prepare(output, names)
+    (staging / "llvm.o").write_text("replacement")
+    for operation in (publisher.prepare, publisher.publish):
+        args = (names,) if operation is publisher.prepare else (staging, names)
+        try:
+            operation(missing, *args)
+        except FileNotFoundError:
+            pass
+        else:
+            raise AssertionError("accepted dot-dot after a missing component")
+    assert not (root / "missing").exists()
+    assert (output / "llvm.o").read_text() == "terminal dot-dot"
+    assert (staging / "llvm.o").read_text() == "replacement"
+
+
+def check_relative_staging(root):
+    root.mkdir()
+    output = root / "out"
+    output.mkdir()
+    (output / "lcb.exe").write_text("previous backend")
+    names = ["llvm.o"]
+    staging = publisher.prepare(output, names)
+    (staging / "llvm.o").write_text("new")
+    cwd = Path.cwd()
+    try:
+        os.chdir(root)
+        publisher.main(["publish", "out", staging.name, *names])
+    finally:
+        os.chdir(cwd)
+    assert (output / "llvm.o").read_text() == "new"
+    assert (output / "lcb.exe").read_text() == "previous backend"
+
+
+def check_symlink_limit(root):
+    root.mkdir()
+    step = root / "step"
+    step.symlink_to(".")
+    out = root / "out"
+    out.mkdir()
+    (out / "llvm.o").write_text("old")
+    names = ["llvm.o"]
+    staging = publisher.prepare(out, names)
+    (staging / "llvm.o").write_text("new")
+
+    supplied = root
+    for _ in range(256):
+        supplied /= "step"
+        try:
+            (supplied / "out").stat()
+        except OSError as error:
+            assert error.errno == errno.ELOOP
+            break
+    else:
+        raise AssertionError("could not reach the OS symlink traversal limit")
+    supplied /= "out"
+
+    for operation in (publisher.prepare, publisher.publish):
+        args = (names,) if operation is publisher.prepare else (staging, names)
+        with patch.object(publisher.tempfile, "mkdtemp",
+                          side_effect=AssertionError("staged through a rejected path")):
+            try:
+                operation(supplied, *args)
+            except OSError as error:
+                assert error.errno == errno.ELOOP
+            else:
+                raise AssertionError("published through a rejected path")
+        assert (out / "llvm.o").read_text() == "old"
+        assert (staging / "llvm.o").read_text() == "new"
+
+
+def check_concurrent_publication(root, *, sibling=False, redirect=False):
+    root.mkdir()
+    first = root / "missing/nested/out"
+    second = first.with_name("other") if sibling else first
+    llvm = ["llvm.o", "llvm.exe"]
+    lcb = ["lcb_body.o", "lcb_rt.s", "lcb_rt.o", "lcb.exe"]
+    llvm_stage = publisher.prepare(first, llvm)
+    lcb_stage = publisher.prepare(second, lcb)
+    for staging, names in ((llvm_stage, llvm), (lcb_stage, lcb)):
+        for name in names:
+            (staging / name).write_text(name)
+    assert not (root / "missing").exists()
+
+    flock = publisher.fcntl.flock
+    locks = []
+    waiting_fd = None
+
+    def take_lock(fd, operation):
+        nonlocal waiting_fd
+        if waiting_fd is not None:
+            # The winner has its own handle to the same directory. Prove the
+            # contender would block before allowing the winner to commit.
+            flock(fd, operation | fcntl.LOCK_NB)
+            try:
+                flock(waiting_fd, operation | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return
+            raise AssertionError("the contender acquired the winner's lock")
+
+        locks.append(os.fstat(fd))
+        if len(locks) == 1:
+            assert os.path.samestat(locks[0], root.stat())
+            if redirect:
+                (root / "elsewhere/nested").mkdir(parents=True)
+                (root / "missing").symlink_to("elsewhere")
+            else:
+                waiting_fd = fd
+                try:
+                    publisher.publish(first, llvm_stage, llvm)
+                finally:
+                    waiting_fd = None
+        flock(fd, operation | fcntl.LOCK_NB)
+
+    with patch.object(publisher.fcntl, "flock", side_effect=take_lock):
+        if redirect:
+            try:
+                publisher.publish(second, lcb_stage, lcb)
+            except ValueError as error:
+                assert "parent changed during publication" in str(error)
+            else:
+                raise AssertionError("followed a newly installed ancestor symlink")
+            assert not list((root / "elsewhere/nested").iterdir())
+            assert set(os.listdir(lcb_stage)) == set(lcb)
+            return
+        publisher.publish(second, lcb_stage, lcb)
+
+    assert len(locks) == 2 and os.path.samestat(locks[1], second.parent.stat())
+    for output, names in ((first, llvm), (second, lcb)):
+        for name in names:
+            assert (output / name).read_text() == name
+    assert set(os.listdir(second)) == set(lcb if sibling else llvm + lcb)
+
+
 if __name__ == "__main__":
     original_cwd = Path.cwd()
     with TemporaryDirectory() as directory:
         root = Path(directory).resolve()
         try:
+            check_path_resolution(root / "path-resolution")
+            check_relative_staging(root / "relative-staging")
+            check_symlink_limit(root / "symlink-limit")
+            check_concurrent_publication(root / "concurrent")
+            check_concurrent_publication(root / "siblings", sibling=True)
+            check_concurrent_publication(root / "redirect", redirect=True)
             sensitive = check_publication(root / "sensitive", insensitive=False)
             insensitive = check_publication(root / "insensitive", insensitive=True)
             ambiguous = check_publication(root / "ambiguous", insensitive=True, ambiguous=True)
@@ -236,6 +388,8 @@ if __name__ == "__main__":
             check_staging_collision(root / "nested collision", nested=True)
         finally:
             os.chdir(original_cwd)
+    print("ok   kernel symlink limit, terminal dot-dot, missing ancestor and relative staging")
+    print("ok   concurrent first publications retain both backends and refuse symlink redirects")
     print(f"ok   equal sensitive ({sensitive}) and equal insensitive ({insensitive}) publication")
     print(f"ok   project-directory aliases and ambiguous artifact alias refusal ({ambiguous})")
     print("ok   mismatched and unknown lookup rules refused before changes")
