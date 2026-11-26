@@ -69,6 +69,14 @@ blocks reads of the moved subtree or an ancestor containing it. An exact field
 write can fill a moved subtree or replace its parent once the remaining active fields can be discarded. Coverage compares only present fields of the logical variant. Ending a partially moved root checks that all
 remaining active fields can be discarded and that every loan of the root has ended. A direct owner write requires the same whole-root loan exclusion. A direct Copy read permits shared loans and excludes mutable loans. MIR and Memory use the same masks,
 and the representation checkpoint compares initialized subtrees across frames.
+Before any slice introduces borrows, close ISS-0116. Establish each owner's
+spec ownership slot at binding with its declared mutability and prove in Lean
+that every shared-interpreter step preserves equality with, or refinement of,
+the `Own` spec state. The required control reaches the first mutable borrow
+through normal execution and checks that it succeeds for a mutable `u8` owner
+and is refused for an otherwise identical immutable owner. Slice 0 has no
+borrows.
+
 Replace the erase-to-MIR `Memory.lower` and `Memory.run` proof path.
 
 ## Memory → SSA
@@ -241,12 +249,12 @@ literal to `43` fails validation.
 
 When an atomic retirement spans owners, each writer prepares the replacement for its own files. The integration writer applies the coordinated deletion and updates the trusted-base inventories and cross-stage fixtures with the cutover. Frozen paths and the digest manifest belong to the interface round. Fixes (e) and (f) provide production definitions in their owned modules before the integration writer replaces the bootstrap instance bodies at cutover.
 
-ISS-XXXX (coordinator assignment pending) tracks D5 controls on the fixed slice
+ISS-0113 tracks D5 controls on the fixed slice
 instances for checked and unchecked Core lowering, Memory lowering, SSA, BIR
 and LCB. Each edge needs a reachable program and a rejected substitution at the
 registered boundary.
 
 
-ISS-XXXX (coordinator assignment pending) tracks indexed type-family
-inspection in the semantic-parameter audit. ISS-XXXX tracks aligning
+ISS-0114 tracks indexed type-family
+inspection in the semantic-parameter audit. ISS-0115 tracks aligning
 intermediate slice domains with production backend coverage before cutover.
