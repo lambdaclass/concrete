@@ -1646,6 +1646,11 @@ def Project.files (project : Project) : List File := project.entries.toList
 def Project.fileAt (project : Project) (id : FileId) : Option File :=
   project.entries[id.index]?
 
+/-- R-0709, docs/decisions.md#decided-2026-11-14-trap-sites-and-law-tests.
+A table-local file slot must resolve in the project that issued it. -/
+def SlotResolves (input : Project × FileId) : Prop :=
+  input.1.fileAt input.2 ≠ none
+
 /-- A span whose issuing slot resolves to a file validating its entire location.
 The table parameter and issuance proof are erased at runtime. -/
 structure ScopedSpan (origin : Project) extends Span where
@@ -1712,21 +1717,85 @@ theorem fileSpan_location (id : FileId) (file : File) (start stop : Nat)
     (fileSpan id file start stop ordered (Nat.le_trans ordered within)).LocationOk file.source :=
   spanFromPosition_location id file start stop ordered within _
 
+/-- A refusal retains the exact source length or expected coordinate when available. -/
+inductive LocationRefusal where
+  | unknownFile
+  | reversedRange
+  | pastEnd (fileLength : Nat)
+  | wrongLine (expected : Nat)
+  | wrongColumn (expected : Nat)
+  deriving DecidableEq, Repr
+
+/-- The evidence carried by each refusal. At this boundary the file is named by
+its project slot. The coordinate equations also apply to unchecked zero values. -/
+def LocationRefusal.Violates (project : Project) (id : FileId) (start stop : Nat)
+    (coordinates : Option (Nat × Nat)) : LocationRefusal → Prop
+  | .unknownFile => ¬ SlotResolves (project, id)
+  | .reversedRange => ¬ OrderedOffsets (start, stop)
+  | .pastEnd length => ∃ file, project.fileAt id = some file ∧
+      length = file.source.length ∧ ¬ EndInSource (file.source, stop)
+  | .wrongLine expected => ∃ file line col, project.fileAt id = some file ∧
+      coordinates = some (line, col) ∧ expected = file.source.lineAt start ∧ line ≠ expected
+  | .wrongColumn expected => ∃ file line col, project.fileAt id = some file ∧
+      coordinates = some (line, col) ∧ expected = file.source.columnAt start ∧ col ≠ expected
+
+/-- A successful issuance retains the requested file, range, and any supplied coordinates. -/
+def MatchesRequest {project : Project} (span : ScopedSpan project) (id : FileId)
+    (start stop : Nat) (coordinates : Option (Nat × Nat)) : Prop :=
+  span.fileId = id ∧ span.startOffset = start ∧ span.endOffset = stop ∧
+    (coordinates = none ∨ coordinates = some (span.line, span.col))
+
 /-- Issue a span through the indexed data accessors. The scaling control can substitute
 a certified prefix traversal at the same coordinate access site. -/
-@[inline] def projectSpanAtM [Monad m] [MonadTick m] (project : Project)
-    (id : FileId) (start stop : Nat)
-    (lookup : File.CoordinateLookup m := File.indexedCoordinate) : m (Option (ScopedSpan project)) := do
+@[inline] def issueSpanAtM [Monad m] [MonadTick m] (project : Project)
+    (id : FileId) (start stop : Nat) (coordinates : Option (Nat × Nat))
+    (lookup : File.CoordinateLookup m := File.indexedCoordinate) :
+    m (Except {reason : LocationRefusal // reason.Violates project id start stop coordinates}
+      {span : ScopedSpan project // MatchesRequest span id start stop coordinates}) := do
   if slot : id.index < project.entries.size then
     let entry ← readArray project.entries id.index slot
     let file := entry.val
+    have found : project.fileAt id = some file :=
+      (Array.getElem?_eq_getElem slot).trans (congrArg some entry.property.symm)
     if ordered : start ≤ stop then
       if within : stop ≤ file.length then
         let pos ← lookup file start (Nat.le_trans ordered within)
-        return some ⟨spanFromPosition id file start stop ordered pos,
-          ⟨file, spanFromPosition_location id file start stop ordered within pos,
-            (Array.getElem?_eq_getElem slot).trans (congrArg some entry.property.symm)⟩⟩
-  return none
+        let span := spanFromPosition id file start stop ordered pos
+        let issuedSpan : ScopedSpan project :=
+          ⟨span, file, spanFromPosition_location id file start stop ordered within pos, found⟩
+        match supplied : coordinates with
+        | none => return .ok ⟨issuedSpan, rfl, rfl, rfl, Or.inl supplied⟩
+        | some (line, col) =>
+          if lineMatches : line = pos.val.line then
+            if colMatches : col = pos.val.column then
+              return .ok ⟨issuedSpan, rfl, rfl, rfl, Or.inr (supplied.trans (by
+                change some (line, col) = some (pos.val.line, pos.val.column)
+                rw [lineMatches, colMatches]))⟩
+            else
+              return .error ⟨.wrongColumn pos.val.column, file, line, col, found, supplied,
+                congrArg Position.column pos.property, colMatches⟩
+          else
+            return .error ⟨.wrongLine pos.val.line, file, line, col, found, supplied,
+              congrArg Position.line pos.property, lineMatches⟩
+      else
+        return .error ⟨.pastEnd file.length, file, found, file.length_eq,
+          by simpa [EndInSource, ← File.length_eq] using within⟩
+    else
+      return .error ⟨.reversedRange, ordered⟩
+  else
+    have missing : project.fileAt id = none := Array.getElem?_eq_none (Nat.le_of_not_gt slot)
+    return .error ⟨.unknownFile, fun resolves => resolves missing⟩
+
+@[inline] def projectSpanAtM [Monad m] [MonadTick m] (project : Project)
+    (id : FileId) (start stop : Nat)
+    (lookup : File.CoordinateLookup m := File.indexedCoordinate) : m (Option (ScopedSpan project)) := do
+  return (← issueSpanAtM project id start stop none lookup).toOption.map Subtype.val
+
+-- Keep projection from the typed issuer definitional, including for a custom lookup.
+example [Monad m] [MonadTick m] (project : Project) (id : FileId) (start stop : Nat)
+    (lookup : File.CoordinateLookup m) :
+    projectSpanAtM project id start stop lookup = (do
+      return (← issueSpanAtM project id start stop none lookup).toOption.map Subtype.val) := rfl
 
 /-- Issue a span using a resolved file ID, with constant-time file and coordinate access. -/
 def projectSpanAt (project : Project) (id : FileId) (start stop : Nat) : Option (ScopedSpan project) :=
@@ -1743,7 +1812,15 @@ theorem projectSpanAt_eq (project : Project) (id : FileId) (start stop : Nat) :
                 Array.getElem?_eq_getElem slot⟩⟩
           else none
         else none
-      else none := rfl
+      else none := by
+  by_cases slot : id.index < project.entries.size
+  · by_cases ordered : start ≤ stop
+    · by_cases within : stop ≤ project.entries[id.index].length <;>
+        simp [projectSpanAt, projectSpanAtM, issueSpanAtM, slot, ordered, within, readArray,
+          bind, pure, Except.toOption, fileSpan]
+    · simp [projectSpanAt, projectSpanAtM, issueSpanAtM, slot, ordered,
+        bind, pure, Except.toOption]
+  · simp [projectSpanAt, projectSpanAtM, issueSpanAtM, slot, pure, bind, Except.toOption]
 
 @[inline] def projectSpanM [Monad m] [MonadTick m] (project : Project) (path : SourcePath)
     (start stop : Nat)
@@ -1808,6 +1885,15 @@ structure RuleId where
   name : Lean.Name
   rev : Nat
   deriving DecidableEq, Repr
+
+/-- The clause cited by the project-slot location refusal. Slot resolution uses
+`Project.fileAt`. The registered `FilePresent` clause covers exact-path lookup. -/
+def SourcePathSpan.LocationRefusal.ruleId : SourcePathSpan.LocationRefusal → RuleId
+  | .unknownFile => ⟨``SourcePathSpan.SlotResolves, 1⟩
+  | .reversedRange => ⟨``SourcePathSpan.OrderedOffsets, 2⟩
+  | .pastEnd _ => ⟨``SourcePathSpan.EndInSource, 2⟩
+  | .wrongLine _ => ⟨``SourcePathSpan.LineMatches, 2⟩
+  | .wrongColumn _ => ⟨``SourcePathSpan.ColumnMatches, 2⟩
 
 /-- The diagnostic citation of a local refusal. Priority is set separately by
 `Reason.inOrder`. -/

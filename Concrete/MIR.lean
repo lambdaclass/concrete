@@ -62,7 +62,7 @@ def evalOp (env : List (ConcreteSpec.Var × Int)) :
       | .trap k => throw (.trap k)
       | _ => throw (.stuck .typeError)
 
-private def runFrom (env : List (ConcreteSpec.Var × Int)) (body : List Assignment)
+def runFrom (env : List (ConcreteSpec.Var × Int)) (body : List Assignment)
     (ret : Core.Atom) : ConcreteSpec.Outcome :=
   match (do
     let env ← body.foldlM (fun env stmt => do
