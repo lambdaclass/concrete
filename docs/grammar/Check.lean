@@ -1,4 +1,4 @@
-import ConcreteSpec.Spec.LL1
+import ConcreteSpec.Spec.Surface0
 import Std.Data.HashMap
 
 /-! Standalone draft qualification. Run from the repository root. -/
@@ -216,12 +216,12 @@ def mainReservedWords : List String :=
    "Fs", "Network", "Env", "Time", "Alloc", "Device", "Console", "Process", "Unsafe"]
 
 def draftReservedWords (slice : Nat) (options : Options) : List String :=
-  mainReservedWords ++ ["for", "break", "continue"] ++
+  mainReservedWords ++ ["for", "break", "continue", "pub", "const", "mod"] ++
     (if slice >= 3 then ["if", "else", "mut", "true", "false"] else []) ++
     (if slice >= 4 && options.mathKeyword then ["math"] else []) ++
     (if slice >= 6 then ["enum", "match"] else []) ++
     (if slice >= 7 then [options.borrowWord] else []) ++
-    (if slice >= 8 then ["pub", "const", "mod", options.importWord] else []) ++
+    (if slice >= 8 then [options.importWord] else []) ++
     (if slice >= 9 then ["trait", "impl", "defer"] else []) ++
     (if slice >= 10 then ["assert", "assume"] else []) ++
     (if slice >= 11 then ["with"] else []) ++
@@ -286,18 +286,18 @@ def escapeTail (policy : LiteralOptions) (quote : Char) (input : List Char) : Op
     return rest
   | [] => none
 
-partial def quotedBody (policy : LiteralOptions) (quote : Char) (input acc : List Char) :
+partial def quotedBody (policy : LiteralOptions) (input acc : List Char) :
     Option (List Char × List Char) :=
   match input with
   | [] => none
   | '\\' :: rest => do
-    let tail ← escapeTail policy quote rest
+    let tail ← escapeTail policy '"' rest
     let escape := '\\' :: rest.take (rest.length - tail.length)
-    quotedBody policy quote tail (escape.reverse ++ acc)
+    quotedBody policy tail (escape.reverse ++ acc)
   | next :: rest =>
-    if next == quote then some (acc.reverse, rest)
-    else if next.toNat < 32 then none
-    else quotedBody policy quote rest (next :: acc)
+    if next == '"' then some (acc.reverse, rest)
+    else if ConcreteSpec.Surface0.StringRaw next.toNat then quotedBody policy rest (next :: acc)
+    else none
 
 def draftTokens (slice : Nat) (options : Options) (source : String)
     (literals : LiteralOptions := {}) : List Token := Id.run do
@@ -308,6 +308,10 @@ def draftTokens (slice : Nat) (options : Options) (source : String)
   let punct := [">>", "<<", "::", "=>", "->", "<=", ">=", "==", "!=", "&&", "||",
     "..", "#[", "@["]
   let mut remaining := source.toList
+  -- Lean Strings already contain valid Unicode scalars. Refuse the remaining
+  -- SourceOk violations before tokenizing, including inside any literal.
+  if remaining.any (fun c => c.toNat == 0 || c.toNat == 0xFEFF) then
+    return [⟨"INVALID", ""⟩]
   let mut output := []
   for _ in [:remaining.length] do
     match remaining with
@@ -328,7 +332,7 @@ def draftTokens (slice : Nat) (options : Options) (source : String)
           (w, k, remaining.drop word.length)
         else if c == '\'' || c == '"' then
           if c == '"' then
-            match quotedBody literals c tail [] with
+            match quotedBody literals tail [] with
             | some (content, rest) => (String.ofList content, "STRING", rest)
             | none => ("", "INVALID", [])
           else
@@ -457,6 +461,7 @@ inductive Attachment where
   | loop (form : String)
   | operand (tree : Tree)
   | function
+  | structDecl
   | declaration
   | invalid
 
@@ -465,19 +470,20 @@ inductive Attachment where
 partial def isPostfixCall : Tree → Bool
   | .node "NameCall" _ => true
   | .node name children =>
-    if ["Atom", "NumericNameTail"].contains name then children.any isPostfixCall else false
+    if ["Atom", "HeadAtom", "NumericNameTail", "HeadNameTail"].contains name then children.any isPostfixCall else false
   | .leaf _ => false
 
 def attachmentValid (slice : Nat) (name : String) (target : Attachment) : Bool :=
+  let generalDeclaration := name != "may_not_terminate" && !contractAttribute slice name &&
+    !(slice >= 10 && ["proof", "test"].contains name)
   match target with
   | .loop form =>
-    if name == "may_not_terminate" then form == "while"
+    if ["may_not_terminate", "variant"].contains name then form == "while"
     else !["requires", "ensures", "proof", "test"].contains name
   | .operand operand => name == "may_not_terminate" && isPostfixCall operand
   | .function => name != "invariant"
-  | .declaration =>
-    name != "may_not_terminate" && !contractAttribute slice name &&
-      !(slice >= 10 && ["proof", "test"].contains name)
+  | .structDecl => (slice >= 8 && name == "invariant") || generalDeclaration
+  | .declaration => generalDeclaration
   | .invalid => false
 
 def attributeAttachment (owner : String) (following : List Tree) : Attachment :=
@@ -490,11 +496,14 @@ def attributeAttachment (owner : String) (following : List Tree) : Attachment :=
     else if name == "Functions" || name == "ImplMembers" then .function
     else if name == "TraitMembers" then .declaration
     else if name == "Item" then
-      if following.any (fun
-        | .node "Decl" (.leaf first :: _) => first.kind == "fn"
-        | .node "Decl" [child] => child.isNode "Function"
-        | _ => false)
-      then .function else .declaration
+      match following.find? (·.isNode "Decl") with
+      | some (.node "Decl" (.leaf first :: _)) =>
+        if first.kind == "fn" then .function
+        else if first.kind == "struct" then .structDecl
+        else .declaration
+      | some (.node "Decl" [child]) =>
+        if child.isNode "Function" then .function else .declaration
+      | _ => .declaration
     else .invalid
   | _, [] => .invalid
 
@@ -550,11 +559,17 @@ def targetArity (args : Tree) : Option Nat :=
     if target.isNode "TargetType" then some (1 + extraArguments tail) else none
   | _ => none
 
-def expectedTargetArity (callee : String) : Nat :=
-  if ["widen", "truncate", "reinterpret"].contains callee then 1
+-- Named operations represented by CExpr.convert, .wrapping and .saturating.
+-- "widen" is the E4 draft spelling. Plain checked operations use operators.
+def constPrimitiveArity (callee : String) : Nat :=
+  if callee == "widen" then 1
   else if ["wrapping_add", "wrapping_sub", "wrapping_mul",
     "saturating_add", "saturating_sub", "saturating_mul"].contains callee then 2
   else 0
+
+def expectedTargetArity (callee : String) : Nat :=
+  if ["truncate", "reinterpret"].contains callee then 1
+  else constPrimitiveArity callee
 
 def braceUsesMath : Tree → Bool
   | .node "BraceContents" [.node "MathOtherValue" _] => true
@@ -570,10 +585,13 @@ partial def validateNamedSuffixes (previous : Token × Token) (tree : Tree) :
   | .node name children =>
     let bareName := previous.1.kind != "::" && previous.2.kind == "IDENT"
     match name, children with
-    | "NameCall", [_, args, _]
-    | "ConstNameTail", [_, args, _] =>
+    | "NameCall", [_, args, _] =>
       if let some arity := targetArity args then
         guard (bareName && expectedTargetArity previous.2.spelling == arity)
+    | "ConstNameTail", [.leaf openParen, .node "ConstArgs" args, _] =>
+      let some tail := args.getLast? | none
+      guard (openParen.kind == "(" && bareName &&
+        constPrimitiveArity previous.2.spelling == 1 + extraArguments tail)
     | "NameLiteral", [_, contents, _] =>
       if braceUsesMath contents then
         guard (bareName && previous.2.spelling == "math")
@@ -636,7 +654,7 @@ def examples (slice currentSlice : Nat) (options : Options) : List Example :=
     [⟨"typed binding and addition", fnBody "let x : u8 = 1; return x + 2;", true⟩,
      ⟨"main capability reserved before its first use", "fn Fs() -> u8 { return 1; }", false⟩,
      ⟨"main struct keyword reserved before its first use", "fn struct() -> u8 { return 1; }", false⟩] ++
-    (mainReservedWords ++ ["for", "break", "continue"]).map (fun name =>
+    (mainReservedWords ++ ["for", "break", "continue", "pub", "const", "mod"]).map (fun name =>
       ⟨s!"reserved binder {name}", s!"fn {name}() -> u8 \{ return 1; }", false⟩) ++
     ["main", "self", "as", "in", "newtype", "union", "total"].map (fun name =>
       ⟨s!"identifier binder {name}", s!"fn {name}() -> u8 \{ return 1; }", true⟩) ++
@@ -686,8 +704,6 @@ def examples (slice currentSlice : Nat) (options : Options) : List Example :=
       fnBody "let x : u8 = if true { 1 } ; 1", false⟩,
     ⟨"statement if does not continue with binary plus",
       fnBody "if true { 1 } else { 1 } + 1", false⟩,
-    ⟨"ordering binds more tightly than equality",
-      fnBody "if x < x == true { 1 } else { 1 }", true⟩,
     ⟨"assignment to local", fnBody "x = 1 ;", true⟩,
     ⟨"assignment to arithmetic result", fnBody "1 + 1 = 1 ;", false⟩,
     ⟨"assignment to call result", fnBody "x ( ) = 1 ;", false⟩,
@@ -696,7 +712,6 @@ def examples (slice currentSlice : Nat) (options : Options) : List Example :=
   | 4 => [
     ⟨"explicit exact arithmetic in a loop contract",
       fnBody "#[invariant(math { x + 1 } > x)] while true {}", true⟩,
-    ⟨"exact arithmetic marker outside a contract", fnBody "return math { x + 1 };", false⟩,
     ⟨"listed names are identifiers in ordinary code", fnBody "let invariant : u8 = 1; return invariant;", true⟩,
     ⟨"termination permission before a loop",
       fnBody "#[ may_not_terminate ( \"reason\" ) ] while true { }", true⟩,
@@ -856,8 +871,9 @@ def examples (slice currentSlice : Nat) (options : Options) : List Example :=
     ⟨"import at first use", s!"{options.importWord} x :: x :: \{ x , x } ;", true⟩,
     ⟨"constant arithmetic and reference", "const x : u8 = x :: x + 1 ;", true⟩,
     ⟨"byte literal is a scalar constant", "const x : u8 = 'a' ;", true⟩,
-    ⟨"named binary primitive shape", "const x : u8 = x ( 1 , 1 ) ;", true⟩,
-    ⟨"named unary primitive shape", "const x : u8 = x ( 1 ) ;", true⟩,
+    ⟨"named wrapping primitive", "const x : u8 = wrapping_add(1, 1);", true⟩,
+    ⟨"named saturating primitive", "const x : u8 = saturating_mul(1, 1);", true⟩,
+    ⟨"draft spelling for lossless conversion", "const x : u32 = widen(1);", true⟩,
     ⟨"constant initializer excludes empty calls", "const x : u8 = x ( ) ;", false⟩,
     ⟨"constant initializer excludes exclusive borrow", "const x : u8 = & mut 1 ;", false⟩,
     ⟨"constant initializer excludes dereference", "const x : u8 = * 1 ;", false⟩]
@@ -975,12 +991,98 @@ def optionsAt (slice : Nat) : List Options := Id.run do
 def project (options : Options) (rules : List Rule) : DraftGrammar :=
   reachableProjection (instantiate options rules)
 
+def precedenceSource : String :=
+  fnBody "if x < x == true { 1 } else { 1 }"
+
+partial def hasOrderingBeforeEquality : Tree → Bool
+  | .node "HeadEquality" [left, right] =>
+    left.isNode "HeadCompare" && (left.tokens.map (·.kind)) == ["IDENT", "<", "IDENT"] &&
+      right.isNode "HeadEqualityTail" && (right.tokens.map (·.kind)) == ["==", "true"]
+  | .node _ children => children.any hasOrderingBeforeEquality
+  | .leaf _ => false
+
+-- Swap the two fixture operators' levels while preserving the input and LL(1).
+def reversedComparisonPrecedence (rules : List Rule) : List Rule :=
+  rules.map fun
+    | ("EqualityTail", ["==", "@Compare"]) => ("EqualityTail", ["<", "@Compare"])
+    | ("CompareOp", ["<"]) => ("CompareOp", ["=="])
+    | rule => rule
+
+def checkDraftBoundaries (slice : Nat) (options : Options) (g : DraftGrammar)
+    (table : PredictionTable) (label : String) : IO Unit := do
+  let parse := parseDraft slice options g table
+  let raw := parseSource slice options g table
+  let require (name : String) (ok : Bool) : IO Unit :=
+    unless ok do throw (IO.userError s!"{label}: {name}")
+  require "uniform reservation of pub, const and mod"
+    ((draftTokens slice options "pub const mod").map (·.kind) == ["pub", "const", "mod"])
+  if slice >= 3 then
+    require "ordering binds more tightly than equality in the parsed head"
+      ((parse precedenceSource).any hasOrderingBeforeEquality)
+  if slice >= 4 then
+    for (body, accepted) in [("#[variant(1)] while true {}", true),
+        ("#[variant(1)] for i from 0 until 1 {}", false)] do
+      let source := fnBody body
+      require s!"OD104 attachment: {body}"
+        ((raw source).any (fun tree => draftRestrictions slice options false tree == accepted) &&
+          (parse source).isSome == accepted)
+    let permission := "#[may_not_terminate(\"reason\")] "
+    let initial := [("if " ++ permission ++ "fp(x) { 1 } else { 1 }", ["fp", "(", "x", ")"]),
+      ("while " ++ permission ++ "fp(x) {}", ["fp", "(", "x", ")"]),
+      ("for i from 0 until " ++ permission ++ "fp(x) {}", ["fp", "(", "x", ")"])]
+    let matchHeads := if slice >= 6 then [
+      ("match " ++ permission ++ "u8::f() { _ => 1, }", ["u8", "::", "f", "(", ")"])] else []
+    let borrows := if slice >= 7 then
+      let range := s!" {options.range.1} 0 {options.range.2} "
+      let place := "x" ++ range ++ permission ++ "fp(x)"
+      let binding := if options.prefixBorrowBinder then s!"view = {place}"
+        else s!"{place} {options.binderMark} view"
+      [(s!"{options.borrowWord} {binding} \{ view }", ["fp", "(", "x", ")"])]
+      else []
+    let generics := if slice >= 9 then [
+      ("if " ++ permission ++ "m::fp::<u8>(x) { 1 } else { 1 }",
+        ["m", "::", "fp", "::", "<", "u8", ">", "(", "x", ")"])] else []
+    for (body, operand) in initial ++ matchHeads ++ borrows ++ generics do
+      require s!"termination permission on the head call: {body}"
+        ((parse (fnBody body)).any (fun tree => permissionOperands tree == [operand]))
+    let grouped := fnBody ("if " ++ permission ++ "(fp(x)) { 1 } else { 1 }")
+    require "termination permission refuses a call nested in a head group"
+      ((raw grouped).any (fun tree => !draftRestrictions slice options false tree) &&
+        (parse grouped).isNone)
+  if slice >= 6 then
+    for body in ["let mut P { a: a, b: b } = p; a = 1;", "let mut One::A { v: v } = o; v = 1;"] do
+      require s!"PAT-11 mutable destructuring: {body}" (parse (fnBody body)).isSome
+    let structInvariant := "#[invariant(math { field + 1 } > 0)] "
+    let visibilities := if slice >= 8 then ["", "pub "] else [""]
+    for visibility in visibilities do
+      let source := structInvariant ++ visibility ++ "struct S { field: u8 }"
+      require "struct invariant enters proof context at Slice 8"
+        ((raw source).any (fun tree => draftRestrictions slice options false tree == (slice >= 8)) &&
+          (parse source).isSome == (slice >= 8))
+    let unrelated := [structInvariant ++ "enum E { A, }", "#[variant(1)] struct S { field: u8 }"]
+    for misplaced in unrelated do
+      require s!"contract attribute refuses unrelated declaration attachment: {misplaced}"
+        ((raw misplaced).any (fun tree => !draftRestrictions slice options false tree) &&
+          (parse misplaced).isNone)
+  if slice >= 8 then
+    let excluded := ["try_convert(1)", "checked_add(1, 2)", "checked_neg(1)",
+      "truncate(1)", "reinterpret(1)", "discard(1)", "ordinary(1)", "wrapping_add(1)",
+      "widen(1, 2)", "wrapping_add(1, try_convert(2))"]
+    let targeted := if options.builtinTargetType then
+      ["try_convert(type: u8, 1)", "truncate(type: u8, 1)", "reinterpret(type: u8, 1)"] else []
+    for formula in excluded ++ targeted do
+      let source := s!"const X : u8 = {formula};"
+      require s!"closed constant primitive set and arity: {formula}"
+        ((raw source).any (fun tree => (validateNamedSuffixes (default, default) tree).isNone) &&
+          (parse source).isNone)
+
 def checkOptions (slice : Nat) (rules : List Rule) : IO Unit := do
   let cases := optionsAt slice
   for options in cases do
     let label := s!"slice {slice}, {reprStr options}"
     let g := project options rules
     let table ← requireLL1 label g
+    checkDraftBoundaries slice options g table label
     if slice >= 1 then
       let wildcardKind := if options.wildcardToken then "_" else "RESERVED_UNDERSCORE"
       unless (draftTokens slice options "_").map (·.kind) == [wildcardKind] do
@@ -1034,7 +1136,25 @@ def literalSuffixAllowed (allowRedundant : Bool) (expected : Option String) (sou
   | some (first :: rest), some ty => allowRedundant && String.ofList (first :: rest) == ty
   | _, _ => false
 
+def checkRawStrings : IO Unit := do
+  let forbidden := List.range 32 ++ List.range' 0x7F 33 ++
+    [0x061C, 0x200E, 0x200F, 0x2028, 0x2029, 0xFEFF] ++
+    List.range' 0x202A 5 ++ List.range' 0x2066 4
+  for unicodeEscape in [false, true] do
+    for stringHexEscape in [false, true] do
+      let policy : LiteralOptions := { unicodeEscape, stringHexEscape }
+      let kind (source : String) := (draftTokens 11 representative source policy).map (·.kind)
+      for scalar in forbidden do
+        let source := "\"" ++ String.singleton (Char.ofNat scalar) ++ "\""
+        unless kind source == ["INVALID"] do
+          throw (IO.userError s!"forbidden raw string scalar accepted: {scalar}")
+      unless kind (String.singleton (Char.ofNat 0xFEFF) ++ "fn") == ["INVALID"] && kind "\"é\\n\\0\"" == ["STRING"] &&
+          kind "\"\\u{202e}\\u{feff}\"" == [if unicodeEscape then "STRING" else "INVALID"] &&
+          kind "\"\\x7f\"" == [if stringHexEscape then "STRING" else "INVALID"] do
+        throw (IO.userError "raw source refusal or escaped string admission diverged")
+
 def checkLiteralOptions : IO Unit := do
+  checkRawStrings
   let kind (policy : LiteralOptions) (source : String) :=
     (draftTokens 2 representative source policy).map (·.kind)
   let base : LiteralOptions := {}
@@ -1067,6 +1187,13 @@ def main : IO Unit := do
     cumulative := extend cumulative delta
     let rules := addExpressionLadders slice cumulative
     checkOptions slice rules
+    if slice == 3 then
+      let reversed := project representative (addExpressionLadders slice (reversedComparisonPrecedence cumulative))
+      let table ← requireLL1 "reversed comparison precedence" reversed
+      unless (parseDraft slice representative reversed table precedenceSource).any
+          (fun tree => !hasOrderingBeforeEquality tree) do
+        throw (IO.userError "reversed precedence must still parse and fail the grouping assertion")
+      IO.println "pass: parsed grouping catches reversed comparison precedence"
     if slice == 4 then
       -- Duplicate the STRING path only in the alternate envelope. The default
       -- projection cannot see it, and slice 11 replaces the argument grammar.

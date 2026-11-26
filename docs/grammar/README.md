@@ -27,31 +27,24 @@ expansion in those deltas is proposed for that slice's grammar approval.
 | 3 | Logical and comparison operators, value conditionals, mutable lets, assignment, statement and trailing expressions | OD16 and OD34 define the condition head boundary, OD29 the Unit statement rule, OD42 the comparisons, and Q6.5 the Boolean forms. The shared Surface0 projection supplies the semicolon-free conditional precedent. The slice 3 delta still needs approval. The grammar factors assignment through a named place, and the type and ownership checks establish its mutability, the Unit statement rule, and branch-result restrictions. [Surface0 grammar](../../ConcreteSpec/Spec/Surface0.lean) · [OD16](../decisions.md#od16) · [OD34](../decisions.md#od34) · [OD29](../decisions.md#od29) · [OD42](../decisions.md#od42) · [OD77](../decisions.md#od77) · [SYN-9](../../legacy/docs/spec/syntax.md#SYN-9) |
 | 4 | While and counted loops, labels, transfers, loop and expression attributes | OD47–49 and OD82 supply the loop and attribute forms. Label punctuation follows the recorded syntax. The exact general attribute syntax and wildcard token classification remain open. [Loop syntax](../../legacy/docs/spec/syntax.md) · [OD47](../decisions.md#od47) · [Termination permission](../decisions.md#decided-project-no-hidden-traps) · [Vertical slices](../../ROADMAP.md#vertical-slices) |
 | 5 | Parameters, calls, recursion and function attributes | Parameters and calls follow the slice plan and the OD31/OD138 typing rules. OD82 covers recursion attributes. The exact production delta remains for slice 5. [OD31](../decisions.md#od31) · [OD138](../decisions.md#od138) · [OD82](../decisions.md#od82) |
-| 6 | Named fields and projections, aliases, qualified patterns, enums and match | OD76 separates struct lets from qualified variant patterns. OD25 requires explicit ignores, recovered item 9 requires field labels, OD86 supplies the arm bodies, and OD130 supplies named variants. OD72 requires a variant. SYN-8 governs statement-position matches, and PAT-7 supplies alternative patterns. The ballot records why the semicolon alternative is infeasible under the recovered comma decision. [OD76](../decisions.md#od76) · [OD25](../decisions.md#od25) · [Field patterns](../decisions.md#recovered-59-9) · [OD86](../decisions.md#od86) · [OD130](../decisions.md#od130) · [Comma record](../decisions.md#recovered-59-48) · [OD41](../decisions.md#od41) · [OD62](../decisions.md#od62) · [OD90](../decisions.md#od90) · [OD128](../decisions.md#od128) · [OD72](../decisions.md#od72) · [SYN-8](../../legacy/docs/spec/syntax.md#SYN-8) · [PAT-7](../../legacy/docs/spec/patterns.md#PAT-7) · [Namespace decision](../decisions.md#decided-2026-11-02-namespace) |
+| 6 | Named fields and projections, aliases, qualified patterns, enums and match | OD76 separates struct lets from qualified variant patterns. OD25 requires explicit ignores, recovered item 9 requires field labels, OD86 supplies the arm bodies, and OD130 supplies named variants. OD72 requires a variant. SYN-8 governs statement-position matches, PAT-7 supplies alternative patterns, and PAT-11 allows mutable bindings in irrefutable destructuring lets. The ballot records why the semicolon alternative is infeasible under the recovered comma decision. [OD76](../decisions.md#od76) · [OD25](../decisions.md#od25) · [Field patterns](../decisions.md#recovered-59-9) · [OD86](../decisions.md#od86) · [OD130](../decisions.md#od130) · [Comma record](../decisions.md#recovered-59-48) · [OD41](../decisions.md#od41) · [OD62](../decisions.md#od62) · [OD90](../decisions.md#od90) · [OD128](../decisions.md#od128) · [OD72](../decisions.md#od72) · [SYN-8](../../legacy/docs/spec/syntax.md#SYN-8) · [PAT-7](../../legacy/docs/spec/patterns.md#PAT-7) · [PAT-11](../../legacy/docs/spec/patterns.md#PAT-11) · [Namespace decision](../decisions.md#decided-2026-11-02-namespace) |
 | 7 | References, dereference, arrays and indexing, scoped views and ranges | OD1–3, OD57–58, Q4.7 and the removal of special `as`. Empty array literals are refused, and OD149 supplies repetition. Borrow keyword, binder and range spellings remain open. Optional borrow extensions remain with their separate owner items. [Empty arrays](../decisions.md#recovered-59-50) · [OD149](../decisions.md#od149) · [OD1](../decisions.md#od1) · [OD3](../decisions.md#od3) · [OD57](../decisions.md#od57) · [OD58](../decisions.md#od58) · [Removed words](../decisions.md#decided-2026-11-08-removed-words) |
-| 8 | Visibility, constants, external modules and import lists | OD33 and OD78 decide `mod X;`. Q6.4 as revised gives the constant initializer restriction. The draft gives initializers a scalar expression ladder and checks the shapes of named primitive applications. Constants and intrinsic names use the identifier token. Resolution must establish constant identity or membership in the closed primitive set. The exact lossless-conversion name and target syntax remain on the ballot. Exact import spelling remains open. [OD33](../decisions.md#od33) · [OD78](../decisions.md#od78) · [Constant initializers](../decisions.md#decided-2026-11-08-constants) · [Imported uses](../decisions.md#decided-2026-11-08-imports-qualified) |
+| 8 | Visibility, struct invariants, constants, external modules and import lists | OD33 and OD78 decide `mod X;`. Q6.4 as revised gives the constant initializer restriction. The draft checks scalar formulas against the closed set of primitive applications from the constant spec. Constants and intrinsic names use the identifier token. Name resolution must confirm constant identities and primitive names. Struct invariants use `#[invariant(...)]` and enable the usual proof-expression context. Field privacy belongs to semantic checking. The exact lossless-conversion name and target syntax remain on the ballot. Exact import spelling remains open. [OD33](../decisions.md#od33) · [OD78](../decisions.md#od78) · [Constant initializers](../decisions.md#decided-2026-11-08-constants) · [Constant spec](../../ConcreteSpec/Spec/Const.lean) · [Struct invariants](../decisions.md#decided-project-spark-2026-11-06) · [Imported uses](../decisions.md#decided-2026-11-08-imports-qualified) |
 | 9 | Generic declarations and arguments, bounds, capability arguments, traits, impls, defer | OD46, OD87, OD88, OD129, OD132 and OD69. OD77 and OD148 limit trait and trait method declarations. OD89 restricts capability parameters to inherent impls. Exact generic delimiter lexing and declaration forms remain for slice 9. The grammar orders visibly tagged type and capability forms. A bare identifier has the same token kind in both categories, so resolution must classify it and then check the order. Slice 9 introduces capability parameters and arguments. Slice 11 adds their use in `with(...)` clauses. [OD88](../decisions.md#od88) · [OD89](../decisions.md#od89) · [OD77](../decisions.md#od77) · [OD148](../decisions.md#od148) · [Authority](../decisions.md#decided-2026-11-02-authority) · [OD46](../decisions.md#od46) · [OD87](../decisions.md#od87) · [OD129](../decisions.md#od129) · [OD132](../decisions.md#od132) · [OD69](../decisions.md#od69) |
 | 10 | Spec functions, ghost lets, assert/by and assume, declaration attributes | OD81, OD120 and the proof-surface schedule. Recovered item 45 records the expression-bodied specification function and theorem-backed assertion. The later recovered item 13 fixes the parenthesized assertion syntax, and OD80 supplies the assumption statement. Exact attribute and proof production delta remains for slice 10. [Specification function spelling](../decisions.md#recovered-59-45) · [Assertion spelling](../decisions.md#recovered-59-13) · [OD80](../decisions.md#od80) · [OD81](../decisions.md#od81) · [OD120](../decisions.md#od120) · [Vertical slices](../../ROADMAP.md#vertical-slices) |
 | 11 | Authority clauses, capability lists, text literals and ordinary resource calls | Authority rules, TYPE-20 and the slice 11 schedule. Plan v4 step 6 reports delegated agreement on console output placement. The lexer keeps text tokens distinct from byte tokens. The exact resource catalog and authority production delta remain for slice 11. [Authority](../decisions.md#decided-2026-11-02-authority) · [Character types](../decisions.md#decided-2026-11-12-char) · [Vertical slices](../../ROADMAP.md#vertical-slices) |
 
 ## Reproduce the checks
 
-From the repository root, compile the existing LL(1) module and the draft
-checker into a temporary directory. The checker prints the completed projections
-and stops on a conflict, undefined production, unproductive nonterminal or
-failed example.
+From the repository root, build the spec lexer and run the standalone
+checker. It prints the completed projections and stops on a conflict, undefined
+production, unproductive nonterminal or failed example.
 
 ```sh
-LEAN_NUM_THREADS=2 nix develop -c bash -s <<'DRAFT_CHECK'
-  set -e
-  draft_build=$(mktemp -d)
-  trap 'rm -r -- "$draft_build"' EXIT
-  mkdir -p "$draft_build/ConcreteSpec/Spec"
-  lean -o "$draft_build/ConcreteSpec/Spec/LL1.olean" -c "$draft_build/ll1.c" ConcreteSpec/Spec/LL1.lean
-  LEAN_PATH="$draft_build" lean -c "$draft_build/check.c" docs/grammar/Check.lean
-  leanc -O2 -o "$draft_build/check" "$draft_build/ll1.c" "$draft_build/check.c"
-  "$draft_build/check"
-DRAFT_CHECK
+LEAN_NUM_THREADS=2 nix develop -c bash -c '
+  lake build +ConcreteSpec.Spec.Surface0 &&
+  lake env lean --run docs/grammar/Check.lean
+'
 ```
 
 The checker runs the active option product on each cumulative projection and
@@ -63,7 +56,8 @@ in each applicable slice. Both trust-word reservation policies run the same
 source controls against each prediction table. The adapter reserves the main
 keywords even in projections that have no production for them. The literal
 extensions share terminal kinds and have source-level admission and refusal
-controls. E4's expected-type and resolved-name choices need later semantic
+controls. The adapter uses the spec’s raw-string predicate under every escape
+policy and refuses raw NUL and U+FEFF throughout the source. E4's expected-type and resolved-name choices need later semantic
 qualification.
 
 The controls exercise slice 1 lets, head braces and shielded literals, block
@@ -136,8 +130,8 @@ name resolution and typing to establish the identity and validity of the
 place. [OD121](../decisions.md#od121)
 
 Slice 4 is the first consumer of the explicit exact-arithmetic boundary,
-through loop contracts. Slice 5 reuses it in function contracts. The draft
-checks both a reserved `math` and an ordinary identifier. The ordinary
+through loop contracts. Slice 5 reuses it in function contracts and Slice 8 in
+struct invariants. The draft checks both a reserved `math` and an ordinary identifier. The ordinary
 identifier candidate shares a braced suffix with struct literals and
 distinguishes a field initializer from an arithmetic operand after the first
 identifier. It requires shielding in a condition head, where an unshielded
@@ -148,8 +142,8 @@ assumptions. The spelling remains open.
 
 Production qualification still needs resolution of attribute targets and
 confirmation of the trailing-comma policy for fixed-arity numeric and constant
-calls. The resolved target of a constant call and classification
-of bare capability names require name resolution. Lexing, AST actions and
+calls. Constant references, primitive names and bare capability names also
+require name resolution. Lexing, AST actions and
 independent derivations remain production obligations under R-0620, R-0622
 and plan v4 step 4(f).
 

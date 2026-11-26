@@ -297,6 +297,10 @@ Initializers = IDENT : @Expr @InitializerTail
 Initializers =
 InitializerTail = , @Initializers
 InitializerTail =
+# PAT-11 applies mut to every binder of the irrefutable pattern.
+LetHead = IDENT @LetTail
+LetHead = mut IDENT @LetTail
+LetHead = WILDCARD : @Type
 LetTail = : @Type
 LetTail = { @PatternFields }
 LetTail = :: IDENT @DestructurePath
@@ -410,8 +414,8 @@ ConstAtom = BYTE
 ConstAtom = true
 ConstAtom = false
 ConstAtom = ( @ConstExpr )
-# Names remain identifiers. Resolution checks constant references and the closed
-# set of primitive operation names. Exact conversion spelling is on the ballot.
+# Names remain identifiers. The draft checks application against the closed set
+# of primitive operations. Resolution checks constant references. E4 owns conversion spelling.
 ConstAtom = IDENT @ConstNameTail
 ConstNameTail = :: IDENT @ConstPathTail
 ConstPathTail = :: IDENT @ConstPathTail
