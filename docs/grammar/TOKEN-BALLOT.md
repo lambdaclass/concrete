@@ -21,13 +21,14 @@ reservations. [Removed words](../decisions.md#decided-2026-11-08-removed-words) 
 | 2 integer types | `i8`, `i16`, `i32`, `i64`, `u16`, `u32`, `u64` | Q1 below. |
 | 3 conditionals, mutable lets, boolean literals and types | `if`, `else`, `mut`, `true`, `false`, `bool`, `Unit` | Constructs scheduled. Reservation of the first five is proposed. Types are Q1. |
 | 4 loops, bounds and transfers | `while`, `from`, `until`, `for`, `break`, `continue` | First three reserved on main. Last three decided by OD47–49. |
-| 6 types, patterns and matches | `Copy`, `type`, `kept`, `enum`, `match` | First three reserved on main. Enum and match constructs are decided. Proposed reservation of the last two requires the slice delta. |
+| 6 types, patterns and matches | `Copy`, `type`, `enum`, `match` | First two reserved on main. Enum and match constructs are decided. Proposed reservation of the last two requires the slice delta. |
 | 7 scoped borrow | `borrow` or `loan` | Open. Each option reserves that word throughout its candidate revision. `mut` is reused for the exclusive form. |
 | 8 public items, constants, external submodules and import lists | `pub`, `const`, `mod`, `import` or `use` | Public visibility, constants and `mod X;` are decided. Import spelling is open. Both import options preserve item lists and qualified uses. |
 | 9 traits, impls, deferred calls and capability parameters | `trait`, `impl`, `defer`, `Self`, `cap` | Constructs decided. `Self` and `cap` already reserved. Proposed reservation of the other three requires the slice delta. |
 | 10 proof declarations and statements | `assert`, `assume`, `spec`, `by`, `ghost` | Constructs decided. Last three already reserved. Proposed reservation of `assert` and `assume` requires the slice delta. |
 | 11 authority clauses and scalar text type | `with`, `char` | `with` construct decided, proposed reservation subject to slice delta. `char` is Q1. |
 | 9 explicit capability arguments, 11 grants and effect clauses | `Fs`, `Network`, `Env`, `Time`, `Alloc`, `Device`, `Console`, `Process`, `Unsafe`, `Entropy` | Reserved on main. Concrete operations consume them as their authority families land. |
+| 17 foreign parameters | `kept` | Already reserved on main. First consumed by FFI extern parameters under Q3.12 and [recovered item 52](../decisions.md#recovered-59-52). |
 | 16–17 trust and foreign declarations | `trusted`, `extern` | Q2 below. |
 
 Authority for the already reserved spellings is reflected in
@@ -89,6 +90,9 @@ Illustrative OD43(c) type and trait list. An exhaustive type and resource
 reservation catalog needs a separate disposition before the relevant
 delta. The names below include candidates already represented as reserved
 keyword tokens as indicated in the keyword table.
+The current [`builtinTypeNames`](../../ConcreteSpec/Surface1.lean) also reserves
+`Heap` (slice 12), `HeapArray` (13), `Vec` and `String` (14), and `f32` and
+`f64` (18). These reservations have no dedicated productions through slice 11.
 
 | First consumer | Builtin types or traits |
 |---|---|
@@ -109,16 +113,19 @@ keyword tokens as indicated in the keyword table.
 | 2 | `,`, `&`, `\|`, `^`, `<<`, `>>` | Comma first separates the two arguments of numeric builtins. Remaining tokens are bitwise/shift operators. |
 | 2 | `~` or `!` for bitwise NOT | A. `~x` (recommended, keeps `!` boolean-only). B. `!x` distinguished by the operand type from slice 3. This is one prefix grammar alternative under B. |
 | 3 | `==`, `!=`, `<`, `<=`, `>`, `>=`, `&&`, `\|\|`, `!` | Decided comparisons and boolean operators (OD42, Q6.5). Trailing expressions have no semicolon. |
+| 4 | `LABEL :` and `break LABEL;` / `continue LABEL;` | The loop declaration uses a colon. The transfer uses the label alone. |
 | 4–5 | `#[name]`, `#[name(args)]` | Listed forms for `invariant`, `variant`, `may_not_terminate`, `requires`, `ensures` are decided. General attribute syntax is open. A. Keep the same `#[...]` envelope. B. Use `@[...]` for general attributes, preserving the listed `#[...]` forms. Attribute names stay identifiers. |
-| 4–6 | `_` | OD62 spelling decided. A. Punctuation token. B. A reserved identifier token distinct from ordinary identifiers. First loop index, then parameter, then pattern. |
+| 4–6 | `_` | OD62 spelling decided. A. Punctuation token. B. A reserved identifier token distinct from ordinary identifiers. The current slice 1 resolver recognizes a typed wildcard let through the identifier token. The draft first tests the two distinct token classifications at slice 4, then reuses them for parameters and patterns. |
 | 6 | `.`, `::`, `=>` | Field selection, qualified paths and pattern/body arrow. OD128 decides `=>`. |
-| 6 | Match arm sequence separator | A. `,`. B. `;`. Both draft options allow the separator before the closing brace. |
+| 6 | `..` in `Variant { .. }` | Explicit ignored payload under [OD25](../decisions.md#od25). |
+| 6 | Match arm terminator | A. `,`, as recorded in [recovered item 48](../decisions.md#recovered-59-48). B. `;`, the isolated alternative requested by E1. Each arm includes its terminator. |
 | 7 | Prefix `&`, `&mut`, `*`, `[`, `]` | Shared/exclusive borrows and dereference, array types/literals and postfix indexing. `&mut` is two tokens. |
 | 7 | Scoped borrow range | A. `borrow place from lo until hi -> view { … }`. B. `borrow place from lo .. hi -> view { … }`. Either range combines with either borrow keyword and binder delimiter. The upper endpoint uses the same depth-zero block boundary as a condition head. |
-| 7 | Scoped borrow binder | A. `-> view`. B. `: view`. `as` remains an ordinary identifier. |
-| 8 | Import list | A. `import a::b::{x, y};`. B. `use a::b::{x, y};`. Both use `b::x` at the use site. The later imported-use decision leaves the exact import spelling open. |
-| 9 | `<`, `>`, explicit expression `::<...>` | Declaration and type arguments use angle delimiters. The expression turbofish has a recorded precedent (OD87). A bare expression `<...>` conflicts with comparison, as the planted control shows. Under the checked token model, `>>` is a shift and nested generic closers are two `>` tokens. The source spacing or lexer treatment of adjacent closers needs the slice 9 approval. |
-| 10 | Existing `(`, `)`, `;`, `#[`, `]` | Assertions, assumptions, proof paths, `#[proof(path)]` and `#[test]`. |
+| 7 | Scoped borrow binder | A. `-> view`. B. `: view`. C. Prefix `borrow view = place { … }`, the earlier [recovered item 11](../decisions.md#recovered-59-11) candidate pending the spelling round. C is checked without a range because the recorded example gives no range placement. `as` remains an ordinary identifier. |
+| 8 | Import list | A. `import a::b::{x, y};`, as recorded in [recovered item 44](../decisions.md#recovered-59-44). B. `use a::b::{x, y};`. Both use `b::x` at the use site. The later imported-use decision leaves the exact import spelling open. |
+| 9 | `<`, `>`, explicit expression `::<...>` | Declaration and type arguments use angle delimiters. The expression turbofish has a recorded precedent (OD87). A bare expression `<...>` conflicts with comparison, as the planted control shows. [Recovered item 34](../decisions.md#recovered-59-34) specifies longest match with `>>` split only where it closes generics. The draft tests the resulting token stream, including the unsplit shift. The exact lexer/parser interface for contextual splitting needs the slice 9 approval. |
+| 9 | `cap C`, `+`, `{}` | Type parameters and arguments precede capability parameters and arguments. `cap` marks declarations, and sets use unions of names or the empty set. [OD88](../decisions.md#od88) · [recovered item 46](../decisions.md#recovered-59-46) |
+| 10 | Existing `(`, `)`, `;`, `#[`, `]` | Expression-bodied `spec fn … = e;`, assertions, assumptions, proof paths, `#[proof(path)]` and `#[test]`. |
 | 11 | Existing `(`, `)`, `,` | `with(...)` before the return arrow and ordinary call syntax for resource operations. |
 | — | Compound assignment | Outside the proposal. |
 
