@@ -666,8 +666,8 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
 
    Accepted examples `return 125;` and `return 134;` are in the corpus and must classify as exits. Slice 0 can't produce a real startup refusal, because it has no grants. The refusal and trap classifications are also exercised by comparator self-tests: stub images, and the trap via gate 6.
 
-   The `llvm exit N lcb diagnostic STATUS CODE [MESSAGE]` row runs the public build command in
-   each backend mode and checks the native LLVM exit and the LCB diagnostic. The CLI
+   The `llvm exit N lcb resource RESOURCE BOUND MEASURED` row runs the public build command in
+   each backend mode and checks the native LLVM exit and the exact LCB resource diagnostic. The CLI
    diagnostic rows check the diagnostic and exit status for an invalid backend, a non-canonical
    source path, an unknown target reported by the native helper, a failed native helper, and a failed build-input write.
 

@@ -248,7 +248,7 @@ def digest (role : PayloadRole) (slot : Nat) (payload : ByteArray) : Option (Dig
 def matchesDigest (role : PayloadRole) (slot : Nat) (payload : ByteArray)
     (expected : Digest role slot) : Bool :=
   match digest role slot payload with
-  | some actual => actual.bytes.data == expected.bytes.data
+  | some actual => actual.bytes == expected.bytes
   | none => false
 
 theorem matchesDigest_of_none {role : PayloadRole} {slot : Nat}

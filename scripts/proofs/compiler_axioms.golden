@@ -52,9 +52,9 @@ Concrete.Artifact.instDecidableEqPayloadRole._proof_1
 Concrete.Artifact.instDecidableEqPayloadRole._proof_2	
 Concrete.Artifact.instDecidableEqRecordKind._proof_1	
 Concrete.Artifact.instDecidableEqRecordKind._proof_2	
-Concrete.Artifact.matchesDigest.eq_1	Classical.choice Quot.sound propext
-Concrete.Artifact.matchesDigest_of_none	Classical.choice Quot.sound propext
-Concrete.Artifact.matchesDigest_of_rejected_length	Classical.choice Quot.sound propext
+Concrete.Artifact.matchesDigest.eq_1	Quot.sound propext
+Concrete.Artifact.matchesDigest_of_none	Quot.sound propext
+Concrete.Artifact.matchesDigest_of_rejected_length	Quot.sound propext
 Concrete.BIR.Behaviour.diverges.sizeOf_spec	
 Concrete.BIR.Behaviour.exited.inj	
 Concrete.BIR.Behaviour.exited.injEq	propext
@@ -1422,6 +1422,44 @@ _private.Concrete.Artifact.Encoding.0.Concrete.Artifact.frameHeader.eq_1
 _private.Concrete.Artifact.Encoding.0.Concrete.Artifact.frame_cancel	Classical.choice Quot.sound propext
 _private.Concrete.Artifact.Encoding.0.Concrete.Artifact.frame_cancel._simp_1_1	propext
 _private.Concrete.Artifact.Encoding.0.Concrete.Artifact.frame_prefix	Classical.choice Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_1	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_10	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_11	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_12	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_13	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_14	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_15	
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_16	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_17	propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_18	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_19	
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_2	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_20	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_21	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_22	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_23	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_24	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_25	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_26	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_27	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_28	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_29	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_3	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_30	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_31	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_32	
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_33	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_4	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_5	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_6	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_7	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_8	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_9	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.hashBytes._proof_1	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.hashBytes._proof_2	
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.hashBytes._proof_3	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.hashBytes._proof_4	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.k._proof_1	
 _private.Concrete.BIR.0.Concrete.BIR.BinOp.exact.match_1.eq_1	
 _private.Concrete.BIR.0.Concrete.BIR.BinOp.exact.match_1.eq_2	
 _private.Concrete.BIR.0.Concrete.BIR.BinOp.exact.match_1.eq_3	

@@ -531,8 +531,15 @@ publish_build=(build tests/slice0/answer.con -o "$publish_out" --backend llvm)
 ln -s "$root/.lake" "$helper_project/.lake"
 control="$work/ctl/cli-lcb-body"
 mkdir -p "$control"
-emit_slice0_row "$root/tests/manifest.tsv" con:tests/slice0/trap.con "$control/trap" \
-  "$target" 'trap arithmeticOverflow site 1'
+control_manifest="$root/tests/manifest.tsv"
+control_rows=$(bounded 30 python3 -I "$root/scripts/checks/lib/test_manifest.py" rows "$control_manifest")
+trap_row=$(awk -F '\t' '$1 == "source_trap" {print}' <<<"$control_rows")
+IFS=$'\t' read -r _ trap_program trap_expect <<<"$trap_row"
+if [[ "$trap_program" != con:tests/slice0/trap.con || "$trap_expect" != "trap "* ]]; then
+  echo "FAIL CLI wrong body control: missing typed source_trap expectation" >&2
+  exit 1
+fi
+emit_slice0_row "$control_manifest" "$trap_program" "$control/trap" "$target" "$trap_expect"
 cat >"$publish_lib/slice0_native.sh" <<'EOF'
 set -euo pipefail
 if [ "$1" != target ]; then
