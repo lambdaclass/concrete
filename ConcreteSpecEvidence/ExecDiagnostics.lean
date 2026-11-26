@@ -1,3 +1,6 @@
+import ConcreteSpec.Spec.Basics
+import ConcreteSpec.Spec.Ident
+import ConcreteSpecEvidence.ExecExamples
 import ConcreteSpec.Diagnostics.Types
 import ConcreteSpec.Spec.Exec
 

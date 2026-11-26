@@ -1,4 +1,4 @@
-import ConcreteSpec.Spec.Own
+import ConcreteSpecEvidence.OwnExamples
 import Lean
 
 open Lean Elab Command
@@ -6,7 +6,7 @@ open Lean Elab Command
 -- Use the built, unmutated module so a failed proof cannot hide its own range.
 #eval show CommandElabM Unit from do
   let env ← getEnv
-  let some own := env.getModuleIdx? `ConcreteSpec.Spec.Own
+  let some own := env.getModuleIdx? `ConcreteSpecEvidence.OwnExamples
     | throwError "missing ownership module"
   let mut ranges := []
   for (name, info) in env.constants do

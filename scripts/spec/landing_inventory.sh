@@ -7,6 +7,6 @@ trap 'rm -rf "$scratch"' EXIT
 BOUNDED_PARENT="$scratch"
 source scripts/checks/lib/bounded.sh
 
-bounded_run -i /dev/null -r 3600 3600 -- lake build ConcreteSpec Concrete
+bounded_run -i /dev/null -r 3600 3600 -- lake build ConcreteSpecEvidence Concrete
 bounded_run -i /dev/null 60 -- lake env lean -DautoImplicit=false -DwarningAsError=true scripts/spec/landing_inventory.lean
 bounded_summary

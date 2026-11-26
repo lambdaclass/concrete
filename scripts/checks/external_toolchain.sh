@@ -15,8 +15,9 @@ cp "$ROOT/scripts/proofs/"{external.sh,external.pins,lake_tool.sh,lib.sh,theorem
 cp "$ROOT/scripts/checks/lib/"{gate_env.sh,git_sandbox.sh,has_match.sh,limits.sh} "$TMP/project/scripts/checks/lib/"
 printf '%s\n' leanprover/lean4:v4.35.0 > "$TMP/project/lean-toolchain"
 # lib.sh's project build and orphan-pruning prerequisites remain real code.
-touch "$TMP/project/ConcreteSpec.lean" "$TMP/project/Concrete.lean"
-mkdir "$TMP/project/ConcreteSpec" "$TMP/project/Concrete"
+touch "$TMP/project/ConcreteSpecEvidence.lean" "$TMP/project/ConcreteSpec.lean" "$TMP/project/Concrete.lean"
+mkdir "$TMP/project/ConcreteSpecEvidence" "$TMP/project/ConcreteSpec" "$TMP/project/Concrete"
+touch "$TMP/project/ConcreteSpec/SpecificationOnly.lean"
 git -C "$TMP/source" init -q
 cp "$TMP/project/lean-toolchain" "$TMP/source/lean-toolchain"
 mkdir "$TMP/source/src"
@@ -54,7 +55,7 @@ rows=[{"meta": {k: {"version": v} for k,v in [("lean","4.35.0"),("exporter","fix
       {"ie":1,"sort":0}, {"ie":2,"natVal":0}, {"ie":3,"natVal":1},
       {"in":2,"str":{"pre":1,"str":"definition"}},
       {"def":{"name":2,"levelParams":[],"type":1,"value":2,"hints":"abbrev","safety":"safe","all":[]}}]
-for i in range(100):
+for i in range(101):
     rows += [{"in":i+3,"str":{"pre":1,"str":f"theorem{i:03}"}},
              {"thm":{"name":i+3,"levelParams":[],"type":1,"value":2+i%2,"all":[]}}]
 with open(sys.argv[1], 'w') as f:
@@ -124,16 +125,44 @@ set -eu
 mkdir -p "$FIXTURE_TOOLS"
 flock -n "$FIXTURE_TOOLS/.lock" true || { echo 'CONTROL: caller lock held' >&2; exit 95; }
 case "$*" in
-  'build ConcreteSpec Concrete') echo project >> "$PHASE_LOG" ;;
+  'build ConcreteSpec ConcreteSpecEvidence Concrete') echo project >> "$PHASE_LOG" ;;
   'env lean '*)
     echo "population-$PROOF_MODE" >> "$PHASE_LOG"
+    if [ "${FIXTURE_EMPTY_SELECTION:-0}" = 1 ] && [ "$PROOF_PKG" = SpecAndEvidence ]; then
+      case "$PROOF_MODE" in theorems|encoded) exit 0 ;; esac
+    fi
     case "$PROOF_MODE" in
-      theorems) for i in $(seq -w 0 99); do printf 'ConcreteSpec.theorem%03d\t\n' "$((10#$i))"; done ;;
+      imported)
+        case "$PROOF_PKG" in
+          ConcreteSpec) printf '%s\n' ConcreteSpec ConcreteSpec.SpecificationOnly ;;
+          ConcreteSpecEvidence) printf '%s\n' ConcreteSpecEvidence ;;
+          SpecAndEvidence)
+            printf '%s\n' ConcreteSpec ConcreteSpecEvidence
+            if [ "${FIXTURE_INCOMPLETE_EXPORT:-0}" = 0 ]; then
+              printf '%s\n' ConcreteSpec.SpecificationOnly
+            fi ;;
+          *) exit 91 ;;
+        esac ;;
+      environment)
+        [ "$PROOF_PKG" = SpecAndEvidence ] || exit 91
+        printf '%s\n' ConcreteSpec ConcreteSpecEvidence
+        if [ "${FIXTURE_INCOMPLETE_ENUMERATOR:-0}" = 0 ]; then
+          printf '%s\n' ConcreteSpec.SpecificationOnly
+        fi ;;
+      theorems)
+        for i in $(seq 0 99); do printf 'ConcreteSpec.theorem%03d\t\n' "$i"; done
+        if [ "${FIXTURE_OMIT_EVIDENCE:-0}" = 0 ]; then printf 'ConcreteSpec.theorem100\t\n'; fi ;;
       encoded)
         if [[ "$3" == */control-* ]]; then
           printf '%s\n' 'ConcreteSpecControl.«a.b»	s19:ConcreteSpecControls3:a.b' 'ConcreteSpecControl.a.b	s19:ConcreteSpecControls1:as1:b' 'ConcreteSpecControl.«λ»	s19:ConcreteSpecControls2:λ'
         else
-          for i in $(seq 0 99); do printf 'ConcreteSpec.theorem%03d\ts12:ConcreteSpecs10:theorem%03d\n' "$i" "$i"; done
+          if [ "$PROOF_PKG" != ConcreteSpecEvidence ]; then
+            for i in $(seq 0 99); do printf 'ConcreteSpec.theorem%03d\ts12:ConcreteSpecs10:theorem%03d\n' "$i" "$i"; done
+          fi
+          if [ "$PROOF_PKG" = ConcreteSpecEvidence ] ||
+             { [ "$PROOF_PKG" = SpecAndEvidence ] && [ "${FIXTURE_OMIT_EVIDENCE:-0}" = 0 ]; }; then
+            printf 'ConcreteSpec.theorem100\ts12:ConcreteSpecs10:theorem100\n'
+          fi
         fi ;;
       decls) python3 scripts/proofs/export_inventory.py decls "$FIXTURE_STREAM" > "$PROOF_OUT" ;;
       heads)
@@ -285,6 +314,26 @@ for phase in project population-theorems population-encoded exporter population-
 done
 printf 'lean4export\ncon-leche\nnanoda\n' > "$TMP/expected"
 cmp "$TMP/expected" "$DISPATCH_LOG"
+# Each library root is complete, but the actual export root misses one spec module.
+: > "$PHASE_LOG"
+FIXTURE_INCOMPLETE_EXPORT=1 run_driver 'source modules outside the export root: ConcreteSpec.SpecificationOnly'
+! grep -qxF exporter "$PHASE_LOG"
+# Complete roots also cannot mask a theorem query running in a smaller environment.
+: > "$PHASE_LOG"
+FIXTURE_INCOMPLETE_ENUMERATOR=1 run_driver 'source modules outside the export theorem environment: ConcreteSpec.SpecificationOnly'
+! grep -qxF exporter "$PHASE_LOG"
+# A complete import closure can coexist with an empty evidence arm of the export selector.
+head -n -2 "$FIXTURE_STREAM" > "$TMP/spec-only.ndjson"
+: > "$PHASE_LOG"
+FIXTURE_OMIT_EVIDENCE=1 FIXTURE_STREAM="$TMP/spec-only.ndjson" \
+  run_driver 'theorems missing from the export selection: s12:ConcreteSpecs10:theorem100'
+! grep -qxF exporter "$PHASE_LOG"
+# The gate refuses an entirely empty combined selection before calling the exporter.
+FIXTURE_EMPTY_SELECTION=1 run_driver 'theorems missing from the export selection:'
+! grep -qxF exporter "$PHASE_LOG"
+# A complete selection also cannot mask an exporter that drops the evidence theorem.
+FIXTURE_STREAM="$TMP/spec-only.ndjson" \
+  run_driver 'theorems missing from the export: s12:ConcreteSpecs10:theorem100'
 # Cache hits must succeed even when the nanoda upstream is unavailable.
 mv "$TMP/source" "$TMP/source-offline"
 run_driver 'PROOF-EXTERNAL:' 0

@@ -158,6 +158,7 @@ def comment_spans(src):
 
 
 HEADER = re.compile(r"import ConcreteSpec(\.[A-Za-z0-9_]+)*\s*$")
+EVIDENCE_HEADER = re.compile(r"import ConcreteSpec(Evidence)?(\.[A-Za-z0-9_]+)*\s*$")
 class ModuleHeader:
     """One import per line, drawn from the approved roots' actual module graph.
 
@@ -285,6 +286,8 @@ if __name__ == "__main__":
     try:
         if sys.argv[1] == "scan-compiler":
             sys.exit(scan(sys.argv[2], sys.argv[3:], compiler_header()))
+        if sys.argv[1] == "scan-evidence":
+            sys.exit(scan(sys.argv[2], sys.argv[3:], EVIDENCE_HEADER))
         if sys.argv[1] == "scan":
             sys.exit(scan(sys.argv[2], sys.argv[3:]))
         if sys.argv[1] == "examples":
