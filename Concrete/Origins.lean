@@ -1,4 +1,5 @@
 import Concrete.Interfaces.Contracts
+import ConcreteSpec.Spec.Rules
 
 /-! Source location validation and provenance lemmas for the frozen stage carriers. -/
 
@@ -141,7 +142,8 @@ example : (validateLocation tabProject atEOF).toOption.map Subtype.val =
 example : FilePresent (tabProject, mainSourcePath) ∧ ¬ SlotResolves (tabProject, ⟨1⟩) ∧
     (match validateLocation tabProject { atEOF with file := ⟨1⟩ } with
     | .error (reason@(.unknownFile)) =>
-      decide (reason.ruleId = ⟨``SourcePathSpan.SlotResolves, 1⟩)
+      decide (reason.ruleId = ⟨``SourcePathSpan.SlotResolves, 1⟩) &&
+        (validateRule reason.ruleId).isSome
     | _ => false) = true := by
   refine ⟨?_, ?_, ?_⟩
   · simp [FilePresent, tabProject, Project.singleton, Project.files, Project.load, File.load]
