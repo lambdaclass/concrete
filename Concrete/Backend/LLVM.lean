@@ -1,3 +1,6 @@
+import Concrete.BIR
+import ConcreteSpec.Spec.Scalar
+import ConcreteSpec.Spec.Slice1Syntax
 import Concrete.Backend.LLVMIR
 import Concrete.Backend.Runtime
 import ConcreteSpec.Proofs.Scalar

@@ -1,7 +1,21 @@
+import Concrete.Core
+import Concrete.Admission
+import Concrete.BIR
+import Concrete.Elab
+import Concrete.MIR
+import Concrete.Memory
+import Concrete.Refusal
+import ConcreteSpec.Spec.Basics
+import ConcreteSpec.Spec.Ident
+import ConcreteSpec.Spec.Slice0
+import ConcreteSpec.Spec.Slice1Semantics
+import ConcreteSpec.Spec.Slice1Syntax
+import ConcreteSpec.Spec.Surface0
+import LeanCompilerBackend.Verified.Job
+import LeanCompilerBackend.Verified.Source
 import Concrete.Lex
 import Concrete.Parse
 import Concrete.SSA
-import Concrete.Backend.LLVM
 import Concrete.Backend.LCB
 
 namespace Concrete.Stages
@@ -61,6 +75,12 @@ private def lex (input : Input) := Lex.lex input.source input.fileId
 
 private def memory (p : MIR.Program) : Except Refusal Memory.Program := .ok (Memory.lower p)
 
+private def admissionRefusal : Admission.Failure → Refusal
+  | .rejected => .checker "Core check rejected the program"
+
+private def loweringRefusal : MIR.LoweringFailure → Refusal
+  | .missingAdditionSite => .internal "missing source site for addition"
+
 /-- Prepare the requested LCB branch of the slice-0 pipeline. Both backends are part of slice 0
 (decided-2026-11-23-slice0-and-roadmap-answers, answer 6). -/
 def prepareLCB (p : BIR.Program) :
@@ -85,10 +105,18 @@ private def stages (path : String) :=
   Pipeline.next lex <|
   .next (fun v => Parse.parse v.2) <|
   .next (fun v => Elab.elaborate v.2) <|
-  .next (fun v => Admission.check v.2) <|
-  .next (fun v => MIR.lower v.2) <|
+  .next (fun v => (Admission.check v.2).mapError admissionRefusal) <|
+  .next (fun v => (MIR.lower v.2).mapError loweringRefusal) <|
   .next (fun v => memory v.2) <|
   .next (fun v => SSA.lower path v.2) .done
+
+private theorem ok_of_mapError_ok {ε δ α : Type} {e : Except ε α} {f : ε → δ} {a : α}
+    (h : e.mapError f = .ok a) : e = .ok a := by
+  cases e with
+  | error => contradiction
+  | ok value =>
+    have eq : value = a := Except.ok.inj h
+    exact congrArg Except.ok eq
 
 private theorem edges_of_run {input : Input} {resolved tokens ast core admitted mir mem bir}
     (h : (stages input.path).run input =
@@ -111,7 +139,8 @@ private theorem edges_of_run {input : Input} {resolved tokens ast core admitted 
             split at h <;> try contradiction
             next loweredSSA hSSA =>
               cases Except.ok.inj h
-              exact ⟨hLex, hParse, hElab, hAdmit, hLower, rfl, hSSA⟩
+              exact ⟨hLex, hParse, hElab, ok_of_mapError_ok hAdmit, ok_of_mapError_ok hLower,
+                rfl, hSSA⟩
 
 def compile (input : Input) : Except Refusal Output :=
   match h : (stages input.path).run input with
@@ -159,7 +188,7 @@ theorem compile_of_edges (input : Input) (tokens : List ConcreteSpec.Surface0.To
   have runEq : (stages input.path).run input =
       .ok (((((((input, tokens), ast), core), admitted), mir), mem), bir) := by
     simp [stages, Pipeline.run, lex, memory, bind, Except.bind,
-      hLex, hParse, hElab, hAdmit, hLower, hMem, hSSA]
+      Except.mapError, hLex, hParse, hElab, hAdmit, hLower, hMem, hSSA]
   unfold compile
   split
   · next failed h => rw [runEq] at h; contradiction
@@ -207,7 +236,7 @@ def unchecked (input : Input) : Except Refusal BIR.Program := do
   let tokens ← lex input
   let ast ← Parse.parse tokens
   let core ← Elab.elaborate ast
-  let mir ← MIR.lowerUnchecked core
+  let mir ← (MIR.lowerUnchecked core).mapError loweringRefusal
   let mem ← memory mir
   SSA.lower input.path mem
 

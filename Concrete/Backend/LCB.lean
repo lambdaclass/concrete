@@ -1,3 +1,14 @@
+import Concrete.BIR
+import ConcreteSpec.Spec.Basics
+import ConcreteSpec.Spec.Scalar
+import ConcreteSpec.Spec.Slice1Syntax
+import LeanCompilerBackend.IR
+import LeanCompilerBackend.Validate
+import LeanCompilerBackend.Verified.Admission
+import LeanCompilerBackend.Verified.BuildIdentity
+import LeanCompilerBackend.Verified.Canonical
+import LeanCompilerBackend.Verified.Plans
+import LeanCompilerBackend.Verified.Source
 import ConcreteSpec.Proofs.Basics
 import Concrete.Backend.Runtime
 import Concrete.BIR.Progress
@@ -581,7 +592,11 @@ theorem eval_bin {env : Source.Environment} {d : Nat} {op : Source.Binary} {a b 
 
 /-- Four consecutive slot writes, as a `bin` expansion makes them. -/
 def set4 (e : Source.Environment) (n : Nat) (u₀ u₁ u₂ v : Option Source.Value) : Source.Environment :=
-  (((e.set! n u₀).set! (n + 1) u₁).set! (n + 2) u₂).set! (n + 3) v
+  (((e.setIfInBounds n u₀).setIfInBounds (n + 1) u₁).setIfInBounds (n + 2) u₂).setIfInBounds (n + 3) v
+
+private theorem set4_eq (e : Source.Environment) (n : Nat) (u₀ u₁ u₂ v : Option Source.Value) :
+    set4 e n u₀ u₁ u₂ v = (((e.set! n u₀).set! (n + 1) u₁).set! (n + 2) u₂).set! (n + 3) v :=
+  rfl
 
 theorem size_set! (e : Source.Environment) (m : Nat) (u : Option Source.Value) :
     (e.set! m u).size = e.size := by
@@ -759,9 +774,9 @@ theorem binOvf_steps {f : Source.Function} {s : Source.State} {lb : Source.Block
     bin_steps (s := ⟨blk, pos, env⟩) ht hb (fun k hk => by
       rw [hq k (by omega)]; rcases k with _ | _ | _ | _ | k <;> first | rfl | omega)
       hA hB hW (by first | omega | (dsimp only; omega))
-  have zE : E.size = env.size := by simp only [E, set4, size_set!]
+  have zE : E.size = env.size := by simp only [E, set4_eq, size_set!]
   have r₁ : Source.read E .word (.local (n + 1)) = .ok (.word (biased t (raw op x y))) := by
-    simp only [E, set4]
+    simp only [E, set4_eq]
     rw [read_set_other (by omega), read_set_other (by omega)]
     exact read_set_self (by simp only [size_set!]; omega) rfl
   have h2 := flag_steps (E := E) (pos := pos + 4) (Q := BitVec.ofInt 32 (2 ^ t.bits)) hb
@@ -885,7 +900,7 @@ theorem inter_not_reg {p : Program} (hok : numberingOk p = true) {m : Nat}
 
 theorem size_set4 (e : Source.Environment) (n : Nat) (u₀ u₁ u₂ v : Option Source.Value) :
     (set4 e n u₀ u₁ u₂ v).size = e.size := by
-  simp only [set4, size_set!]
+  simp only [set4_eq, size_set!]
 
 /-- One `bin` instruction: its four LCB steps keep agreement, range and size, with the result
 bound. -/
@@ -919,6 +934,7 @@ theorem bin_sim {p : Program} (hok : numberingOk p = true) {f : Source.Function}
     · have m₀ := inter_not_reg hok (inter_mem (off := 0) hbj hi (by simp [interOffsets]))
       have m₁ := inter_not_reg hok (inter_mem (off := 1) hbj hi (by simp [interOffsets]))
       have m₂ := inter_not_reg hok (inter_mem (off := 2) hbj hi (by simp [interOffsets]))
+      rw [set4_eq]
       exact agrees_define hok (agrees_set_other (agrees_set_other (agrees_set_other hag m₀) m₁) m₂)
         hd (by simp only [size_set!]; omega)
     · exact inRange_cons hr (fun t' x' h => by cases h; exact wrap_inRange _ _)
@@ -960,7 +976,7 @@ theorem binOvf_sim {p : Program} (hok : numberingOk p = true) {f : Source.Functi
       have hdef : Agrees p ((d, .int t (wrap t (op.exact x y))) :: benv)
           (set4 s.environment n (some (.word (raw op x y))) (some (.word (biased t (raw op x y))))
             (some (.word (masked t (biased t (raw op x y))))) (some (word (wrap t (op.exact x y))))) :=
-        agrees_define hok (agrees_set_other (agrees_set_other (agrees_set_other hag m₀) m₁) m₂) hd
+        set4_eq .. ▸ agrees_define hok (agrees_set_other (agrees_set_other (agrees_set_other hag m₀) m₁) m₂) hd
           (by simp only [size_set!]; omega)
       exact agrees_define hok (agrees_set_other (x := u₄) hdef m₄) hf
         (by simp only [size_set!, size_set4]; omega)

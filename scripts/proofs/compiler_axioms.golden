@@ -1,5 +1,6 @@
 # Per-theorem transitive axioms of Concrete (scripts/proofs/axioms.sh). Regenerate with
 # bash scripts/proofs/axioms.sh --update; review every changed line.
+Concrete.Admission.Failure.rejected.sizeOf_spec	
 Concrete.Admission.Token.mk.inj	
 Concrete.Admission.Token.mk.injEq	propext
 Concrete.Admission.Token.mk.sizeOf_spec	
@@ -51,9 +52,9 @@ Concrete.Artifact.instDecidableEqPayloadRole._proof_1
 Concrete.Artifact.instDecidableEqPayloadRole._proof_2	
 Concrete.Artifact.instDecidableEqRecordKind._proof_1	
 Concrete.Artifact.instDecidableEqRecordKind._proof_2	
-Concrete.Artifact.matchesDigest.eq_1	Classical.choice Quot.sound propext
-Concrete.Artifact.matchesDigest_of_none	Classical.choice Quot.sound propext
-Concrete.Artifact.matchesDigest_of_rejected_length	Classical.choice Quot.sound propext
+Concrete.Artifact.matchesDigest.eq_1	Quot.sound propext
+Concrete.Artifact.matchesDigest_of_none	Quot.sound propext
+Concrete.Artifact.matchesDigest_of_rejected_length	Quot.sound propext
 Concrete.BIR.Behaviour.diverges.sizeOf_spec	
 Concrete.BIR.Behaviour.exited.inj	
 Concrete.BIR.Behaviour.exited.injEq	propext
@@ -458,9 +459,9 @@ Concrete.Backend.LCB.Proof.binOvf_sim._proof_1_9	Quot.sound propext
 Concrete.Backend.LCB.Proof.binOvf_steps	Classical.choice Quot.sound propext
 Concrete.Backend.LCB.Proof.binOvf_steps._proof_1_1	Quot.sound propext
 Concrete.Backend.LCB.Proof.binOvf_steps._proof_1_10	Quot.sound propext
-Concrete.Backend.LCB.Proof.binOvf_steps._proof_1_11	Quot.sound propext
 Concrete.Backend.LCB.Proof.binOvf_steps._proof_1_2	Quot.sound propext
 Concrete.Backend.LCB.Proof.binOvf_steps._proof_1_3	Quot.sound propext
+Concrete.Backend.LCB.Proof.binOvf_steps._proof_1_4	Quot.sound propext
 Concrete.Backend.LCB.Proof.binOvf_steps._proof_1_5	Quot.sound propext
 Concrete.Backend.LCB.Proof.binOvf_steps._proof_1_6	Quot.sound propext
 Concrete.Backend.LCB.Proof.binOvf_steps._proof_1_7	Quot.sound propext
@@ -610,7 +611,6 @@ Concrete.Backend.LCB.Proof.returns_unique	Quot.sound propext
 Concrete.Backend.LCB.Proof.runBlock_sim	Classical.choice Quot.sound propext
 Concrete.Backend.LCB.Proof.runBlock_sim._proof_1_11	Quot.sound propext
 Concrete.Backend.LCB.Proof.runBlock_sim._proof_1_12	Quot.sound propext
-Concrete.Backend.LCB.Proof.set4.eq_1	
 Concrete.Backend.LCB.Proof.size_foldl_set	propext
 Concrete.Backend.LCB.Proof.size_set!	propext
 Concrete.Backend.LCB.Proof.size_set4	propext
@@ -1024,8 +1024,8 @@ Concrete.Certificate.StillAccepted.brecOn
 Concrete.Certificate.environmentPremises.eq_1	
 Concrete.Certificate.instDecidableEqBackend._proof_1	
 Concrete.Certificate.instDecidableEqBackend._proof_2	
-Concrete.Certificate.instDecidableEqDigest.decEq._proof_1	
-Concrete.Certificate.instDecidableEqDigest.decEq._proof_2	
+Concrete.Certificate.instDecidableEqDigest._proof_1	propext
+Concrete.Certificate.instDecidableEqDigest._simp_1	propext
 Concrete.Certificate.instDecidableEqDigestDomain._proof_1	
 Concrete.Certificate.instDecidableEqDigestDomain._proof_2	
 Concrete.Certificate.instDecidableEqObligation.decEq._proof_1	
@@ -1309,7 +1309,7 @@ Concrete.ImageTheorem.Sanity.instantRefines	Quot.sound propext
 Concrete.ImageTheorem.Sanity.pinnedRevision	
 Concrete.ImageTheorem.Sanity.refinementsToInstant	Quot.sound propext
 Concrete.ImageTheorem.Sanity.returnAtTwo	Quot.sound propext
-Concrete.ImageTheorem.Sanity.testAnchor	Classical.choice Quot.sound propext
+Concrete.ImageTheorem.Sanity.testAnchor	Quot.sound propext
 Concrete.ImageTheorem.Sanity.testLLVMHandoffs	Classical.choice Quot.sound propext
 Concrete.ImageTheorem.Sanity.testRegistry._proof_1	
 Concrete.ImageTheorem.SharedModels.mk.inj	
@@ -1718,6 +1718,7 @@ Concrete.Lex.whitespace?_iff	propext
 Concrete.MIR.Assignment.mk.inj	
 Concrete.MIR.Assignment.mk.injEq	propext
 Concrete.MIR.Assignment.mk.sizeOf_spec	
+Concrete.MIR.LoweringFailure.missingAdditionSite.sizeOf_spec	
 Concrete.MIR.Op.add.inj	
 Concrete.MIR.Op.add.injEq	propext
 Concrete.MIR.Op.add.sizeOf_spec	
@@ -1975,6 +1976,44 @@ _private.Concrete.Artifact.Encoding.0.Concrete.Artifact.frameHeader.eq_1
 _private.Concrete.Artifact.Encoding.0.Concrete.Artifact.frame_cancel	Classical.choice Quot.sound propext
 _private.Concrete.Artifact.Encoding.0.Concrete.Artifact.frame_cancel._simp_1_1	propext
 _private.Concrete.Artifact.Encoding.0.Concrete.Artifact.frame_prefix	Classical.choice Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_1	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_10	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_11	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_12	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_13	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_14	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_15	
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_16	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_17	propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_18	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_19	
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_2	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_20	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_21	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_22	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_23	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_24	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_25	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_26	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_27	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_28	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_29	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_3	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_30	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_31	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_32	
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_33	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_4	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_5	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_6	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_7	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_8	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.compress._proof_9	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.hashBytes._proof_1	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.hashBytes._proof_2	
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.hashBytes._proof_3	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.hashBytes._proof_4	Quot.sound propext
+_private.Concrete.Artifact.Sha256.0.Concrete.Artifact.Sha256.k._proof_1	
 _private.Concrete.BIR.0.Concrete.BIR.BinOp.exact.match_1.eq_1	
 _private.Concrete.BIR.0.Concrete.BIR.BinOp.exact.match_1.eq_2	
 _private.Concrete.BIR.0.Concrete.BIR.BinOp.exact.match_1.eq_3	
@@ -2094,6 +2133,7 @@ _private.Concrete.Backend.LCB.0.Concrete.Backend.LCB.Proof.runBlock_sim.match_1.
 _private.Concrete.Backend.LCB.0.Concrete.Backend.LCB.Proof.runBlock_sim.match_1.eq_2	
 _private.Concrete.Backend.LCB.0.Concrete.Backend.LCB.Proof.runBlock_sim.match_1.eq_3	
 _private.Concrete.Backend.LCB.0.Concrete.Backend.LCB.Proof.runBlock_sim.match_1.eq_4	
+_private.Concrete.Backend.LCB.0.Concrete.Backend.LCB.Proof.set4_eq	
 _private.Concrete.Backend.LCB.0.Concrete.Backend.LCB.adaptPhi.match_1.eq_1	
 _private.Concrete.Backend.LCB.0.Concrete.Backend.LCB.adaptPhi.match_1.eq_2	
 _private.Concrete.Backend.LCB.0.Concrete.Backend.LCB.edgesTo.match_1.eq_1	propext
@@ -2742,6 +2782,7 @@ _private.Concrete.Stages.0.Concrete.Stages.compile.match_3.eq_2	Quot.sound prope
 _private.Concrete.Stages.0.Concrete.Stages.edges_of_run	Classical.choice Quot.sound propext
 _private.Concrete.Stages.0.Concrete.Stages.lex.eq_1	Classical.choice Quot.sound propext
 _private.Concrete.Stages.0.Concrete.Stages.memory.eq_1	
+_private.Concrete.Stages.0.Concrete.Stages.ok_of_mapError_ok	
 _private.Concrete.Stages.0.Concrete.Stages.stages.eq_1	Classical.choice Quot.sound propext
 _private.Concrete.Stages.0.Except.map.match_1.eq_1	
 _private.Concrete.Stages.0.Except.map.match_1.eq_2	
@@ -2767,7 +2808,7 @@ _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.llvmWitness	Classical.c
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.overflowInput._proof_1	Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.refusesFirstBinder	
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.returnAtOne	Quot.sound propext
-_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.testImagePremises	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.testImagePremises	Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.testLCBAnswerMarker	propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.testLCBHandoffs	Classical.choice Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.testLCBPremises	Classical.choice Quot.sound propext

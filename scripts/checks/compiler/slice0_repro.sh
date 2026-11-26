@@ -97,6 +97,20 @@ a="$work/first/checkout-with-first-path"
 b="$work/second/checkout-with-second-path"
 "${compare[@]}" "$a" "$b" "$work/identity" ${manifest:+"$manifest"}
 
+# The same source inventory and digest used for the public identity must bind
+# the specification root. Mutate only the private reproducer checkout.
+source_digest() {
+  git ls-files -z -- "${slice0_sources[@]}" | (cd "$1" && slice0_source_digest)
+}
+before=$(source_digest "$b")
+[ "source_sha256=$before" = "$(sed -n '/^source_sha256=/p' "$work/identity")" ]
+cp "$b/ConcreteSpec.lean" "$work/spec-root"
+printf '\n-- spec root identity control\n' >> "$b/ConcreteSpec.lean"
+after=$(source_digest "$b")
+mv "$work/spec-root" "$b/ConcreteSpec.lean"
+[ "$before" != "$after" ] || { echo 'FAIL spec root edit preserved the source digest' >&2; exit 1; }
+echo 'ok slice0_repro control: spec root edit changes the source digest'
+
 # Negative controls: the comparator must refuse each perturbation of an identical pair.
 control() { # control LABEL EXPECTED-MESSAGE SETUP...
   local label=$1

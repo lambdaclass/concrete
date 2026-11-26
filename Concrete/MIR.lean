@@ -1,3 +1,9 @@
+import Concrete.Core
+import Concrete.Elab
+import ConcreteSpec.Spec.Basics
+import ConcreteSpec.Spec.Slice0
+import ConcreteSpec.Spec.Slice1Semantics
+import ConcreteSpec.Spec.Slice1Syntax
 import ConcreteSpec.Proofs.Scalar
 import ConcreteSpec.Spec.Scalar
 import Concrete.Admission
@@ -18,24 +24,27 @@ structure Program where
   body : List Assignment
   result : Core.Atom
 
+inductive LoweringFailure where
+  | missingAdditionSite
+
 private def lowerStmt (sites : List Elab.SourceSite) (tokens : List Admission.Token)
-    (stmt : Core.Stmt) : Except Refusal Assignment := do
+    (stmt : Core.Stmt) : Except LoweringFailure Assignment := do
   match stmt.e with
   | .atom a => return ⟨stmt.x, .copy a⟩
   | .add a b =>
     let some site := sites.find? (·.binding == stmt.x)
-      | throw (.internal "missing source site for addition")
+      | throw .missingAdditionSite
     let evidence := (tokens.find? (·.binding == stmt.x)).map (·.value)
     return ⟨stmt.x, .add a b site evidence⟩
 
-private def lowerWith (core : Elab.Output) (tokens : List Admission.Token) : Except Refusal Program := do
+private def lowerWith (core : Elab.Output) (tokens : List Admission.Token) : Except LoweringFailure Program := do
   let body ← core.program.body.mapM (lowerStmt core.sites tokens)
   return ⟨body, core.program.ret⟩
 
-def lower (out : Admission.Output) : Except Refusal Program :=
+def lower (out : Admission.Output) : Except LoweringFailure Program :=
   lowerWith out.core out.tokens
 
-def lowerUnchecked (core : Elab.Output) : Except Refusal Program :=
+def lowerUnchecked (core : Elab.Output) : Except LoweringFailure Program :=
   lowerWith core []
 
 

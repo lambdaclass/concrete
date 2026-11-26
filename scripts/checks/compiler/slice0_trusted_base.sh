@@ -20,6 +20,7 @@ set -euo pipefail
 # shellcheck source=scripts/checks/lib/slice0_common.sh
 source scripts/checks/lib/slice0_common.sh
 golden=tests/golden/slice0_trusted_base.txt
+bounded 600 lake build ConcreteTooling
 
 # print_lean FILE OUT: elaborate FILE (bounded, capped) and write its stdout to OUT; fails (with
 # the bounded diagnostics) when Lean fails, times out, or prints more than 1 MiB.
@@ -101,12 +102,12 @@ if print_lean "$work/ctl/fails.lean" "$work/ctl/fails.out" 2>/dev/null; then
 else echo "ok   control: the printer fails on a Lean file that errors"; fi
 cat >"$work/ctl/axiom.lean" <<'EOF'
 import Lean.Elab.Command
-import Concrete
+import ConcreteTooling
 axiom slice0_control_axiom : 1 = 2
 theorem slice0_control : 1 = 2 := slice0_control_axiom
 open Lean Elab Command in
 #eval show CommandElabM Unit from do
-  for l in ← liftCoreM (Concrete.Premises.report [``slice0_control]) do IO.println l
+  for l in ← liftCoreM (ConcreteTooling.report [``slice0_control]) do IO.println l
 EOF
 if print_lean "$work/ctl/axiom.lean" "$work/ctl/axiom.out" &&
    grep -qx 'theorem slice0_control axioms: slice0_control_axiom' "$work/ctl/axiom.out" &&

@@ -1,5 +1,6 @@
+import Concrete.Backend.LLVM
 import Concrete.Stages
-import Concrete.Driver.Project
+import Concrete.Driver.Invocation
 import Concrete.Driver.Launcher
 
 open Concrete Concrete.Backend
@@ -76,7 +77,7 @@ private def buildNative (lib dir : System.FilePath) (backend : Option String)
 
 private def report (refusal : Refusal) : IO UInt32 := do
   let message := match refusal with
-    | .syntaxError detail => s!"{refusal.code.toLower} error: {detail}"
+    | .syntaxError detail => s!"syntax error: {detail}"
     | _ => refusal.message
   match ← (writeOutput "stderr" IO.getStderr s!"{refusal.code}: {message}\n").run with
   | .ok () => return refusal.exitCode

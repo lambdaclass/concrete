@@ -1,3 +1,10 @@
+import Concrete.Core
+import Concrete.Admission
+import Concrete.Elab
+import ConcreteSpec.Spec.Basics
+import ConcreteSpec.Spec.Slice0
+import ConcreteSpec.Spec.Slice1Semantics
+import ConcreteSpec.Spec.Slice1Syntax
 import Concrete.MIR
 
 namespace Concrete.Memory

@@ -104,7 +104,8 @@ partial def carrierCore (e : Expr) (seen : List Name := []) : ScanM (Bool × Boo
     return (false, false)
   -- These validated nominal boundaries intentionally hide their representation.
   if e.isConstOf `ConcreteSpec.Var then return (true, false)
-  if e.isConstOf `ConcreteSpec.Name then return (false, false)
+  if e.isConstOf `ConcreteSpec.Name then
+    return (false, false)
   -- These atomic spelling carriers have no type-expression children. Their
   -- implementation fields add no information to the spelling classification.
   if e.isConstOf `Char || e.isConstOf `String || e.isConstOf `ConcreteSpec.LocalNames then
@@ -259,6 +260,13 @@ def importClosure (env : Environment) (target : Name) : Std.HashSet String := Id
         pending := pending.push dependency.module
   return modules
 
+-- SSA and BIR still carry raw source paths (checklist A4/4(d)). The
+-- name-resolution and diagnostic modules are outside the semantic boundary.
+def semanticModule (m : String) : Bool :=
+  m == "ConcreteSpec.Spec" || m.startsWith "ConcreteSpec.Spec." ||
+    ["Concrete.Core", "Concrete.Admission", "Concrete.MIR", "Concrete.Memory"].any
+      (fun stage => m == stage || m.startsWith (stage ++ "."))
+
 def main (args : List String) : IO Unit := do
   let batch := args.head? == some "--batch"
   let targets := if batch then args.drop 1 else args
@@ -294,6 +302,22 @@ def main (args : List String) : IO Unit := do
       | .defnInfo d => d.value == mkConst `Char
       | _ => false) do
       throw (IO.userError "ScalarChar must be exactly Char")
+  -- Refusal is the presentation-layer diagnostic type. Its payloads must
+  -- themselves remain free of local identities.
+  if let some ci := env.find? `Concrete.Refusal then
+    let .inductInfo info := ci
+      | throw (IO.userError "compiler Refusal must be a nominal diagnostic type")
+    unless info.numParams == 0 && info.numIndices == 0 && !info.ctors.isEmpty do
+      throw (IO.userError "compiler Refusal must be a closed diagnostic type")
+    for ctor in info.ctors do
+      let some c := env.find? ctor | throw (IO.userError s!"missing refusal constructor {ctor}")
+      let mut ty := c.type
+      while let .forallE _ field body _ := ty do
+        unless field.isConstOf `String || field.isConstOf `Nat do
+          throw (IO.userError s!"compiler Refusal has a non-diagnostic field: {ctor}")
+        ty := body
+      unless ty.isConstOf `Concrete.Refusal do
+        throw (IO.userError s!"unexpected compiler refusal constructor result: {ctor}")
   let _ ← contextualKeyControls.run' {} |>.toIO
     { fileName := "local_identity_key_controls", fileMap := default } { env := env }
   -- Inspect the complete dependency closure of semantic declarations. Module
@@ -303,7 +327,7 @@ def main (args : List String) : IO Unit := do
   for (n, _) in env.constants.toList do
     let some i := env.getModuleIdxFor? n | continue
     let m := env.header.moduleNames[i.toNat]!.toString
-    if m == "ConcreteSpec.Spec" || m.startsWith "ConcreteSpec.Spec." then
+    if semanticModule m then
       pending := pending.push n
   let mut next := 0
   while next < pending.size do
@@ -324,6 +348,15 @@ def main (args : List String) : IO Unit := do
         users := users.insert dependency ((users[dependency]?.getD #[]).push n)
   let mut tainted : Std.HashSet Name := {}
   let mut queue := #[`ConcreteSpec.LocalNames, `ConcreteSpec.Elaborated]
+  if let some (.inductInfo refusal) := env.find? `Concrete.Refusal then
+    for n in reachable.toArray do
+      let some i := env.getModuleIdxFor? n | continue
+      -- Seed the diagnostic implementation, including generated eliminators
+      -- and instances. The carrier scan checks the type and constructor fields
+      -- directly. Semantic stages use structured errors and render at the boundary.
+      if env.header.moduleNames[i.toNat]! == `Concrete.Refusal &&
+          n != refusal.name && !refusal.ctors.contains n then
+        queue := queue.push n
   -- Inspect every declaration's instantiated telescope, including inductive indices
   -- and Prop-valued judgments. The same analysis handles fields and function values.
   if profile then IO.eprintln s!"profile: graph_ms={(← IO.monoMsNow) - graphStart} reachable={reachable.size}"
@@ -362,7 +395,7 @@ def main (args : List String) : IO Unit := do
   for (n, ci) in env.constants.toList do
     let some i := env.getModuleIdxFor? n | continue
     let m := env.header.moduleNames[i.toNat]!.toString
-    if !(m == "ConcreteSpec.Spec" || m.startsWith "ConcreteSpec.Spec.") then continue
+    if !semanticModule m then continue
     -- Examples contains conformance data, never semantic rules. Only its presentation
     -- records and the namesBound validator (including its generated matcher) may depend on
     -- diagnostics. Anonymous example checks are not exported semantic declarations.

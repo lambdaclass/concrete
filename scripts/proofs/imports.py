@@ -7,10 +7,11 @@ check and its elaborated negative controls; the root owns population reachabilit
 """
 import argparse
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
-from lean_lex import LexError, module_imports, rename_examples
+from lean_lex import LexError, compiler_header, lex, module_imports, rename_examples
 
 ROOT = Path(__file__).resolve().parents[2]
 MODULES = {'ConcreteSpec', 'ConcreteSpecEvidence'} | {
@@ -30,20 +31,30 @@ def run(command):
     return result.stdout
 
 
-def inspect(module, temp):
-    return run(["lake", "env", "env",
-                "LEAN_PATH=" + str(temp.parent) + ":" +
-                run(["lake", "env", "printenv", "LEAN_PATH"]).strip(),
-                "lean", "--run", str(ROOT / "scripts/proofs/imports.lean"), module])
+def inspect(module, temp, *, source=False):
+    output = run(["lake", "env", "env",
+                  "LEAN_PATH=" + str(temp.parent) + ":" +
+                  run(["lake", "env", "printenv", "LEAN_PATH"]).strip(),
+                  "lean", "--run", str(ROOT / "scripts/proofs/imports.lean"), module,
+                  *([str(temp)] if source else [])])
+    if output.splitlines().count(f"MODULE {module}") != 1:
+        raise SystemExit(f'imports: inspection did not report module {module}')
+    return output
 
 
-def dependencies(source, temp, built_module=None, *, dropped=None):
-    module_imports(source, MODULES)
+def elaborate(source, temp):
     temp.write_text(rename_examples(source, lambda line: f'⟪import-example⟫{line}'))
     search = str(temp.parent) + ':' + run(['lake', 'env', 'printenv', 'LEAN_PATH']).strip()
-    run(['lake', 'env', 'env', 'LEAN_PATH=' + search, 'lean', '-DwarningAsError=true',
-         '-DautoImplicit=false', '-R', str(temp.parent), '-o', str(temp.with_suffix('.olean')), str(temp)])
-    output = inspect(temp.stem, temp)
+    return run(['lake', 'env', 'env', 'LEAN_PATH=' + search, 'lean', '-DwarningAsError=true',
+                '-DautoImplicit=false', '-R', str(temp.parent), '-o', str(temp.with_suffix('.olean')),
+                str(temp)])
+
+
+def dependencies(source, temp, built_module=None, *, dropped=None, compiler_modules=None):
+    allowed = MODULES if compiler_modules is None else compiler_modules
+    module_imports(source, allowed)
+    elaborate(source, temp)
+    output = inspect(temp.stem, temp, source=compiler_modules is not None)
     if dropped is not None:
         dropped.extend(line.removeprefix('FOREIGN ') for line in output.splitlines()
                        if line.startswith('FOREIGN '))
@@ -56,18 +67,21 @@ def dependencies(source, temp, built_module=None, *, dropped=None):
                              f'probe: {named(output)}\nbuilt: {named(built)}')
     deps = sorted(line.removeprefix('IMPORT ') for line in output.splitlines()
                   if line.startswith('IMPORT '))
-    if not deps:
+    forbidden = sorted(set(deps) - allowed)
+    if forbidden:
+        raise LexError('direct dependencies outside the approved import graph: ' + ', '.join(forbidden))
+    if not deps and (built_module is None or built_module.startswith(('ConcreteSpec.', 'ConcreteSpecEvidence.'))):
         raise SystemExit('imports: empty dependency population')
     return deps
 
 
-def matches(source, deps):
-    actual, _, _ = module_imports(source, MODULES)
+def matches(source, deps, modules=MODULES):
+    actual, _, _ = module_imports(source, modules)
     return sorted(actual) == deps
 
 
-def rewrite(source, deps):
-    actual, spans, _ = module_imports(source, MODULES)
+def rewrite(source, deps, modules=MODULES):
+    actual, spans, _ = module_imports(source, modules)
     if not spans:
         raise SystemExit('imports: missing import header')
     # Keep each surviving command in its original slot: its trailing comment
@@ -91,6 +105,20 @@ def rewrite(source, deps):
     for start, end, replacement in sorted(edits, reverse=True):
         source = source[:start] + replacement + source[end:]
     return source
+
+
+def compiler_proof_paths(root):
+    # Compatibility modules may intentionally only re-export context. Exact
+    # imports concern proof sources, including mixed code and proof modules.
+    paths = [*root.glob('Concrete.lean'), *sorted((root / 'Concrete').rglob('*.lean'))]
+    proof_paths = []
+    for p in paths:
+        source = p.read_text(encoding='utf-8')
+        if re.search(r'\b(theorem|lemma|example)\b', lex(source, literals=False)):
+            proof_paths.append(p)
+    if not proof_paths:
+        raise SystemExit('imports: empty compiler proof-module population')
+    return proof_paths
 
 
 def proof_paths(root):
@@ -148,7 +176,7 @@ def declaring_owner_control(temp):
     print('imports: declaring-owner controls pass (named/examples, lazy/pre-realized)')
 
 
-def controls(temp):
+def controls(temp, compiler_modules):
     declaring_owner_control(temp)
     # Brand imports Basics itself: removing the explicit Basics import still
     # elaborates. Both an extra import and a transitive-only dependency must fail.
@@ -214,10 +242,52 @@ def controls(temp):
         fixture.touch()
         if proof_paths(root) != [nested, fixture]:
             raise SystemExit('recursive proof population control failed')
+        compiler_root = root / 'Concrete.lean'
+        compiler_root.write_text('import Concrete.Elab\n'
+                                 'theorem rootProof (p : Concrete.Core.Program) : p = p := rfl\n')
+        if compiler_proof_paths(root) != [compiler_root]:
+            raise SystemExit('compiler root proof discovery control failed')
+        source = compiler_root.read_text()
+        deps = dependencies(source, temp, compiler_modules=compiler_modules)
+        if 'Concrete.Core' not in deps or matches(source, deps, compiler_modules):
+            raise SystemExit('compiler root missing-direct-import control accepted')
     missing = good.replace('import ConcreteSpec.Spec.Basics', '')
     # Removing just the command retains its trailing comment and legal header.
     if matches(missing, dependencies(missing, temp)):
         raise SystemExit('missing-direct-import control accepted')
+    compiler_header_probe = 'import Concrete.Core\ndef control := 0\n'
+    module_imports(compiler_header_probe, compiler_modules)
+    try:
+        module_imports(compiler_header_probe, MODULES)
+    except LexError:
+        pass
+    else:
+        raise SystemExit('spec proof import header accepted a compiler module')
+    alias_body = ('theorem compilerAliasProbe (p : Concrete.Core.Program) : p = p := rfl\n'
+                  'def compilerQuoteProbe : Lean.Name := ``Concrete.Lex.lex_correct\n')
+    direct = ['Concrete.Core', 'Concrete.Lex', 'ConcreteSpec.Spec.Slice0']
+    for header, valid in [
+        (direct, True),
+        (direct + ['Concrete.Elab'], False),
+        (['Concrete.Elab', 'Concrete.Lex', 'ConcreteSpec.Spec.Slice0'], False),
+        (['Concrete.Core', 'Concrete.Stages', 'ConcreteSpec.Spec.Slice0'], False),
+    ]:
+        source = ''.join(f'import {mod}\n' for mod in header) + alias_body
+        deps = dependencies(source, temp, compiler_modules=compiler_modules)
+        if deps != direct or matches(source, deps, compiler_modules) != valid:
+            raise SystemExit(f'compiler alias/quoted direct-import control: {header}, got {deps}')
+    direct = ['Concrete.Core', 'Concrete.Elab', 'ConcreteSpec.Spec.Slice0']
+    for open_decl, program in [('Concrete.Core (Program)', 'Program'),
+                               ('Concrete.Core renaming Program -> RenamedProgram', 'RenamedProgram')]:
+        for suffix in ('\n', ' in\n'):
+            body = (f'open {open_decl}{suffix}'
+                    f'theorem selectiveAliasProbe (p : {program}) (o : Concrete.Elab.Output) :'
+                    ' (p, o) = (p, o) := rfl\n')
+            for header in (direct, direct[1:]):
+                source = ''.join(f'import {mod}\n' for mod in header) + body
+                deps = dependencies(source, temp, compiler_modules=compiler_modules)
+                if deps != direct or matches(source, deps, compiler_modules) != (header == direct):
+                    raise SystemExit(f'compiler explicit-open import control: {open_decl}, {header}, got {deps}')
     print('imports: extra, transitive-only, commented-header and rewrite controls pass')
 
 
@@ -225,21 +295,26 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--write', action='store_true')
     args = parser.parse_args()
-    run(['lake', 'build', 'ConcreteSpec', 'ConcreteSpecEvidence'])
+    run(['lake', 'build', 'ConcreteSpec', 'ConcreteSpecEvidence', 'Concrete'])
+    compiler_modules = compiler_header().modules
     failed = False
     with tempfile.TemporaryDirectory(prefix='spec-imports-') as tmp:
         temp = Path(tmp) / 'Probe.lean'
-        controls(temp)
-        for path in proof_paths(ROOT):
+        controls(temp, compiler_modules)
+        for path in proof_paths(ROOT) + compiler_proof_paths(ROOT):
             source = path.read_bytes().decode('utf-8')
+            module = '.'.join(path.relative_to(ROOT).with_suffix('').parts)
             try:
-                deps = dependencies(source, temp, '.'.join(path.relative_to(ROOT).with_suffix('').parts))
+                compiler = module == 'Concrete' or module.startswith('Concrete.')
+                modules = compiler_modules if compiler else MODULES
+                deps = dependencies(source, temp, module,
+                                    compiler_modules=compiler_modules if compiler else None)
             except LexError as e:
                 raise SystemExit(f'imports: {path.relative_to(ROOT)}:{e}') from None
             print(f'{path.relative_to(ROOT)}: {", ".join(deps)}', flush=True)
-            if not matches(source, deps):
+            if not matches(source, deps, modules):
                 if args.write:
-                    path.write_bytes(rewrite(source, deps).encode('utf-8'))
+                    path.write_bytes(rewrite(source, deps, modules).encode('utf-8'))
                 else:
                     failed = True
                     print('  import header differs from direct constant dependencies', flush=True)

@@ -1,3 +1,20 @@
+import Concrete.Admission
+import Concrete.BIR
+import Concrete.Backend.LCB
+import Concrete.Backend.LLVM
+import Concrete.Backend.Runtime
+import Concrete.Contracts
+import Concrete.Elab
+import Concrete.Lex
+import Concrete.MIR
+import Concrete.Memory
+import Concrete.Parse
+import Concrete.Refusal
+import Concrete.SSA
+import Concrete.Stages
+import ConcreteSpec.Spec.Surface0
+import LeanCompilerBackend.Verified.Job
+import LeanCompilerBackend.Verified.Source
 import Concrete.Theorem
 
 namespace Concrete.Certificate
@@ -16,7 +33,13 @@ inductive DigestDomain where
 verification are obligations of the future bounded reader. -/
 structure Digest (_domain : DigestDomain) where
   bytes : ByteArray
-  deriving DecidableEq
+
+/-- Decide digest equality using structural array equality inside the audited stage. -/
+instance {domain : DigestDomain} : DecidableEq (Digest domain) := fun left right =>
+  decidable_of_iff (left.bytes.data = right.bytes.data) (by
+    cases left
+    cases right
+    simp only [Digest.mk.injEq, ByteArray.ext_iff])
 
 /-- Both backends use the same artifact envelope and canonical encoding. -/
 inductive Backend where

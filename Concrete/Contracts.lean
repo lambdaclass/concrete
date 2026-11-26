@@ -1,5 +1,4 @@
 import Concrete.BIR
-import ConcreteSpec.Spec.Surface0
 import ConcreteSpec.Spec.Outcome
 
 namespace Concrete.Contracts

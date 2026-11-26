@@ -1,8 +1,19 @@
 #!/usr/bin/env bash
 # The tracked inputs of a slice-0 build: what slice0_repro.sh copies and build_identity.sh digests.
 # shellcheck disable=SC2034
-slice0_sources=(Concrete Concrete.lean ConcreteSpec Main.lean scripts/checks tests lakefile.toml lean-toolchain
+slice0_sources=(Concrete Concrete.lean ConcreteSpec ConcreteSpec.lean Main.lean scripts/checks tests lakefile.toml lean-toolchain
   lake-manifest.json)
+
+# Hash the tracked path list on stdin relative to the current checkout.
+slice0_source_digest() {
+  python3 -c '
+import hashlib,sys
+paths=sorted(p for p in sys.stdin.buffer.read().split(b"\0") if p)
+h=hashlib.sha256()
+for p in paths:
+    h.update(hashlib.sha256(open(p,"rb").read()).hexdigest().encode()+b"  "+p+b"\n")
+print(h.hexdigest())'
+}
 
 # emit_slice0_row MANIFEST PROGRAM DIR TARGET EXPECTATION
 # Each caller supplies its bounded emitter command in the emitter array.

@@ -323,4 +323,73 @@ $INV encode "$TMP/c-nl.ndjson" > "$TMP/c-nl.out" 2>&1 && PRC=0 || PRC=$?
 [ "$LRC" != 0 ] && grep -q 'control character' "$TMP/c-tab.out" && [ "$PRC" != 0 ] && grep -q 'control character' "$TMP/c-nl.out" \
   && ok "a name holding a tab (Lean, heads mode) or a line break (stream reader) fails the run" \
   || no "control-character names: Lean rc=$LRC '$(head -c 200 "$TMP/c-tab.out")', stream rc=$PRC '$(head -c 200 "$TMP/c-nl.out")'"
+echo "=== compiler theorem and imported correspondence ==="
+population compiler-closure > "$TMP/compiler-closure" \
+  || { no "could not compute the compiler theorem's closure"; finish; }
+read -r COMPILER_THEOREM COMPILER_ENCODED < "$TMP/compiler-closure"
+tail -n +2 "$TMP/compiler-closure" | sort > "$TMP/compiler-wanted"
+COMPILER_EXPORT="$TMP/compiler.ndjson"
+"$LAKE" env "$EXPORTER" Concrete -- "$COMPILER_THEOREM" > "$COMPILER_EXPORT" 2> "$TMP/compiler.err"; rc=$?
+[ "$rc" = 0 ] && [ ! -s "$TMP/compiler.err" ] \
+  || { no "compiler export (rc=$rc): $(head -3 "$TMP/compiler.err")"; finish; }
+read -r EXP_LEAN EXP_TOOL EXP_FORMAT < <($INV meta "$COMPILER_EXPORT")
+[ "leanprover/lean4:v$EXP_LEAN" = "$TOOLCHAIN" ] && [ "$EXP_FORMAT" = "$EXPECT_FORMAT" ] \
+  && ok "compiler export metadata matches the pinned Lean and export format" \
+  || no "compiler export metadata: Lean $EXP_LEAN format $EXP_FORMAT"
+$INV axioms "$COMPILER_EXPORT" > "$TMP/compiler-axioms" \
+  || { no "cannot read compiler export axioms"; finish; }
+EXTRA=$(comm -23 "$TMP/compiler-axioms" <(printf '%s\n' $STANDARD_AXIOMS))
+[ -z "$EXTRA" ] && ok "compiler export declares only standard axioms" \
+  || no "compiler export declares non-standard axioms: $EXTRA"
+$INV names "$COMPILER_EXPORT" > "$TMP/compiler-names" \
+  || { no "cannot read compiler export names"; finish; }
+if ! cmp -s "$TMP/compiler-wanted" "$TMP/compiler-names"; then
+  no "compiler export differs from Lean's closure: $(comm -3 "$TMP/compiler-wanted" "$TMP/compiler-names" | head -12)"
+  finish
+fi
+PROOF_NAMES="$TMP/compiler-wanted" PROOF_OUT="$TMP/compiler-lean" population decls \
+  || { no "cannot render compiler closure from Lean"; finish; }
+$INV decls "$COMPILER_EXPORT" > "$TMP/compiler-export" \
+  || { no "cannot render compiler export"; finish; }
+if cmp -s "$TMP/compiler-lean" "$TMP/compiler-export"; then
+  ok "Lean and export agree on the exact closure of $COMPILER_THEOREM"
+else
+  no "compiler declaration differs: $(fidelity "$TMP/compiler-lean" "$TMP/compiler-export")"
+fi
+conleche "$COMPILER_EXPORT" > "$TMP/compiler-c.out" 2>&1; rc=$?
+[ "$rc" = 0 ] && has_match -E '^con-leche: accepted [0-9]+ declarations \(--verified\)' < "$TMP/compiler-c.out" \
+  && ok "con-leche accepts the compiler theorem" || no "compiler con-leche (rc=$rc): $(tail -3 "$TMP/compiler-c.out")"
+nanoda "$COMPILER_EXPORT" > "$TMP/compiler-k.out" 2>&1; rc=$?
+[ "$rc" = 0 ] && has_match -E '^Checked [0-9]+ declarations with no errors$' < "$TMP/compiler-k.out" \
+  && ok "nanoda accepts the compiler theorem" || no "compiler nanoda (rc=$rc): $(tail -3 "$TMP/compiler-k.out")"
+
+# Preserve the theorem statement while replacing its proof in the stream.
+python3 - "$COMPILER_EXPORT" "$TMP/compiler-forged.ndjson" "$COMPILER_ENCODED" <<'PYTHON'
+import json
+import sys
+sys.path.insert(0, "scripts/proofs")
+from export_inventory import name_table, records
+
+source, target, theorem = sys.argv[1:]
+names = name_table(source, encoded=True)
+with open(target, "w", encoding="utf-8") as out:
+    for record in records(source):
+        decl = record.get("thm")
+        if decl and names[decl["name"]] == theorem:
+            decl["value"] = decl["type"]
+        out.write(json.dumps(record, separators=(",", ":")) + "\n")
+PYTHON
+$INV decls "$TMP/compiler-forged.ndjson" > "$TMP/compiler-forged" \
+  || { no "cannot render forged compiler export"; finish; }
+[ "$(fidelity "$TMP/compiler-lean" "$TMP/compiler-forged")" = "$COMPILER_ENCODED" ] \
+  && ok "control: fidelity rejects the compiler theorem with a changed proof" \
+  || no "control: compiler theorem proof drift went undetected"
+conleche "$TMP/compiler-forged.ndjson" > "$TMP/compiler-forged-c.out" 2>&1; rc=$?
+[ "$rc" = 1 ] && has_match -Ei 'type mismatch|theorem.*(type|proof)' < "$TMP/compiler-forged-c.out" \
+  && ok "control: con-leche rejects the forged compiler proof" \
+  || no "forged compiler con-leche (rc=$rc): $(tail -3 "$TMP/compiler-forged-c.out")"
+nanoda "$TMP/compiler-forged.ndjson" > "$TMP/compiler-forged-k.out" 2>&1; rc=$?
+[ "$rc" != 0 ] && has_match -Ei 'type mismatch|theorem.*(type|proof)|assertion' < "$TMP/compiler-forged-k.out" \
+  && ok "control: nanoda rejects the forged compiler proof" \
+  || no "forged compiler nanoda (rc=$rc): $(tail -5 "$TMP/compiler-forged-k.out")"
 finish

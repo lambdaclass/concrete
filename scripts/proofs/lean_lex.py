@@ -35,10 +35,11 @@ class LexError(Exception):
     pass
 
 
-def lex(src, spans=None, literals=True):
+def lex(src, spans=None, literals=True, *, quoted_names=False):
     """`src` with its comments blanked; when `spans` is a list, each top-level comment's
     (start, end) offsets are appended to it (a comment nested in another is part of that one).
-    With `literals=False`, string, character and name literals are blanked too (code tokens only)."""
+    With `literals=False`, string, character and name literals are blanked too (code tokens only).
+    Use `quoted_names=True` to keep quoted identifiers in the code stream."""
     n, out = len(src), []
 
     def emit(text, literal=False):
@@ -124,7 +125,7 @@ def lex(src, spans=None, literals=True):
             elif c == "«":                            # a quoted name part: no comment inside it
                 k = src.find("»", i + 1)
                 if k < 0: raise LexError("unterminated «name»")
-                emit(src[i:k + 1], True); i = k + 1
+                emit(src[i:k + 1], not quoted_names); i = k + 1
             elif src.startswith("`(", i) or src.startswith("``(", i):
                 # A syntax quotation: its comments are syntax data, not comments of the source,
                 # and the library runs no meta code, so the lexer refuses it.
@@ -200,14 +201,25 @@ def module_imports(source, modules):
 def compiler_header():
     prefix = Path(subprocess.check_output(["lean", "--print-prefix"], text=True).strip())
     modules = set()
-    for base, root in ((Path("."), "ConcreteSpec"), (Path("."), "Concrete"),
-                       (prefix / "src/lean", "Lean"),
-                       (Path(".lake/packages/lean-compiler-backend"), "LeanCompilerBackend")):
-        if not (base / (root + ".lean")).is_file() or not (base / root).is_dir():
-            raise LexError(f"missing approved module graph: {base / root}")
+    for root in ("ConcreteSpec", "Concrete"):
+        if not Path(root + ".lean").is_file() or not Path(root).is_dir():
+            raise LexError(f"missing approved module graph: {root}")
         modules.add(root)
-        modules.update(".".join(p.relative_to(base).with_suffix("").parts)
-                       for p in (base / root).rglob("*.lean"))
+        modules.update(".".join(p.with_suffix("").parts) for p in Path(root).rglob("*.lean"))
+    # The verified adapter uses this surface of the pinned backend. Its
+    # executable and test modules may contain IO and reflection.
+    backend = Path(".lake/packages/lean-compiler-backend")
+    backend_surface = (
+        "AArch64", "AMD64", "IR", "Validate", "Verified.Admission",
+        "Verified.BuildIdentity", "Verified.Canonical", "Verified.Job",
+        "Verified.Plans", "Verified.Source", "Verified.StackMIR", "Verified.TypedA64",
+    )
+    for component in backend_surface:
+        module = "LeanCompilerBackend." + component
+        source = backend / (module.replace(".", "/") + ".lean")
+        if not source.is_file():
+            raise LexError(f"missing approved module: {source}")
+        modules.add(module)
     # SSA's indexed slot correspondence uses this proof-bearing container from
     # the pinned toolchain. Permit this module in compiler sources only.
     hash_map_lemmas = "Std.Data.HashMap.Lemmas"
@@ -221,23 +233,24 @@ def compiler_header():
 FIRST_COMMAND = re.compile(r"(namespace|open|section|def|theorem|structure|inductive|abbrev)\b")
 
 
-def scan(pattern, paths, header=HEADER):
+def scan(pattern, paths, header=HEADER, *, literals=True, quoted_names=False):
     word, rc = re.compile(pattern, re.M), 0
     for path in paths:
         try:
-            text = lex(Path(path).read_text(encoding="utf-8"))
+            text = lex(Path(path).read_text(encoding="utf-8"), literals=literals, quoted_names=quoted_names)
         except (OSError, UnicodeDecodeError, LexError) as e:
             print(f"error: {path}: {e}", file=sys.stderr); rc = 3; continue
         lines = text.split("\n")
-        # Lean lets an import list continue (`import A B`, or B on the next line), so the first
-        # line after the header must be a command at column 0.
-        k = 0
-        while k < len(lines) and (not lines[k].strip() or header.match(lines[k])): k += 1
-        if k < len(lines) and not FIRST_COMMAND.match(lines[k]):
-            print(f"{path}:{k + 1}: {lines[k].strip()} (the import header must end in a command at column 0)")
         hits = {text.count("\n", 0, m.start()) + 1 for m in word.finditer(text)}
-        hits |= {j for j, line in enumerate(lines, 1)
-                 if re.search(r"\bimport\b", line) and not (j <= k and header.match(line))}
+        if header is not None:
+            # Lean lets an import list continue (`import A B`, or B on the next line),
+            # so the first line after the header must be a command at column 0.
+            k = 0
+            while k < len(lines) and (not lines[k].strip() or header.match(lines[k])): k += 1
+            if k < len(lines) and not FIRST_COMMAND.match(lines[k]):
+                print(f"{path}:{k + 1}: {lines[k].strip()} (the import header must end in a command at column 0)")
+            hits |= {j for j, line in enumerate(lines, 1)
+                     if re.search(r"\bimport\b", line) and not (j <= k and header.match(line))}
         for j in sorted(hits):
             print(f"{path}:{j}: {lines[j - 1].strip()}")
     return rc
@@ -284,6 +297,10 @@ def examples(src_dir, dst_dir, paths):
 
 if __name__ == "__main__":
     try:
+        if sys.argv[1] == "scan-code":
+            sys.exit(scan(sys.argv[2], sys.argv[3:], None, literals=False, quoted_names=True))
+        if sys.argv[1] == "scan-totality":
+            sys.exit(scan(sys.argv[2], sys.argv[3:], compiler_header(), literals=False, quoted_names=True))
         if sys.argv[1] == "scan-compiler":
             sys.exit(scan(sys.argv[2], sys.argv[3:], compiler_header()))
         if sys.argv[1] == "scan-evidence":

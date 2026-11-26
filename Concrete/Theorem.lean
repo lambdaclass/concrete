@@ -1,3 +1,34 @@
+import Concrete.Admission
+import Concrete.BIR
+import Concrete.Backend.LCB
+import Concrete.Backend.LLVMIR
+import Concrete.Backend.Runtime
+import Concrete.Contracts
+import Concrete.Core
+import Concrete.Elab
+import Concrete.Lex
+import Concrete.MIR
+import Concrete.Memory
+import Concrete.Parse
+import Concrete.Refusal
+import Concrete.SSA
+import ConcreteSpec.Spec.Basics
+import ConcreteSpec.Spec.Ident
+import ConcreteSpec.Spec.Outcome
+import ConcreteSpec.Spec.Scalar
+import ConcreteSpec.Spec.Slice0
+import ConcreteSpec.Spec.Slice1Ownership
+import ConcreteSpec.Spec.Slice1Semantics
+import ConcreteSpec.Spec.Slice1Syntax
+import ConcreteSpec.Spec.Surface0
+import LeanCompilerBackend.IR
+import LeanCompilerBackend.Verified.Job
+import LeanCompilerBackend.Verified.Plans
+import LeanCompilerBackend.Verified.Source
+import LeanCompilerBackend.Verified.StackMIR
+import LeanCompilerBackend.Verified.TypedA64
+import Std.Data.HashMap.Lemmas
+import Concrete.Backend.LLVM
 import Concrete.Stages
 import Concrete.Backend.Observation
 import LeanCompilerBackend.Verified.BuildIdentity
@@ -1070,7 +1101,7 @@ def answerImage : ByteArray := ⟨#[42]⟩
 private def trapImage : ByteArray := ⟨#[134]⟩
 
 private def trapBytecodeObservation (bytes : ByteArray) : Observation :=
-  if bytes.data[0]? == some (134 : UInt8) then overflowObservation "src/a.con"
+  if bytes.data[0]? = some (134 : UInt8) then overflowObservation "src/a.con"
   else bytecodeObservation bytes
 
 def testReference : TargetReference Unit sampleProfile.target :=
