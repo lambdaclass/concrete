@@ -1,8 +1,10 @@
+# One row per test: id, program, expected outcome, owning slice (tab-separated).
+# Programs are bir:NAME, con:tests/PATH.con, or a known cli: case.
 # Fields in expect are separated by single spaces. Stderr is lowercase hex, or - for empty.
 # exit STATUS STDERR; trap KIND BIR_INDEX STDERR (exit 134).
-# refuse KIND RULE@REV START:STOP:LINE:COLUMN LABEL=ORIGIN,... (or - for no related origins).
+# refuse 1 KIND RULE@REV START:STOP:LINE:COLUMN LABEL=ORIGIN,... (or - for no related origins).
 # Origins are relative to the fixture source, with half-open byte offsets and one-based coordinates.
-# pending-refusal records constructor coverage until 4(c)/4(d)/4(f) expose structured diagnostics.
+# pending-refusal 1 KIND records constructor coverage until 4(c)/4(d)/4(f) expose structured diagnostics.
 # Migrate trap kind and site together with the 4(e) observation cutover.
 # The STMT-14 span covers the second return. The trap bytes follow the runtime line contract.
 # llvm exit STATUS lcb resource RESOURCE BOUND MEASURED; diagnostic STATUS CODE [MESSAGE] for cli: rows.
@@ -42,42 +44,42 @@ site1	bir:site1	trap arithmeticOverflow 1 636f6e63726574653a20747261703a206f7665
 site0	bir:site0	trap arithmeticOverflow 0 636f6e63726574653a20747261703a206f766572666c6f77206174207372632f6d61696e2e636f6e3a313a31312028736974652033290a	slice0
 two_sites_ok	bir:two_sites_ok	exit 42 -	slice0
 source_answer	con:tests/slice0/answer.con	exit 42 -	slice0
-source_overflow	con:tests/slice0/overflow.con	pending-refusal checker	slice0
+source_overflow	con:tests/slice0/overflow.con	pending-refusal 1 checker	slice0
 source_trap	con:tests/slice0/trap.con	trap arithmeticOverflow 1 636f6e63726574653a20747261703a206f766572666c6f772061742074657374732f736c696365302f747261702e636f6e3a343a31342028736974652031290a	slice0
 source_zero	con:tests/slice0/zero.con	exit 0 -	slice0
-source_syntax	con:tests/slice0/syntax_error.con	pending-refusal syntax	slice0
-source_unsupported	con:tests/slice0/unsupported.con	pending-refusal unsupported_form	slice0
+source_syntax	con:tests/slice0/syntax_error.con	pending-refusal 1 syntax	slice0
+source_unsupported	con:tests/slice0/unsupported.con	pending-refusal 1 unsupported_form	slice0
 source_bindings	con:tests/slice0/bindings.con	exit 42 -	slice0
-source_unannotated	con:tests/slice0/unannotated.con	pending-refusal syntax	slice0
-source_suffix	con:tests/slice0/suffix.con	pending-refusal checker	slice0
+source_unannotated	con:tests/slice0/unannotated.con	pending-refusal 1 syntax	slice0
+source_suffix	con:tests/slice0/suffix.con	pending-refusal 1 checker	slice0
 source_boundary	con:tests/slice0/boundary.con	exit 255 -	slice0
-source_reserved	con:tests/slice0/reserved.con	pending-refusal syntax	slice0
-source_reserved_move	con:tests/slice0/reserved_move.con	pending-refusal syntax	slice0
-source_reserved_struct	con:tests/slice0/reserved_struct.con	pending-refusal syntax	slice0
-source_intrinsic_shadow	con:tests/slice0/intrinsic_shadow.con	pending-refusal checker	slice0
-source_radix_missing_semi	con:tests/slice0/radix_missing_semi.con	pending-refusal syntax	slice0
-source_malformed_if	con:tests/slice0/malformed_if.con	pending-refusal syntax	slice0
-source_multiply	con:tests/slice0/multiply.con	pending-refusal unsupported_form	slice0
-source_conditional	con:tests/slice0/conditional.con	pending-refusal unsupported_form	slice0
-source_mutable	con:tests/slice0/mutable.con	pending-refusal unsupported_form	slice0
-source_contextual_multiply	con:tests/slice0/contextual_multiply.con	pending-refusal unsupported_form	slice0
-source_shadow_destroy	con:tests/slice0/shadow_destroy.con	pending-refusal checker	slice0
-source_shadow_discard	con:tests/slice0/shadow_discard.con	pending-refusal checker	slice0
-source_shadow_alloc	con:tests/slice0/shadow_alloc.con	pending-refusal checker	slice0
-source_shadow_sizeof	con:tests/slice0/shadow_sizeof.con	pending-refusal checker	slice0
-source_shadow_alignof	con:tests/slice0/shadow_alignof.con	pending-refusal checker	slice0
-source_shadow_read_owned	con:tests/slice0/shadow_read_owned.con	pending-refusal checker	slice0
-source_shadow_get_args	con:tests/slice0/shadow_get_args.con	pending-refusal checker	slice0
-source_shadow_byte_at	con:tests/slice0/shadow_byte_at.con	pending-refusal checker	slice0
+source_reserved	con:tests/slice0/reserved.con	pending-refusal 1 syntax	slice0
+source_reserved_move	con:tests/slice0/reserved_move.con	pending-refusal 1 syntax	slice0
+source_reserved_struct	con:tests/slice0/reserved_struct.con	pending-refusal 1 syntax	slice0
+source_intrinsic_shadow	con:tests/slice0/intrinsic_shadow.con	pending-refusal 1 checker	slice0
+source_radix_missing_semi	con:tests/slice0/radix_missing_semi.con	pending-refusal 1 syntax	slice0
+source_malformed_if	con:tests/slice0/malformed_if.con	pending-refusal 1 syntax	slice0
+source_multiply	con:tests/slice0/multiply.con	pending-refusal 1 unsupported_form	slice0
+source_conditional	con:tests/slice0/conditional.con	pending-refusal 1 unsupported_form	slice0
+source_mutable	con:tests/slice0/mutable.con	pending-refusal 1 unsupported_form	slice0
+source_contextual_multiply	con:tests/slice0/contextual_multiply.con	pending-refusal 1 unsupported_form	slice0
+source_shadow_destroy	con:tests/slice0/shadow_destroy.con	pending-refusal 1 checker	slice0
+source_shadow_discard	con:tests/slice0/shadow_discard.con	pending-refusal 1 checker	slice0
+source_shadow_alloc	con:tests/slice0/shadow_alloc.con	pending-refusal 1 checker	slice0
+source_shadow_sizeof	con:tests/slice0/shadow_sizeof.con	pending-refusal 1 checker	slice0
+source_shadow_alignof	con:tests/slice0/shadow_alignof.con	pending-refusal 1 checker	slice0
+source_shadow_read_owned	con:tests/slice0/shadow_read_owned.con	pending-refusal 1 checker	slice0
+source_shadow_get_args	con:tests/slice0/shadow_get_args.con	pending-refusal 1 checker	slice0
+source_shadow_byte_at	con:tests/slice0/shadow_byte_at.con	pending-refusal 1 checker	slice0
 source_local_vec_pop	con:tests/slice0/local_vec_pop.con	exit 42 -	slice0
 source_removed_builtin_names	con:tests/slice0/removed_builtin_names.con	exit 42 -	slice0
-source_empty_body	con:tests/slice0/empty_body.con	pending-refusal checker	slice0
-source_fallthrough	con:tests/slice0/fallthrough.con	pending-refusal checker	slice0
-source_after_return	con:tests/slice0/after_return.con	refuse unreachable_statement STMT-14@1 28:37:1:29 -	slice0
-source_shadow_wrapping_add	con:tests/slice0/shadow_wrapping_add.con	pending-refusal checker	slice0
-source_shadow_saturating_add	con:tests/slice0/shadow_saturating_add.con	pending-refusal checker	slice0
-source_shadow_checked_add	con:tests/slice0/shadow_checked_add.con	pending-refusal checker	slice0
-source_shadow_try_convert	con:tests/slice0/shadow_try_convert.con	pending-refusal checker	slice0
+source_empty_body	con:tests/slice0/empty_body.con	pending-refusal 1 checker	slice0
+source_fallthrough	con:tests/slice0/fallthrough.con	pending-refusal 1 checker	slice0
+source_after_return	con:tests/slice0/after_return.con	refuse 1 unreachable_statement STMT-14@1 28:37:1:29 -	slice0
+source_shadow_wrapping_add	con:tests/slice0/shadow_wrapping_add.con	pending-refusal 1 checker	slice0
+source_shadow_saturating_add	con:tests/slice0/shadow_saturating_add.con	pending-refusal 1 checker	slice0
+source_shadow_checked_add	con:tests/slice0/shadow_checked_add.con	pending-refusal 1 checker	slice0
+source_shadow_try_convert	con:tests/slice0/shadow_try_convert.con	pending-refusal 1 checker	slice0
 source_lcb_value_limit	con:tests/slice0/lcb_value_limit.con	llvm exit 42 lcb resource values 488 1924	slice0
 cli_invalid_backend	cli:invalid-backend	diagnostic 3 USAGE usage: concrete build SOURCE.con -o OUTPUT-DIRECTORY [--backend llvm|lcb] | concrete help	slice0
 cli_invalid_path	cli:invalid-path	diagnostic 3 USAGE expected a project-relative .con path	slice0

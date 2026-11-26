@@ -107,7 +107,7 @@ exit_256() { printf 'bad_exit\tbir:other\texit 256 -\tslice0\n' >>"$1/tests/mani
 bad_trap() { printf 'bad_trap\tbir:other\ttrap foo\tslice0\n' >>"$1/tests/manifest.tsv"; }
 wrong_columns() { printf 'bad_columns\tbir:answer\texit 0 -\n' >>"$1/tests/manifest.tsv"; }
 duplicate_bir() { printf 'duplicate_bir\tbir:answer\texit 0 -\tslice0\n' >>"$1/tests/manifest.tsv"; }
-refuse_bir() { printf 'refused_bir\tbir:other\trefuse unreachable_statement STMT-14@1 0:1:1:1 -\tslice0\n' >>"$1/tests/manifest.tsv"; }
+refuse_bir() { printf 'refused_bir\tbir:other\trefuse 1 unreachable_statement STMT-14@1 0:1:1:1 -\tslice0\n' >>"$1/tests/manifest.tsv"; }
 
 if [ "${CONCRETE_TEST_MANIFEST_SKIP_CONTROLS:-0}" != 1 ]; then
   control duplicate-id "duplicate id 'answer'" duplicate_id manifest.tsv

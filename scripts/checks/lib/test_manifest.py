@@ -120,7 +120,7 @@ def validate_expect(path, line, expect):
             validate_stderr(path, line, stderr)
             if stderr == "-":
                 fail(path, line, "trap requires nonempty stderr")
-        case ["refuse", kind, rule, primary, related] if kind in REFUSAL_KINDS and RULE_RE.fullmatch(rule):
+        case ["refuse", "1", kind, rule, primary, related] if kind in REFUSAL_KINDS and RULE_RE.fullmatch(rule):
             validate_origin(path, line, primary)
             labels = set()
             if related != "-":
@@ -130,7 +130,7 @@ def validate_expect(path, line, expect):
                         fail(path, line, f"invalid or duplicate related origin label {label!r}")
                     labels.add(label)
                     validate_origin(path, line, location)
-        case ["pending-refusal", kind] if kind in PENDING_REFUSALS:
+        case ["pending-refusal", "1", kind] if kind in PENDING_REFUSALS:
             pass
         case ["diagnostic", status, code, *message] if (
                 status in ("2", "3", "4") and CLI_CODE_RE.fullmatch(code) and all(message)):
@@ -252,9 +252,9 @@ def self_test():
         (tests / "slice0" / "dangling.con").symlink_to(tests / "slice0" / "missing.con")
         valid = ("id\tprogram\texpect\tslice\n"
                  "a\tbir:answer\texit 42 -\tslice0\n"
-                 "b\tcon:tests/slice0/ok.con\trefuse unreachable_statement STMT-14@1 0:1:1:1 anchor=2:3:1:3\tslice0\n")
+                 "b\tcon:tests/slice0/ok.con\trefuse 1 unreachable_statement STMT-14@1 0:1:1:1 anchor=2:3:1:3\tslice0\n")
         assert len(parse(tests / "manifest.tsv", valid)) == 2
-        refusal = "refuse unreachable_statement STMT-14@1 0:1:1:1 anchor=2:3:1:3"
+        refusal = "refuse 1 unreachable_statement STMT-14@1 0:1:1:1 anchor=2:3:1:3"
         llvm = valid.replace(refusal, "llvm exit 42 lcb resource values 488 1924")
         assert len(parse(tests / "manifest.tsv", llvm)) == 2
         cli = "c\tcli:invalid-backend\tdiagnostic 3 USAGE\tslice0\n"
@@ -264,11 +264,13 @@ def self_test():
             valid + cli.replace("diagnostic 3 USAGE", "exit 3 -"),
             valid + cli.replace("invalid-backend", "unknown-case"),
             valid.replace(refusal, "diagnostic 3 USAGE"),
+            valid.replace("refuse 1", "refuse 2"),
+            valid.replace(refusal, "pending-refusal 2 checker"),
             llvm.replace("488 1924", "488 488"),
             llvm.replace("exit 42 lcb", "exit 256 lcb"),
             llvm.replace("values 488", "values 0"),
-            valid.replace(refusal, "pending-refusal checker"),
-            valid.replace("exit 42 -", "pending-refusal checker"),
+            valid.replace(refusal, "pending-refusal 1 checker"),
+            valid.replace("exit 42 -", "pending-refusal 1 checker"),
             valid.replace("exit 42 -", "trap arithmeticOverflow 0 -"),
             valid.replace("exit 42 -", "exit 42 0A"),
             valid.replace("STMT-14@1", "STMT-14@0"),

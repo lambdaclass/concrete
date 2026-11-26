@@ -291,12 +291,13 @@ def emitSource (path actual : String) (dir : System.FilePath) (expectation : Lis
     (target : LCB.Target) : IO UInt32 := do
   let input : Concrete.Stages.Input := ⟨path, ← IO.FS.readBinFile actual⟩
   match expectation, Concrete.Stages.compile input with
-  | ["pending-refusal", kind], .error refusal =>
-    if pendingRefusalMatches kind refusal then
+  | ["pending-refusal", status, kind], .error refusal =>
+    if toString refusal.exitCode == status && pendingRefusalMatches kind refusal then
       IO.println s!"pending diagnostic fields: {path} ({kind})"
       return 0
     return 13
-  | ["refuse", kind, rule, primary, related], .error (actual@(.checker _)) =>
+  | ["refuse", status, kind, rule, primary, related], .error (actual@(.checker _)) =>
+    unless toString actual.exitCode == status do return 13
     let some expected := parseRefusal kind rule primary related | return 2
     checkBodyRefusal input expected actual
   | "refuse" :: _, _ | "pending-refusal" :: _, _ => return 13
@@ -305,8 +306,8 @@ def emitSource (path actual : String) (dir : System.FilePath) (expectation : Lis
     unless status.toNat?.any (fun n => Concrete.Core.run p (p.body.length + 1) == .exit n) do
       return 10
     match Concrete.Stages.prepareLCB out.bir with
-    | .error (.backendResource "LCB" resourceFound measured limit) =>
-      unless resource == resourceFound && bound.toNat? == some limit &&
+    | .error (refusal@(.backendResource "LCB" resourceFound measured limit)) =>
+      unless refusal.exitCode == 2 && resource == resourceFound && bound.toNat? == some limit &&
           measurement.toNat? == some measured && measured > limit do return 15
       IO.println s!"ok   {path}: LCB {resourceFound}: {measured} exceeds {limit}"
       return 0

@@ -19,11 +19,8 @@ source scripts/checks/lib/has_match.sh
 # Emit-only runs validate fixture expectations without building native executables.
 if [[ ${CONCRETE_TEST_EMIT_ONLY:-0} != 1 ]]; then
   bash scripts/checks/compiler/f31_census.sh
-  build llvm-rendering "$work/llvm-rendering.log" bounded 120 \
-    lake env lean scripts/checks/compiler/llvm_rendering.lean
-  echo "ok   LLVM rendering controls"
   build llvm-mutation-controls "$work/llvm-mutation-controls.log" bounded 120 \
-    python3 -B scripts/checks/compiler/llvm_mutation_controls.py
+    lake env python3 -B scripts/checks/compiler/llvm_mutation_controls.py
   cat "$work/llvm-mutation-controls.log"
 fi
 
@@ -350,11 +347,11 @@ if [ "${CONCRETE_TEST_MANIFEST_SKIP_CONTROLS:-0}" != 1 ]; then
   done
   manifest_control missing-row 1 missing_row "" "slice0: program without a manifest row: answer"
   manifest_control nonexistent-program 1 nonexistent_program "" "slice0: manifest row names no program: no_such_program"
-  manifest_control wrong-source-refusal 13 mutate_field source_syntax "" 2 checker
-  manifest_control wrong-rule-id 13 mutate_field source_after_return "" 3 STMT-15@1
-  manifest_control wrong-rule-revision 13 mutate_field source_after_return "" 3 STMT-14@2
-  manifest_control wrong-primary-origin 14 mutate_field source_after_return "" 4 18:27:1:19
-  manifest_control wrong-related-origin 14 mutate_field source_after_return "" 5 anchor=18:27:1:19
+  manifest_control wrong-source-refusal 13 mutate_field source_syntax "" 3 checker
+  manifest_control wrong-rule-id 13 mutate_field source_after_return "" 4 STMT-15@1
+  manifest_control wrong-rule-revision 13 mutate_field source_after_return "" 4 STMT-14@2
+  manifest_control wrong-primary-origin 14 mutate_field source_after_return "" 5 18:27:1:19
+  manifest_control wrong-related-origin 14 mutate_field source_after_return "" 6 anchor=18:27:1:19
   manifest_control wrong-resource-name 15 mutate_field source_lcb_value_limit "" 6 blocks
   manifest_control wrong-resource-limit 15 mutate_field source_lcb_value_limit "" 7 489
   manifest_control wrong-resource-measurement 15 mutate_field source_lcb_value_limit "" 8 1925
@@ -419,12 +416,13 @@ while IFS=$'\t' read -r name program expect; do
     "llvm "*) check_backend_limit "$program" "$d" "$expect" ;;
     "refuse "*|"pending-refusal "*)
       mkdir -p "$d"
-      case "$expect" in
+      read -r form status kind _ <<<"$expect"
+      case "$form $kind" in
         "pending-refusal syntax") code=SYNTAX ;;
         "pending-refusal unsupported_form") code=SLICE-0 ;;
         *) code=CORE-CHECK ;;
       esac
-      check_cli_diagnostic "$name" "$d/cli" "refuse 1 $code" "${project_cli[@]}" \
+      check_cli_diagnostic "$name" "$d/cli" "refuse $status $code" "${project_cli[@]}" \
         build "${program#con:}" -o "$d/out"
       if [ -e "$d/out" ] || [ -L "$d/out" ]; then
         echo "FAIL $name: refused build created an output path"

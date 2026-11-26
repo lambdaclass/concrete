@@ -114,7 +114,5 @@ fi
 #   * test_mutation.sh compares on-disk content against what it itself wrote, so
 #     a foreign edit is a fact rather than an inference — and it refuses to
 #     restore over it.
-#   * train.sh takes an exclusive lock in the COMMON git dir, so local
-#     landings cannot interleave even from different worktrees.
 #
 # This script's job is to make isolation the cheap default, not to police it.
