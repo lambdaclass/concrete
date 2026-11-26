@@ -3,6 +3,7 @@ import ConcreteSpec.Spec.Manifest
 
 namespace Concrete
 open ConcreteSpec.Project
+open ConcreteSpec.Core
 
 inductive ManifestRefusal where
   | read (detail : String)
@@ -22,12 +23,16 @@ def ManifestRefusal.code : ManifestRefusal → String
   | .malformed => "MANIFEST-SYNTAX"
   | .schemaPending => "MANIFEST-SCHEMA"
 
-def ManifestRefusal.ruleId : ManifestRefusal → Option ConcreteSpec.Core.RuleId
-  | .size => some Manifest.sizeRule
-  | .encoding => some Manifest.encodingRule
-  | .depth => some Manifest.depthRule
-  | .malformed => some Manifest.syntaxRule
+/-- Manifest diagnostics cite the exact registered rule for the refusal. -/
+private def ManifestRefusal.registeredRule : ManifestRefusal → Option RegisteredRule
+  | .size => some ⟨Manifest.sizeRule, by decide⟩
+  | .encoding => some ⟨Manifest.encodingRule, by decide⟩
+  | .depth => some ⟨Manifest.depthRule, by decide⟩
+  | .malformed => some ⟨Manifest.syntaxRule, by decide⟩
   | .read _ | .schemaPending => none
+
+def ManifestRefusal.ruleId (refusal : ManifestRefusal) : Option RuleId :=
+  refusal.registeredRule.map Subtype.val
 
 def ManifestRefusal.message : ManifestRefusal → String
   | .read detail => s!"cannot read Concrete.toml ({detail})"
@@ -86,9 +91,7 @@ def Refusal.message : Refusal → String
   | .usageError msg => msg
   | .internal msg => "compiler failure: " ++ msg
 
-open ConcreteSpec.Core
-
-/-- The rule citation carries a validated name and revision and matches the refusal category. -/
+/-- The rule citation carries a validated name and revision and matches the refusal. -/
 structure Diagnostic where
   private mk ::
   refusal : Refusal
@@ -102,9 +105,13 @@ private def Refusal.ruleCategory : Refusal → Option RuleRefusalCategory
   | .internal _ => some .internal
   | .backendProfile .. | .toolFailure _ | .manifest _ | .usageError _ => none
 
-private def Refusal.withRule (refusal : Refusal) (rule : RegisteredRule) : Option Diagnostic := do
-  let category ← refusal.ruleCategory
-  if rule.val.refusalCategory = some category then some ⟨refusal, rule⟩ else none
+private def Refusal.withRule (refusal : Refusal) (rule : RegisteredRule) : Option Diagnostic :=
+  let compatible : Bool := match refusal with
+    | .manifest detail => detail.ruleId == some rule.val
+    | _ => match refusal.ruleCategory with
+      | some category => rule.val.refusalCategory == some category
+      | none => false
+  if compatible then some ⟨refusal, rule⟩ else none
 
 /-- Generate a diagnostic from the current revision of a rule declaration. -/
 def Refusal.diagnostic (refusal : Refusal) (rule : Lean.Name) : Option Diagnostic :=

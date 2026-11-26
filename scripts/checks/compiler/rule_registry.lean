@@ -2,6 +2,7 @@ import ConcreteSpec.Spec.Slice0Layout
 import Concrete.Refusal
 
 open Concrete ConcreteSpec.Core
+open ConcreteSpec.Project
 open Slice0Layout
 
 private def refusal : Refusal := .checker "unreachable code"
@@ -22,6 +23,17 @@ example : ((Refusal.lexerDigitLimit 0 1024).diagnostic ``Slice0Rules.WithinLimit
     true := by decide
 example : ((Refusal.lexerDigitLimit 0 1024).diagnostic ``Slice0Rules.Lexed).isNone =
     true := by decide
+
+example : ((Refusal.manifest .size).diagnosticAt Manifest.sizeRule).isSome = true :=
+  by decide
+example : ((Refusal.manifest .size).diagnostic ``Manifest.SizeAccepted).isSome = true :=
+  by decide
+example : ((Refusal.manifest .size).diagnosticAt {Manifest.sizeRule with rev := 2}).isNone =
+    true := by decide
+example : ((Refusal.manifest .size).diagnosticAt Manifest.depthRule).isNone = true :=
+  by decide
+example : ((Refusal.manifest .schemaPending).diagnosticAt Manifest.sizeRule).isNone = true :=
+  by decide
 
 -- A literal-range or generic admission example cannot stand in for OWN-5.
 example : ((rulesForSlice ⟨0⟩).getD []).any

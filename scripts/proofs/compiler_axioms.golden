@@ -2615,6 +2615,10 @@ _private.Concrete.Parse.0.Concrete.Parse.refusalTable._proof_1	propext
 _private.Concrete.Refusal.0.Concrete.Diagnostic.mk.inj	
 _private.Concrete.Refusal.0.Concrete.Diagnostic.mk.injEq	propext
 _private.Concrete.Refusal.0.Concrete.Diagnostic.mk.sizeOf_spec	
+_private.Concrete.Refusal.0.Concrete.ManifestRefusal.registeredRule._proof_1	Quot.sound propext
+_private.Concrete.Refusal.0.Concrete.ManifestRefusal.registeredRule._proof_2	Quot.sound propext
+_private.Concrete.Refusal.0.Concrete.ManifestRefusal.registeredRule._proof_3	Quot.sound propext
+_private.Concrete.Refusal.0.Concrete.ManifestRefusal.registeredRule._proof_4	Quot.sound propext
 _private.Concrete.SSA.0.Concrete.BIR.ScalarBridge.toCore.match_1.eq_1	
 _private.Concrete.SSA.0.Concrete.BIR.ScalarBridge.toCore.match_1.eq_2	
 _private.Concrete.SSA.0.Concrete.BIR.ScalarBridge.toCore.match_1.eq_3	
