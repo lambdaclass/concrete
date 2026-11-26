@@ -1,3 +1,5 @@
+import ConcreteSpec.Spec.Manifest
+import ConcreteSpec.Spec.ProjectPolicy
 import ConcreteSpec.Spec.Basics
 import ConcreteSpec.Spec.Hybrid
 import ConcreteSpec.Spec.Scalar
@@ -531,6 +533,100 @@ theorem overflow : RuleRefused ProgramPermitted
 
 end Slice1Registry
 
+namespace ProjectRegistry
+open ConcreteSpec.Project
+
+-- Fixture-only language-rules identities. The manifest schema assigns their real spelling.
+def supported : LanguageRulesVersion := ⟨1, 2⟩
+
+theorem standaloneAccepted : RuleAccepted LanguagePinAccepted (supported, .standalone) := by
+  unfold RuleAccepted
+  decide
+
+theorem pinAccepted : RuleAccepted LanguagePinAccepted (supported, .project (some supported)) := by
+  unfold RuleAccepted
+  decide
+
+theorem missingPinRefused : RuleRefused LanguagePinAccepted (supported, .project none) := by
+  unfold RuleRefused
+  decide
+
+theorem unsupportedPinRefused :
+    RuleRefused LanguagePinAccepted (supported, .project (some ⟨2, 0⟩)) := by
+  unfold RuleRefused
+  decide
+
+def package : PackageId := ⟨⟨"example"⟩, ⟨⟨"0"⟩⟩⟩
+def function : FnId := ⟨⟨package, [⟨"entry"⟩], by simp⟩, ⟨"main"⟩⟩
+
+def facts : FunctionFacts :=
+  ⟨function, .established false [] .function, .established false [] .function,
+    .established false [] .function, .established true [] .function,
+    .established 32 [] .function⟩
+
+theorem clauseAccepted : RuleAccepted ClauseAccepted (⟨.noAlloc, []⟩, facts) := by
+  unfold RuleAccepted
+  decide
+
+theorem allocationRefused : RuleRefused ClauseAccepted
+    (⟨.noAlloc, []⟩, { facts with allocates := .established true [] .function }) := by
+  unfold RuleRefused
+  decide
+
+theorem unknownRefused : RuleRefused ClauseAccepted
+    (⟨.noAlloc, []⟩, { facts with allocates := .unknown .function }) := by
+  unfold RuleRefused
+  decide
+
+def tables : Tables := ⟨some ⟨1, []⟩, some ⟨2, []⟩⟩
+
+theorem versionsAccepted : RuleAccepted TableVersionsAccepted (tables, 1, 2) := by
+  unfold RuleAccepted
+  decide
+
+theorem policyVersionRefused : RuleRefused TableVersionsAccepted (tables, 2, 2) := by
+  unfold RuleRefused
+  decide
+
+theorem assumptionsVersionRefused : RuleRefused TableVersionsAccepted (tables, 1, 1) := by
+  unfold RuleRefused
+  decide
+
+
+theorem sizeAccepted : RuleAccepted Project.Manifest.SizeAccepted 65536 := by
+  unfold RuleAccepted
+  decide
+
+theorem sizeRefused : RuleRefused Project.Manifest.SizeAccepted 65537 := by
+  unfold RuleRefused
+  decide
+
+theorem encodingAccepted : RuleAccepted Project.Manifest.EncodingAccepted (ByteArray.mk #[0xC3, 0xA9]) := by
+  unfold RuleAccepted
+  decide
+
+theorem encodingRefused : RuleRefused Project.Manifest.EncodingAccepted (ByteArray.mk #[0xFF]) := by
+  unfold RuleRefused
+  decide
+
+theorem depthAccepted : RuleAccepted Project.Manifest.DepthAccepted "[a.b.c.d.e.f.g.h.i.j.k.l.m.n.o]\nx = true" := by
+  unfold RuleAccepted
+  cbv <;> decide
+
+theorem depthRefused : RuleRefused Project.Manifest.DepthAccepted "[a.b.c.d.e.f.g.h.i.j.k.l.m.n.o.p]\nx = true" := by
+  unfold RuleRefused
+  cbv <;> decide
+
+theorem syntaxAccepted : RuleAccepted Project.Manifest.SyntaxAccepted "a = true" := by
+  unfold RuleAccepted
+  cbv <;> decide
+
+theorem syntaxRefused : RuleRefused Project.Manifest.SyntaxAccepted "a = " := by
+  unfold RuleRefused
+  cbv <;> decide
+
+end ProjectRegistry
+
 /-- Complete conformance links, populated alongside the owning rules. -/
 def registeredRuleExamples : List RuleExample :=
   [⟨``ConstsPermitted, ``ConstRegistry.accepted⟩,
@@ -617,6 +713,24 @@ def registeredRuleExamples : List RuleExample :=
    ⟨``SourcePathSpan.LineMatches, ``SourcePathSpan.Registry.lineAccepted⟩,
    ⟨``SourcePathSpan.LineMatches, ``SourcePathSpan.Registry.lineRefused⟩,
    ⟨``SourcePathSpan.ColumnMatches, ``SourcePathSpan.Registry.columnAccepted⟩,
-   ⟨``SourcePathSpan.ColumnMatches, ``SourcePathSpan.Registry.columnRefused⟩]
+   ⟨``SourcePathSpan.ColumnMatches, ``SourcePathSpan.Registry.columnRefused⟩,
+   ⟨``Project.LanguagePinAccepted, ``ProjectRegistry.standaloneAccepted⟩,
+   ⟨``Project.LanguagePinAccepted, ``ProjectRegistry.pinAccepted⟩,
+   ⟨``Project.LanguagePinAccepted, ``ProjectRegistry.missingPinRefused⟩,
+   ⟨``Project.LanguagePinAccepted, ``ProjectRegistry.unsupportedPinRefused⟩,
+   ⟨``Project.ClauseAccepted, ``ProjectRegistry.clauseAccepted⟩,
+   ⟨``Project.ClauseAccepted, ``ProjectRegistry.allocationRefused⟩,
+   ⟨``Project.ClauseAccepted, ``ProjectRegistry.unknownRefused⟩,
+   ⟨``Project.TableVersionsAccepted, ``ProjectRegistry.versionsAccepted⟩,
+   ⟨``Project.TableVersionsAccepted, ``ProjectRegistry.policyVersionRefused⟩,
+   ⟨``Project.TableVersionsAccepted, ``ProjectRegistry.assumptionsVersionRefused⟩,
+   ⟨``Project.Manifest.SizeAccepted, ``ProjectRegistry.sizeAccepted⟩,
+   ⟨``Project.Manifest.SizeAccepted, ``ProjectRegistry.sizeRefused⟩,
+   ⟨``Project.Manifest.EncodingAccepted, ``ProjectRegistry.encodingAccepted⟩,
+   ⟨``Project.Manifest.EncodingAccepted, ``ProjectRegistry.encodingRefused⟩,
+   ⟨``Project.Manifest.DepthAccepted, ``ProjectRegistry.depthAccepted⟩,
+   ⟨``Project.Manifest.DepthAccepted, ``ProjectRegistry.depthRefused⟩,
+   ⟨``Project.Manifest.SyntaxAccepted, ``ProjectRegistry.syntaxAccepted⟩,
+   ⟨``Project.Manifest.SyntaxAccepted, ``ProjectRegistry.syntaxRefused⟩]
 
 end ConcreteSpec.Core

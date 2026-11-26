@@ -1,5 +1,7 @@
 import Concrete.Backend.LLVM
 import Concrete.Stages
+import Concrete.Driver.Project
+import Concrete.Driver.Launcher
 
 open Concrete Concrete.Backend
 
@@ -20,49 +22,62 @@ private def writeOutput (name : String) (getStream : BaseIO IO.FS.Stream) (text 
     stream.putStr text
     stream.flush
 
-private def checkedWriter : String := "scripts/checks/lib/slice0_write.py"
-
-private def writeBuildInput (path : System.FilePath) (text : String) : ExceptT Refusal IO Unit :=
+private def writeBuildInput (lib path : System.FilePath) (text : String) : ExceptT Refusal IO Unit :=
   toolIO s!"write {path}" do
-    let result ← IO.Process.output { cmd := "python3", args := #[checkedWriter, path.toString] } (some text)
+    let result ← IO.Process.output { cmd := "python3", args := #[(lib / "slice0_write.py").toString, path.toString] } (some text)
     if result.exitCode != 0 then
       throw (IO.userError s!"checked writer exited with status {result.exitCode}: {result.stderr.trimAscii}")
 
-private def outputTransaction (operation : String) (args : Array String) :
+private def outputTransaction (lib : System.FilePath) (operation : String) (args : Array String) :
     ExceptT Refusal IO String :=
   toolIO operation do
     let result ← IO.Process.output {
-      cmd := "python3", args := #["-B", "scripts/checks/lib/slice0_publish.py"] ++ args }
+      cmd := "python3", args := #["-B", (lib / "slice0_publish.py").toString] ++ args }
     if result.exitCode != 0 then
       throw (IO.userError result.stderr.trimAscii.toString)
     return result.stdout
 
-private def buildNative (dir : System.FilePath) (backend : Option String)
-    (helper lcb : String) (inputs : Array (String × String)) (artifacts : Array String) :
-    ExceptT Refusal IO Unit := do
-  let names := inputs.map Prod.fst ++ artifacts
-  let path ← outputTransaction "prepare build outputs" (#["prepare", dir.toString] ++ names)
+private def buildNative (lib dir : System.FilePath) (backend : Option String)
+    (lcb : String) (inputs : Array (String × String)) (artifacts : Array String)
+    (version : ConcreteSpec.Project.LanguageRulesVersion) : ExceptT Refusal IO Unit := do
+  let names := inputs.map Prod.fst ++ artifacts ++ #["runtime-premises.txt"]
+  let path ← outputTransaction lib "prepare build outputs" (#["prepare", dir.toString] ++ names)
   let staging := System.FilePath.mk (path.dropEnd 1 |>.toString)
   try
     for (name, text) in inputs do
-      writeBuildInput (staging / name) text
-    let args := #[helper, staging.toString, lcb] ++ backend.toArray
-    let child ← toolIO "run native build helper" (IO.Process.output { cmd := "bash", args })
+      writeBuildInput lib (staging / name) text
+    let helper := (lib / "slice0_native.sh").toString
+    let args := #[staging.toString, lcb] ++ backend.toArray
+    let child ← toolIO "run native build helper"
+      (IO.Process.output { cmd := "bash", args := #[helper, "bound"] ++ args })
     if child.exitCode != 0 then
-      let detail := child.stderr.trimAscii.toString
+      let detail := (child.stdout ++ child.stderr).trimAscii.toString
       throw (.toolFailure s!"native build helper exited with status {child.exitCode}{if detail.isEmpty then "" else s!": {detail}"}")
     if !child.stdout.isEmpty then writeOutput "stdout" IO.getStdout child.stdout
     if !child.stderr.isEmpty then writeOutput "stderr" IO.getStderr child.stderr
-    discard <| outputTransaction "publish build outputs"
+    for (name, text) in inputs do
+      let retained ← toolIO s!"read staged input {name}" (IO.FS.readBinFile (staging / name))
+      unless text.toUTF8 == retained do
+        throw (.toolFailure s!"staged link input changed during native build: {name}")
+    let verified ← toolIO "verify native build"
+      (IO.Process.output { cmd := "bash", args := #[helper, "verify"] ++ args })
+    if verified.exitCode != 0 then
+      let detail := (verified.stdout ++ verified.stderr).trimAscii.toString
+      throw (.toolFailure s!"native replay exited with status {verified.exitCode}: {detail}")
+    -- Finish fallible reporting before committing the verified generation.
+    writeOutput "stdout" IO.getStdout s!"language-rules version {version.major}.{version.minor}\n"
+    discard <| outputTransaction lib "publish build outputs"
       (#["publish", dir.toString, staging.toString] ++ names)
   finally
-    -- After the exchange, staging contains the retired output directory. A
-    -- cleanup failure cannot turn an already committed build into a failure.
-    try IO.FS.removeDirAll staging catch _ => pure ()
+    -- The publisher moves a private candidate out of staging on first publication.
+    -- On exchange the retired output remains in staging for cleanup.
+    let cleanup : IO Unit := do
+      try IO.FS.removeDirAll staging catch _ => pure ()
+    cleanup
 
 private def report (refusal : Refusal) : IO UInt32 := do
   let message := match refusal with
-    | .syntaxError detail => "syntax error: " ++ detail
+    | .syntaxError detail => s!"{refusal.code.toLower} error: {detail}"
     | _ => refusal.message
   match ← (writeOutput "stderr" IO.getStderr s!"{refusal.code}: {message}\n").run with
   | .ok () => return refusal.exitCode
@@ -77,14 +92,20 @@ private def build (source dir : System.FilePath) (backend : Option String) :
   let root ← toolIO "resolve project root" (IO.FS.realPath ".")
   unless path == root / source do
     throw (.usageError "source path must be canonical and project-relative")
+  let version ← liftExcept <| (← Driver.Project.checkInvocation (root / "Concrete.toml")).mapError
+    Refusal.manifest
   let bytes ← toolIO "read source" (IO.FS.readBinFile path)
   let input ← liftExcept (Stages.Input.load source.toString bytes)
   let out ← liftExcept (Stages.compile input)
-  let helper := "scripts/checks/lib/slice0_native.sh"
+  let executable ← toolIO "resolve compiler installation" (IO.appPath >>= IO.FS.realPath)
+  let some installation := executable.parent >>= (·.parent) >>= (·.parent) >>= (·.parent)
+    | throw (.internal "cannot locate the compiler installation")
+  let lib := installation / "scripts/checks/lib"
+  let helper := (lib / "slice0_native.sh").toString
   let (lcb, asm) ← if backend == some "llvm" then pure ("-", none) else do
     let f ← liftExcept (Stages.prepareLCB out.bir)
     let lcb ← toolIO "locate LCB"
-      (IO.FS.realPath ".lake/packages/lean-compiler-backend/.lake/build/bin/lcb")
+      (IO.FS.realPath (installation / ".lake/packages/lean-compiler-backend/.lake/build/bin/lcb"))
     let host ← toolIO "detect native target" (IO.Process.run { cmd := "bash", args := #[helper, "target"] })
     let host := host.trimAscii.toString
     let some target := LCB.Target.ofName host
@@ -94,12 +115,14 @@ private def build (source dir : System.FilePath) (backend : Option String) :
   let mut inputs := #[]
   let mut artifacts := #[]
   if backend != some "lcb" then
-    inputs := inputs.push ("llvm.ll", LLVM.module out.bir)
-    artifacts := artifacts ++ #["llvm.o", "llvm.exe"]
+    let some pair := Driver.Launcher.prepareLLVM out.bir
+      | throw (.internal "invalid LLVM link inputs")
+    inputs := #[("component.ll", pair.component), ("launcher.ll", pair.launcher)]
+    artifacts := #["component.o", "launcher.o", "llvm.exe", "llvm.link.sha256"]
   if let some text := asm then
     inputs := inputs ++ #[("lcb_body.s", text), ("lcb_rt.ssa", Runtime.qbe out.bir.sites)]
-    artifacts := artifacts ++ #["lcb_body.o", "lcb_rt.s", "lcb_rt.o", "lcb.exe"]
-  buildNative dir backend helper lcb inputs artifacts
+    artifacts := artifacts ++ #["lcb_body.o", "lcb_rt.s", "lcb_rt.o", "lcb.exe", "lcb.link.sha256"]
+  buildNative lib dir backend lcb inputs artifacts version
 
 def main (args : List String) : IO UInt32 := do
   let result ← try
