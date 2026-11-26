@@ -144,4 +144,4 @@ axiom propext : ∀ {a b : Prop}, (a ↔ b) → a = b
 axiom Classical.choice : {α : Sort u} → Nonempty α → α
 axiom Quot.sound : ∀ {α : Sort u} {r : α → α → Prop} {a b : α}, r a b → Quot.mk r a = Quot.mk r b
 lean-toolchain leanprover/lean4:v4.35.0
-pin «lean-compiler-backend» 4623fba6fec8439974b7e4ceb9a577b3e6918a22
+pin «lean-compiler-backend» 1d2584c0f6cfa9ba10bd918bc62234c5878dd38f

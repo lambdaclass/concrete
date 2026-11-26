@@ -834,10 +834,20 @@ These are internal. None blocks slice 0's correctness.
 ## What LCB must provide
 
 LCB is our own project. The items below track work for LCB. Concrete pins LCB at
-`4623fba6fec8439974b7e4ceb9a577b3e6918a22`, which includes indexed validation,
-linear assembly emission, and LCB's deterministic scaling gate. Wire packets use
-header v2 with semantics `ssa-int-v2` / `a64-leaf-v2`. LCB refuses packets with
-the old header or semantics identifiers. `CodeInput.version` stays 1.
+`1d2584c0f6cfa9ba10bd918bc62234c5878dd38f`. LCB's scaling gate covers numbered
+validation and the x86-64 Linux and AArch64 macOS emitters. Separate compatibility
+emitter cases scale the block count, phi count, and phi fan-in. The gate also
+counts byte comparisons for long names that differ at the first byte as suffix
+length and lookup count vary independently. LCB's `compiler-build.json` records
+build identity `581c7ceb46686862f1d1c8f0b37db8a1de1658da681a60d7026be00673b50364`.
+The pin also adds typed high-multiply proofs and an execution-closure audit. The audit rejects
+reachable partial definitions and unaudited externs, requires equality proofs
+using only standard axioms for reachable `csimp` substitutions, checks
+that the shipped executables import only `Init`, `Std`, and backend modules,
+and compares the stock Lean build's generated C and Lean module artifacts byte
+for byte with the audit build. Wire packets use header v2 with semantics
+`ssa-int-v2` / `a64-leaf-v2`. LCB refuses packets with the old header or
+semantics identifiers. `CodeInput.version` stays 1.
 
 **For the trusted base (now):**
 1. A public entry `compileSource : Target → Symbol → Source.Function → Except Error Artifact`. Today the compiler builds LCB's `FunctionJob` itself (`Concrete/Backend/LCB.lean`, `assemble`).
@@ -850,7 +860,11 @@ the old header or semantics identifiers. `CodeInput.version` stays 1.
 
 **For slice 2, integers complete (all widths u8–u64, i8–i64): provided on LCB's verified path (Apple AArch64).** LCB's verified profile now has `word` (32-bit) and `long` (64-bit) values, `add sub mul and or xor`, the shifts `shiftLeft logicalRight arithmeticRight` (count modulo the width), `mulHighUnsigned mulHighSigned` (accepted only at `long`), division and remainder (`unsignedDiv unsignedRem signedDiv signedRem`; a zero divisor or signed minimum by −1 is stuck, so the adapter must branch to a trap before them), and the comparisons `eq unsignedLT unsignedLE signedLT signedLE` (word result). The adapter will carry every integer as a `long`: exact for types up to 32 bits; 64-bit overflow uses the high multiply and, for add/sub, `xor`/`and`/compare. Still absent and optional while every integer is a `long`: width conversion (`word`↔`long` extension and truncation).
 
-**Still needed for the Linux targets:** the compatibility path is reached with `Verified.reify`, which maps both high multiplies to an ordinary `mul` (LCB `Verified/Canonical.lean`), because the compatibility IR has no high multiply. Slice 2's 64-bit multiply overflow would compute the wrong flag there. LCB must add high multiply to its compatibility IR and backends (or the x86-64 verified path) before slice 2; until then the adapter must refuse high multiply on Linux targets. Slice 0 emits none.
+**Still needed for the Linux targets:** compatibility reification (`Verified.reify`
+in LCB's `Verified/Canonical.lean`) now returns `unsupportedBinary` for both
+high multiplies. The compatibility IR still needs these operations, or Linux
+needs a verified path that supports them, before the adapter can lower slice 2's
+64-bit multiply overflow checks there. Slice 0 emits neither operation.
 
 ## Not in slice 0
 

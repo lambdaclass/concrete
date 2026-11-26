@@ -436,41 +436,17 @@ private def check (path : String) (mem : Memory.Program) (bir : BIR.Program) (ed
     checkStores path mem.result mem.stores {} 0 0 0 insts term blocks bir.sites edges
   | _ => false
 
-private def sourceFrom (stores : List Memory.Store) (result : Core.Atom)
-    (slots : List (ConcreteSpec.Var × Int)) : ConcreteSpec.Outcome :=
-  let answer : Except ConcreteSpec.Outcome Int := do
-    let slots ← stores.foldlM (fun slots stmt => do
-      let n ← MIR.evalOp slots stmt.value
-      return (stmt.dest.id, n) :: slots) slots
-    MIR.value slots result
-  match answer with
-  | .ok n => .exit n.toNat
-  | .error e => e
-
 private theorem source_cons {stmt : Memory.Store} {stores : List Memory.Store}
     {result : Core.Atom} {slots : List (ConcreteSpec.Var × Int)} {n : Int}
     (hn : MIR.evalOp slots stmt.value = .ok n) :
-    sourceFrom (stmt :: stores) result slots = sourceFrom stores result ((stmt.dest.id, n) :: slots) := by
-  simp [sourceFrom, hn, bind, Except.bind, Pure.pure, Except.pure]
+    Memory.runFrom (stmt :: stores) result slots = Memory.runFrom stores result ((stmt.dest.id, n) :: slots) := by
+  simp [Memory.runFrom, hn, bind, Except.bind, Pure.pure, Except.pure]
 
 private theorem source_trap {stmt : Memory.Store} {stores : List Memory.Store}
     {result : Core.Atom} {slots : List (ConcreteSpec.Var × Int)} {kind : ConcreteSpec.Trap}
     (hn : MIR.evalOp slots stmt.value = .error (.trap kind)) :
-    sourceFrom (stmt :: stores) result slots = .trap kind := by
-  simp [sourceFrom, hn, bind, Except.bind]
-
-private theorem source_initial (mem : Memory.Program) :
-    sourceFrom mem.stores mem.result [] = Memory.run mem := by
-  unfold sourceFrom Memory.run MIR.run
-  change _ = (match (do
-    let env ← (mem.stores.map (fun (stmt : Memory.Store) => (⟨stmt.dest.id, stmt.value⟩ : MIR.Assignment))).foldlM
-      (fun env (stmt : MIR.Assignment) => do
-        let n ← MIR.evalOp env stmt.op
-        return (stmt.dest, n) :: env) []
-    MIR.value env mem.result) with
-    | .ok n => ConcreteSpec.Outcome.exit n.toNat
-    | .error e => e)
-  rw [List.foldlM_map]
+    Memory.runFrom (stmt :: stores) result slots = .trap kind := by
+  simp [Memory.runFrom, hn, bind, Except.bind]
 
 private theorem execInsts_append {initial middle : BIR.Env} {pre rest : List Inst}
     (h : BIR.execInsts initial pre = some middle) :
@@ -522,7 +498,7 @@ private theorem checkStores_correct {path : String} {p : BIR.Program} {result : 
     (hinsts : block.insts = pre ++ insts) (hpre : BIR.execInsts initial pre = some regs)
     (hfuel : p.blocks.length - j < fuel) (hs : Scoped names next)
     (hrep : Represents slots names regs) :
-    RelatedOutcome p (sourceFrom stores result slots) (BIR.runBlock p fuel j initial) := by
+    RelatedOutcome p (Memory.runFrom stores result slots) (BIR.runBlock p fuel j initial) := by
   induction stores generalizing names next j site fuel pre insts block blocks sites edges slots initial regs with
   | nil =>
     obtain ⟨params, original, term⟩ := block
@@ -536,7 +512,7 @@ private theorem checkStores_correct {path : String} {p : BIR.Program} {result : 
       have hexec := execInsts_append (rest := []) hpre
       simp only [List.append_nil, BIR.execInsts] at hexec
       have horig : original = pre := by simpa using hinsts
-      simp [BIR.runBlock, block_at hblocks, horig, hexec, he, RelatedOutcome, sourceFrom, hn,
+      simp [BIR.runBlock, block_at hblocks, horig, hexec, he, RelatedOutcome, Memory.runFrom, hn,
         bind, Except.bind, Pure.pure, Except.pure]
   | cons stmt stores ih =>
     obtain ⟨dest, value⟩ := stmt
@@ -679,7 +655,7 @@ private theorem check_correct {path : String} {mem : Memory.Program} {bir : BIR.
         (fuel := bir.blocks.length + 1) (pre := []) (initial := []) (slots := [])
         h (by simpa using hblocks) rfl rfl rfl (by omega) (by simp [Scoped])
         (by simp [Represents])
-      rw [source_initial mem] at hrun
+      change RelatedOutcome _ (Memory.run mem) _ at hrun
       unfold Preserves BIR.run
       rw [hblocks]
       simpa [RelatedOutcome, hblocks] using hrun
@@ -730,5 +706,38 @@ theorem lower_wf {path : String} {p : Memory.Program} {bir : BIR.Program}
 theorem lower_correct {path : String} {p : Memory.Program} {bir : BIR.Program}
     (h : lower path p = .ok bir) : Preserves p bir :=
   (lower_validated h).2
+
+end Concrete.SSA
+
+namespace Concrete.SSA
+
+open Concrete.Interfaces ConcreteSpec.Core ConcreteSpec.Core.SourcePathSpan ConcreteSpec.StageInterface
+
+/-- Validate SSA at its frozen boundary using the shared Memory handoff check. -/
+def checkHandoff {language : CoreLanguage} {lang : LoweringLanguage language.operands.Ty}
+    {profile : Profile} (ssa : Interfaces.SSA lang profile) : Bool :=
+  @Memory.checkHandoff _ language.typeDecidableEq _ _ (ssa.memoryView (language := language))
+
+theorem checkHandoff_iff {language : CoreLanguage} {lang : LoweringLanguage language.operands.Ty}
+    {profile : Profile} (ssa : Interfaces.SSA lang profile) :
+    checkHandoff (language := language) ssa = true ↔ ssa.WF (language := language) :=
+  @Memory.checkHandoff_iff _ language.typeDecidableEq _ _ (ssa.memoryView (language := language))
+
+private abbrev controlLanguage := sliceLoweringLanguage slice0
+private def controlProfile : Profile := ⟨.lcb, .x86_64Linux, 0, 4096⟩
+
+private def loopControl (ending : Terminator
+    (Sigma (SSARead _ controlLanguage.literal)) (SSARead _ controlLanguage.literal controlLanguage.bool)) :
+    Interfaces.SSA controlLanguage controlProfile :=
+  let fn : FnId := ⟨⟨⟨⟨"control"⟩, ⟨⟨"0"⟩⟩⟩, [⟨"control"⟩], by decide⟩, ⟨"main"⟩⟩
+  let project := Project.singleton mainSourcePath (SourceText.ofBytes [])
+  ⟨project, fn, [(fn, ⟨[], none⟩)], [(fn, [], ⟨⟨0⟩, #[⟨⟨0⟩, [], [], ending, []⟩]⟩)], [], []⟩
+
+example : checkHandoff (language := sliceLanguage slice0) (loopControl (.jump ⟨⟨0⟩, []⟩)) = true :=
+  by with_unfolding_all rfl
+example : checkHandoff (language := sliceLanguage slice0) (loopControl .invalid) = false :=
+  by with_unfolding_all rfl
+example : checkHandoff (language := sliceLanguage slice0)
+    ({ loopControl (.jump ⟨⟨0⟩, []⟩) with functions := [] } : Interfaces.SSA controlLanguage controlProfile) = false := by with_unfolding_all rfl
 
 end Concrete.SSA
