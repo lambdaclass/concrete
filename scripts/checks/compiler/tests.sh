@@ -22,6 +22,22 @@ source scripts/checks/lib/has_match.sh
 
 # The emit-only manifest controls exercise only manifest validation.
 if [[ ${CONCRETE_TEST_EMIT_ONLY:-0} != 1 ]]; then
+  # Exercise one golden in independent process environments, with distinct cwd and TMPDIR.
+  for encoding_env in utc pacific; do
+    encoding_dir="$work/artifact-$encoding_env"
+    mkdir -p "$encoding_dir/tmp"
+    if [[ $encoding_env == utc ]]; then
+      encoding_tz=UTC0
+    else
+      encoding_tz=PST8
+    fi
+    build "artifact encoding ($encoding_env)" "$encoding_dir/vectors" bounded 120 \
+      lake env env "TMPDIR=$encoding_dir/tmp" "TZ=$encoding_tz" bash -c \
+      'cd "$1" && exec lean --run "$2"' _ "$encoding_dir" \
+      "$root/scripts/checks/compiler/artifact_encoding.lean"
+  done
+  cmp "$work/artifact-utc/vectors" "$work/artifact-pacific/vectors"
+  echo "ok   canonical artifact bytes and SHA-256 goldens in two environments, payload substitutions"
   bash scripts/checks/compiler/f31_census.sh
   build llvm-rendering "$work/llvm-rendering.log" bounded 120 \
     lake env lean scripts/checks/compiler/llvm_rendering.lean
