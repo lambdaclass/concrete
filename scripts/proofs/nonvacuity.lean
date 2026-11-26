@@ -8,8 +8,9 @@ whole telescope ending in True, using conjunction for proof premises
 when the rest of the telescope does not depend on the proof. A registered
 kernel-checked theorem must have exactly that type up to definitional
 equality and satisfy the witness axiom policy. The conclusion contributes
-no evidence. A residual implication, conditional, match or iff requires
-restating the Law with explicit premises.
+no evidence. Its unreduced head must be a supported propositional former
+or a saturated named predicate. Other residual heads require restating
+the Law with explicit premises.
 -/
 
 open Lean Meta
@@ -33,18 +34,33 @@ private partial def exposeConclusion (expr : Expr) : MetaM Expr := withIncRecDep
   | .letE _ _ value body _ => exposeConclusion (body.instantiate1 value)
   | other => pure other
 
+-- Accept the built-in propositional formers and saturated named predicates.
+-- The declaration's result sort must be literally Prop, so a polymorphic
+-- eliminator specialized to Prop cannot qualify as a predicate.
+private def supportedConclusion (conclusion : Expr) : MetaM Bool := do
+  let .const name _ := conclusion.getAppFn.consumeMData | return false
+  if [``Eq, ``HEq, ``And, ``Or, ``Not, ``Exists, ``True, ``False].contains name then
+    return true
+  let env ← getEnv
+  let recursorSuffix := match name with
+    | .str _ suffix => ["rec", recOnSuffix, brecOnSuffix, casesOnSuffix].contains suffix
+    | _ => false
+  if [``Iff, ``ite, ``dite].contains name || recursorSuffix ||
+      isAuxRecursor env name || isCasesOnLike env name ||
+      isMatcherCore env name || isMatcherLikeCore env name then
+    return false
+  let some info := env.find? name | return false
+  match info with
+  | .axiomInfo _ | .defnInfo _ | .opaqueInfo _ | .inductInfo _ =>
+    forallTelescope info.type fun params result =>
+      pure (params.size == conclusion.getAppNumArgs && result.consumeMData == mkSort .zero)
+  | _ => return false
+
 private def jointPremises (type : Expr) : MetaM Expr :=
   forallTelescope type.consumeMData fun args conclusion => do
     -- Expose local syntax without unfolding constants or reducing matches.
     let conclusion ← exposeConclusion conclusion
-    let env ← getEnv
-    let needsRestatement := match conclusion.getAppFn with
-      | .const name _ =>
-        [``ite, ``dite, ``Iff, ``Decidable.casesOn].contains name ||
-          isMatcherLikeCore env name || isMatcherCore env name ||
-          isCasesOnRecursor env name
-      | _ => false
-    if conclusion.isForall || needsRestatement then
+    unless ← supportedConclusion conclusion do
       throwError "restate with explicit premises"
     args.foldrM (init := mkConst ``True) fun arg rest => do
       let domain ← inferType arg
@@ -97,8 +113,8 @@ private def audit (inScope : Name → Bool) (witnesses : List (Name × Name)) :
       errors := errors.push s!"duplicate witness registration: {law}"
     registrations := registrations.insert law witness
   for (name, info) in env.constants do
-    if !inScope name || (privateToUserName name).isInternal then continue
-    let some label := category ((← findDocString? env name).getD "")
+    if !inScope name then continue
+    let some label := category ((← findSimpleDocString? env name (includeBuiltin := false)).getD "")
       | continue
     if label != "Law" then
       excluded := excluded.push s!"excluded {label} {name}"
@@ -884,6 +900,44 @@ theorem conditionalProofWitness : ∃ _ : selectedProofDomain, True :=
 
 namespace RoundSix
 
+-- These proof premises are inhabited. The first two functions eliminate
+-- incompatible equations, the structure has an inhabitant, and the
+-- conditional selects the inhabited branch.
+theorem vacuousProofPremises : (∀ n : Nat, n = 0 → n = 1 → False) ∧ True := by
+  refine ⟨fun _ h₀ h₁ => ?_, trivial⟩
+  let zeroCase (n : Nat) : Prop := match n with
+    | 0 => True
+    | _ + 1 => False
+  exact Eq.mp (congrArg zeroCase (h₀.symm.trans h₁)) True.intro
+
+theorem falseElimPremises : (∀ n : Nat, n = 0 → n = 1 → (0 : Nat) = 1) ∧ True :=
+  ⟨fun n h₀ h₁ => (vacuousProofPremises.1 n h₀ h₁).elim, trivial⟩
+
+theorem wrappedPremises : Wrapped ∧ True := ⟨nestedStructure, trivial⟩
+
+theorem selectedProofPremises : selectedProofDomain ∧ True := ⟨fun _ => trivial, trivial⟩
+
+-- The empty list establishes the explicit constraint. Pairwise is the
+-- conclusion, so the audit requires no evidence of an exercised relation.
+theorem emptyListPremises : ∃ xs : List Nat, xs = [] ∧ True := ⟨[], rfl, trivial⟩
+
+
+/-- Law: authored underscore names belong in the census even without a registration. -/
+theorem _hidden (h : False) : True := h.elim
+
+/-- Law: a primitive recursor hides an unreachable arm. -/
+theorem primitiveRecursor : Bool.rec (motive := fun _ => Prop) True False false :=
+  trivial
+
+/-- Law: an auxiliary recursor hides the same arm. -/
+theorem auxiliaryRecursor : Bool.recOn (motive := fun _ => Prop) false True False :=
+  trivial
+
+/-- Law: a proposition variable is not a supported conclusion head. -/
+theorem variableConclusion (p : Prop) (h : p) : p := h
+
+theorem variablePremises : ∃ p : Prop, p ∧ True := ⟨True, trivial, trivial⟩
+
 -- Universal data, proof and proposition-valued binders are all included.
 /-- Law: a universal data carrier. -/
 theorem lifted (_ : PLift (False → True)) : True := trivial
@@ -897,7 +951,16 @@ inductive Packed : Prop where
 /-- Law: a proof premise with a data field. -/
 theorem packed (_ : Packed) : True := trivial
 
+-- The function field has an inhabitant and its constructor establishes Packed.
 theorem packedPremises : Packed ∧ True := ⟨.intro ⟨fun _ => trivial⟩, trivial⟩
+
+/-- Law: a packed field must establish its explicit proof, even when another field is vacuous. -/
+theorem packedImpossible (_ : Packed ∧ False) : True := trivial
+
+axiom packedContradiction : False
+
+theorem packedImpossiblePremises : (Packed ∧ False) ∧ True :=
+  ⟨⟨packedPremises.1, packedContradiction⟩, trivial⟩
 
 /-- Law: disequality as an explicit premise. -/
 theorem unequal (_ : (none : Option Prop) ≠ some (False → True)) : True := trivial
@@ -1199,15 +1262,20 @@ private def controls : MetaM Unit := do
   for law in [``ConcreteSpec.Core.KeyConstruct.collectKeysIn_sound,
       ``ConcreteSpec.Core.KeyConstruct.collectKeysIn_complete] do
     let inFamily := law.isPrefixOf
-    let mut hasGeneratedLaw := false
-    for (name, _) in env.constants do
-      if inFamily name && (privateToUserName name).isInternal &&
-          category ((← findDocString? env name).getD "") == some "Law" then
-        hasGeneratedLaw := true
-    unless hasGeneratedLaw do
-      throwError "generated-law control lost its auxiliary for {law}"
+    let mut labelledTheorems := 0
+    let mut expectedErrors := #[]
+    for (name, info) in env.constants do
+      if inFamily name &&
+          category ((← findSimpleDocString? env name (includeBuiltin := false)).getD "") == some "Law" then
+        match info with
+        | .thmInfo _ =>
+          labelledTheorems := labelledTheorems + 1
+          expectedErrors := expectedErrors.push s!"missing joint-premise coverage: {name}"
+        | _ => expectedErrors := expectedErrors.push s!"Law tag on non-theorem: {name}"
+    unless expectedErrors.size > 1 do
+      throwError "generated-law control lost its labelled auxiliary for {law}"
     let (errors, _, _, count) ← audit inFamily []
-    unless count == 1 && errors.contains s!"missing joint-premise coverage: {law}" do
+    unless count == labelledTheorems && expectedErrors.all errors.contains do
       throwError "generated-law control {law}: {errors}; laws={count}"
   let positive := [(``Control.realizable, ``Control.together)]
   let positiveScope := fun n => n == ``Control.realizable
@@ -1217,9 +1285,21 @@ private def controls : MetaM Unit := do
   let (errors, _, _, _) ← audit positiveScope []
   unless errors == #["missing joint-premise coverage: Nonvacuity.Control.realizable"] do
     throwError "omitted law control: {errors}"
+  let hidden := ``Control.RoundSix._hidden
+  let (errors, _, covered, laws) ← audit (fun n => n == hidden || positiveScope n) positive
+  unless errors == #[s!"missing joint-premise coverage: {hidden}"] &&
+      covered == 1 && laws == 2 do
+    throwError "authored underscore Law census: {errors}; covered={covered} laws={laws}"
+  for (law, witness) in [
+      (``Control.RoundSix.primitiveRecursor, ``Control.unconditional),
+      (``Control.RoundSix.auxiliaryRecursor, ``Control.unconditional),
+      (``Control.RoundSix.variableConclusion, ``Control.RoundSix.variablePremises)] do
+    let (errors, _, covered, laws) ← audit (· == law) [(law, witness)]
+    unless errors == #[s!"{law}: incomplete check: restate with explicit premises"] &&
+        covered == 0 && laws == 1 do
+      throwError "unsupported conclusion control {law}: {errors}; covered={covered} laws={laws}"
   let mut falsePasses := #[]
-  for (law, witness) in [(``Control.reflexiveFallback, ``Control.unconditional),
-      (``Control.vacuousProofArgument, ``Control.vacuousProofWitness),
+  for (law, witness) in [(``Control.vacuousProofArgument, ``Control.vacuousProofWitness),
       (``Control.falseElimArgument, ``Control.falseElimWitness),
       (``Control.wrappedArgument, ``Control.wrappedArgumentWitness),
       (``Control.conditionalProofArgument, ``Control.conditionalProofWitness),
@@ -1230,23 +1310,36 @@ private def controls : MetaM Unit := do
       (``Control.existentialFallback, ``Control.unitFallbackWitness),
       (``Control.universalFallback, ``Control.unitFallbackWitness),
       (``Control.competingArms, ``Control.someNat),
-      (``Control.vacuousGuard, ``Control.unconditional),
-      (``Control.vacuousDependentGuard, ``Control.unconditional),
       (``Control.trivialDisjunct, ``Control.trivialDisjunctWitness),
       (``Control.competingDisjunct, ``Control.zeroDisjunctWitness),
       (``Control.subtypeDomain, ``Control.subtypeDomain),
       (``Control.liftedDomain, ``Control.liftedDomain),
       (``Control.structureDomain, ``Control.structureDomain),
       (``Control.conditionalDomain, ``Control.unitFallbackWitness),
-      (``Control.contradictoryPairwise, ``Control.emptyPairwiseWitness),
-      (``Control.Historical.projectedEmptyOk, ``Control.unconditional)] do
+      (``Control.contradictoryPairwise, ``Control.emptyPairwiseWitness)] do
     let (errors, _, covered, laws) ← audit (· == law) [(law, witness)]
     unless covered == 0 && laws == 1 && errors.size == 1 do
       falsePasses := falsePasses.push law
   unless falsePasses.isEmpty do
     throwError "planted false passes accepted: {falsePasses}"
-  -- Regression pairs with an exact witness under the telescope rule.
+  -- Every accepted registration supplies a proof of the generated telescope.
   for (law, proof) in [
+      (``Control.vacuousProofArgument, ``Control.RoundSix.vacuousProofPremises),
+      (``Control.falseElimArgument, ``Control.RoundSix.falseElimPremises),
+      (``Control.wrappedArgument, ``Control.RoundSix.wrappedPremises),
+      (``Control.conditionalProofArgument, ``Control.RoundSix.selectedProofPremises),
+      (``Control.contradictoryPairwise, ``Control.RoundSix.emptyListPremises),
+      -- These explicit telescopes contain only a Nat binder, inhabited at zero.
+      (``Control.disjoint, ``Control.someNat),
+      (``Control.competingDisjunct, ``Control.someNat),
+      -- These Laws have no explicit binders. Their conclusions earn zero credit.
+      (``Control.trivialDisjunct, ``Control.unconditional),
+      (``Control.detached, ``Control.unconditional),
+      (``Control.detachedFunction, ``Control.unconditional),
+      (``Control.subtypeDomain, ``Control.unconditional),
+      (``Control.liftedDomain, ``Control.unconditional),
+      (``Control.structureDomain, ``Control.unconditional),
+      (``Control.conditionalDomain, ``Control.unconditional),
       (``Control.propositionArgument, ``Control.unprovedProposition),
       (``Control.predicateEquality, ``Control.unconditional),
       (``Control.containerEquality, ``Control.unconditional),
@@ -1276,7 +1369,16 @@ private def controls : MetaM Unit := do
       throwError "exact telescope control {law}: {errors}"
   let mut badDiagnostics := #[]
   for (law, witness, diagnostic) in [
+    (``Control.reflexiveFallback, ``Control.unconditional, "restate with explicit premises"),
+    (``Control.reachableIf, ``Control.someNat, "restate with explicit premises"),
+    (``Control.existentialFallback, ``Control.unconditional, "restate with explicit premises"),
+    (``Control.universalFallback, ``Control.unconditional, "restate with explicit premises"),
+    (``Control.competingArms, ``Control.unconditional, "restate with explicit premises"),
+    (``Control.vacuousGuard, ``Control.unconditional, "restate with explicit premises"),
+    (``Control.vacuousDependentGuard, ``Control.unconditional, "restate with explicit premises"),
+    (``Control.Historical.projectedEmptyOk, ``Control.unconditional, "restate with explicit premises"),
     (``Control.RoundSix.lifted, ``Control.unconditional, "witness does not establish the joint premises"),
+    (``Control.RoundSix.packedImpossible, ``Control.RoundSix.packedImpossiblePremises, "unsupported witness axioms"),
     (``Control.RoundSix.packed, ``Control.RoundSix.packedPrevious, "witness does not establish the joint premises"),
     (``Control.RoundSix.unequal, ``Control.RoundSix.unequalPrevious, "witness does not establish the joint premises"),
     (``Control.RoundSix.conditionalPremise, ``Control.RoundSix.conditionalPrevious, "witness does not establish the joint premises"),
@@ -1380,6 +1482,8 @@ private def controls : MetaM Unit := do
   unless covered == 0 && laws == archived.length && errors.size == archived.length &&
       archived.all (fun law => errors.contains s!"{law}: witness does not establish the joint premises") do
     throwError "archived proof-body probes used as evidence: {errors}"
+  -- At n = 0, Nat.lt_succ_self proves the first conjunct and trivial the second.
+  -- The original projection bodies therefore share a satisfiable telescope.
   let (errors, _, covered, laws) ← audit archivedScope
     (archived.map fun law => (law, ``Control.Historical.growthPremises))
   unless errors.isEmpty && covered == archived.length && laws == archived.length do
