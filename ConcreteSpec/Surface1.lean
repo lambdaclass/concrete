@@ -129,50 +129,53 @@ private abbrev Scope := List (String × (Var × Ty))
 
 structure State where
   nextVar : Nat := 0
-  reverseBody : List Stmt := []
+  reverseBody : List (Stmt × Option SiteId) := []
   nextSite : Nat := 0
   reverseSites : List (SiteId × Span) := []
 
-private def State.bind (state : State) (ty : Ty) (rhs : ConcreteSpec.Expr) : Var × State :=
+private def State.emit (state : State) (stmt : Stmt) (site : Option SiteId) : State :=
+  { state with reverseBody := (stmt, site) :: state.reverseBody }
+
+private def State.bind (state : State) (ty : Ty) (rhs : ConcreteSpec.Expr)
+    (site : Option SiteId) : Var × State :=
   let var : Var := ⟨state.nextVar⟩
-  (var, { state with nextVar := state.nextVar + 1,
-                     reverseBody := .let_ (.name var) ty rhs :: state.reverseBody })
+  (var, { state.emit (.let_ (.name var) ty rhs) site with nextVar := state.nextVar + 1 })
 
 private def State.site (state : State) (span : Span) : SiteId × State :=
   let site : SiteId := ⟨state.nextSite⟩
   (site, { state with nextSite := state.nextSite + 1,
                       reverseSites := (site, span) :: state.reverseSites })
 
-private def asU8Atom (e : ConcreteSpec.Expr) (state : State) : Atom × State :=
+private def asU8Atom (e : ConcreteSpec.Expr) (site : Option SiteId) (state : State) : Atom × State :=
   match e with
   | .atom a => (a, state)
   | _ =>
-    let (var, state) := state.bind u8 e
+    let (var, state) := state.bind u8 e site
     (.copy var, state)
 
 /-- Resolve reads by their written form. Arithmetic operands expect u8, and introducing
 an A-normal temporary for a sum preserves that expected type. -/
-private def lowerExpr (scope : Scope) : Expr → Ty → State → Option (ConcreteSpec.Expr × State)
+private def lowerExpr (scope : Scope) : Expr → Ty → State → Option (ConcreteSpec.Expr × Option SiteId × State)
   | .integer value suffix, expected, state =>
-    if expected = u8 ∧ suffix = none then some (.atom (.int .u8 value), state) else none
+    if expected = u8 ∧ suffix = none then some (.atom (.int .u8 value), none, state) else none
   | .local name, expected, state => do
     let (var, ty) ← AList.lookup scope name
-    if ty = u8 ∧ expected = u8 then some (.atom (.copy var), state) else none
+    if ty = u8 ∧ expected = u8 then some (.atom (.copy var), none, state) else none
   | .move name, expected, state => do
     let (var, ty) ← AList.lookup scope name
     match ty with
     | .scalar _ => none
-    | .struct _ => if ty = expected then some (.atom (.move var), state) else none
+    | .struct _ => if ty = expected then some (.atom (.move var), none, state) else none
   | .construct name, expected, state =>
-    if expected = .struct ⟨name⟩ then some (.mk ⟨name⟩ [], state) else none
+    if expected = .struct ⟨name⟩ then some (.mk ⟨name⟩ [], none, state) else none
   | .add left right span, expected, state => do
     if expected ≠ u8 then none else
-      let (lhs, state) ← lowerExpr scope left u8 state
-      let (lhs, state) := asU8Atom lhs state
-      let (_, state) := state.site span
-      let (rhs, state) ← lowerExpr scope right u8 state
-      let (rhs, state) := asU8Atom rhs state
-      return (.add lhs rhs, state)
+      let (lhs, lhsSite, state) ← lowerExpr scope left u8 state
+      let (lhs, state) := asU8Atom lhs lhsSite state
+      let (site, state) := state.site span
+      let (rhs, rhsSite, state) ← lowerExpr scope right u8 state
+      let (rhs, state) := asU8Atom rhs rhsSite state
+      return (.add lhs rhs, some site, state)
 
 private def resolvesType (decls : List String) : Ty → Bool
   | .scalar (.int .u8) => true
@@ -182,36 +185,38 @@ private def resolvesType (decls : List String) : Ty → Bool
 private def lowerBody (decls : List String) (scope : Scope) :
     List Statement → State → Option (Terminator × State)
   | [.ret rhs], state => do
-    let (rhs, state) ← lowerExpr scope rhs u8 state
-    let (atom, state) := asU8Atom rhs state
+    let (rhs, rhsSite, state) ← lowerExpr scope rhs u8 state
+    let (atom, state) := asU8Atom rhs rhsSite state
     return (.ret atom, state)
   | [.call "abort" span], state =>
     let (site, state) := state.site span
     some (.abort site, state)
   | .bind name (.typed ty) rhs :: rest, state => do
     if !resolvesType decls ty then none else
-      let (rhs, state) ← lowerExpr scope rhs ty state
+      let (rhs, rhsSite, state) ← lowerExpr scope rhs ty state
       if name = "_" then
-        lowerBody decls scope rest { state with reverseBody := .let_ .wild ty rhs :: state.reverseBody }
+        lowerBody decls scope rest (state.emit (.let_ .wild ty rhs) rhsSite)
       else if userName name && !decls.contains name && !(AList.lookup scope name).isSome then
-        let (var, state) := state.bind ty rhs
+        let (var, state) := state.bind ty rhs rhsSite
         lowerBody decls ((name, (var, ty)) :: scope) rest state
       else none
   | .bind name .destructure rhs :: rest, state => do
     if !decls.contains name then none else
-      let (rhs, state) ← lowerExpr scope rhs (.struct ⟨name⟩) state
-      lowerBody decls scope rest { state with reverseBody := .letStruct ⟨name⟩ [] rhs :: state.reverseBody }
+      let (rhs, rhsSite, state) ← lowerExpr scope rhs (.struct ⟨name⟩) state
+      lowerBody decls scope rest (state.emit (.letStruct ⟨name⟩ [] rhs) rhsSite)
   | _, _ => none
 
 structure Elaborated where
   core : Program
   sites : List (SiteId × Span)
+  statementSites : List (Option SiteId)
 
 def elaborate (src : SourceProgram) : Option Elaborated := do
   if src.name ≠ "main" ∨ ¬ src.decls.all userName then none else
     let (ending, state) ← lowerBody src.decls [] src.body {}
     let decls := src.decls.map fun name => StructDecl.mk ⟨name⟩ false []
-    return ⟨⟨decls, state.reverseBody.reverse, ending⟩, state.reverseSites.reverse⟩
+    let body := state.reverseBody.reverse
+    return ⟨⟨decls, body.map Prod.fst, ending⟩, state.reverseSites.reverse, body.map Prod.snd⟩
 
 /-- Q8.2, OD62, OD84 and OD138. The resolved source must end at return or at builtin abort.
 The Core checker checks nominal identity, scope-wide use, ownership and arithmetic evidence. -/
@@ -275,10 +280,10 @@ private theorem lowerBody_abort {decls scope body state site result}
     cases hx : lowerExpr scope rhs ty state with
     | none => simp [hx] at h
     | some pair =>
-      obtain ⟨expr, next⟩ := pair
+      obtain ⟨expr, exprSite, next⟩ := pair
       simp only [hx, bind, Option.bind_some] at h
       split at h
-      · obtain ⟨span, hs, hr⟩ := ihWild expr next h
+      · obtain ⟨span, hs, hr⟩ := ihWild expr exprSite next h
         exact ⟨span, lift hs, hr⟩
       · split at h
         · obtain ⟨span, hs, hr⟩ := ihName _ _ h
@@ -289,9 +294,9 @@ private theorem lowerBody_abort {decls scope body state site result}
     cases hx : lowerExpr scope rhs (.struct ⟨name⟩) state with
     | none => simp [hx] at h
     | some pair =>
-      obtain ⟨expr, next⟩ := pair
+      obtain ⟨expr, exprSite, next⟩ := pair
       simp only [hx, bind, Option.bind_some] at h
-      obtain ⟨span, hs, hr⟩ := ih expr next h
+      obtain ⟨span, hs, hr⟩ := ih expr exprSite next h
       exact ⟨span, lift hs, hr⟩
   | case7 => contradiction
 

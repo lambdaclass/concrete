@@ -377,7 +377,7 @@ private theorem parsed (f : Fixture) : Derives (tokens {} (pieces f)) (ast f) :=
       .nil (.ret (sp 7) (sp 9) (.expr (.integer 134 none (sp 8)) (.nil _)) .nil)
 
 private def result (f : Fixture) : Elaborated :=
-  (elaborate (ast f)).getD ⟨⟨[], [], .ret (.int .u8 0)⟩, []⟩
+  (elaborate (ast f)).getD ⟨⟨[], [], .ret (.int .u8 0)⟩, [], []⟩
 
 private theorem derived (f : Fixture) :
     Lexes (bytes (pieces f)) (tokens {} (pieces f)) ∧
