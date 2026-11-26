@@ -45,6 +45,16 @@ example :
     elaborate slice0 ⟨source, .inl (.node .body [])⟩ =
       .error (.diagnostic ⟨``Elab.surfaceProgram, 1⟩ ⟨⟨0⟩, 0, 0, 1, 1⟩ []) := rfl
 
+-- A valid constructor tree can still reach a typed elaboration refusal.
+example :
+    elaborate slice0 ⟨source, .inl (.node .program [
+      .leaf ⟨⟨⟨0⟩, 3, 7, 1, 4⟩, .name "main"⟩, .node .body []])⟩ =
+      .error (.slice0 .fallthrough) := rfl
+
+example :
+    elaborate slice0 ⟨source, .inr true⟩ =
+      .error (.diagnostic ⟨``SliceElaboration, 1⟩ ⟨⟨0⟩, 0, 0, 1, 1⟩ []) := rfl
+
 private def slice1 : Slice := ⟨⟨1, by decide⟩⟩
 
 example :
@@ -54,6 +64,50 @@ example :
 example :
     elaborate slice0 ⟨{source with slice := slice1}, .inr true⟩ =
       .error (.diagnostic ⟨``Parsed.ElaborationDomain, 1⟩ ⟨⟨0⟩, 0, 0, 1, 1⟩ []) := rfl
+
+private def profile : Profile := ⟨.lcb, .x86_64Linux, 3, 4096⟩
+
+-- The remaining edges refuse because this bundle exercises elaboration only.
+private def elaborationPasses : Passes slice0 profile where
+  lex input := .error (.missingFile input.entryFile)
+  elaborate := elaborate slice0
+  typeCore _ := .error (.invalidInput ⟨``elaborate, 1⟩)
+  checkCore _ := .error ⟨⟨``elaborate, 1⟩, ⟨⟨0⟩, 0, 0, 1, 1⟩, [], none⟩
+  lowerCore _ := .error (.invalidInput ⟨``elaborate, 1⟩)
+  lowerUnchecked _ := .error (.invalidInput ⟨``elaborate, 1⟩)
+  lowerMemory _ := .error (.invalidInput ⟨``elaborate, 1⟩)
+  buildSSA _ := .error (.invalidInput ⟨``elaborate, 1⟩)
+  buildBIR _ := .error (.invalidInput ⟨``elaborate, 1⟩)
+  emitLLVM _ := .error (.invalidInput ⟨``elaborate, 1⟩)
+  emitLCB _ := .error (.invalidInput ⟨``elaborate, 1⟩)
+
+example : (registry elaborationPasses).elaborator.Validated :=
+  validated elaborationPasses rfl
+
+open LeanCompilerBackend.Verified
+
+private def wordJob (word : BitVec 32) (sites : TrapTable) : LCBInput profile :=
+  ⟨⟨.word, #[], #[], #[⟨#[], #[], .ret (.literal (.word word))⟩]⟩, [], sites, ByteArray.empty⟩
+
+private def entryState : LeanCompilerBackend.Verified.Source.State := ⟨0, 0, #[]⟩
+
+example :
+    (LCBInput.Execution (profile := profile) Empty source.project).result (wordJob 42 #[]) (some entryState)
+      (.returned 42 ByteArray.empty) :=
+  lcb_return_word source.project (wordJob 42 #[]) entryState 42 (by with_unfolding_all rfl)
+
+private def overflow : TrapEntry :=
+  ⟨.overflow, ⟨⟨9⟩, ⟨⟨0⟩, 25, 27, 1, 26⟩, ⟨.function earlyEntry, ⟨[⟨.return, .ordinal 0⟩]⟩⟩⟩⟩
+
+private def trapJob : LCBInput profile :=
+  wordJob 257 #[{overflow with kind := .abort}, overflow]
+
+example :
+    (LCBInput.Execution (profile := profile) Empty source.project).result trapJob (some entryState)
+      (.trapped 134 .overflow ⟨⟨9⟩, ⟨"main.con", 1, 26⟩⟩
+        "concrete: trap: overflow at main.con:1:26 (site 9)\n".toUTF8) := by
+  with_unfolding_all
+    exact lcb_trap_word source.project trapJob entryState ⟨1⟩ overflow _ (by decide) rfl rfl rfl
 
 -- The stable source operation number is used in the rendered UTF-8 diagnostic.
 example :

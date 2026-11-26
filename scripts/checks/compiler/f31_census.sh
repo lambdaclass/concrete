@@ -7,55 +7,69 @@ cd "$(dirname "${BASH_SOURCE[0]}")/../../.."
 source scripts/checks/lib/git_sandbox.sh
 git_sandbox
 work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
 BOUNDED_PARENT="$work"
 source scripts/checks/lib/bounded.sh
-rc=0
-bounded_run -i /dev/null 120 -- python3 -B scripts/spec/f31_census_controls.py || rc=$?
-# Compare imported scalar declarations and check the new proof roots in a
-# standalone probe. At cutover this probe supersedes the migration census.
-if [ "$rc" = 0 ]; then
-  cat >"$work/integrated_core_proofs.lean" <<'LEAN'
+trap 'bounded_summary; rm -rf "$work"' EXIT
+bounded_run -i /dev/null 120 -- python3 -B scripts/spec/f31_census_controls.py
+
+# Dynamic imports are invisible to Lake's import scan. Build the exact roots
+# the probe loads, including the integrated Core controls imported by Concrete.
+bounded_run -i /dev/null 1800 -- lake build ConcreteSpec ConcreteSpecEvidence Concrete
+
+cat >"$work/import_fidelity.lean" <<'LEAN'
 import Lean
-import Concrete.IntegratedCore.Controls
 
-open Lean Concrete.IntegratedCore ConcreteSpec.StageInterface
+open Lean
 
--- Check the shared equation and its transitive support across the two import
--- closures. Missing declarations are failures even if the statements match.
-private def checkEquationSupport (spec combined : Environment) (root : Name) : IO Unit := do
-  let mut seen : NameSet := {}
-  let mut pending := [root]
-  while let name :: rest := pending do
-    pending := rest
-    if seen.contains name then continue
-    let some left := spec.find? name
-      | throw (IO.userError s!"missing spec declaration {name}")
-    let some right := combined.find? name
-      | throw (IO.userError s!"missing combined declaration {name}")
-    unless left == right do
-      throw (IO.userError s!"shared equation support differs at {name}")
-    seen := seen.insert name
-    pending := left.getUsedConstantsAsSet.toList ++ pending
-
--- ISS-0085 compares already-imported proof bodies, so the control does not
--- trigger local lazy equation realization itself.
-#eval do
-  let spec ← importModules #[{module := `ConcreteSpec}, {module := `ConcreteSpec.IntegratedCore}] {}
-  let combined ← importModules #[{module := `ConcreteSpec}, {module := `ConcreteSpec.IntegratedCore},
-    {module := `Concrete}, {module := `Concrete.IntegratedCore}] {}
-  checkEquationSupport spec combined `ConcreteSpec.Core.IntTy.signed.eq_5
-
-run_cmd do
-  for theoremName in [``validated, ``earlyAddLiteralCondition,
-      ``earlyIntegerLiteralRoundTrip, ``earlyLiteralMatchesStorage, ``earlyAddOverflow,
-      ``lcb_return_word, ``lcb_trap_word] do
-    for axiomName in ← collectAxioms theoremName do
-      unless [``propext, ``Classical.choice, ``Quot.sound].contains axiomName do
-        throwError "unexpected axiom {axiomName} in {theoremName}"
+-- ISS-0085: compare imported declarations without triggering lazy realization
+-- in the probe. Scanning the entire spec also checks its private support.
+def main (args : List String) : IO UInt32 := do
+  let reference :: _ :: _ := args
+    | throw (IO.userError "expected a reference module and at least one consumer")
+  initSearchPath (← findSysroot)
+  let spec ← importModules #[{module := reference.toName}] {}
+  let combined ← importModules (args.toArray.map fun root => {module := root.toName}) {}
+  let mut status := 0
+  for (name, original) in spec.constants do
+    match combined.find? name with
+    | none =>
+      IO.eprintln s!"missing combined declaration {name}"
+      return 1
+    | some imported =>
+      unless original == imported do
+        IO.eprintln s!"shared declaration differs at {name}"
+        status := 1
+  return status
 LEAN
-  bounded_run -i /dev/null 120 -- lake lean "$work/integrated_core_proofs.lean" \
-    -- -DwarningAsError=true -DautoImplicit=false || rc=$?
+probe=(lean -DwarningAsError=true -DautoImplicit=false --run "$work/import_fidelity.lean")
+
+# Both disposable modules independently realize the same spec equation using
+# module-local private support. Use a different equation from the original
+# ISS-0085 reproducer so a check restricted to that one equation cannot pass.
+for module in CensusReference CensusConsumer; do
+  cat >"$work/$module.lean" <<LEAN
+import ConcreteSpec.Spec.Scalar
+open ConcreteSpec.Core
+theorem ${module}_countOperand : (MachineOp.wrapping .add).countOperand = false := by
+  simp only [MachineOp.countOperand]
+LEAN
+  bounded_run -i /dev/null 120 -- lake env lean --root="$work" \
+    -DwarningAsError=true -DautoImplicit=false -o "$work/$module.olean" "$work/$module.lean"
+done
+
+# Lake supplies the dependency search path. Add the disposable modules to it
+# inside the Lake environment, leaving the repository build untouched.
+control_probe=(lake env bash -c 'export LEAN_PATH="$1:$LEAN_PATH"; shift; exec "$@"' _ "$work" "${probe[@]}")
+rc=0
+bounded_run -i /dev/null 120 -- "${control_probe[@]}" CensusReference CensusConsumer \
+  >"$work/divergence.log" 2>&1 || rc=$?
+printf '%s\n' 'shared declaration differs at ConcreteSpec.Core.MachineOp.countOperand.eq_3' \
+  >"$work/expected.log"
+if [ "$rc" != 1 ] || ! cmp -s "$work/expected.log" "$work/divergence.log"; then
+  cat "$work/divergence.log" >&2
+  echo "ISS-0085: expected the import fidelity probe to reject divergent equation bodies (status $rc)" >&2
+  exit 1
 fi
-bounded_summary
-exit "$rc"
+echo "ISS-0085: rejected divergent equation realization"
+
+bounded_run -i /dev/null 120 -- lake env "${probe[@]}" ConcreteSpec ConcreteSpecEvidence Concrete
