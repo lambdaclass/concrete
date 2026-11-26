@@ -393,7 +393,7 @@ def ImageDependencies (path : LoweringPath) (binding : ImageBinding) : List Obli
 
 /-- Replay selects one of two fixed propositions. The checked claim supplies the
 dependency list, which is never inferred from the receipt's declared premises. -/
-def ImageClaim.proposition {Env : Type} {profile : Profile}
+private def ImageClaim.proposition {Env : Type} {profile : Profile}
     {reference : TargetReference Env profile.target} (claim : ImageClaim)
     (n : NativeModels Env profile reference) (path : String) (core : Elab.Output)
     (exe : ByteArray) : Prop :=
@@ -404,23 +404,34 @@ def ImageClaim.proposition {Env : Type} {profile : Profile}
   | .provedStack => ∀ env, n.launchAdmitted exe env →
       n.stackAdequate exe env profile.maxImageStackBytes
 
-/-- Exact-byte replay uses the verifier's target reference and resource policy. -/
-def ReceiptValid {Env : Type} (policy : ExecutionPolicy Env)
-    (codec : Codec) (ctx : ReplayContext) (format : NoteFormat)
-    (tools : NativeTools) (input : Stages.Input) (out : Stages.Output) (build : ExactBuild)
-    (exe : ByteArray) (r : Receipt) (platform : TargetReference Env r.certificate.profile.target)
-    (n : NativeModels Env r.certificate.profile platform) : Prop :=
-  r.schemaVersion = codec.version ∧ PreLinkValid codec ctx tools input out build r.certificate ∧
-  r.executable = codec.hash .executable exe ∧
-  r.certificateDigest = codec.hash .preLinkCertificate (codec.certificate r.certificate) ∧
-  NoteMatches codec format r.certificate build exe r.note ∧
+private def ImagePreserved {Env : Type} {profile : Profile}
+    {platform : TargetReference Env profile.target} (n : NativeModels Env profile platform)
+    (build : ExactBuild) (exe : ByteArray) : Prop :=
   platform.decode exe = platform.decode build.linkedImage ∧
   (∀ env, LaunchReady n exe env → LaunchReady n build.linkedImage env ∧
     Contracts.PrefixSafety n.process n.process (build.linkedImage, env) (exe, env)) ∧
   (∀ env, RunReady n exe env → RunReady n build.linkedImage env ∧
     Contracts.MaximalRefinement n.process n.process (build.linkedImage, env) (exe, env) ∧
     ((∃ o, n.process.observes (build.linkedImage, env) o) →
-      ∃ o, n.process.observes (exe, env) o)) ∧
+      ∃ o, n.process.observes (exe, env) o))
+
+private def ImageReplay {Env : Type} {profile : Profile}
+    {platform : TargetReference Env profile.target} (policy : ExecutionPolicy Env)
+    (codec : Codec) (input : Stages.Input) (out : Stages.Output) (build : ExactBuild)
+    (exe : ByteArray) (binding : ImageBinding) (n : NativeModels Env profile platform) : Prop :=
+  policy.Anchors n ∧ ImagePreserved n build exe ∧
+  match binding with
+  | .driverAttested => True
+  | .imageValidated claim d =>
+    Checked codec d (claim.proposition n input.path out.core exe)
+
+private def ReceiptChecks (codec : Codec) (ctx : ReplayContext) (format : NoteFormat)
+    (tools : NativeTools) (input : Stages.Input) (out : Stages.Output) (build : ExactBuild)
+    (exe : ByteArray) (r : Receipt) : Prop :=
+  r.schemaVersion = codec.version ∧ PreLinkValid codec ctx tools input out build r.certificate ∧
+  r.executable = codec.hash .executable exe ∧
+  r.certificateDigest = codec.hash .preLinkCertificate (codec.certificate r.certificate) ∧
+  NoteMatches codec format r.certificate build exe r.note ∧
   OrderedGraph (r.certificate.evidenceGraph ++ r.evidenceGraph) ∧
   r.replay = ctx.commands ∧ r.executionTrust = ctx.executionTrust ∧
   r.facts = factsFromEvidence (r.certificate.evidenceGraph ++ r.evidenceGraph) ∧
@@ -433,10 +444,24 @@ def ReceiptValid {Env : Type} (policy : ExecutionPolicy Env)
     (ImageDependencies r.certificate.loweringPath r.binding) ∧
   match r.binding with
   | .driverAttested => HasEvidence r.evidenceGraph .finalImage .driverAttested
-  | .imageValidated claim d =>
-    policy.Anchors n ∧
-    HasEvidence r.evidenceGraph .finalImage (.kernelChecked d) ∧
-    Checked codec d (claim.proposition n input.path out.core exe)
+  | .imageValidated _ d =>
+    HasEvidence r.evidenceGraph .finalImage (.kernelChecked d)
+
+/-- Replay chooses the native semantics from the certificate's ISA/OS target.
+An unmodified driver-attested image requires only the structural checks. A note
+or a semantic image claim requires a registered target and semantic evidence. -/
+def ReceiptValid (codec : Codec) (ctx : ReplayContext) (format : NoteFormat)
+    (tools : NativeTools) (input : Stages.Input) (out : Stages.Output) (build : ExactBuild)
+    (exe : ByteArray) (r : Receipt)
+    (policy : (registered : (nativeReference r.certificate.profile.target).isSome) →
+      ExecutionPolicy ((nativeReference r.certificate.profile.target).get registered).1) : Prop :=
+  ReceiptChecks codec ctx format tools input out build exe r ∧
+  match r.binding, r.note with
+  | .driverAttested, none => True
+  | _, _ => ∃ registered : (nativeReference r.certificate.profile.target).isSome,
+    ∃ n : NativeModels _ r.certificate.profile
+        ((nativeReference r.certificate.profile.target).get registered).2,
+      ImageReplay (policy registered) codec input out build exe r.binding n
 
 
 example : OrderedGraph [⟨0, .frontend, .driverAttested, []⟩,
@@ -609,38 +634,143 @@ private def testReceipt : Receipt :=
     .imageValidated .provedStack testEvidence, testImageGraph, factsFromEvidence (testPreLink.evidenceGraph ++ testImageGraph),
     environmentPremises, [], []⟩
 
-example : ReceiptValid testExecutionPolicy testCodec testContext testNoteFormat testTools
-    answerInput answerOutput testBuild answerImage testReceipt testReference
-    testNative := by
+private theorem testImageReplay (binding : ImageBinding) :
+    ImageReplay testExecutionPolicy testCodec answerInput answerOutput testBuild answerImage
+      binding testNative := by
   with_unfolding_all
-    refine ⟨rfl, testPreLinkValid, rfl, rfl, ⟨rfl, rfl⟩, rfl, ?_, ?_, ?_, rfl, rfl, rfl,
-      rfl, ?_, ?_, ?_, ?_, ?_⟩
-    · intro env ready
-      exact ⟨ready, (instantRefines _ _ (answerImage, env) (answerImage, env) rfl).1⟩
-    · intro env ready
-      exact ⟨ready, (instantRefines _ _ (answerImage, env) (answerImage, env) rfl).2, id⟩
+    have ready : ImagePreserved testNative testBuild answerImage :=
+      ⟨rfl, fun env ready => ⟨ready, (instantRefines _ _ (answerImage, env) (answerImage, env) rfl).1⟩,
+        fun env ready => ⟨ready, (instantRefines _ _ (answerImage, env) (answerImage, env) rfl).2, id⟩⟩
+    refine ⟨testAnchor, ready, ?_⟩
+    cases binding with
+    | driverAttested => trivial
+    | imageValidated claim d =>
+      refine ⟨⟨⟨_, rfl⟩, ⟨(), ⟨trivial, trivial⟩, trivial, trivial⟩,
+        ⟨fun _ _ => answerImageRefines.1, fun _ _ => answerImageRefines.2,
+          fun _ env _ => ⟨exit42, instantObserves _ (answerImage, env)⟩⟩, ?_⟩, trivial⟩
+      cases claim with
+      | conditionalStack => trivial
+      | provedStack => exact fun _ _ => trivial
+
+private theorem testReceiptChecks : ReceiptChecks testCodec testContext testNoteFormat testTools
+    answerInput answerOutput testBuild answerImage testReceipt := by
+  with_unfolding_all
+    refine ⟨rfl, testPreLinkValid, rfl, rfl, ⟨rfl, rfl⟩, ?_, rfl, rfl, rfl, rfl, ?_, ?_, ?_, ?_, ?_⟩
     · simp [OrderedGraph, testReceipt, testImageGraph, testPreLink]
     · intro p
       cases p <;> simp [testReceipt, testImageGraph, environmentPremises, HasEvidence]
     · simp [testReceipt, testImageGraph, environmentPremises]
     · simp [testReceipt, testImageGraph, testPreLink, HasDependencies]
-    · simp [testReceipt, testImageGraph, testPreLink, HasDependencies, ImageDependencies, ImageBinding.openPremises, ImageClaim.openPremises, environmentPremises]
-    · refine ⟨testAnchor, ?_, ⟨⟨_, rfl⟩, ⟨(), ⟨trivial, trivial⟩, trivial, trivial⟩,
-        ⟨fun _ _ => answerImageRefines.1, fun _ _ => answerImageRefines.2,
-          fun _ env _ => ⟨exit42, instantObserves _ (answerImage, env)⟩⟩, fun _ _ => trivial⟩, trivial⟩
-      exact ⟨_, List.Mem.tail _ (List.Mem.tail _ (List.Mem.tail _ (List.Mem.head _))), rfl, rfl⟩
+    · simp [testReceipt, testImageGraph, testPreLink, HasDependencies, ImageDependencies,
+        ImageBinding.openPremises, ImageClaim.openPremises, environmentPremises]
+    · exact ⟨_, List.Mem.tail _ (List.Mem.tail _ (List.Mem.tail _ (List.Mem.head _))), rfl, rfl⟩
 
-/-- Relabeling the proof as stack-conditional requires both a premise and a graph edge. -/
-example : ¬ ReceiptValid testExecutionPolicy testCodec testContext testNoteFormat testTools
-    answerInput answerOutput testBuild answerImage
-    {testReceipt with binding := .imageValidated .conditionalStack testEvidence}
-    testReference testNative := by
+private def conditionalGraph (deps : List Nat) : List EvidenceNode :=
+  testImageGraph.take 3 ++
+    [⟨7, .external .imageStack, .openPremise ExternalPremise.imageStack.name, []⟩,
+     ⟨8, .finalImage, .kernelChecked testEvidence, deps⟩]
+
+private def conditionalReceipt (deps : List Nat) : Receipt :=
+  { testReceipt with
+    binding := .imageValidated .conditionalStack testEvidence
+    evidenceGraph := conditionalGraph deps
+    facts := factsFromEvidence (testPreLink.evidenceGraph ++ conditionalGraph deps)
+    openPremises := .imageStack :: environmentPremises }
+
+example : ReceiptChecks testCodec testContext testNoteFormat testTools
+    answerInput answerOutput testBuild answerImage (conditionalReceipt [0, 4, 5, 6, 7]) ∧
+    ImageReplay testExecutionPolicy testCodec answerInput answerOutput testBuild answerImage
+      (conditionalReceipt [0, 4, 5, 6, 7]).binding testNative := by
+  refine ⟨?_, testImageReplay _⟩
+  with_unfolding_all
+    refine ⟨rfl, testPreLinkValid, rfl, rfl, ⟨rfl, rfl⟩, ?_, rfl, rfl, rfl, rfl, ?_, ?_, ?_, ?_, ?_⟩
+    · simp [OrderedGraph, conditionalReceipt, conditionalGraph, testImageGraph, testReceipt, testPreLink]
+    · intro p
+      cases p <;> simp [conditionalReceipt, conditionalGraph, testImageGraph, environmentPremises, HasEvidence]
+    · simp [conditionalReceipt, conditionalGraph, testImageGraph, environmentPremises]
+    · simp [conditionalReceipt, conditionalGraph, testImageGraph, testReceipt, testPreLink, HasDependencies]
+    · simp [conditionalReceipt, conditionalGraph, testImageGraph, testReceipt, testPreLink, HasDependencies,
+        ImageDependencies, ImageBinding.openPremises, ImageClaim.openPremises, environmentPremises]
+    · simp [conditionalReceipt, conditionalGraph, testImageGraph, HasEvidence]
+
+
+/-- The stack premise is present and the only omitted dependency is its edge. -/
+example : ¬ ReceiptChecks testCodec testContext testNoteFormat testTools
+    answerInput answerOutput testBuild answerImage (conditionalReceipt [0, 4, 5, 6]) := by
   intro valid
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, premises, _⟩ := valid
-  have stackListed : .imageStack ∈ environmentPremises := by
-    rw [show environmentPremises = _ from premises]
-    exact List.Mem.head _
-  exact (by decide : .imageStack ∉ environmentPremises) stackListed
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, deps, _⟩ := valid
+  have missing : 7 ∈ ([0, 4, 5, 6] : List Nat) :=
+    (deps ⟨8, .finalImage, .kernelChecked testEvidence, [0, 4, 5, 6]⟩ (by simp [conditionalReceipt, conditionalGraph, testImageGraph]) rfl
+      ⟨7, .external .imageStack, .openPremise ExternalPremise.imageStack.name, []⟩ (by
+        simp [conditionalReceipt, conditionalGraph, testImageGraph])).mpr
+      (by decide)
+  exact (by decide : 7 ∉ ([0, 4, 5, 6] : List Nat)) missing
+
+private def noteBytes := answerImage ++ "test note".toUTF8
+
+private def changedByNote : TargetReference Unit sampleProfile.target :=
+  {testReference with
+    decode := fun bytes => some ⟨#[bytes.data[0]?.getD 0]⟩
+    process := instant fun (bytes, _) =>
+      .returned (if bytes.size == 1 then 42 else 1) ByteArray.empty }
+
+private def noteModels : NativeModels Unit sampleProfile changedByNote where
+  llvmModule := testNative.llvmModule
+  llvmWellFormed := testNative.llvmWellFormed
+  lcbBodyAssembly := testNative.lcbBodyAssembly
+  lcbAssembly := testNative.lcbAssembly
+  objectOperands := testNative.objectOperands
+  objects := testNative.objects
+  linked := testNative.linked
+  loaded := testNative.loaded
+  runtime := testNative.runtime
+  stackAdequate := testNative.stackAdequate
+  launchAdmitted := testNative.launchAdmitted
+  osLive := testNative.osLive
+  stderrAndExitAvailable := testNative.stderrAndExitAvailable
+
+/-- This note leaves decoding unchanged but changes the process's exit status. -/
+example : changedByNote.decode noteBytes = changedByNote.decode answerImage ∧
+    ¬ ImageReplay testExecutionPolicy testCodec answerInput answerOutput testBuild noteBytes
+      .driverAttested noteModels := by
+  refine ⟨rfl, ?_⟩
+  intro replay
+  have ready : RunReady noteModels noteBytes () := ⟨⟨trivial, trivial⟩, trivial, trivial⟩
+  have refines := (replay.2.1.2.2 () ready).2.1
+  have observed : noteModels.process.observes (noteBytes, ()) (.returned 1 ByteArray.empty) :=
+    instantObserves _ _
+  obtain ⟨state, finite, returned⟩ := observed
+  obtain ⟨_, _, linkedResult, _⟩ := refines.1 state _ finite returned
+  have conflict : (42 : UInt8) = 1 := (Contracts.Observation.returned.inj linkedResult).1
+  exact (by decide : (42 : UInt8) ≠ 1) conflict
+
+/-- Suppressing launch admission in the model cannot make note replay vacuous. -/
+example : ¬ ImageReplay testExecutionPolicy testCodec answerInput answerOutput testBuild noteBytes
+    .driverAttested (profile := sampleProfile) (platform := changedByNote)
+    {noteModels with launchAdmitted := fun _ _ => False} := by
+  intro replay
+  have conflict : False = True := congrFun (congrFun replay.1.2.1 noteBytes) ()
+  exact Eq.mpr conflict trivial
+
+private def wrongImage : ByteArray := ⟨#[43]⟩
+
+/-- The same image proposition used by replay rejects byte 43 under the fixture's
+fixed semantics, even with the same permissive resource policy as byte 42. -/
+example : ¬ ImageClaim.proposition .provedStack testNative answerInput.path answerCore wrongImage := by
+  intro claim
+  obtain ⟨_, ⟨env, ready⟩, correct, _⟩ := claim
+  have observed : testNative.process.observes (wrongImage, env) (.returned 43 ByteArray.empty) :=
+    instantObserves _ _
+  obtain ⟨state, reachable, result⟩ := observed
+  obtain ⟨source, finite, returned, _⟩ := (correct.2.1 env ready).1 state _ reachable result
+  exact answerDoesNotReturn43 ⟨source, finite, returned⟩
+
+example : ¬ ReceiptValid testCodec testContext testNoteFormat testTools
+    answerInput answerOutput testBuild wrongImage
+    {testReceipt with executable := ⟨wrongImage⟩} (fun registered => nomatch registered) := by
+  intro valid
+  obtain ⟨_, registered, _⟩ := valid
+  cases registered
 
 
 end Sanity

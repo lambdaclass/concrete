@@ -6,12 +6,12 @@ namespace Concrete.Interfaces
 open ConcreteSpec.StageInterface ConcreteSpec.StageGrammar
 open Concrete.Contracts (EvidenceKind)
 
-variable {N : Type} {grammar : SharedGrammar N} {language : CoreLanguage}
+variable {count : Nat} {grammar : SharedGrammar count} {language : CoreLanguage}
   {lang : LoweringLanguage language.operands.Ty} {profile : Profile}
 
 /-- Executable signatures are collected separately from the declarative spec and models.
 The registry below builds its graphs from these values. -/
-structure Passes {N : Type} (grammar : SharedGrammar N) (language : CoreLanguage)
+structure Passes {count : Nat} (grammar : SharedGrammar count) (language : CoreLanguage)
     (lang : LoweringLanguage language.operands.Ty) (profile : Profile) where
   lex : Source → Except LexRefusal TokenStream
   parser : Parser grammar
@@ -44,13 +44,16 @@ def Passes.lexer (passes : Passes grammar language lang profile) (spec : Fronten
 def Passes.parserEntry (passes : Passes grammar language lang profile)
     (inv : FrontendInvariants (grammar.value grammar.start) language) :
     Stage TokenStream ParseRefusal (Parsed (grammar.value grammar.start)) where
-  run stream := (passes.parser.run stream.parserView).2
+  run stream := (passes.parser.run stream.parserView).2.getD
+    (.error (.malformed passes.parser.malformedRule ⟨stream.source.entryFile, 0, 0, 1, 1⟩))
   kind := .directProof
   inputInvariant _ := True
   outputInvariant := inv.ast
-  success stream output := Parses passes.parser stream.parserView output ∧
+  success stream output := (passes.parser.run stream.parserView).2 = some (.ok output) ∧
+    Parses passes.parser stream.parserView output ∧
     (passes.parser.run stream.parserView).1 ≤ passes.parser.bound stream.parserView
-  refusal stream failure := Refuses grammar stream.parserView failure ∧
+  refusal stream failure := (passes.parser.run stream.parserView).2 = some (.error failure) ∧
+    Refuses grammar stream.parserView failure ∧
     (passes.parser.run stream.parserView).1 ≤ passes.parser.bound stream.parserView
 
 def Passes.elaborator (passes : Passes grammar language lang profile) (spec : FrontendSpec (grammar.value grammar.start) language)
@@ -89,7 +92,7 @@ structure LoweringFailures (language : CoreLanguage) (lang : LoweringLanguage la
   llvm : BIR lang profile → StageFailure → Prop
   lcb : BIR lang profile → StageFailure → Prop
 
-structure Registry {N : Type} (grammar : SharedGrammar N) (language : CoreLanguage)
+structure Registry {count : Nat} (grammar : SharedGrammar count) (language : CoreLanguage)
     (lang : LoweringLanguage language.operands.Ty) (profile : Profile) where
   coreModel : CoreModel language
   lexer : Stage Source LexRefusal TokenStream

@@ -1,5 +1,6 @@
 import ConcreteSpec.Spec.Hybrid
 import ConcreteSpec.Spec.Own
+import ConcreteSpec.Spec.Observation
 import ConcreteSpec.Spec.Surface0
 
 /-! Spec-owned data and signatures at the compiler boundary. -/
@@ -116,10 +117,28 @@ inductive CoreOperation (O : Exec.Operands) where
   | call (callee : FnId) (args : List O.Expr)
   | primitive (primitive : O.Prim) (args : List O.Expr)
 
+/-- The semantic operation survives instruction selection. Calls carry their actual callee. -/
+inductive Operator where
+  | read
+  | arithmetic (op : MachineOp)
+  | named (operation : Name)
+  deriving DecidableEq
+
+inductive Opcode where
+  | operator (operation : Operator)
+  | call (callee : FnId)
+  deriving DecidableEq
+
 structure SafetyCondition (Ty : Type) where
   discriminator : Nat
   trap : TrapKind
   operands : List (Ty × OperandRead)
+
+/-- Every integrated instance shares the scalar representation. Aggregates,
+references, and other values occupy the instance-specific arm. -/
+inductive CoreValue (Other : Type) where
+  | scalar (value : CVal)
+  | other (value : Other)
 
 /-- The operand family is supplied by ConcreteSpec. Control, calls and scoped lifetime use Exec. -/
 structure CoreLanguage where
@@ -127,9 +146,35 @@ structure CoreLanguage where
   hybridStore : operands.Store = Hybrid.State
   Declaration : Type
   /-- Exact ordered operand reads and trap conditions of the integrated spec operation. -/
+  expressionOperator : operands.Expr → Operator
+  primitiveOperator : operands.Prim → Operator
+  OtherValue : Type
+  valueShape : operands.Val = CoreValue OtherValue
   safety : CoreOperation operands → List (SafetyCondition operands.Ty)
   permit : AList Var Own.Descriptor → AList Var operands.Val → operands.Expr →
     Own.State → Option Own.State
+
+def CoreLanguage.opcode (language : CoreLanguage) : CoreOperation language.operands → Opcode
+  | .expression expr => .operator (language.expressionOperator expr)
+  | .primitive primitive _ => .operator (language.primitiveOperator primitive)
+  | .call callee _ => .call callee
+
+inductive HostedResult where
+  | returned (status : UInt8)
+  | trapped (status : UInt8) (kind : TrapKind) (site : SiteId)
+
+/-- Hosted entry returns a u8. Normal statement completion and non-u8 results
+have no hosted observation. -/
+def CoreLanguage.hostedResult (language : CoreLanguage) :
+    Exec.Final language.operands.Val → Option HostedResult
+  | .normal => none
+  | .returned value => do
+    let .scalar (.int .u8 n) := language.valueShape ▸ value | none
+    if 0 ≤ n ∧ n < 256 then
+      some (.returned (UInt8.ofNat (Observe.Observation.exited n.toNat).status))
+    else none
+  | .trapped kind site =>
+    some (.trapped (UInt8.ofNat (Observe.Observation.aborted site).status) kind site)
 
 abbrev CoreLanguage.instrumented (language : CoreLanguage)
     (ownership : AList Var Own.Descriptor) : Exec.Operands :=
@@ -142,9 +187,7 @@ inductive EarlyTy where
   | nominal (decl : DeclId)
   deriving DecidableEq
 
-inductive EarlyValue where
-  | scalar (value : CVal)
-  | empty (decl : DeclId)
+abbrev EarlyValue := CoreValue DeclId
 
 inductive EarlyOperand where
   | literal (value : CVal)
@@ -263,8 +306,9 @@ structure Admission (language : CoreLanguage) where
   check : CoreInput language → Except CheckerRefusal (Discharges language)
 
 def Payload.ConditionsAt {language : CoreLanguage} (payload : Payload language) (site : SiteId)
-    (conditions : List (SafetyCondition language.operands.Ty)) : Prop :=
-  ∃ op, (site, op) ∈ payload.operations ∧ conditions = language.safety op
+    (opcode : Opcode) (conditions : List (SafetyCondition language.operands.Ty)) : Prop :=
+  ∃ op, (site, op) ∈ payload.operations ∧ language.opcode op = opcode ∧
+    conditions = language.safety op
 
 def Discharge.condition {language : CoreLanguage} (d : Discharge language) :
     SafetyCondition language.operands.Ty :=
@@ -278,7 +322,7 @@ def ValidDischarges {language : CoreLanguage} (input : CoreInput language)
     group ≠ [] ∧ (group.map Discharge.obligation).Nodup) ∧
   ∀ (site : SiteId) (d : Discharge language), discharges.Contains site d →
     site = d.operation ∧ d.obligation.site = site ∧ d.obligation.kind = .safety ∧
-    (∃ conditions, input.payload.ConditionsAt site conditions ∧ d.condition ∈ conditions) ∧
+    (∃ opcode conditions, input.payload.ConditionsAt site opcode conditions ∧ d.condition ∈ conditions) ∧
     (∃ origin, (site, origin) ∈ input.payload.origins ∧ origin.evidenceKey = d.key) ∧
     ∀ state events op, Exec.Steps input.payload.body input.payload.initial events state →
       input.payload.activeOperation state = some (site, op) →

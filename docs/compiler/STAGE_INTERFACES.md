@@ -13,7 +13,7 @@ Fix (f) owns the lossless scanner. `Source` carries the admitted project, entry-
 
 ## Tokens → AST
 
-Fix (f) owns the registered metered parser. Its AST is indexed by the shared grammar's start symbol. The registered table is the successful result of the recorded verifier execution. For every parser view, success requires both a full declarative derivation and the same predictive visits using that exact table. These derivations count production and token visits. The same parser invocation supplies the result and charged steps, with a linear token budget on success and refusal. Refusals distinguish an under-sliced derivation from a stream with no derivation. Replace `Parse.parse`, the separate refusal grammar, token rewriting and handwritten body derivations.
+Fix (f) supplies the grammar, table-verification program and correspondence proofs. The AST is indexed by the start symbol. The verifier runs a closed word machine over proposal memory and certifies the exact dense prediction table used by the parser. Its word-operation and memory budgets use a fixed multiplier of grammar positions times the exact number of lookahead columns. The parser executes the frozen cursor machine with indexed lookups and first-order typed constructor actions. It counts visits and action constructors on the same execution that returns the result. A stage proof must show that execution completes within its linear token budget, including on refusal. The full declarative and predictive derivations check each production and token's slice eligibility, including radix and suffix. The unsupported refusal names the least slice admitting the full stream and the span that raised the requirement. Replace `Parse.parse`, the separate refusal grammar, token rewriting and handwritten body derivations.
 
 ## AST → Core → admitted Core
 
@@ -25,7 +25,7 @@ Fix (c) supplies the single ConcreteSpec traversal. `Admitted` carries the exact
 
 ## Admitted Core → MIR
 
-Fix (c) owns evidence validation and consumption and the empty-evidence entry. Fix (b) owns the typed MIR instruction semantics. Fix (d) owns operation origin transport. `MIR` carries typed places, copy/move reads and explicit lifetime and control transfers. `LowersCore` ties removed checks to exact validated discharges and checks every emitted occurrence against the source condition inventory and its ordered typed operand identities. A residual condition is part of the same MIR instruction as the operation it guards and traps at its origin on failure. CFG edges enter blocks, so they cannot enter an instruction after its checks. Each supplied discharge matches exactly one emitted occurrence. `LowersUnchecked` uses the same carrier and checks with no admission discharges. Both preserve origins and terminal observations. Replace the linear `MIR.Program` and its token-bearing operators.
+Fix (c) owns evidence validation and consumption and the empty-evidence entry. Fix (b) owns the typed MIR instruction semantics. Fix (d) owns operation origin transport. `MIR` carries typed places, copy/move reads and explicit lifetime and control transfers. `LowersCore` ties removed checks to exact validated discharges and checks every emitted occurrence against the source condition inventory, indexed operator or exact callee, and ordered typed operand identities. Call checks run at the call argument evaluation site. A residual condition is part of the same MIR instruction as the operation it guards and traps at its origin on failure. CFG edges enter blocks, so they cannot enter an instruction after its checks. Each supplied discharge matches exactly one emitted occurrence. `LowersUnchecked` uses the same carrier and checks with no admission discharges. Both preserve origins and terminal observations. Replace the linear `MIR.Program` and its token-bearing operators.
 
 ## MIR → Memory
 
@@ -41,7 +41,7 @@ Fix (a) owns the validated handoff and profile slot check. Fix (d) owns the trap
 
 ## BIR → LLVM
 
-Fix (a) registers the exact emitter and the named LLVM premise. `LLVMInput` carries the full module bytes and the exact trap table. `EmitsLLVM` relates those bytes to the BIR and projected behavior. The legacy printer inventory and inverse claim retire in the A11 cutover. Full-image stack, toolchain and launch requirements stay in the theorem's native artifact boundary.
+Fix (a) registers the exact emitter and the named LLVM premise. `LLVMInput` carries a target triple, data layout, structured LLVM items and the exact trap table. `EmitsLLVM` checks the target fields against the profile and relates the canonical rendered module to the BIR and projected behavior. The renderer serializes the checked header and the structured body into the actual toolchain bytes. The legacy printer inventory and inverse claim retire in the A11 cutover. Full-image stack, toolchain and launch requirements stay in the theorem's native artifact boundary.
 
 ## BIR → LCB
 
@@ -49,7 +49,7 @@ Fix (a) registers the exact adapter and profile preparation. `LCBInput` carries 
 
 ## Common proof boundary
 
-Executable registry entries own the function and the proof graph uses that function's result. `Pipeline.Sound` requires edge soundness and adjacent invariant implication for the registered fold. The production and unchecked folds differ at admission. Semantic edges use fuel-free simulation over the theorem's transition system, with a nonempty source path or a decreasing stutter rank, finite-prefix safety, progress and divergence trace matching. The precise terminal projection distinguishes return, trap and startup refusal, including exact stderr and file-scoped lexical sites. The Core trace starts empty and each step appends exactly the events of its Exec label. The process projection adds only the canonical terminal trap diagnostic from the lexical origin. Evaluator fuel appears separately in adequacy. Existence of an admitted observation and native-image assumptions remain theorem-level obligations.
+Executable registry entries own the function and the proof graph uses that function's result. `Pipeline.Sound` requires edge soundness and adjacent invariant implication for the registered fold. The production and unchecked folds differ at admission. Semantic edges use fuel-free simulation over the theorem's transition system, with a nonempty source path or a decreasing stutter rank, finite-prefix safety, progress and divergence trace matching. The precise terminal projection distinguishes return, trap and startup refusal, including exact stderr and file-scoped lexical sites. The Core trace starts empty and each step appends exactly the events of its Exec label. The Core process projection uses the shared scalar carrier and the spec's hosted status rule. It takes the returned `u8` value as the status and sets a trap's status to 134 with the canonical diagnostic from its lexical origin. Evaluator fuel appears separately in adequacy. Existence of an admitted observation and native-image assumptions remain theorem-level obligations.
 
 ## Writer ownership
 

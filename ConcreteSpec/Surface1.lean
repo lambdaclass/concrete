@@ -104,26 +104,8 @@ inductive Derives : List Token → SourceProgram → Prop
         fixed .rparen rp, fixed .arrow arrow, fixed .u8 ty, fixed .lbrace lb] ++
         body ++ [fixed .rbrace rb]) ⟨decls, name, statements⟩
 
-/-- The reserved intrinsic spellings in the 2026-11-24 clarification and its referenced
-decisions. Tokens retain their identifier payload for resolution. -/
-def intrinsicNames : List String :=
-  ["abort", "alloc", "destroy", "discard", "sizeof", "alignof", "read_owned", "get_args", "byte_at",
-   "string_concat", "string_slice", "string_substr", "string_trim", "int_to_string",
-   "bool_to_string", "float_to_string", "string_push_char", "string_append", "string_append_int",
-   "string_append_bool", "string_reserve",
-   "wrapping_add", "wrapping_sub", "wrapping_mul", "saturating_add", "saturating_sub",
-   "saturating_mul", "checked_add", "checked_sub", "checked_mul", "checked_div", "checked_rem",
-   "checked_shl", "checked_shr", "checked_neg", "try_convert", "truncate", "reinterpret",
-   "trunc", "round", "floor", "ceil"]
-
-/-- Already decided builtin type spellings, reserved under OD43. The complete later-slice
-reservation catalog belongs to the shared lexical audit. -/
-def builtinTypeNames : List String :=
-  ["i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "bool", "f32", "f64",
-   "char", "String", "Unit", "Option", "Result", "Heap", "HeapArray", "Vec"]
-
 private def userName (name : String) : Bool :=
-  name != "_" && name != "main" && !intrinsicNames.contains name && !builtinTypeNames.contains name
+  decide (Surface0.BinderLegal [] name)
 
 private abbrev Scope := List (String × (Var × Ty))
 

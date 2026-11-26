@@ -148,6 +148,7 @@ structure MIR.Occurrence (Ty : Type) where
   block : BlockId
   index : Nat
   origin : Origin
+  opcode : Opcode
   operands : List (Ty × OperandRead)
   checks : List OperationCheck
 
@@ -156,7 +157,11 @@ def MIR.operations {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
   mir.functions.flatMap fun (fn, _, graph) =>
     graph.blocks.toList.flatMap fun block =>
       block.body.zipIdx.filterMap fun (inst, index) => match inst.instruction with
-        | .op _ _ args checks => some ⟨fn, block.id, index, inst.origin, args.identities, checks⟩
+        | @MIRInst.op _ _ opcode _ _ _ _ args checks =>
+          some ⟨fn, block.id, index, inst.origin, .operator opcode, args.identities, checks⟩
+        | .call callee _ args checks =>
+          some ⟨fn, block.id, index, inst.origin, .call callee,
+            args.map (fun arg => (arg.1, arg.2.identity)), checks⟩
         | _ => none
 
 def MIR.Occurrence.Justifies {language : CoreLanguage}
@@ -172,10 +177,10 @@ def ConsumesEvidence {language : CoreLanguage} {lang : LoweringLanguage language
     {profile : Profile} (core : CoreInput language) (discharges : Discharges language)
     (mir : MIR lang profile) : Prop :=
   ((mir.operations.map fun op => (op.fn, op.block, op.index)).Nodup) ∧
-  (∀ site conditions, core.payload.ConditionsAt site conditions → conditions ≠ [] →
-    ∃ op ∈ mir.operations, op.origin.operation = site) ∧
+  (∀ site opcode conditions, core.payload.ConditionsAt site opcode conditions → conditions ≠ [] →
+    ∃ op ∈ mir.operations, op.origin.operation = site ∧ op.opcode = opcode) ∧
   (∀ op ∈ mir.operations,
-    ∃ conditions, core.payload.ConditionsAt op.origin.operation conditions ∧
+    ∃ conditions, core.payload.ConditionsAt op.origin.operation op.opcode conditions ∧
       (op.checks.map OperationCheck.discriminator).Nodup ∧
       conditions = op.checks.map (fun check => ⟨check.discriminator, check.trap, op.operands⟩) ∧
       ∀ check ∈ op.checks, check.disposition = .discharged →
@@ -247,11 +252,18 @@ def coreRuntimeEvents {language : CoreLanguage} (core : CoreInput language)
   | some (.trapped kind site) => (coreTrapDiagnostic core kind site).data.toList.map .stderr
   | _ => []
 
+def coreObservation {language : CoreLanguage} (core : CoreInput language)
+    (outcome : Exec.Final language.operands.Val) : Option Observation := do
+  match ← language.hostedResult outcome with
+  | .returned status => return .returned status ByteArray.empty
+  | .trapped status kind site =>
+    let origin ← AList.lookup core.payload.origins site
+    return .trapped status kind origin.lexical (coreTrapDiagnostic core kind site)
+
 /-- Relate the shared theorem model to actual spec configurations and spec transition labels. -/
 structure CoreModel (language : CoreLanguage) where
   model : Model (CoreInput language) language.operands.Event
   config : (a : CoreInput language) → model.execution.State → Exec.Config a.payload.machine
-  projectFinal : CoreInput language → Exec.Final language.operands.Val → Observation → Prop
   specTrace : CoreInput language → model.execution.State → List language.operands.Event
   initialExact : ∀ a state, model.execution.initial a state →
     config a state = a.payload.initial ∧ specTrace a state = [] ∧
@@ -276,10 +288,7 @@ structure CoreModel (language : CoreLanguage) where
     Exec.Step a.payload.body state label next → next.ctrl = .trapped kind site →
     ∃ condition ∈ language.safety op, condition.trap = kind
   terminalExact : ∀ a state observed, model.result a state observed ↔
-    ∃ outcome, (config a state).final? = some outcome ∧ projectFinal a outcome observed
-  trapExact : ∀ a kind operation observed, projectFinal a (.trapped kind operation) observed →
-    ∃ origin status bytes, (operation, origin) ∈ a.payload.origins ∧
-      observed = .trapped status kind origin.lexical bytes
+    ∃ outcome, (config a state).final? = some outcome ∧ coreObservation a outcome = some observed
 
 structure LoweringModels (language : CoreLanguage) (lang : LoweringLanguage language.operands.Ty)
     (profile : Profile) where
@@ -349,7 +358,8 @@ def BuildsBIR (m : LoweringModels language lang profile)
 
 def EmitsLLVM (m : LoweringModels language lang profile)
     (bir : BIR lang profile) (output : LLVMInput profile) : Prop :=
-  profile.backend = .llvm ∧ output.sites = bir.sites ∧ m.llvmHandoff bir output ∧ m.bir.Refines m.llvm bir output
+  profile.backend = .llvm ∧ output.triple = profile.llvmTriple ∧
+  output.dataLayout = profile.llvmDataLayout ∧ output.sites = bir.sites ∧ m.llvmHandoff bir output ∧ m.bir.Refines m.llvm bir output
 
 def EmitsLCB (m : LoweringModels language lang profile)
     (bir : BIR lang profile) (output : LCBInput profile) : Prop :=

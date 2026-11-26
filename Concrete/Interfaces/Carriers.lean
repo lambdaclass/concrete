@@ -1,4 +1,5 @@
 import ConcreteSpec.StageInterface
+import Concrete.Backend.LLVMIR
 import LeanCompilerBackend.Verified.Job
 
 namespace Concrete.Backend.LCB
@@ -115,7 +116,7 @@ structure Literal (Ty : Type) (_ty : Ty) where
   encoding : List UInt8
 
 structure LoweringLanguage (Ty : Type) where
-  operation : List Ty → Ty → Type
+  operation : Operator → List Ty → Ty → Type
   bool : Ty
 
 abbrev LoweringLanguage.literal {Ty : Type} (_lang : LoweringLanguage Ty) := Literal Ty
@@ -141,13 +142,13 @@ inductive Args {Ty : Type} (Read : Ty → Type) : List Ty → Type where
 inductive MIRInst {Ty : Type} (lang : LoweringLanguage Ty) where
   | bind {ty : Ty} (dst : Place Ty ty) (src : Read Ty lang.literal ty)
   | assign {ty : Ty} (dst : Place Ty ty) (src : Read Ty lang.literal ty)
-  | op {types : List Ty} {ty : Ty} (dst : Place Ty ty)
-      (op : lang.operation types ty) (args : Args (Read Ty lang.literal) types)
+  | op {opcode : Operator} {types : List Ty} {ty : Ty} (dst : Place Ty ty)
+      (op : lang.operation opcode types ty) (args : Args (Read Ty lang.literal) types)
       (checks : List OperationCheck)
   | endLifetime (place : PlaceId)
   | destructure {ty : Ty} (src : Place Ty ty) (bindings : List (FieldId × Sigma (Place Ty)))
   | call (callee : FnId) (dst : Option (Sigma (Place Ty)))
-      (args : List (Sigma (Read Ty lang.literal)))
+      (args : List (Sigma (Read Ty lang.literal))) (checks : List OperationCheck)
 
 structure LocatedOp (Inst : Type) where
   origin : Origin
@@ -193,8 +194,8 @@ inductive MemoryRead (Ty : Type) (Literal : Ty → Type) : Ty → Type where
 inductive MemoryInst {Ty : Type} (lang : LoweringLanguage Ty) where
   | bind {ty : Ty} (dst : MemoryPlace Ty ty) (src : MemoryRead Ty lang.literal ty)
   | assign {ty : Ty} (dst : MemoryPlace Ty ty) (src : MemoryRead Ty lang.literal ty)
-  | op {types : List Ty} {ty : Ty} (dst : MemoryPlace Ty ty)
-      (op : lang.operation types ty) (args : Args (MemoryRead Ty lang.literal) types)
+  | op {opcode : Operator} {types : List Ty} {ty : Ty} (dst : MemoryPlace Ty ty)
+      (op : lang.operation opcode types ty) (args : Args (MemoryRead Ty lang.literal) types)
   | beginLifetime (place : PlaceId)
   | endLifetime (place : PlaceId)
   | destructure {ty : Ty} (src : MemoryPlace Ty ty)
@@ -239,7 +240,7 @@ inductive SSARead (Ty : Type) (Literal : Ty → Type) : Ty → Type where
 
 /-- SSA only renames virtual values. Materialized locations retain their addressable identity. -/
 inductive SSAInst {Ty : Type} (lang : LoweringLanguage Ty) where
-  | op {types : List Ty} {ty : Ty} (dst : SSAValue Ty ty) (op : lang.operation types ty)
+  | op {opcode : Operator} {types : List Ty} {ty : Ty} (dst : SSAValue Ty ty) (op : lang.operation opcode types ty)
       (args : Args (SSARead Ty lang.literal) types)
   | load {ty : Ty} (dst : SSAValue Ty ty) (src : Place Ty ty)
   | store {ty : Ty} (dst : Place Ty ty) (src : SSARead Ty lang.literal ty)
@@ -298,9 +299,29 @@ def BIR.frameSlots {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
         | .call _ (some _) _ => count + 1
         | _ => count) (slots + block.params.length)) 0)) 0
 
+def Profile.llvmTriple (profile : Profile) : String :=
+  match profile.backendTarget with
+  | .x86_64Linux => "x86_64-unknown-linux-gnu"
+  | .aarch64Linux => "aarch64-unknown-linux-gnu"
+  | .aarch64Macos => "arm64-apple-macosx15.0.0"
+
+def Profile.llvmDataLayout (profile : Profile) : String :=
+  match profile.backendTarget with
+  | .x86_64Linux => "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"
+  | .aarch64Linux => "e-m:e-p270:32:32-p271:32:32-p272:64:64-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128-Fn32"
+  | .aarch64Macos => "e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-n32:64-S128-Fn32"
+
 structure LLVMInput (_profile : Profile) where
-  moduleBytes : ByteArray
+  triple : String
+  dataLayout : String
+  items : List Backend.LLVM.Item
   sites : TrapTable
+
+/-- The bytes passed to the toolchain are rendered from the checked fields.
+The structured body has no target directive or raw-text escape hatch. -/
+def LLVMInput.moduleBytes {profile : Profile} (input : LLVMInput profile) : ByteArray :=
+  (s!"target datalayout = \"{input.dataLayout}\"\ntarget triple = \"{input.triple}\"\n" ++
+    Backend.LLVM.render input.items).toUTF8
 
 structure LCBInput (_profile : Profile) where
   body : LeanCompilerBackend.Verified.Source.Function
