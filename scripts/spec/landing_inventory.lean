@@ -418,7 +418,8 @@ private def completion : PieceId → Completion
         ⟨``ConcreteSpec.Core.SourcePathSpan.endInSource_guard_iff, ``SpanBridge.endInSource⟩,
         ⟨``ConcreteSpec.Core.SourcePathSpan.lineMatches_guard_iff, ``SpanBridge.lineMatches⟩,
         ⟨``ConcreteSpec.Core.SourcePathSpan.columnMatches_guard_iff, ``SpanBridge.columnMatches⟩]
-      namespaces := [specNamespace `Proofs.Ident `Core.SourcePathSpan]
+      namespaces := [specNamespace `Proofs.Ident `Core.SourcePathSpan,
+        specNamespace `Spec.Ident `Core.SourcePathSpan.Controls]
       controls := [
         control `projectSpan_correct `ProjectionCorrect `projectSpan `projectPastEnd,
         control `projectSpan_correct `ProjectionCorrect `projectSpan `projectAtStartOnly,
@@ -1411,9 +1412,11 @@ private def plan : List Piece := [
     groups := [
       evidence `ConcreteSpec.Proofs.Ident `ConcreteSpec.Core.SourcePathSpan [
         `ProjectionCorrect, `BindingCorrect],
+      evidence `ConcreteSpec.Spec.Ident `ConcreteSpec.Core.SourcePathSpan.Controls [
+        `pastEnd, `wrongLine, `wrongColumn, `pastEndScoped, `wrongLineScoped, `wrongColumnScoped,
+        `projectPastEnd],
       evidence `ConcreteSpec.Proofs.Ident `ConcreteSpec.Core.SourcePathSpan.Controls [
-        `pastEnd, `wrongLine, `wrongColumn, `projectPastEnd, `projectAtStartOnly,
-        `bindPastEnd, `bindIgnoringLine, `bindIgnoringColumn, `bindBeforeEof]] },
+        `projectAtStartOnly, `bindPastEnd, `bindIgnoringLine, `bindIgnoringColumn, `bindBeforeEof]] },
   added .R "Rule registry, prerequisite of F06, F13 and F17"
     "changelog.d/2026-11-13-spec-rule-registry.md; ROADMAP.md R-0615",
   present .F05 "Fixed-width arithmetic and exact-term correspondence",
@@ -1960,7 +1963,8 @@ def verify (env : Environment) (specModules compilerModules : NameSet) (specEvid
   let helperOnly := [{ present .F04p "" with groups := [decls origin [helper]] }]
   -- Exercise F04p's proof reservation using only the helper fixture as evidence.
   let withFixtureOrigin (_ : PieceId) : Completion :=
-    reservedEvidence ((completion .F04p).namespaces.map fun ns => { ns with origin })
+    let proofReservations := (completion .F04p).namespaces.filter (·.isProof)
+    reservedEvidence (proofReservations.map fun ns => { ns with origin })
   let checked := inventory env inScope {} helperOnly #[] withFixtureOrigin
     { rules := [], examples := [] }
   unless checked.errors.size == 2 &&

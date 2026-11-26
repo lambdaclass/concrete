@@ -9,6 +9,7 @@ namespace Concrete.Stages
 structure Input where
   path : String
   source : ByteArray
+  fileId : ConcreteSpec.Core.FileId := ⟨0⟩
 
 structure Output where
   tokens : List ConcreteSpec.Surface0.Token
@@ -19,7 +20,7 @@ structure Output where
   memory : Memory.Program
   bir : BIR.Program
 
-private def lex (input : Input) := Lex.lex input.source
+private def lex (input : Input) := Lex.lex input.source input.fileId
 
 private def memory (p : MIR.Program) : Except Refusal Memory.Program := .ok (Memory.lower p)
 
@@ -60,11 +61,19 @@ def compile (input : Input) : Except Refusal Output := do
   let ((((((( _, tokens), ast), core), admitted), mir), mem), bir) ← (stages input.path).run input
   return ⟨tokens, ast, core, admitted.tokens, mir, mem, bir⟩
 
+/-- Compile the exact bytes in a resolved slot of the shared project table. -/
+def compileFile (project : ConcreteSpec.Core.SourcePathSpan.Project)
+    (fileId : ConcreteSpec.Core.FileId) : Except Refusal Output := do
+  let some file := project.fileAt fileId
+    | throw (.internal s!"unknown project file ID {fileId.index}")
+  let path := file.path.render.text
+  compile ⟨path, ⟨file.source.toBytes.toArray⟩, fileId⟩
+
 /-- The token list recorded by successful compilation satisfies the surface lexical relation. -/
 theorem compile_lexes {input : Input} {out : Output} (h : compile input = .ok out) :
-    ConcreteSpec.Surface0.Lexes input.source out.tokens := by
+    ConcreteSpec.Surface0.Lexes input.source out.tokens input.fileId := by
   simp only [compile, stages, Pipeline.run, lex, memory, bind, Except.bind, pure, Except.pure] at h
-  cases hl : Lex.lex input.source <;> simp only [hl, reduceCtorEq] at h
+  cases hl : Lex.lex input.source input.fileId <;> simp only [hl, reduceCtorEq] at h
   rename_i toks
   cases hp : Parse.parse toks <;> simp only [hp, reduceCtorEq] at h
   rename_i ast
@@ -82,7 +91,7 @@ theorem compile_lexes {input : Input} {out : Output} (h : compile input = .ok ou
 theorem compile_of_edges (input : Input) (tokens : List ConcreteSpec.Surface0.Token)
     (ast : ConcreteSpec.Surface0.Program) (core : Elab.Output) (admitted : Admission.Output)
     (mir : MIR.Program) (mem : Memory.Program) (bir : BIR.Program)
-    (hLex : Lex.lex input.source = .ok tokens)
+    (hLex : Lex.lex input.source input.fileId = .ok tokens)
     (hParse : Parse.parse tokens = .ok ast)
     (hElab : Elab.elaborate ast = .ok core)
     (hAdmit : Admission.check core = .ok admitted)

@@ -88,7 +88,7 @@ def moveThenConsume : Program :=
   { decls, body := [.let_ (.name t₀) (.struct ⟨"Token"⟩) (.mk ⟨"Token"⟩ []),
                     .let_ (.name u₁) (.struct ⟨"Token"⟩) (mv t₀),
                     .letStruct ⟨"Token"⟩ [] (mv u₁)],
-    ret := .int .u8 42 }
+    ending := .ret (.int .u8 42) }
 
 example : check moveThenConsume = true := by decide
 
@@ -109,7 +109,7 @@ def useAfterMove : Program :=
                     .let_ (.name u₁) (.struct ⟨"Token"⟩) (mv t₀),
                     .letStruct ⟨"Token"⟩ [] (mv t₀),
                     .letStruct ⟨"Token"⟩ [] (mv u₁)],
-    ret := .int .u8 42 }
+    ending := .ret (.int .u8 42) }
 
 example : check useAfterMove = false := by decide
 
@@ -122,7 +122,7 @@ read is in the wrong mode. -/
 def copyLinear : Program :=
   { decls, body := [.let_ (.name t₀) (.struct ⟨"Token"⟩) (.mk ⟨"Token"⟩ []),
                     .letStruct ⟨"Token"⟩ [] (cp t₀)],
-    ret := .int .u8 42 }
+    ending := .ret (.int .u8 42) }
 
 example : check copyLinear = false := by decide
 
@@ -132,7 +132,7 @@ example : run copyLinear 10 = .stuck .wrongMode := by decide
 non-Copy types). Run anyway, the read is in the wrong mode. -/
 def moveCopy : Program :=
   { decls, body := [.let_ (.name x₀) u8 (lit 7)],
-    ret := .move x₀ }
+    ending := .ret (.move x₀) }
 
 example : check moveCopy = false := by decide
 
@@ -146,7 +146,7 @@ fn main() -> u8 {
 }
 ``` -/
 def notConsumed : Program :=
-  { decls, body := [.let_ (.name t₀) (.struct ⟨"Token"⟩) (.mk ⟨"Token"⟩ [])], ret := .int .u8 42 }
+  { decls, body := [.let_ (.name t₀) (.struct ⟨"Token"⟩) (.mk ⟨"Token"⟩ [])], ending := .ret (.int .u8 42) }
 
 example : check notConsumed = false := by decide
 
@@ -165,7 +165,7 @@ def copyTwice : Program :=
                     .let_ (.name q₅) (.struct ⟨"Unit0"⟩) (cp p₄),
                     .letStruct ⟨"Unit0"⟩ [] (cp p₄),
                     .letStruct ⟨"Unit0"⟩ [] (cp q₅)],
-    ret := .int .u8 0 }
+    ending := .ret (.int .u8 0) }
 
 example : check copyTwice = true := by decide
 
@@ -179,7 +179,7 @@ fn main() -> u8 {
 }
 ``` -/
 def unusedBinding : Program :=
-  { decls, body := [.let_ (.name x₀) u8 (lit 1)], ret := .int .u8 42 }
+  { decls, body := [.let_ (.name x₀) u8 (lit 1)], ending := .ret (.int .u8 42) }
 
 example : check unusedBinding = false := by decide
 
@@ -197,7 +197,7 @@ def destructureAdd : Program :=
   { decls, body := [.let_ (.name p₄) (.struct ⟨"Pair"⟩) (.mk ⟨"Pair"⟩ [(⟨"a"⟩, .int .u8 40), (⟨"b"⟩, .int .u8 2)]),
                     .letStruct ⟨"Pair"⟩ [(⟨"a"⟩, .name x₁), (⟨"b"⟩, .name y₆)] (mv p₄),
                     .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₆))],
-    ret := .copy s₂ }
+    ending := .ret (.copy s₂) }
 
 example : check destructureAdd = true := by decide
 
@@ -214,7 +214,7 @@ fn main() -> u8 {
 def missingField : Program :=
   { decls, body := [.let_ (.name p₄) (.struct ⟨"Pair"⟩) (.mk ⟨"Pair"⟩ [(⟨"a"⟩, .int .u8 40), (⟨"b"⟩, .int .u8 2)]),
                     .letStruct ⟨"Pair"⟩ [(⟨"a"⟩, .name x₁)] (mv p₄)],
-    ret := .copy x₁ }
+    ending := .ret (.copy x₁) }
 
 example : check missingField = false := by decide
 
@@ -229,7 +229,7 @@ fn main() -> u8 {
 def wildcardField : Program :=
   { decls, body := [.let_ (.name p₄) (.struct ⟨"Pair"⟩) (.mk ⟨"Pair"⟩ [(⟨"a"⟩, .int .u8 42), (⟨"b"⟩, .int .u8 0)]),
                     .letStruct ⟨"Pair"⟩ [(⟨"a"⟩, .name x₁), (⟨"b"⟩, .wild)] (mv p₄)],
-    ret := .copy x₁ }
+    ending := .ret (.copy x₁) }
 
 example : check wildcardField = true := by decide
 
@@ -249,7 +249,7 @@ def overflowTrap : Program :=
   { decls, body := [.let_ (.name a₀) u8 (lit 200),
                     .let_ (.name b₁) u8 (lit 100),
                     .let_ (.name s₂) u8 (.add (.copy a₀) (.copy b₁))],
-    ret := .copy s₂ }
+    ending := .ret (.copy s₂) }
 
 example : check overflowTrap = false := by decide
 
@@ -264,7 +264,7 @@ fn main() -> u8 {
 }
 ``` -/
 def overflowDropped : Program :=
-  { decls, body := [.let_ .wild u8 (.add (.int .u8 200) (.int .u8 100))], ret := .int .u8 42 }
+  { decls, body := [.let_ .wild u8 (.add (.int .u8 200) (.int .u8 100))], ending := .ret (.int .u8 42) }
 
 example : check overflowDropped = false := by decide
 
@@ -283,7 +283,7 @@ def fieldOverflowTrap : Program :=
   { decls, body := [.let_ (.name p₄) (.struct ⟨"Pair"⟩) (.mk ⟨"Pair"⟩ [(⟨"a"⟩, .int .u8 200), (⟨"b"⟩, .int .u8 100)]),
                     .letStruct ⟨"Pair"⟩ [(⟨"a"⟩, .name x₁), (⟨"b"⟩, .name y₆)] (mv p₄),
                     .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₆))],
-    ret := .copy s₂ }
+    ending := .ret (.copy s₂) }
 
 example : check fieldOverflowTrap = false := by decide
 
@@ -304,7 +304,7 @@ def fieldOverflowMoved : Program :=
                     .let_ (.name q₅) (.struct ⟨"Pair"⟩) (mv p₄),
                     .letStruct ⟨"Pair"⟩ [(⟨"a"⟩, .name x₁), (⟨"b"⟩, .name y₆)] (mv q₅),
                     .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₆))],
-    ret := .copy s₂ }
+    ending := .ret (.copy s₂) }
 
 example : check fieldOverflowMoved = false := by decide
 
@@ -316,7 +316,7 @@ def fieldSumFits : Program :=
   { decls, body := [.let_ (.name p₄) (.struct ⟨"Pair"⟩) (.mk ⟨"Pair"⟩ [(⟨"a"⟩, .int .u8 200), (⟨"b"⟩, .int .u8 55)]),
                     .letStruct ⟨"Pair"⟩ [(⟨"a"⟩, .name x₁), (⟨"b"⟩, .name y₆)] (mv p₄),
                     .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₆))],
-    ret := .copy s₂ }
+    ending := .ret (.copy s₂) }
 
 example : check fieldSumFits = true := by decide
 
@@ -341,11 +341,11 @@ def inputEnv (n : Int) : Env := [(x₀, .val (.scalar (.int .u8 n)))]
 
 def add100 : List Stmt := [.let_ (.name s₂) u8 (.add (.copy x₀) (.int .u8 100))]
 
-example : bodyOkB decls inputCtx add100 (.copy s₂) = false := by decide
+example : bodyOkB decls inputCtx add100 (.ret (.copy s₂)) = false := by decide
 
-example : runBody decls 10 (inputEnv 200) add100 (.copy s₂) = .trap .arithmeticOverflow := by decide
+example : runBody decls 10 (inputEnv 200) add100 (.ret (.copy s₂)) = .trap .arithmeticOverflow := by decide
 
-example : runBody decls 10 (inputEnv 1) add100 (.copy s₂) = .exit 101 := by decide
+example : runBody decls 10 (inputEnv 1) add100 (.ret (.copy s₂)) = .exit 101 := by decide
 
 /-- Accepted: the type bound of the input is evidence enough when the sum always fits.
 ```
@@ -355,9 +355,9 @@ fn add0(x: u8) -> u8 {
 ``` -/
 def add0 : List Stmt := [.let_ (.name s₂) u8 (.add (.copy x₀) (.int .u8 0))]
 
-example : bodyOkB decls inputCtx add0 (.copy s₂) = true := by decide
+example : bodyOkB decls inputCtx add0 (.ret (.copy s₂)) = true := by decide
 
-example : runBody decls 10 (inputEnv 255) add0 (.copy s₂) = .exit 255 := by decide
+example : runBody decls 10 (inputEnv 255) add0 (.ret (.copy s₂)) = .exit 255 := by decide
 
 /-- **Partial facts** (Q6.2 as amended): an unknown field does not discard a known sibling. `p`'s
 field `a` comes from the input `x` and is unknown; field `b` is `200` and is known. Adding `100` to
@@ -378,7 +378,7 @@ def partialKnownRefused : List Stmt :=
    .let_ (.name s₂) u8 (.add (.copy y₆) (.int .u8 100)),
    .let_ (.name z₃) u8 (.add (.copy x₁) (.copy s₂))]
 
-example : bodyOkB decls inputCtx partialKnownRefused (.copy z₃) = false := by decide
+example : bodyOkB decls inputCtx partialKnownRefused (.ret (.copy z₃)) = false := by decide
 
 /-- Refused (no hidden traps): the unknown field is bounded by its type, `0 ≤ c ≤ 255`, and the
 known one is `200`, so `c + d` may not fit. The known sibling is still used: it is the `200` in
@@ -395,16 +395,16 @@ def partialUnknownRefused : List Stmt :=
    .letStruct ⟨"Pair"⟩ [(⟨"a"⟩, .name x₁), (⟨"b"⟩, .name y₆)] (mv p₄),
    .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₆))]
 
-example : bodyOkB decls inputCtx partialUnknownRefused (.copy s₂) = false := by decide
+example : bodyOkB decls inputCtx partialUnknownRefused (.ret (.copy s₂)) = false := by decide
 
-example : runBody decls 10 (inputEnv 55) partialUnknownRefused (.copy s₂) = .exit 255 := by decide
+example : runBody decls 10 (inputEnv 55) partialUnknownRefused (.ret (.copy s₂)) = .exit 255 := by decide
 
-example : runBody decls 10 (inputEnv 56) partialUnknownRefused (.copy s₂) = .trap .arithmeticOverflow := by
+example : runBody decls 10 (inputEnv 56) partialUnknownRefused (.ret (.copy s₂)) = .trap .arithmeticOverflow := by
   decide
 
 /-- Refused: `300` does not fit `u8` (ARITH-2). -/
 def literalTooBig : Program :=
-  { decls, body := [.let_ (.name a₀) u8 (lit 300)], ret := .copy a₀ }
+  { decls, body := [.let_ (.name a₀) u8 (lit 300)], ending := .ret (.copy a₀) }
 
 example : check literalTooBig = false := by decide
 
@@ -420,7 +420,7 @@ def mixedAdd : Program :=
   { decls, body := [.let_ (.name a₀) u8 (lit 1),
                     .let_ (.name b₁) (.scalar (.int .i64)) (.atom (.int .i64 2)),
                     .let_ (.name s₂) u8 (.add (.copy a₀) (.copy b₁))],
-    ret := .copy s₂ }
+    ending := .ret (.copy s₂) }
 
 example : check mixedAdd = false := by decide
 
@@ -430,7 +430,7 @@ the surface rule against rebinding (SCOPE-1) is an elaboration rule. -/
 def rebind : Program :=
   { decls, body := [.let_ (.name x₀) u8 (lit 1),
                     .let_ (.name x₀) u8 (lit 41)],
-    ret := .copy x₀ }
+    ending := .ret (.copy x₀) }
 
 example : check rebind = false := by decide
 
@@ -442,7 +442,7 @@ fn main() -> u8 {
 }
 ``` -/
 def wildCopy : Program :=
-  { decls, body := [.let_ .wild u8 (lit 1)], ret := .int .u8 42 }
+  { decls, body := [.let_ .wild u8 (lit 1)], ending := .ret (.int .u8 42) }
 
 example : check wildCopy = true := by decide
 
@@ -456,13 +456,13 @@ fn main() -> u8 {
 }
 ``` -/
 def wildLinear : Program :=
-  { decls, body := [.let_ .wild (.struct ⟨"Token"⟩) (.mk ⟨"Token"⟩ [])], ret := .int .u8 42 }
+  { decls, body := [.let_ .wild (.struct ⟨"Token"⟩) (.mk ⟨"Token"⟩ [])], ending := .ret (.int .u8 42) }
 
 example : check wildLinear = false := by decide
 
 /-- Refused: `main` returns `u8` (STMT-7). -/
 def wrongReturnType : Program :=
-  { decls, body := [], ret := .int .i64 42 }
+  { decls, body := [], ending := .ret (.int .i64 42) }
 
 example : check wrongReturnType = false := by decide
 
@@ -478,7 +478,7 @@ example : (Observe.observe true (run moveThenConsume 10)).map Observe.Observatio
 
 /-- The refused body `add100`, run anyway on input 200, traps: the trap message goes to descriptor
 2 and the status is 134. -/
-example : Observe.observe true (runBody decls 10 (inputEnv 200) add100 (.copy s₂)) =
+example : Observe.observe true (runBody decls 10 (inputEnv 200) add100 (.ret (.copy s₂))) =
     some (.trapped .arithmeticOverflow) := by decide
 
 /-- A missing configured grant: status 125, and `main` does not run. -/

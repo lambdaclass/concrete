@@ -13,12 +13,9 @@ Authority: docs/decisions.md#recovered-59-30 (OPEN-1; primary recommendation
 and queued owner approval recorded with transcript lines and UTC times),
 SYN-5@3 and SYN-6@3, and the literal decisions recorded on 2026-11-08.
 Core Q4.2 permits embedded NUL in static text VALUES (e.g. through the `\0`
-escape), not in raw source bytes. Item 30 says "no byte-order mark"; it does not
-settle whether U+FEFF is excluded everywhere, including comments and literals.
-The landed definitions below exclude it everywhere and end comments at bare CR.
-These authority gaps remain open in docs/decisions.md#decided-2026-11-08-recovery-queue
-(ISS-0064 / ISS-0065); the claimed separate 15:31 CR approval was not verified.
-No current owner approval of either disputed scope is inferred here.
+escape), not in raw source bytes. The owner confirmed raw U+FEFF refusal everywhere.
+Bare CR continues to end line comments through slice 0 under the recorded default.
+See docs/decisions.md#mechanical-defaults-and-owner-veto-list (ISS-0064 / ISS-0065).
 
 UTF-8 source validity, NUL/BOM refusal, ASCII identifiers, the four settled whitespace scalars,
 line comments and maximal trivia runs are specified here. Strings and comments refuse raw Cc,
@@ -99,7 +96,7 @@ def FirstError (bytes : List UInt8) (offset : Nat) : Prop :=
 
 /-- Decision: docs/decisions.md#recovered-59-30 (OPEN-1), SYN-5@3. The first raw-source failure:
 an invalid scalar, NUL, or U+FEFF, following only permitted complete scalars.
-The everywhere-U+FEFF scope is pending owner confirmation; see the header (ISS-0064).
+The owner confirmed U+FEFF refusal at every source position (ISS-0064).
 NUL/BOM offsets name the start of the refused scalar. -/
 inductive SourceFailure : List UInt8 → Nat → Prop
   | utf8 {bytes : List UInt8} {k : Nat} : bytes ≠ [] → ScalarFailure bytes k → SourceFailure bytes k
@@ -420,7 +417,7 @@ inductive Terminal where
   | fn | let_ | return_ | ident | integer | reserved | u8
   | lparen | rparen | lbrace | rbrace | arrow | colon | equal | semi | plus
   | minus | star | slash | percent | stringLiteral | byteLiteral | label
-  | mut_ | if_ | else_
+  | mut_ | if_ | else_ | struct_ | move_
   deriving DecidableEq, Repr
 
 /-- The word terminals used below, the six item-40 reservations
@@ -433,6 +430,8 @@ def word (name : String) : Terminal :=
   | "let" => .let_
   | "return" => .return_
   | "u8" => .u8
+  | "struct" => .struct_
+  | "move" => .move_
   | "spec" | "by" | "kept" | "Self" | "while" | "Entropy" => .reserved
   | "from" | "until" | "cap" | "type" | "ghost" | "Copy" => .reserved
   | "Fs" | "Network" | "Env" | "Time" | "Alloc" | "Device" | "Console"
@@ -446,30 +445,82 @@ def punctuation : List (String × Terminal) :=
 
 inductive Nonterminal where
   | program | body | expr | more | atom
+  | decls | letHead | letTail | localTy | nameTail | headExpr | headMore | headAtom
   | ty | binder | product | factors | conditional | alternative | elseBody | identifier
   deriving DecidableEq, Repr
 
-/-- decisions.md#decided-project-proof-infrastructure (Slice 0), #od38 and
-#decided-2026-11-02-authority (entry point), TYPE-19 (`u8`), SYN-2 (associativity),
-STMT-1 (termination), and ARITH-3 (checked addition). Decimal tokens use the literal decisions
-at #decided-2026-11-08-language-literals. The factored expression tail represents successive
-checked sums. Core elaboration evaluates those sums from left to right. -/
-def grammar0 : Grammar Terminal Nonterminal :=
+/-- Table projections retain slice 0's production shapes for its parser proof.
+The shared view includes the existing conditional form with a separate head expression. -/
+inductive GrammarView where
+  | slice0 | slice1 | shared
+  deriving DecidableEq
+
+private abbrev Production := Nonterminal × List (Sym Terminal Nonterminal)
+
+def surfaceProductions : List (Production × List GrammarView) :=
+  let all := [.slice0, .slice1, .shared]
+  let from1 := [.slice1, .shared]
+  [
+    ((.program, [.t .fn, .t .ident, .t .lparen, .t .rparen, .t .arrow, .t .u8,
+                 .t .lbrace, .n .body, .t .rbrace]), [.slice0]),
+    ((.program, [.n .decls, .t .fn, .t .ident, .t .lparen, .t .rparen, .t .arrow,
+                 .t .u8, .t .lbrace, .n .body, .t .rbrace]), from1),
+    ((.decls, [.t .struct_, .t .ident, .t .lbrace, .t .rbrace, .n .decls]), from1),
+    ((.decls, []), from1),
+    ((.body, [.t .let_, .t .ident, .t .colon, .t .u8, .t .equal, .n .expr, .t .semi, .n .body]), [.slice0]),
+    ((.body, [.t .let_, .t .ident, .n .letTail, .t .equal, .n .expr, .t .semi, .n .body]), [.slice1]),
+    ((.body, [.t .let_, .n .letHead, .t .equal, .n .expr, .t .semi, .n .body]), [.shared]),
+    ((.letHead, [.t .ident, .n .letTail]), [.shared]),
+    ((.letHead, [.t .mut_, .t .ident, .t .colon, .n .localTy]), [.shared]),
+    ((.body, [.t .return_, .n .expr, .t .semi, .n .body]), all),
+    ((.body, [.t .ident, .t .lparen, .t .rparen, .t .semi, .n .body]), from1),
+    ((.body, []), all),
+    ((.letTail, [.t .colon, .n .localTy]), from1),
+    ((.letTail, [.t .lbrace, .t .rbrace]), from1),
+    ((.localTy, [.t .u8]), from1),
+    ((.localTy, [.t .ident]), from1),
+    ((.expr, [.n .atom, .n .more]), all),
+    ((.more, [.t .plus, .n .atom, .n .more]), all),
+    ((.more, []), all),
+    ((.atom, [.t .integer]), all),
+    ((.atom, [.t .ident]), [.slice0]),
+    ((.atom, [.t .ident, .n .nameTail]), from1),
+    ((.atom, [.t .lparen, .n .expr, .t .rparen]), all),
+    ((.atom, [.t .move_, .t .ident]), from1),
+    ((.nameTail, [.t .lbrace, .t .rbrace]), from1),
+    ((.nameTail, []), from1),
+    ((.body, [.n .conditional, .n .body]), [.shared]),
+    ((.conditional, [.t .if_, .n .headExpr, .t .lbrace, .n .body, .t .rbrace, .n .alternative]), [.shared]),
+    ((.alternative, [.t .else_, .n .elseBody]), [.shared]),
+    ((.alternative, []), [.shared]),
+    ((.elseBody, [.t .lbrace, .n .body, .t .rbrace]), [.shared]),
+    ((.elseBody, [.n .conditional]), [.shared]),
+    ((.headExpr, [.n .headAtom, .n .headMore]), [.shared]),
+    ((.headMore, [.t .plus, .n .headAtom, .n .headMore]), [.shared]),
+    ((.headMore, []), [.shared]),
+    ((.headAtom, [.t .integer]), [.shared]),
+    ((.headAtom, [.t .ident]), [.shared]),
+    ((.headAtom, [.t .lparen, .n .expr, .t .rparen]), [.shared]),
+    ((.headAtom, [.t .move_, .t .ident]), [.shared])]
+
+def projectGrammar (view : GrammarView) : Grammar Terminal Nonterminal :=
   { start := .program
-    prods := [
-      (.program, [.t .fn, .t .ident, .t .lparen, .t .rparen, .t .arrow, .t .u8,
-                   .t .lbrace, .n .body, .t .rbrace]),
-      (.body, [.t .let_, .t .ident, .t .colon, .t .u8, .t .equal, .n .expr, .t .semi, .n .body]),
-      (.body, [.t .return_, .n .expr, .t .semi, .n .body]),
-      (.body, []),
-      (.expr, [.n .atom, .n .more]),
-      (.more, [.t .plus, .n .atom, .n .more]),
-      (.more, []),
-      (.atom, [.t .integer]),
-      (.atom, [.t .ident]),
-      (.atom, [.t .lparen, .n .expr, .t .rparen])] }
+    prods := (surfaceProductions.filter fun p => p.2.contains view).map Prod.fst }
+
+def grammar0 := projectGrammar .slice0
+def grammar1 := projectGrammar .slice1
+def sharedGrammar := projectGrammar .shared
 
 theorem grammar0_ll1 : ll1 grammar0 = true := by decide
+theorem grammar1_ll1 : ll1 grammar1 = true := by decide
+theorem sharedGrammar_ll1 : ll1 sharedGrammar = true := by decide
+
+/-- Declarative prediction is single-valued in the slice-1 projection. -/
+theorem grammar1_predicts_unique {i j : Nat} {lhs : Nonterminal} {look : Option Terminal}
+    (hi : (grammar1.prods[i]?.map Prod.fst) = some lhs)
+    (hj : (grammar1.prods[j]?.map Prod.fst) = some lhs)
+    (pi : Predicts grammar1 i look) (pj : Predicts grammar1 j look) : i = j :=
+  ll1_sound grammar1_ll1 hi hj pi pj
 
 def checkedGrammar0 : CheckedGrammar Terminal Nonterminal :=
   ⟨grammar0, grammar0_ll1⟩
@@ -525,6 +576,7 @@ structure Span where
   stop : Nat
   line : Nat
   column : Nat
+  fileId : ConcreteSpec.Core.FileId
   deriving DecidableEq, Repr
 
 inductive TokenValue where
@@ -587,8 +639,8 @@ where
     | .ret _ _ :: next :: _ => .error (.unreachable next.span)
 
 section
-private def sampleSpan : Span := ⟨0, 9, 1, 1⟩
-private def deadSpan : Span := ⟨10, 19, 1, 11⟩
+private def sampleSpan : Span := ⟨0, 9, 1, 1, ⟨0⟩⟩
+private def deadSpan : Span := ⟨10, 19, 1, 11, ⟨0⟩⟩
 private def sampleReturn : Statement := .ret (.integer 1 none sampleSpan) sampleSpan
 
 example : checkBody [] = .error .fallthrough := rfl
@@ -608,8 +660,8 @@ abbrev Position := ConcreteSpec.Core.Position
 def Position.advance (pos : Position) (c : Nat) : Position :=
   pos.step c (if c < 0x80 then 1 else if c < 0x800 then 2 else if c < 0x10000 then 3 else 4)
 
-def Position.span (start stop : Position) : Span :=
-  ⟨start.byte, stop.byte, start.line, start.column⟩
+def Position.span (start stop : Position) (fileId : ConcreteSpec.Core.FileId := ⟨0⟩) : Span :=
+  ⟨start.byte, stop.byte, start.line, start.column, fileId⟩
 
 def scalarText (cs : List Nat) : String := String.ofList (cs.map Char.ofNat)
 
@@ -643,20 +695,21 @@ inductive Tokenizes : List Nat → List Nat → List Nat → TokenValue → Prop
       LongestMatch punctuationScalars input (some (spelling, rest)) →
       (scalarText spelling, kind) ∈ punctuation → Tokenizes input spelling rest (.fixed kind)
 
-inductive TokenStream : Position → List Nat → List Token → Prop
-  | eof {pos : Position} {input : List Nat} : Trivia input [] → TokenStream pos input []
+inductive TokenStream (fileId : ConcreteSpec.Core.FileId) : Position → List Nat → List Token → Prop
+  | eof {pos : Position} {input : List Nat} : Trivia input [] → TokenStream fileId pos input []
   | cons {pos : Position} {trivia remaining lexeme rest : List Nat} {value : TokenValue}
       {tokens : List Token} :
       Trivia (trivia ++ remaining) remaining →
       Tokenizes remaining lexeme rest value →
-      TokenStream (lexeme.foldl Position.advance (trivia.foldl Position.advance pos)) rest tokens →
-      TokenStream pos (trivia ++ remaining)
+      TokenStream fileId (lexeme.foldl Position.advance (trivia.foldl Position.advance pos)) rest tokens →
+      TokenStream fileId pos (trivia ++ remaining)
         (⟨value, (trivia.foldl Position.advance pos).span
-          (lexeme.foldl Position.advance (trivia.foldl Position.advance pos))⟩ :: tokens)
+          (lexeme.foldl Position.advance (trivia.foldl Position.advance pos)) fileId⟩ :: tokens)
 
-def Lexes (source : ByteArray) (tokens : List Token) : Prop :=
+def Lexes (source : ByteArray) (tokens : List Token)
+    (fileId : ConcreteSpec.Core.FileId := ⟨0⟩) : Prop :=
   ∃ scalars, Utf8.Decodes source.data.toList scalars ∧
-    (∀ c ∈ scalars, c ≠ 0 ∧ c ≠ 0xFEFF) ∧ TokenStream {} scalars tokens
+    (∀ c ∈ scalars, c ≠ 0 ∧ c ≠ 0xFEFF) ∧ TokenStream fileId {} scalars tokens
 
 private def fixed (kind : Terminal) (span : Span) : Token := ⟨.fixed kind, span⟩
 private def named (name : String) (span : Span) : Token := ⟨.name name, span⟩

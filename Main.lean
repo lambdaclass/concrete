@@ -22,7 +22,7 @@ private def build (source dir : System.FilePath) (backend : Option String) : IO 
     return ← report (.syntaxError "source path must be canonical and project-relative")
   let bytes ← IO.FS.readBinFile path
   let compiled : Except Refusal (Stages.Output × Option LeanCompilerBackend.Verified.Source.Function) := do
-    let out ← Stages.compile ⟨source.toString, bytes⟩
+    let out ← Stages.compile { path := source.toString, source := bytes }
     let lcb ← if backend == some "llvm" then pure none else some <$> Stages.prepareLCB out.bir
     return (out, lcb)
   match compiled with
