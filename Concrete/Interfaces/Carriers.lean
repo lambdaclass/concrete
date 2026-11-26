@@ -239,6 +239,8 @@ structure MemoryFrame (Value : Type) where
   initialized : List PlaceId
   zeroValues : AList PlaceId Value := []
   addressIds : AList PlaceId Hybrid.Place := []
+  /-- Moved subtrees of initialized roots. A path is relative to its root. -/
+  movedFields : List (PlaceId × List FieldId) := []
 
 structure MemoryContinuation (Ty Value : Type) where
   caller : MemoryFrame Value

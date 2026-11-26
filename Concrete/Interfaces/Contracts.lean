@@ -1,6 +1,7 @@
 import Concrete.Interfaces.Carriers
 import Concrete.Interfaces.Behavior
 import Concrete.Backend.Observation
+import Concrete.Interfaces.SurfaceElaboration
 
 namespace Concrete.Interfaces
 
@@ -75,23 +76,64 @@ def Pipeline.run {A C : Type} (pipeline : Pipeline A C) (input : A) :
 
 structure FrontendSpec (Ast : Type) (language : CoreLanguage) where
   lexes : Source → TokenStream → Prop
-  reconstruct : TokenStream → ByteArray
   malformedToken : Source → RuleId → FileSpan → Prop
   lexLimit : Source → ResourceRefusal → Prop
-  elaborates : Parsed Ast → Payload language → Prop
   elabRefusal : Parsed Ast → ElabRefusal → Prop
 
 def Lexes {Ast : Type} {language : CoreLanguage} (spec : FrontendSpec Ast language)
     (source : Source) (stream : TokenStream) : Prop :=
   stream.source = source ∧ spec.lexes source stream ∧ stream.parserView.WF ∧
-  stream.trivia.size = stream.tokens.size + 1 ∧
   ∃ file, source.project.files[source.entryFile.index]? = some file ∧
-    (spec.reconstruct stream).data.toList = file.source.toBytes
+    ∃ bytes, reconstruct source.entryFile stream.tokens stream.trivia = some bytes ∧
+      bytes.data.toList = file.source.toBytes
 
-def Elaborates {Ast : Type} {language : CoreLanguage} (spec : FrontendSpec Ast language)
+private def earlyOperand : ConcreteSpec.Slice0.Atom → EarlyOperand
+  | .lit n => .literal (.int .u8 n)
+  | .var id => .copy id
+
+private def earlyExpression : ConcreteSpec.Slice0.Expr → EarlyExpr
+  | .atom atom => .read (earlyOperand atom)
+  | .add left right => .add .u8 (earlyOperand left) (earlyOperand right)
+
+private def earlyOrigin (entry : FnId) (site : SiteId) (kind : ConstructKind)
+    (ordinal : Nat) (span : ConcreteSpec.Surface0.Span) : SiteId × Origin :=
+  (site, ⟨site, ⟨span.fileId, span.start, span.stop, span.line, span.column⟩,
+    ⟨.function entry, ⟨[⟨kind, .ordinal ordinal⟩]⟩⟩⟩)
+
+/-- The standalone Slice 0 program has one internal function identity. -/
+def earlyEntry : FnId :=
+  ⟨⟨⟨⟨"standalone"⟩, ⟨⟨"0"⟩⟩⟩, [⟨"main"⟩], by decide⟩, ⟨"main"⟩⟩
+
+/-- Embed the existing Slice 0 elaboration in the integrated carrier. -/
+def earlyPayload {language : CoreLanguage} (early : EarlyCore language)
+    (out : Concrete.Elab.LocatedOutput) : Payload language :=
+  let entry := earlyEntry
+  let scalar : CTy := .int .u8
+  let ownership : AList ConcreteSpec.Var Own.Descriptor :=
+    out.bindings.map fun (bind, _) => (bind.x, ⟨scalar, true, false⟩)
+  let retSite : SiteId := ⟨out.bindings.length⟩
+  let body : Exec.Stmt (language.instrumented ownership) :=
+    out.bindings.foldr (fun (bind, _) rest =>
+      .seq (.bind bind.x (early.expressions.symm ▸ earlyExpression bind.e) ⟨bind.x.id⟩) rest)
+      (.ret (early.expressions.symm ▸ EarlyExpr.read (earlyOperand out.ret)) retSite)
+  let origins := out.bindings.map fun (bind, span) =>
+    earlyOrigin entry ⟨bind.x.id⟩ .binding bind.x.id span
+  ⟨ownership, ⟨[(entry, ⟨[], early.types.symm ▸ EarlyTy.scalar scalar, ⟨0⟩, body⟩)]⟩,
+    entry, origins ++ [earlyOrigin entry retSite .return 0 out.returnSpan], []⟩
+
+/-- The registered edge has a fixed elaboration judgment. A later surface
+fragment extends the judgment with its own repository-defined rule. -/
+def Elaboration {Ast : Type} {language : CoreLanguage} (ast : Parsed Ast)
+    (payload : Payload language) : Prop :=
+  ∃ surface : Ast = ConcreteSpec.Surface0.Program, ∃ early : EarlyCore language,
+    ∃ out,
+      Concrete.Elab.elaborateLocated (surface ▸ ast.tree) = .ok out ∧
+      payload = earlyPayload early out
+
+def Elaborates {Ast : Type} {language : CoreLanguage}
     (ast : Parsed Ast) (core : CoreInput language) : Prop :=
   core.project = ast.source.project ∧ core.slice = ast.source.slice ∧
-  core.WF ∧ spec.elaborates ast core.payload
+  core.WF ∧ Elaboration ast core.payload
 
 /-- The actual admission entry calls exactly the function supplied by ConcreteSpec. -/
 def check {language : CoreLanguage} (spec : Admission language) (core : CoreInput language) :
@@ -264,6 +306,7 @@ structure LogicalFrame (Value : Type) where
   fn : FnId
   live : List PlaceId
   values : AList PlaceId Value
+  movedFields : List (PlaceId × List FieldId) := []
 
 abbrev MemoryRegisters (language : CoreLanguage) (profile : Profile) :=
   MemoryState language.operands.Ty language.operands.Val language.operands.Event profile
@@ -330,11 +373,23 @@ def rangeAt (memory : Memory lang profile)
 def zeroRoot (memory : Memory lang profile) (frame : FnId) (root : PlaceId) : Bool :=
   (memory.layoutAt frame root).any (fun layout => layout.size == 0)
 
-def loadValue (memory : Memory lang profile)
+private def pathsOverlap (left right : List FieldId) : Bool :=
+  left.isPrefixOf right || right.isPrefixOf left
+
+def initializedAt (state : MemoryRegisters language profile) (root : PlaceId)
+    (path : List FieldId) : Bool :=
+  state.initialized.contains root &&
+    !(state.movedFields.any fun (owner, moved) => owner == root && pathsOverlap path moved)
+
+private def hasLoan (state : MemoryRegisters language profile) (root : PlaceId) : Bool :=
+  (AList.lookup state.addressIds root).any fun id =>
+    state.ownership.loans.any fun loan => loan.root == id
+
+private def loadBacking (memory : Memory lang profile)
     (state : MemoryRegisters language profile) {ty : language.operands.Ty}
     (place : MemoryPlace _ ty) : Option language.operands.Val := do
   if !(memory.validPlace state place) then none else
-  if !state.live.contains place.logical.root || !state.initialized.contains place.logical.root then none else
+  if !state.live.contains place.logical.root then none else
   match place.storage with
   | .virtual =>
     let root ← AList.lookup state.virtualValues place.logical.root
@@ -353,6 +408,12 @@ def loadValue (memory : Memory lang profile)
       | none =>
         let value ← language.decodeOther profile.memoryTarget ty bytes
         return language.valueShape.symm ▸ CoreValue.other value
+
+def loadValue (memory : Memory lang profile)
+    (state : MemoryRegisters language profile) {ty : language.operands.Ty}
+    (place : MemoryPlace _ ty) : Option language.operands.Val :=
+  if initializedAt state place.logical.root place.logical.path then memory.loadBacking state place
+  else none
 
 def byteRuns
     (target : Target) (ty : language.operands.Ty) (value : language.operands.Val) :
@@ -382,8 +443,14 @@ def writeValue (memory : Memory lang profile)
   let root := place.logical.root
   if !state.live.contains root then none else
   if !place.logical.path.isEmpty && !state.initialized.contains root then none else
-  let state := if state.initialized.contains root then state
-    else {state with initialized := root :: state.initialized}
+  let path := place.logical.path
+  if state.initialized.contains root && !initializedAt state root path &&
+      !(state.movedFields.contains (root, path)) then none else
+  let state := if path.isEmpty then
+      {state with
+        initialized := if state.initialized.contains root then state.initialized else root :: state.initialized
+        movedFields := state.movedFields.filter (fun (owner, _) => owner != root)}
+    else {state with movedFields := state.movedFields.erase (root, path)}
   match place.storage with
   | .virtual =>
     let stored ← if place.logical.path.isEmpty then some value else do
@@ -423,10 +490,11 @@ def readValue (memory : Memory lang profile)
       return (← memory.loadValue state place, state)
     else none
   | .move place => do
-    -- Projected moves require per-field initialization, supplied at their first consumer.
-    if !place.logical.path.isEmpty then none else
-    let value ← memory.loadValue state place
     let root := place.logical.root
+    if hasLoan state root then none else
+    let value ← memory.loadValue state place
+    if !place.logical.path.isEmpty then
+      return (value, {state with movedFields := (root, place.logical.path) :: state.movedFields})
     let moved := {state with
       initialized := state.initialized.erase root
       virtualValues := AList.erase state.virtualValues root
@@ -438,7 +506,8 @@ def Writes (memory : Memory lang profile)
     (place : MemoryPlace _ ty) (value : language.operands.Val)
     (next : MemoryRegisters language profile) : Prop :=
   (memory.validPlace state place = true ∧
-    (place.logical.root ∈ state.initialized → language.operands.isCopy ty = true)) ∧
+    (initializedAt state place.logical.root place.logical.path = true →
+      language.operands.isCopy ty = true)) ∧
   (place.storage = .materialized → ∃ layout,
     memory.layoutAt state.frame place.logical.root = some layout ∧
     (layout.size = 0 ↔ (AList.lookup state.materialized place.logical.root).isNone)) ∧
@@ -448,7 +517,7 @@ def Writes (memory : Memory lang profile)
 def Represents (memory : Memory lang profile)
     (logical : LogicalFrame language.operands.Val) (state : MemoryRegisters language profile)
     (ranges : AList Hybrid.Place (Option Hybrid.Range) := []) : Prop :=
-  state.BytesWF ∧ logical.fn = state.frame ∧ (∀ place ∈ logical.live, place ∈ state.live) ∧
+  (state.BytesWF ∧ logical.movedFields = state.movedFields) ∧ logical.fn = state.frame ∧ (∀ place ∈ logical.live, place ∈ state.live) ∧
   (List.map Prod.fst logical.values).Nodup ∧ (List.map Prod.fst state.materialized).Nodup ∧
   (List.map Prod.fst state.virtualValues).Nodup ∧
   (List.map Prod.fst state.zeroValues).Nodup ∧
@@ -469,8 +538,15 @@ def Represents (memory : Memory lang profile)
       memory.layoutAt state.frame place = some layout ∧
       (layout.size = 0 ↔ (AList.lookup state.materialized place).isNone)) ∧
     ∀ value, AList.lookup logical.values place = some value →
-      ∃ physical, language.representsValue profile.memoryTarget ranges ty value physical ∧
-        memory.StoresValue state (ty := ty) ⟨⟨place, []⟩, storage⟩ physical
+      if initializedAt state place [] then
+        ∃ physical, language.representsValue profile.memoryTarget ranges ty value physical ∧
+          memory.StoresValue state (ty := ty) ⟨⟨place, []⟩, storage⟩ physical
+      else
+        ∀ path fieldTy, initializedAt state place path = true →
+          path.foldlM language.fieldType ty = some fieldTy →
+          ∃ field physical, language.field value path = some field ∧
+            language.representsValue profile.memoryTarget ranges fieldTy field physical ∧
+            memory.StoresValue state (ty := fieldTy) ⟨⟨place, path⟩, storage⟩ physical
 
 end Memory
 
@@ -501,10 +577,36 @@ def Begins (memory : Memory lang profile) (state : MemoryRegisters language prof
       next = {live with bytes := bytes, materialized :=
         (place, ⟨⟨space, base, some block⟩, layout.size, layout.align⟩) :: state.materialized})))
 
+/-- Ignore moved subtrees when checking for live linear fields at lifetime end. -/
+private def canDiscard (language : CoreLanguage) :
+    Nat → language.operands.Ty → language.operands.Val → List (List FieldId) → Bool
+  | fuel, ty, value, moved =>
+    if moved.contains [] then true
+    else if moved.isEmpty then language.operands.isCopy ty
+    else match fuel with
+      | 0 => false
+      | n + 1 =>
+        (language.activeFields ty value).any fun fields =>
+          fields.all fun field =>
+            let below := moved.filterMap fun path =>
+              match path with
+              | first :: rest => if first == field then some rest else none
+              | [] => none
+            match language.fieldType ty field, language.field value [field] with
+            | some fieldTy, some fieldValue => canDiscard language n fieldTy fieldValue below
+            | _, _ => false
+
 def canEnd (memory : Memory lang profile) (state : MemoryRegisters language profile)
     (place : PlaceId) : Bool :=
   !state.initialized.contains place ||
-    (memory.rootType state.frame place).any language.operands.isCopy
+    (memory.rootType state.frame place).any fun ty =>
+      let moved := state.movedFields.filterMap fun (owner, path) =>
+        if owner == place then some path else none
+      if moved.isEmpty then language.operands.isCopy ty
+      else
+        (memory.classAt state.frame place).any fun storage =>
+          (memory.loadBacking state (ty := ty) ⟨⟨place, []⟩, storage⟩).any fun value =>
+            canDiscard language (moved.foldl (fun depth path => max depth path.length) 0) ty value moved
 
 def Ends (memory : Memory lang profile) (state : MemoryRegisters language profile)
     (place : PlaceId) (next : MemoryRegisters language profile) : Prop :=
@@ -515,7 +617,8 @@ def Ends (memory : Memory lang profile) (state : MemoryRegisters language profil
     zeroValues := AList.erase state.zeroValues place
     virtualValues := AList.erase state.virtualValues place
     materialized := AList.erase state.materialized place
-    addressIds := AList.erase state.addressIds place}
+    addressIds := AList.erase state.addressIds place
+    movedFields := state.movedFields.filter (fun (owner, _) => owner != place)}
   (memory.classAt state.frame place = some .virtual ∧ next = dead) ∨
   (memory.classAt state.frame place = some .materialized ∧
     ((∃ layout, memory.layoutAt state.frame place = some layout ∧ layout.size = 0 ∧ next = dead) ∨
@@ -558,7 +661,7 @@ def Call (memory : Memory lang profile) (callee : FnId)
     memory.graphAt callee = some graph ∧ graph.blocks.find? (·.id == graph.entry) = some entry ∧
     args.map Sigma.fst = entry.params.map Sigma.fst ∧
     memory.WriteParams entry.params values
-      { toMemoryFrame := ⟨callee, graph.entry, 0, [], [], [], [], [], []⟩
+      { toMemoryFrame := ⟨callee, graph.entry, 0, [], [], [], [], [], [], []⟩
         bytes := afterRead.bytes
         ownership := afterRead.ownership
         nextAddressId := afterRead.nextAddressId
@@ -628,7 +731,7 @@ def resolveAddress (memory : Memory lang profile)
     Option (OperationAddress language.operands.Ty) := do
   let place := operand.2
   if !memory.validPlace state place || !state.live.contains place.logical.root ||
-      !state.initialized.contains place.logical.root then none else
+      !initializedAt state place.logical.root place.logical.path then none else
   let provenance ← AList.lookup state.addressIds place.logical.root
   if logical then
     return ⟨operand.1, place.logical.root, place.logical.path, none, provenance, .logical⟩
@@ -741,7 +844,7 @@ def Initial (memory : Memory lang profile) (state : MemoryRegisters language pro
   state.instruction = 0 ∧ state.virtualValues = [] ∧
   state.materialized = [] ∧ state.live = [] ∧ state.initialized = [] ∧ state.zeroValues = [] ∧
   state.bytes = Mem.Memory.empty ∧ state.effects = [] ∧ state.ownership = {} ∧
-  state.addressIds = [] ∧ state.nextAddressId = 0
+  state.addressIds = [] ∧ state.nextAddressId = 0 ∧ state.movedFields = []
 
 end Memory
 
@@ -879,7 +982,7 @@ private def entryStateFor (memory : Memory lang profile) (arity : Nat := 0) :
   let block := graph.bind (·.blocks.find? (·.id == id))
   let pc := (block.map fun block =>
     if block.params.length = arity then 0 else block.body.length + 1).getD 0
-  ⟨⟨memory.entry, id, pc, [], [], [], [], [], []⟩, Mem.Memory.empty, [], [], {}, 0⟩
+  ⟨⟨memory.entry, id, pc, [], [], [], [], [], [], []⟩, Mem.Memory.empty, [], [], {}, 0⟩
 
 private def hostedResultFor (memory : Memory lang profile) (state : MemoryRegisters language profile) :
     Option Concrete.Contracts.Observation := do
@@ -1006,7 +1109,7 @@ def LowersUnchecked
 def Memory.RepresentsActivation (memory : Memory lang profile)
     (logical physical : MemoryFrame language.operands.Val) (bytes : Mem.Memory)
     (ranges : AList Hybrid.Place (Option Hybrid.Range) := []) : Prop :=
-  memory.Represents ⟨logical.frame, logical.live, logical.virtualValues⟩
+  memory.Represents ⟨logical.frame, logical.live, logical.virtualValues, logical.movedFields⟩
     ⟨physical, bytes, [], [], {}, 0⟩ ranges
 
 def MemoryFrame.backingRanges (frame : MemoryFrame language.operands.Val) :

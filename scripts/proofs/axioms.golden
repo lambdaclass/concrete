@@ -4291,6 +4291,9 @@ ConcreteSpec.StageInterface.Payload.mk.sizeOf_spec	propext
 ConcreteSpec.StageInterface.ResourceRefusal.mk.inj	
 ConcreteSpec.StageInterface.ResourceRefusal.mk.injEq	propext
 ConcreteSpec.StageInterface.ResourceRefusal.mk.sizeOf_spec	
+ConcreteSpec.StageInterface.RetainedToken.mk.inj	propext
+ConcreteSpec.StageInterface.RetainedToken.mk.injEq	propext
+ConcreteSpec.StageInterface.RetainedToken.mk.sizeOf_spec	propext
 ConcreteSpec.StageInterface.SafetyCondition.mk.inj	
 ConcreteSpec.StageInterface.SafetyCondition.mk.injEq	propext
 ConcreteSpec.StageInterface.SafetyCondition.mk.sizeOf_spec	

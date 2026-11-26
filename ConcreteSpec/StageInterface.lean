@@ -44,7 +44,7 @@ def Terminal.HasPayload : Terminal → Bool
   | .ident | .integer | .stringLiteral | .byteLiteral | .label => true
   | _ => false
 
-/-- The raw spelling lives in the span. These are the decoded values used by actions. -/
+/-- The decoded values used by grammar actions. -/
 inductive TokenValue where
   | fixed (kind : Terminal) (plain : Terminal.HasPayload kind = false)
   | name (text : String)
@@ -62,20 +62,44 @@ def TokenValue.kind : TokenValue → Terminal
   | .byteLiteral _ => .byteLiteral
   | .label _ => .label
 
+abbrev RawPiece := Located ByteArray
+
+structure RetainedToken where
+  decoded : Located TokenValue
+  spelling : ByteArray
+
 structure TokenStream where
   source : Source
-  tokens : Array (Located TokenValue)
+  tokens : Array RetainedToken
   /-- Trivia preceding each token, followed by the EOF trivia. -/
-  trivia : Array (Array FileSpan)
+  trivia : Array (Array RawPiece)
+
+/-- Reconstruct from retained pieces only. Each piece must begin at the
+current byte offset and cover exactly the bytes it retains. -/
+def reconstruct (entry : FileId) (tokens : Array RetainedToken)
+    (trivia : Array (Array RawPiece)) : Option ByteArray := do
+  if trivia.size != tokens.size + 1 then none else
+  let append := fun ((bytes, position) : ByteArray × Position) (piece : RawPiece) =>
+    if piece.span.file == entry && piece.span.startOffset == position.byte &&
+        piece.span.endOffset == position.byte + piece.value.size && piece.value.size > 0 &&
+        piece.span.line == position.line && piece.span.col == position.column then
+      some (bytes ++ piece.value, piece.value.data.foldl
+        (fun pos byte => pos.advanceByte byte.toNat) position)
+    else none
+  let state ← (List.range tokens.size).foldlM (fun state index => do
+    let before ← trivia[index]?
+    let state ← before.foldlM append state
+    let token ← tokens[index]?
+    append state ⟨token.decoded.span, token.spelling⟩) (ByteArray.empty, {})
+  let trailing ← trivia[tokens.size]?
+  return (← trailing.foldlM append state).1
 
 structure ParserView where
   source : Source
   tokens : Array (Located TokenValue)
 
 private def sourcePositions (source : SourceText) : Array (Nat × Nat) :=
-  (source.bytes.foldl (fun (positions, line, column) byte =>
-    let next := if byte == 10 then (line + 1, 1) else (line, column + 1)
-    (positions.push next, next)) (#[ (1, 1) ], 1, 1)).1
+  ((source.bytes.scanl Position.advanceByte {}).map fun pos => (pos.line, pos.column)).toArray
 
 /-- Validate source coordinates before grammar execution. Build an indexed position
 table in one pass over the project bytes, including the boundary at EOF. -/
@@ -95,7 +119,7 @@ def ParserView.WF (input : ParserView) : Prop :=
   input.invalidSpan = none
 
 def TokenStream.parserView (stream : TokenStream) : ParserView :=
-  ⟨stream.source, stream.tokens⟩
+  ⟨stream.source, (stream.tokens.toList.map RetainedToken.decoded).toArray⟩
 
 /-- AST is the result of the selected typed start action of the shared grammar.
 Later slices supply larger action families through the same handoff. -/

@@ -55,16 +55,23 @@ def Passes.parserEntry (passes : Passes grammar language lang profile)
     Refuses grammar stream.parserView failure ∧
     (passes.parser.run stream.parserView).1 ≤ passes.parser.bound stream.parserView
 
-def Passes.elaborator (passes : Passes grammar language lang profile) (spec : FrontendSpec (grammar.value grammar.start) language)
-    (admission : Admission language) (inv : FrontendInvariants (grammar.value grammar.start) language) :
-    Stage (Parsed (grammar.value grammar.start)) ElabRefusal (CoreInput language) where
-  run := passes.elaborate
+def elaborationEntry {Ast : Type}
+    (run : Parsed Ast → Except ElabRefusal (CoreInput language))
+    (spec : FrontendSpec Ast language) (admission : Admission language)
+    (inv : FrontendInvariants Ast language) : Stage (Parsed Ast) ElabRefusal (CoreInput language) where
+  run := run
   kind := .directProof
   inputInvariant := inv.ast
   outputInvariant input := input.WF ∧ admission.fragment input.slice input.payload ∧
     inv.conformance input
-  success := Elaborates spec
+  success := Elaborates
   refusal := spec.elabRefusal
+
+def Passes.elaborator (passes : Passes grammar language lang profile)
+    (spec : FrontendSpec (grammar.value grammar.start) language)
+    (admission : Admission language) (inv : FrontendInvariants (grammar.value grammar.start) language) :
+    Stage (Parsed (grammar.value grammar.start)) ElabRefusal (CoreInput language) :=
+  elaborationEntry passes.elaborate spec admission inv
 
 def Admitted.Valid (admission : Admission language) (admitted : Admitted language) : Prop :=
   admitted.core.WF ∧ admission.fragment admitted.core.slice admitted.core.payload ∧

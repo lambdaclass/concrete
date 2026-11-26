@@ -1,4 +1,6 @@
 import Concrete.Interfaces.Pipeline
+import Concrete.Lex
+import Concrete.Parse
 import ConcreteSpecEvidence.ExecExamples
 
 open Concrete
@@ -329,8 +331,8 @@ private def testPasses {profile : Profile} (parser : Parser grammar) (checks : L
   emitLCB _ := .ok testOutput
 
 private def testFrontend : FrontendSpec Bool testLanguage :=
-  ⟨fun _ _ => True, fun _ => ByteArray.empty, fun _ _ _ => False, fun _ _ => False,
-    fun _ _ => True, fun _ _ => False⟩
+  ⟨fun _ _ => True, fun _ _ _ => False, fun _ _ => False,
+    fun _ _ => False⟩
 
 private def testInvariants : FrontendInvariants Bool testLanguage :=
   ⟨fun _ => True, fun _ => True, fun _ => True⟩
@@ -355,7 +357,7 @@ private abbrev r {profile : Profile} (m : LoweringModels testLanguage testLoweri
 
 private def tokenStream (radix : Surface0.Radix)
     (slice : Slice := early) : TokenStream :=
-  ⟨⟨tabProject, ⟨0⟩, slice⟩, #[⟨span, .integer 42 radix none⟩], #[#[], #[]]⟩
+  ⟨⟨tabProject, ⟨0⟩, slice⟩, #[⟨⟨span, .integer 42 radix none⟩, "a".toUTF8⟩], #[#[], #[]]⟩
 
 private def testParser (verifier : TableVerifier grammar) (size : proposal.size = verifier.words)
     (accept : (verifier.run proposal).2 = some true) (stepsPerToken : Nat := 4) : Parser grammar :=
@@ -369,12 +371,37 @@ local notation "parser" => testParser verifier size accept
 
 -- The parser sees all decoded payloads without consulting the raw source.
 example (source : Source) :
-    let view := TokenStream.parserView ⟨source, #[⟨span, .stringLiteral [65, 0]⟩,
-      ⟨span, .byteLiteral 255⟩, ⟨span, .label ⟨"next"⟩⟩], #[#[], #[], #[], #[]]⟩
+    let view := TokenStream.parserView ⟨source, #[⟨⟨span, .stringLiteral [65, 0]⟩, ByteArray.empty⟩,
+      ⟨⟨span, .byteLiteral 255⟩, ByteArray.empty⟩,
+      ⟨⟨span, .label ⟨"next"⟩⟩, ByteArray.empty⟩], #[#[], #[], #[], #[]]⟩
     view.tokens[0]?.map Located.value = some (.stringLiteral [65, 0]) ∧
       view.tokens[1]?.map Located.value = some (.byteLiteral 255) ∧
       view.tokens[2]?.map Located.value = some (.label ⟨"next"⟩) :=
   ⟨rfl, rfl, rfl⟩
+
+private def spacedStream : TokenStream :=
+  let source : Source := ⟨Project.singleton mainSourcePath (SourceText.ofBytes [52, 50, 32, 13, 10]), ⟨0⟩, early⟩
+  ⟨source, #[⟨⟨{span with endOffset := 2}, .integer 42 .decimal none⟩, "42".toUTF8⟩],
+    #[#[], #[⟨{span with startOffset := 2, endOffset := 5, col := 3}, " \r\n".toUTF8⟩]]⟩
+
+-- The mutant retains the same token and the same number of trivia groups.
+-- Only reconstruction of the retained pieces can distinguish it.
+example :
+    let dropped := {spacedStream with trivia := #[#[], #[]]}
+    let mutant := ({testPasses (profile := testProfile) parser [] with
+      lex := fun _ => .ok dropped}).lexer testFrontend testInvariants
+    dropped.parserView = spacedStream.parserView ∧
+    mutant.success spacedStream.source spacedStream ∧
+    ¬ mutant.Validated := by
+  refine ⟨rfl, ⟨rfl, trivial, rfl, _, rfl, _, rfl, rfl⟩, ?_⟩
+  intro validated
+  obtain ⟨_, _, _, file, lookup, bytes, rebuilt, exactBytes⟩ :=
+    (validated.1 spacedStream.source _ trivial rfl).2
+  have short : some "42".toUTF8 = some bytes := rebuilt
+  cases Option.some.inj short
+  have found : some (File.load mainSourcePath (SourceText.ofBytes [52, 50, 32, 13, 10])) = some file := lookup
+  obtain rfl := Option.some.inj found
+  exact (show ¬ ([52, 50] : List UInt8) = [52, 50, 32, 13, 10] by decide) exactBytes
 
 -- A fabricated AST from the registered parser's success channel fails the exact run check.
 example (m : LoweringModels testLanguage testLowering testProfile) :
@@ -422,8 +449,174 @@ example (m : LoweringModels testLanguage testLowering testProfile) :
     ⟨(tokenStream .decimal).source, true⟩ rfl rfl
   exact (show ¬ 5 ≤ 4 from by decide) h.2.2.2
 
+private def elaborationSourceText := "fn main() -> u8 { return 42; }"
+
+private def elaborationSource : Source :=
+  ⟨Project.singleton mainSourcePath (SourceText.ofBytes elaborationSourceText.toUTF8.data.toList),
+    ⟨0⟩, early⟩
+
+private def entryNameSpan : Surface0.Span := ⟨3, 7, 1, 4, ⟨0⟩⟩
+private def resultSpan : Surface0.Span := ⟨25, 27, 1, 26, ⟨0⟩⟩
+
+private def parsedReturn : Parsed Surface0.Program :=
+  ⟨elaborationSource, ⟨"main", entryNameSpan,
+    [.ret (.integer 42 none resultSpan) ⟨18, 28, 1, 19, ⟨0⟩⟩]⟩⟩
+
+private abbrev earlyFixtureLanguage : CoreLanguage where
+  operands := {
+    Val := EarlyValue
+    Ty := EarlyTy
+    Expr := EarlyExpr
+    Prim := EarlyPrim
+    Event := Empty
+    Store := Hybrid.State
+    unitVal := .scalar .unit
+    unitTy := .scalar .unit
+    isCopy := fun ty => match ty with | .scalar _ => true | .nominal _ => false
+    eval := fun _ store expr => match expr with
+      | .read (.literal value) => .ok (.scalar value, store)
+      | _ => .stuck
+    life := fun _ store => some store
+    test := fun _ => none
+    allows := fun _ _ _ _ => false }
+  hybridStore := rfl
+  Declaration := EarlyDeclaration
+  expressionOperator := fun _ => .read
+  primitiveOperator := fun _ => .named ⟨"destructureEmpty"⟩
+  argumentRead := fun _ => none
+  argumentReadNoTrap := by simp
+  OtherValue := DeclId
+  valueShape := rfl
+  layout := fun _ _ => none
+  scalarType := fun _ => none
+  literal := fun _ _ => none
+  typeDecidableEq := inferInstance
+  fieldType := fun _ _ => none
+  activeFields := fun _ _ => none
+  operation := fun _ _ _ _ _ _ _ _ _ _ => False
+  checkTrap := fun _ _ _ => false
+  field := fun _ _ => none
+  replaceField := fun _ _ _ => none
+  fieldRange := fun _ _ _ => none
+  encodeOther := fun _ _ _ => none
+  decodeOther := fun _ _ _ => none
+  safety := fun _ => []
+  permit := fun _ _ _ own => some own
+
+private theorem fixtureEarly : EarlyCore earlyFixtureLanguage := ⟨rfl, rfl, rfl, rfl, rfl⟩
+
+private def returnPayload (n : Nat) : Payload earlyFixtureLanguage :=
+  earlyPayload fixtureEarly ⟨[], .lit n, resultSpan⟩
+
+private def elaboratedReturn (n : Nat) : CoreInput earlyFixtureLanguage :=
+  ⟨elaborationSource.project, early, returnPayload n⟩
+
+private def fixtureElaborate (ast : Parsed Surface0.Program) :
+    Except ElabRefusal (CoreInput earlyFixtureLanguage) :=
+  ((Concrete.Elab.elaborateLocated ast.tree).map fun out =>
+    ⟨ast.source.project, ast.source.slice, earlyPayload fixtureEarly out⟩).mapError
+      fun _ => ⟨rule, span, []⟩
+
+private abbrev returnEdge
+    (run : Parsed Surface0.Program → Except ElabRefusal (CoreInput earlyFixtureLanguage)) :=
+  elaborationEntry run
+    ⟨fun _ _ => False, fun _ _ _ => False, fun _ _ => False, fun _ _ => False⟩
+    ⟨fun _ _ => True, fun _ => True, fun _ => True, fun _ _ => False,
+      fun _ => .error ⟨rule, span, [], none⟩⟩
+    ⟨fun _ => True, fun _ => True, fun _ => True⟩
+
+set_option maxRecDepth 2048 in
+private theorem returnedCoreWF (n : Nat) : (elaboratedReturn n).WF := by
+  let core := elaboratedReturn n
+  let origin : SiteId × Origin := ⟨⟨0⟩, ⟨⟨0⟩, ⟨⟨0⟩, 25, 27, 1, 26⟩,
+    ⟨.function earlyEntry, ⟨[⟨.return, .ordinal 0⟩]⟩⟩⟩⟩
+  refine ⟨⟨by change [SiteId.mk 0].Nodup; simp, by change [SiteId.mk 0].Nodup; simp,
+    by change [origin.2.evidenceKey].Nodup; simp, ?_, ?_, ?_⟩, ?_⟩
+  · intro site op member
+    change (site, op) ∈ [(⟨0⟩, .expression (.read (.literal (.int .u8 n))))] at member
+    cases List.mem_singleton.mp member
+    exact ⟨origin.2, rfl⟩
+  · intro state events kind site reached trapped
+    let start := core.payload.initial
+    let next (q : Exec.Config core.payload.machine) :=
+      match Exec.step core.payload.body q with
+      | some (.next result) => result
+      | _ => q
+    let returned := next start
+    let unscoped := next returned
+    let finished := next unscoped
+    have peel (current successor : Exec.Config core.payload.machine)
+        (dispatch : Exec.step core.payload.body current = some (.next successor))
+        (nontrap : current.final? ≠ some (.trapped kind site)) :
+        ∀ trace, Exec.Steps core.payload.body current trace state →
+          ∃ rest, Exec.Steps core.payload.body successor rest state := by
+      intro trace path
+      cases path with
+      | refl => exact (nontrap trapped).elim
+      | step tick rest =>
+        cases tick with
+        | silent tick =>
+          rw [dispatch] at tick
+          cases Option.some.inj tick
+          exact ⟨_, rest⟩
+        | prim tick _ _ => rw [dispatch] at tick; contradiction
+    obtain ⟨_, reached⟩ := peel start returned (by with_unfolding_all rfl)
+      (by with_unfolding_all exact nofun) _ reached
+    obtain ⟨_, reached⟩ := peel returned unscoped (by with_unfolding_all rfl)
+      (by with_unfolding_all exact nofun) _ reached
+    obtain ⟨_, reached⟩ := peel unscoped finished (by with_unfolding_all rfl)
+      (by with_unfolding_all exact nofun) _ reached
+    have blocked (current final : Exec.Config core.payload.machine)
+        (stopped : Exec.step core.payload.body current = none)
+        (nontrap : current.final? ≠ some (.trapped kind site))
+        (trace : List core.payload.machine.Event)
+        (path : Exec.Steps core.payload.body current trace final) :
+        final.final? ≠ some (.trapped kind site) := by
+      cases path with
+      | refl => exact nontrap
+      | step tick _ =>
+        cases tick with
+        | silent tick => rw [stopped] at tick; contradiction
+        | prim tick _ _ => rw [stopped] at tick; contradiction
+    exact (blocked finished state (by with_unfolding_all rfl)
+      (by with_unfolding_all exact nofun) _ reached trapped).elim
+  · intro site found member
+    change (site, found) ∈ [origin] at member
+    have same := List.mem_singleton.mp member
+    obtain rfl := congrArg Prod.fst same
+    obtain rfl := congrArg Prod.snd same
+    let specSpan : ConcreteSpec.Core.Span := ⟨⟨0⟩, 25, 27, by decide, 1, 26, by decide, by decide⟩
+    exact ⟨rfl, specSpan, _, rfl, rfl, by decide, rfl, rfl, rfl, rfl⟩
+  · intro site op member
+    change (site, op) ∈ [(⟨0⟩, .expression (.read (.literal (.int .u8 n))))] at member
+    cases List.mem_singleton.mp member
+    trivial
+
+-- The existing lexer and parser reach this AST, and the registered elaboration
+-- contract binds the exact return expression and its provenance to that AST.
+set_option maxRecDepth 2048 in
+example :
+    ((Concrete.Lex.lex elaborationSourceText.toUTF8).bind Concrete.Parse.parse) = .ok parsedReturn.tree ∧
+    (returnEdge fixtureElaborate).run parsedReturn = .ok (elaboratedReturn 42) ∧
+    (returnEdge fixtureElaborate).success parsedReturn (elaboratedReturn 42) ∧
+    (returnEdge (fun _ => .ok (elaboratedReturn 43))).outputInvariant (elaboratedReturn 43) ∧
+    ¬ (returnEdge (fun _ => .ok (elaboratedReturn 43))).Validated := by
+  refine ⟨rfl, rfl, ⟨rfl, rfl, returnedCoreWF 42, rfl, fixtureEarly, _, rfl, rfl⟩,
+    ⟨returnedCoreWF 43, trivial, trivial⟩, ?_⟩
+  intro validated
+  obtain ⟨_, _, _, matching⟩ := (validated.1 parsedReturn _ trivial rfl).2
+  obtain ⟨surface, earlyShape, out, elaborated, payload⟩ := matching
+  have expected : Concrete.Elab.elaborateLocated parsedReturn.tree =
+      .ok ⟨[], .lit 42, resultSpan⟩ := rfl
+  rw [expected] at elaborated
+  cases Except.ok.inj elaborated
+  have returns := congrArg Payload.operations payload
+  change [(SiteId.mk 0, CoreOperation.expression (O := earlyFixtureLanguage.operands) (.read (.literal (.int .u8 43))))] =
+    [(SiteId.mk 0, CoreOperation.expression (O := earlyFixtureLanguage.operands) (.read (.literal (.int .u8 42))))] at returns
+  cases returns
+
 private def corruptTokenStream (location : FileSpan) : TokenStream :=
-  {tokenStream .decimal with tokens := #[⟨location, .integer 42 .decimal none⟩]}
+  {tokenStream .decimal with tokens := #[⟨⟨location, .integer 42 .decimal none⟩, "a".toUTF8⟩]}
 
 -- Valid and corrupt streams have the same grammar projection. The registered
 -- parser rejects both a fabricated file and an out-of-bounds byte range.
@@ -741,7 +934,7 @@ private def storingMemory (project : Project) : Memory testLowering testProfile 
     [(Exec.Demo.mainF, [(storeRoot, ⟨1, 1⟩)])], [(Exec.Demo.mainF, [(storeRoot, .materialized)])]⟩
 
 private def storeInitial : MemoryRegisters testLanguage testProfile :=
-  ⟨⟨Exec.Demo.mainF, ⟨0⟩, 0, [], [], [], [], [], []⟩, Mem.Memory.empty, [], [], {}, 0⟩
+  ⟨⟨Exec.Demo.mainF, ⟨0⟩, 0, [], [], [], [], [], [], []⟩, Mem.Memory.empty, [], [], {}, 0⟩
 
 private def storeBlock : Mem.Block :=
   ⟨⟨0⟩, 1, 1, 1, true, false, [.uninit]⟩
@@ -1557,14 +1750,14 @@ example (project : Project) (m : LoweringModels residualLanguage testLowering te
           List.mem_singleton_self _, List.mem_singleton_self _, rfl, noEscape⟩
     · refine ⟨⟨fun _ _ => ?_, fun _ _ => ?_⟩,
         fun _ _ _ h => h.elim, fun _ next _ step => (residualStops project next step).elim, ?_⟩
-      · exact ⟨rfl, rfl, ⟨_, rfl, rfl⟩, ⟨_, rfl, rfl⟩, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+      · exact ⟨rfl, rfl, ⟨_, rfl, rfl⟩, ⟨_, rfl, rfl⟩, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
       · with_unfolding_all rfl
       · intro _ _ _
         with_unfolding_all exact ⟨fun h => congrArg some h.symm, fun h => (Option.some.inj h).symm⟩
     · refine ⟨⟨fun _ _ => ?_, fun _ _ => ?_⟩,
         fun _ _ _ h => h.elim, fun _ next _ step => (residualLogicalStops project next step).elim, ?_⟩
       · with_unfolding_all
-          exact ⟨rfl, rfl, ⟨_, rfl, rfl⟩, ⟨_, rfl, rfl⟩, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+          exact ⟨rfl, rfl, ⟨_, rfl, rfl⟩, ⟨_, rfl, rfl⟩, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
       · with_unfolding_all rfl
       · intro _ _ _
         with_unfolding_all exact ⟨fun h => congrArg some h.symm, fun h => (Option.some.inj h).symm⟩
@@ -1581,8 +1774,8 @@ example (project : Project) (m : LoweringModels residualLanguage testLowering te
         refine ⟨?_, rfl, nofun, ⟨rfl, nofun⟩, List.nodup_nil, rfl, rfl⟩
         change (residualMemory project [runtimeCheck]).RepresentsActivation
           (language := residualLanguage) storeInitial.toMemoryFrame storeInitial.toMemoryFrame Mem.Memory.empty
-        exact ⟨⟨⟨nofun, by decide, nofun, nofun, nofun, nofun, nofun, nofun⟩,
-          by decide, by decide, nofun⟩, rfl, nofun, by decide, by decide, by decide, by decide,
+        exact ⟨⟨⟨⟨nofun, by decide, nofun, nofun, nofun, nofun, nofun, nofun⟩,
+          by decide, by decide, nofun⟩, rfl⟩, rfl, nofun, by decide, by decide, by decide, by decide,
           nofun, (fun _ => ⟨nofun, nofun⟩), nofun, nofun, nofun, nofun⟩
   · intro lowers
     have exactTarget := lowers.2.2.2.2.2.2.1.2.2.2 () (residualObserved project)
@@ -2428,6 +2621,155 @@ private abbrev twoFieldLanguage : CoreLanguage :=
       if path = [splitField] then some (.scalar (.int .u8 17))
       else if path = [secondSplitField] then some (.scalar (.int .u8 25)) else none}
 
+private def partialRead (path : List FieldId) : Read Unit testLowering.literal () :=
+  .move ⟨storeRoot, path⟩
+
+private def partialMIR (sibling : List FieldId) : MIR testLowering testProfile :=
+  let body : List (MIRInst testLowering) :=
+    [.bind (ty := ()) ⟨storeRoot, []⟩ (.literal ⟨[]⟩),
+      .bind ⟨⟨1⟩, []⟩ (partialRead [splitField]),
+      .bind ⟨⟨2⟩, []⟩ (partialRead sibling),
+      .endLifetime storeRoot,
+      .op (opcode := .named ⟨"sumFields"⟩) (types := [(), ()]) (ty := ()) ⟨⟨3⟩, []⟩ ()
+        (.cons (.move ⟨⟨1⟩, []⟩) (.cons (.move ⟨⟨2⟩, []⟩) .nil)) []]
+  ⟨tabProject, Exec.Demo.mainF, [(Exec.Demo.mainF, ⟨[], some ()⟩)],
+    [(Exec.Demo.mainF, [(storeRoot, ()), (⟨1⟩, ()), (⟨2⟩, ()), (⟨3⟩, ())],
+      ⟨⟨0⟩, #[⟨⟨0⟩, [], body.map (LocatedOp.mk testOrigin),
+        .ret (some ⟨(), .move ⟨⟨3⟩, []⟩⟩), []⟩]⟩)]⟩
+
+private def firstMoved : MemoryRegisters twoFieldLanguage testProfile :=
+  {erasureBound with
+    instruction := 2
+    live := [⟨1⟩, storeRoot]
+    initialized := [⟨1⟩, storeRoot]
+    movedFields := [(storeRoot, [splitField])]
+    virtualValues := [(⟨1⟩, .scalar (.int .u8 17)), (storeRoot, .other ())]}
+
+private def bothMoved : MemoryRegisters twoFieldLanguage testProfile :=
+  {firstMoved with
+    instruction := 3
+    live := ⟨2⟩ :: firstMoved.live
+    initialized := ⟨2⟩ :: firstMoved.initialized
+    movedFields := (storeRoot, [secondSplitField]) :: firstMoved.movedFields
+    virtualValues := (⟨2⟩, .scalar (.int .u8 25)) :: firstMoved.virtualValues}
+
+-- Starting at entry, each linear field moves once. The remaining sibling is
+-- usable, and the aggregate can end only when both linear fields are gone.
+set_option maxRecDepth 4096 in
+set_option maxHeartbeats 1000000 in
+example :
+    let program := partialMIR [secondSplitField]
+    (program.logicalView (language := twoFieldLanguage)).Initial storeInitial ∧
+    Concrete.Contracts.Steps (program.Step (language := twoFieldLanguage)) storeInitial bothMoved ∧
+    (program.logicalView (language := twoFieldLanguage)).canEnd firstMoved storeRoot = false ∧
+    (program.logicalView (language := twoFieldLanguage)).canEnd bothMoved storeRoot = true ∧
+    (∀ next, ¬ (partialMIR [splitField]).Step (language := twoFieldLanguage) firstMoved next) ∧
+    (∀ next, ¬ (partialMIR []).Step (language := twoFieldLanguage) firstMoved next) := by
+  refine ⟨?_, ?_, rfl, rfl, ?_, ?_⟩
+  · with_unfolding_all
+      exact ⟨rfl, rfl, ⟨_, rfl, rfl⟩, ⟨_, rfl, rfl⟩,
+        rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  · refine .cons (b := erasureBound) ?_ (.cons (b := firstMoved) ?_ (.cons ?_ (.nil _)))
+    · with_unfolding_all
+        refine ⟨rfl, .other (), storeInitial, {erasureBound with instruction := 0}, rfl, ?_, rfl⟩
+      rw [ite_eq_left (show (true || false) = true from rfl)]
+      with_unfolding_all apply Memory.WriteParams.cons (language := twoFieldLanguage) (started := {storeInitial with live := [storeRoot]})
+      · with_unfolding_all exact ⟨nofun, Or.inl ⟨rfl, rfl⟩⟩
+      · with_unfolding_all exact ⟨⟨rfl, nofun⟩, nofun, rfl, rfl, nofun⟩
+      · exact .nil _
+    · let afterRead : MemoryRegisters twoFieldLanguage testProfile :=
+        {erasureBound with movedFields := firstMoved.movedFields}
+      with_unfolding_all
+        refine ⟨rfl, .scalar (.int .u8 17), afterRead, {firstMoved with instruction := 1}, rfl, ?_, rfl⟩
+      rw [ite_eq_left (show (true || false) = true from rfl)]
+      with_unfolding_all apply Memory.WriteParams.cons (language := twoFieldLanguage) (started := {afterRead with live := firstMoved.live})
+      · with_unfolding_all exact ⟨nofun, Or.inl ⟨rfl, rfl⟩⟩
+      · with_unfolding_all exact ⟨⟨rfl, nofun⟩, nofun, rfl, rfl, nofun⟩
+      · exact .nil _
+    · let afterRead : MemoryRegisters twoFieldLanguage testProfile :=
+        {firstMoved with movedFields := bothMoved.movedFields}
+      with_unfolding_all
+        refine ⟨rfl, .scalar (.int .u8 25), afterRead, {bothMoved with instruction := 2}, rfl, ?_, rfl⟩
+      rw [ite_eq_left (show (true || false) = true from rfl)]
+      with_unfolding_all apply Memory.WriteParams.cons (language := twoFieldLanguage) (started := {afterRead with live := bothMoved.live})
+      · with_unfolding_all exact ⟨nofun, Or.inl ⟨rfl, rfl⟩⟩
+      · with_unfolding_all exact ⟨⟨rfl, nofun⟩, nofun, rfl, rfl, nofun⟩
+      · exact .nil _
+  · intro next tick
+    obtain ⟨_, _, _, _, read, _, _⟩ := tick
+    with_unfolding_all contradiction
+  · intro next tick
+    obtain ⟨_, _, _, _, read, _, _⟩ := tick
+    with_unfolding_all contradiction
+
+private abbrev physicalFieldLanguage : CoreLanguage :=
+  {linearProjectedLanguage with
+    fieldRange := fun _ path _ =>
+      if path = [splitField] then some (0, ⟨1, 1⟩)
+      else if path = [secondSplitField] then some (1, ⟨1, 1⟩)
+      else none}
+
+private def physicalFields : MemoryRegisters physicalFieldLanguage testProfile :=
+  {storeInitial with
+    live := [storeRoot]
+    initialized := [storeRoot]
+    materialized := [(storeRoot, {storeRange with extent := 2})]
+    bytes := ⟨[(⟨0⟩, {storeBlock with size := 2, bytes := [.init 17 none, .init 25 none]})], 1⟩}
+
+private def physicalFieldLoads : List (LocatedOp (SSAInst testLowering)) :=
+  [SSAInst.load (ty := ()) ⟨0⟩ ⟨storeRoot, [splitField]⟩,
+    SSAInst.load (ty := ()) ⟨1⟩ ⟨storeRoot, [secondSplitField]⟩].map (LocatedOp.mk testOrigin)
+
+private def physicalFieldSSA : SSA testLowering testProfile :=
+  ⟨tabProject, Exec.Demo.mainF, [],
+    [(Exec.Demo.mainF, [(storeRoot, ())], ⟨⟨0⟩, #[⟨⟨0⟩, [],
+      physicalFieldLoads, .ret none, []⟩]⟩)],
+    [(Exec.Demo.mainF, [(storeRoot, ⟨2, 1⟩)])]⟩
+
+private def physicalFieldBIR : BIR testLowering testProfile :=
+  ⟨tabProject, Exec.Demo.mainF, [],
+    [(Exec.Demo.mainF, [(storeRoot, ())], ⟨⟨0⟩, #[⟨⟨0⟩, [], physicalFieldLoads, .ret none, []⟩]⟩)],
+    physicalFieldSSA.layouts, #[]⟩
+
+-- Both register stages consume a projected linear load through the shared
+-- byte interpreter. The sibling remains readable from its separate range.
+set_option maxRecDepth 4096 in
+example :
+    let memory := physicalFieldBIR.memoryView (language := physicalFieldLanguage)
+    let first : MemoryRegisters physicalFieldLanguage testProfile :=
+      {physicalFields with movedFields := [(storeRoot, [splitField])]}
+    memory.readValue physicalFields (.move (ty := ()) ⟨⟨storeRoot, [splitField]⟩, .materialized⟩) =
+      some (.scalar (.int .u8 17), first) ∧
+    memory.readValue first (.move (ty := ()) ⟨⟨storeRoot, [splitField]⟩, .materialized⟩) = none ∧
+    memory.readValue first (.move (ty := ()) ⟨⟨storeRoot, [secondSplitField]⟩, .materialized⟩) =
+      some (.scalar (.int .u8 25), {first with
+        movedFields := (storeRoot, [secondSplitField]) :: first.movedFields}) ∧
+    ∃ next,
+      (SSA.Execution (language := physicalFieldLanguage)).step physicalFieldSSA physicalFields next ∧
+      (BIR.Execution (language := physicalFieldLanguage)).step physicalFieldBIR physicalFields next ∧
+      next.movedFields = first.movedFields := by
+  let memory := physicalFieldBIR.memoryView (language := physicalFieldLanguage)
+  let first : MemoryRegisters physicalFieldLanguage testProfile :=
+    {physicalFields with movedFields := [(storeRoot, [splitField])]}
+  let place : MemoryPlace Unit () := ⟨⟨⟨storeRoot.id + 1⟩, []⟩, .virtual⟩
+  let ready : MemoryRegisters physicalFieldLanguage testProfile :=
+    {first with live := place.logical.root :: first.live}
+  let stored : MemoryRegisters physicalFieldLanguage testProfile :=
+    {ready with
+      initialized := place.logical.root :: first.initialized
+      virtualValues := [(place.logical.root, .scalar (.int .u8 17))]}
+  have tick : memory.InstructionStepWith physicalFields stored.advance false true
+      (.bind place (.move ⟨⟨storeRoot, [splitField]⟩, .materialized⟩)) := by
+    with_unfolding_all
+      refine ⟨.scalar (.int .u8 17), first, stored, rfl, ?_, rfl⟩
+    apply Memory.WriteParams.cons (started := ready)
+    · exact ⟨nofun, Or.inl ⟨rfl, rfl⟩⟩
+    · exact ⟨⟨rfl, nofun⟩, nofun, rfl, rfl, nofun⟩
+    · exact .nil _
+  with_unfolding_all
+    exact ⟨rfl, rfl, rfl, stored.advance,
+      ⟨rfl, ⟨_, rfl, tick⟩, [], rfl⟩, ⟨rfl, ⟨_, rfl, tick⟩, [], rfl⟩, rfl⟩
+
 private def splitRegisters : List (FieldId × Sigma (SSAValue Unit)) :=
   [(splitField, ⟨(), ⟨0⟩⟩), (secondSplitField, ⟨(), ⟨1⟩⟩)]
 
@@ -2533,15 +2875,11 @@ example (project : Project) :
     memory.readOperands (language := twoFieldLanguage) args consumed = none := by
   with_unfolding_all exact ⟨rfl, rfl⟩
 
--- Dropping either linear field or translating it into a standalone projected
--- move cannot stand for the consuming split.
+-- A consuming split cannot omit a linear field.
 set_option maxRecDepth 2048 in
 example (project : Project) :
-    (∀ next, ¬ (SSA.Execution (language := twoFieldLanguage)).step
-      (splitSSA project true) splitBefore next) ∧
-    (splitMemory project).readValue (language := twoFieldLanguage) splitBefore
-      (.move ⟨⟨storeRoot, [splitField]⟩, .materialized⟩ : MemoryRead Unit (Literal Unit) ()) = none := by
-  refine ⟨?_, rfl⟩
+    ∀ next, ¬ (SSA.Execution (language := twoFieldLanguage)).step
+      (splitSSA project true) splitBefore next := by
   intro next execution
   obtain ⟨_, ⟨block, fetch, tick⟩, _⟩ := execution
   let expected : MemoryBlock testLowering := ⟨⟨0⟩, [],
@@ -2682,7 +3020,7 @@ private theorem fullSplitReturns (project : Project) :
     let result : MemoryRegisters twoFieldLanguage testProfile := {finished with instruction := 6}
     have starts : memory.Initial start := by
       with_unfolding_all
-        exact ⟨rfl, rfl, ⟨_, rfl, rfl⟩, ⟨_, rfl, rfl⟩, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+        exact ⟨rfl, rfl, ⟨_, rfl, rfl⟩, ⟨_, rfl, rfl⟩, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
     have memoryAllocate : memory.Step start allocated := by
       obtain ⟨_, ⟨block, found, tick⟩, _⟩ := allocate
       have found' : some (((bir.memoryView (language := twoFieldLanguage)).blockAt start).getD splitBlock) =
@@ -3276,7 +3614,7 @@ private theorem materializedRepresents (project : Project) (space : AddrSpace) (
     (fits : backingFits space base) :
     (materializedBinding project).RepresentsActivation (language := erasureLanguage)
       erasureBound.toMemoryFrame (backingAfter space base).toMemoryFrame (backingAfter space base).bytes := by
-  refine ⟨⟨storedBytesWF space base fits, (by simp : [storeRoot].Nodup), (by simp : [storeRoot].Nodup), fun _ h => h⟩, rfl, fun _ h => h,
+  refine ⟨⟨⟨storedBytesWF space base fits, (by simp : [storeRoot].Nodup), (by simp : [storeRoot].Nodup), fun _ h => h⟩, rfl⟩, rfl, fun _ h => h,
     (by simp : [storeRoot].Nodup), (by simp : [storeRoot].Nodup), List.nodup_nil, List.nodup_nil, nofun, ?_, ?_, nofun, ?_, ?_⟩
   · intro place
     change (place ∈ [storeRoot]) ↔ (AList.lookup [(storeRoot, CoreValue.other ())] place :
@@ -3634,11 +3972,11 @@ private theorem materializationRepresents (project : Project) (q : Materializati
       (materializedSourceState q.finished).toMemoryFrame q.state.toMemoryFrame q.state.bytes := by
   cases q with
   | initial =>
-    exact ⟨⟨emptyBytesWF, List.nodup_nil, List.nodup_nil, nofun⟩,
+    exact ⟨⟨⟨emptyBytesWF, List.nodup_nil, List.nodup_nil, nofun⟩, rfl⟩,
       rfl, nofun, List.nodup_nil, List.nodup_nil, List.nodup_nil, List.nodup_nil,
       nofun, (fun _ => ⟨nofun, nofun⟩), nofun, nofun, nofun, nofun⟩
   | allocated space base fits =>
-    refine ⟨⟨allocatedBytesWF space base fits, (by simp : [_].Nodup), List.nodup_nil, nofun⟩,
+    refine ⟨⟨⟨allocatedBytesWF space base fits, (by simp : [_].Nodup), List.nodup_nil, nofun⟩, rfl⟩,
       rfl, nofun, List.nodup_nil, (by simp : [_].Nodup), List.nodup_nil, List.nodup_nil,
       nofun, (fun _ => ⟨nofun, nofun⟩), nofun, nofun, ?_, ?_⟩
     · intro place range member
@@ -4258,7 +4596,7 @@ private theorem AddressAllocation.loadUpdated (a : AddressAllocation) :
 private theorem addressRepresents (project : Project) (q : AddressTargetPhase) :
     (addressMemory project).RepresentsActivation (language := addressLanguage)
       q.source.state.toMemoryFrame q.state.toMemoryFrame q.state.bytes q.state.toMemoryFrame.backingRanges := by
-  refine ⟨⟨?_, ?_, ?_, ?_⟩, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨⟨⟨?_, ?_, ?_, ?_⟩, ?_⟩, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · cases q with
     | start => exact emptyBytesWF
     | allocated a => exact allocatedBytesWF a.space a.base a.fits
@@ -4276,6 +4614,7 @@ private theorem addressRepresents (project : Project) (q : AddressTargetPhase) :
     | exact fun _ h => (List.not_mem_nil h).elim
     | exact fun _ h => h
     | exact fun _ h => List.mem_cons_of_mem _ h
+  · cases q <;> rfl
   · cases q <;> rfl
   · cases q <;> first
     | exact fun _ h => h
@@ -4841,8 +5180,8 @@ private theorem abortMemoryCheckpoint :
   refine ⟨?_, rfl, nofun, ⟨rfl, nofun⟩, List.nodup_nil, rfl, rfl⟩
   change (abortMemory .abort).RepresentsActivation
     storeInitial.toMemoryFrame storeInitial.toMemoryFrame Mem.Memory.empty
-  exact ⟨⟨⟨nofun, by decide, nofun, nofun, nofun, nofun, nofun, nofun⟩,
-    by decide, by decide, nofun⟩, rfl, nofun, by decide, by decide, by decide, by decide,
+  exact ⟨⟨⟨⟨nofun, by decide, nofun, nofun, nofun, nofun, nofun, nofun⟩,
+    by decide, by decide, nofun⟩, rfl⟩, rfl, nofun, by decide, by decide, by decide, by decide,
     nofun, (fun _ => ⟨nofun, nofun⟩), nofun, nofun, nofun, nofun⟩
 
 -- The same abort used in the Core→MIR pair is terminal at each of the

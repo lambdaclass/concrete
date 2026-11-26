@@ -4,6 +4,7 @@ The frozen declarations are [spec carriers](../../ConcreteSpec/StageInterface.le
 [compiler carriers](../../Concrete/Interfaces/Carriers.lean),
 [grammar](../../ConcreteSpec/StageGrammar.lean),
 [behavior refinement](../../Concrete/Interfaces/Behavior.lean), [edge propositions](../../Concrete/Interfaces/Contracts.lean),
+[reference elaboration](../../Concrete/Interfaces/SurfaceElaboration.lean),
 [executable signatures and registry](../../Concrete/Interfaces/Pipeline.lean), and the
 [backend observation adapter](../../Concrete/Backend/Observation.lean) and the
 [backend runtime renderer](../../Concrete/Backend/Runtime.lean).
@@ -11,7 +12,7 @@ The root check compares their exact SHA-256 digests with the [recorded manifest]
 
 ## Source → Tokens
 
-Fix (f) owns the lossless scanner. `Source` carries the admitted project, entry-file ID and active slice. `TokenStream` retains typed decoded tokens, including string bytes, byte literals and label names, plus the leading and EOF trivia ranges. `Lexes` relates the exact project bytes to the token stream and requires exact reconstruction and establishes the spec-owned parser-view invariant. Malformed input and resource limits have separate typed refusals. Migrate `Lex.lex` and its correctness proof to the retained stream and prove agreement on its parser view.
+Fix (f) owns the lossless scanner. `Source` carries the admitted project, entry-file ID and active slice. `TokenStream` retains typed decoded tokens, including string bytes, byte literals and label names, plus each exact spelling and the bytes and spans of leading and EOF trivia. The spec reconstructs ordered, contiguous pieces from the retained bytes and checks their file and coordinates. `Lexes` compares the result with the whole entry file and establishes the parser-view invariant. Malformed input and resource limits have separate typed refusals. Migrate `Lex.lex` and its correctness proof to the retained stream and prove agreement on its parser view.
 
 ## Tokens → AST
 
@@ -19,7 +20,7 @@ Fix (f) supplies the grammar, table-verification program and correspondence proo
 
 ## AST → Core → admitted Core
 
-Fix (e) supplies the integrated Exec operands over Hybrid and the ownership instrumentation. The early fragment uses the shared scalar vocabulary and nominal declaration IDs. Elaboration preserves the admitted project and slice and establishes exact source correspondence and valid locations. The Core operation inventory requires an origin for each executable operation, including explicit abort. The location contract also quantifies over reachable Exec traps independently of table membership. Replace `Elab.Output`'s slice carrier and `Core.toCore` with `CoreInput`. Retire duplicate integer and trap types, wrapping and bit conversions, fixed-fuel outcomes and F31 with their consumers.
+Fix (e) supplies the integrated Exec operands over Hybrid and the ownership instrumentation. The early fragment uses the shared scalar vocabulary and nominal declaration IDs. Elaboration preserves the admitted project and slice and establishes exact source correspondence and valid locations. The fixed judgment embeds the existing Slice 0 A-normal elaboration into the integrated carrier, pairing each operation with its retained span and assigning the single standalone entry its canonical internal identity. Fix (e) implements against this judgment. Later surface fragments extend the repository judgment when their elaboration is specified. The Core operation inventory requires an origin for each executable operation, including explicit abort. The location contract also quantifies over reachable Exec traps independently of table membership. Replace `Elab.Output`'s slice carrier and `Core.toCore` with `CoreInput`. Retire duplicate integer and trap types, wrapping and bit conversions, fixed-fuel outcomes and F31 with their consumers.
 
 Fix (d) supplies the location and provenance rules. Semantic identities are spec `Var`, `PlaceId` and declaration IDs. An `Origin` contains a run-local operation ID, file-scoped lexical span and persistent evidence key. A file span resolves against exact bytes in the admitted project and agrees with the spec span judgment. A backend table index is a separate type, allocated only at BIR formation. R-0709 is represented by the project admission invariant.
 
@@ -62,14 +63,18 @@ of all related activations. Operations receive escaped logical values by provena
 apply indirect writes to the owning activation, including suspended callers. Physical
 operations use byte memory for nonempty roots. A zero-byte address carries its provenance
 and field path without requiring a byte block. Zero-byte roots keep a logical value for
-direct and indirect reads and writes. A linear move consumes root
-initialization, and field writes require an initialized root. Replace the erase-to-MIR `Memory.lower`
-and `Memory.run` proof path.
+direct and indirect reads and writes. Each activation tracks the moved subtrees
+of its initialized roots. A projected move leaves disjoint fields available and
+blocks reads of the moved subtree or an ancestor containing it. An exact field
+write can fill a moved subtree. Ending a partially moved root checks that all
+remaining active fields can be discarded. MIR and Memory use the same masks,
+and the representation checkpoint compares initialized subtrees across frames.
+Replace the erase-to-MIR `Memory.lower` and `Memory.run` proof path.
 
 ## Memory → SSA
 
 Fix (b) supplies the addressable/virtual partition and Fix (a) registers the validated SSA lowering. `SSA` has typed value IDs and parallel block arguments. Addressable places and layout remain explicit. SSA promotion records the eliminated virtual binding origins at control boundaries. `BuildsSSA` requires preservation of origins, layouts and observations against the
-exact Memory and SSA semantics. A destructure consumes a whole materialized or
+exact Memory and SSA semantics. A linear projected load consumes that field in the shared interpreter for SSA and BIR. A destructure consumes a whole materialized or
 promoted root. It simultaneously defines the typed field registers and requires
 each active linear field to have a distinct binding. Split the SSA construction
 currently inside `SSA.lower` from its BIR output.
@@ -152,7 +157,12 @@ The trusted base for the frozen interfaces contains the following obligations.
 | --- | --- |
 | `P_print` | Behaviors of the exact rendered LLVM module bytes under the fixed opaque `llvmBehaviors` interpretation refine the originating BIR program. |
 
-Native-image and launch assumptions remain at the production theorem boundary.
+The revised D5 asks for a reachable whole-program witness and a rejected
+wrong-compiler mutant on each verified edge. Existing edge proofs count toward
+that requirement. Trusted edges are exempt. Any control on the LLVM behavior
+claim is necessarily conditional on `P_print` and the opaque `llvmBehaviors`
+interpretation. Native-image and launch assumptions remain at the production
+theorem boundary.
 
 ## Writer ownership
 
@@ -166,5 +176,9 @@ Use separate implementation modules so parallel proof and implementation work ca
 | (b) | `Concrete/CFG.lean`, `Concrete/MIR.lean`, `Concrete/Memory.lean`, `Concrete/SSA.lean`, `ConcreteSpec/Layout.lean`, `ConcreteSpec/Spec/Memory.lean`, `ConcreteSpec/Spec/Hybrid.lean`, `ConcreteSpec/Proofs/Memory.lean`, `ConcreteSpec/Proofs/Hybrid.lean` |
 | (a) | `Concrete/BIR.lean`, `Concrete/BIR/`, `Concrete/Stages.lean`, `Concrete/Contracts.lean`, `Concrete/Theorem.lean`, `Concrete/Certificate.lean`, `Concrete/Premises.lean`, `Main.lean`, `Concrete/Backend/` except `Observation.lean` and `Runtime.lean`, root imports, proof inventories and cross-stage checks and fixtures |
 | (f) | `Concrete/Lex.lean`, `Concrete/Parse.lean`, `Concrete/LL1.lean`, `ConcreteSpec/Spec/LL1.lean`, `ConcreteSpec/Spec/Surface0.lean`, `ConcreteSpec/Surface1.lean`, `ConcreteSpec/Proofs/Surface0.lean`, `ConcreteSpec/Proofs/Surface1.lean`, `ConcreteSpec/Proofs/LL1.lean` |
+
+Fix (a)'s production cutover owns the update to the provisional trusted-base
+registry and the removal of test-local model scaffolding after its remaining
+controls exercise the registered contracts directly.
 
 When an atomic retirement spans owners, each writer prepares the replacement for its own files. The integration writer applies the coordinated deletion and updates the trusted-base inventories and cross-stage fixtures with the cutover. Frozen paths and the digest manifest belong to the interface round.
