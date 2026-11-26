@@ -8,10 +8,6 @@ open Concrete.LL1
 
 abbrev SurfaceToken := Located TokenValue
 
-inductive SyntaxTree where
-  | node (tag : Nat) (fields : List SyntaxTree)
-  | leaf (token : SurfaceToken)
-
 /-- Grammar actions are first-order constructor expressions. A fetched child or
 token is shared, and the only way to traverse action syntax is the interpreter. -/
 inductive Action : Type → Type → Type 1 where
@@ -22,7 +18,9 @@ inductive Action : Type → Type → Type 1 where
   | pair {In A B : Type} (left : Action In A) (right : Action In B) : Action In (A × B)
   | some {In A : Type} (value : Action In A) : Action In (Option A)
   | cons {In A : Type} (head : Action In A) (tail : Action In (List A)) : Action In (List A)
-  | node {In : Type} (tag : Nat) (fields : Action In (List SyntaxTree)) : Action In SyntaxTree
+  | inl {In A B : Type} (value : Action In A) : Action In (A ⊕ B)
+  | inr {In A B : Type} (value : Action In B) : Action In (A ⊕ B)
+  | node {In : Type} (tag : SurfaceNode) (fields : Action In (List SyntaxTree)) : Action In SyntaxTree
   | leaf {In : Type} (token : Action In SurfaceToken) : Action In SyntaxTree
 
 /-- The semantic type of a rhs follows its exact symbols, including token payloads. -/
@@ -45,6 +43,8 @@ def Action.eval {In Out : Type} (input : In) : Action In Out → Nat × Out
     let (hc, hv) := head.eval input
     let (tc, tv) := tail.eval input
     (hc + tc + 1, hv :: tv)
+  | .inl value => let (cost, v) := value.eval input; (cost + 1, Sum.inl v)
+  | .inr value => let (cost, v) := value.eval input; (cost + 1, Sum.inr v)
   | .node tag fields => let (cost, values) := fields.eval input; (cost + 1, .node tag values)
   | .leaf token => let (cost, value) := token.eval input; (cost + 1, .leaf value)
 
@@ -67,6 +67,8 @@ structure SharedGrammar (count : Nat) where
     0 < (integerSlices[integerForm radix suffix]'(integerSliceCoverage radix suffix)).val
   start : Fin count
   value : Fin count → Type
+  extraAst : Type
+  startShape : value start = SurfaceAST (fun _ => extraAst) slice0
   productions : Array (Production value)
 
 def SharedGrammar.grammar {count : Nat} (g : SharedGrammar count) : Grammar Terminal (Fin count) :=

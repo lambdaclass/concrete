@@ -4,6 +4,24 @@ import Concrete.Interfaces.SurfaceElaboration
 namespace Concrete.Elab
 open ConcreteSpec.Surface0
 
+structure SourceSite where
+  binding : ConcreteSpec.Var
+  operator : Span
+
+structure Output where
+  program : ConcreteSpec.Slice0.Program
+  sites : List SourceSite
+
+def LocatedOutput.erase (out : LocatedOutput) : Output :=
+  let sites := out.bindings.filterMap fun (bind, span) =>
+    match bind.e with
+    | .atom _ => none
+    | .add .. => some (⟨bind.x, span⟩ : SourceSite)
+  ⟨⟨out.bindings.map Prod.fst, out.ret⟩, sites⟩
+
+def elaborate (ast : Program) : Except Refusal Output :=
+  ((elaborateLocated ast).map LocatedOutput.erase).mapError Failure.diagnostic
+
 private def evalExpr (env : List (String × Int)) : Expr → Except ConcreteSpec.Outcome Int
   | .integer value _ _ => .ok value
   | .local name _ => match env.lookup name with

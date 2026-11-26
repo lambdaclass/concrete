@@ -1225,9 +1225,25 @@ Concrete.Driver.Reference.Run.mk.sizeOf_spec
 Concrete.Driver.Reference.instDecidableEqRun.decEq._proof_1	
 Concrete.Driver.Reference.instDecidableEqRun.decEq._proof_2	
 Concrete.Driver.Reference.instDecidableEqRun.decEq._proof_3	
-Concrete.Elab.LocatedOutput.mk.inj	
-Concrete.Elab.LocatedOutput.mk.injEq	propext
-Concrete.Elab.LocatedOutput.mk.sizeOf_spec	
+Concrete.Elab.Failure.fallthrough.sizeOf_spec	
+Concrete.Elab.Failure.integerSuffix.inj	
+Concrete.Elab.Failure.integerSuffix.injEq	propext
+Concrete.Elab.Failure.integerSuffix.sizeOf_spec	
+Concrete.Elab.Failure.shadowing.inj	
+Concrete.Elab.Failure.shadowing.injEq	propext
+Concrete.Elab.Failure.shadowing.sizeOf_spec	
+Concrete.Elab.Failure.unexpectedEntry.inj	
+Concrete.Elab.Failure.unexpectedEntry.injEq	propext
+Concrete.Elab.Failure.unexpectedEntry.sizeOf_spec	
+Concrete.Elab.Failure.unknownLocal.inj	
+Concrete.Elab.Failure.unknownLocal.injEq	propext
+Concrete.Elab.Failure.unknownLocal.sizeOf_spec	
+Concrete.Elab.Failure.unreachable.inj	
+Concrete.Elab.Failure.unreachable.injEq	propext
+Concrete.Elab.Failure.unreachable.sizeOf_spec	
+Concrete.Elab.Failure.wildcard.inj	
+Concrete.Elab.Failure.wildcard.injEq	propext
+Concrete.Elab.Failure.wildcard.sizeOf_spec	
 Concrete.Elab.Output.mk.inj	
 Concrete.Elab.Output.mk.injEq	propext
 Concrete.Elab.Output.mk.sizeOf_spec	
@@ -1421,15 +1437,12 @@ Concrete.Interfaces.CoreInput.Execution._proof_1	Quot.sound propext
 Concrete.Interfaces.CoreInput.Execution._proof_2	Quot.sound propext
 Concrete.Interfaces.CoreInput.Execution._proof_3	Quot.sound propext
 Concrete.Interfaces.CoreInput.Execution._proof_4	Quot.sound propext
-Concrete.Interfaces.ElabRefusal.mk.inj	
-Concrete.Interfaces.ElabRefusal.mk.injEq	propext
-Concrete.Interfaces.ElabRefusal.mk.sizeOf_spec	
-Concrete.Interfaces.FrontendInvariants.mk.inj	Quot.sound propext
-Concrete.Interfaces.FrontendInvariants.mk.injEq	Quot.sound propext
-Concrete.Interfaces.FrontendInvariants.mk.sizeOf_spec	Quot.sound propext
-Concrete.Interfaces.FrontendSpec.mk.inj	Quot.sound propext
-Concrete.Interfaces.FrontendSpec.mk.injEq	Quot.sound propext
-Concrete.Interfaces.FrontendSpec.mk.sizeOf_spec	Quot.sound propext
+Concrete.Interfaces.ElabRefusal.diagnostic.inj	
+Concrete.Interfaces.ElabRefusal.diagnostic.injEq	propext
+Concrete.Interfaces.ElabRefusal.diagnostic.sizeOf_spec	
+Concrete.Interfaces.ElabRefusal.slice0.inj	
+Concrete.Interfaces.ElabRefusal.slice0.injEq	propext
+Concrete.Interfaces.ElabRefusal.slice0.sizeOf_spec	
 Concrete.Interfaces.FunctionSignature.mk.inj	
 Concrete.Interfaces.FunctionSignature.mk.injEq	propext
 Concrete.Interfaces.FunctionSignature.mk.sizeOf_spec	
@@ -1442,12 +1455,15 @@ Concrete.Interfaces.LCBInput.mk.sizeOf_spec
 Concrete.Interfaces.LLVMInput.mk.inj	
 Concrete.Interfaces.LLVMInput.mk.injEq	propext
 Concrete.Interfaces.LLVMInput.mk.sizeOf_spec	
+Concrete.Interfaces.LexRefusal.digitLimit.inj	
+Concrete.Interfaces.LexRefusal.digitLimit.injEq	propext
+Concrete.Interfaces.LexRefusal.digitLimit.sizeOf_spec	
 Concrete.Interfaces.LexRefusal.malformed.inj	
 Concrete.Interfaces.LexRefusal.malformed.injEq	propext
 Concrete.Interfaces.LexRefusal.malformed.sizeOf_spec	
-Concrete.Interfaces.LexRefusal.resource.inj	
-Concrete.Interfaces.LexRefusal.resource.injEq	propext
-Concrete.Interfaces.LexRefusal.resource.sizeOf_spec	
+Concrete.Interfaces.LexRefusal.missingFile.inj	
+Concrete.Interfaces.LexRefusal.missingFile.injEq	propext
+Concrete.Interfaces.LexRefusal.missingFile.sizeOf_spec	
 Concrete.Interfaces.Literal.mk.inj	
 Concrete.Interfaces.Literal.mk.injEq	propext
 Concrete.Interfaces.Literal.mk.sizeOf_spec	
@@ -1457,12 +1473,6 @@ Concrete.Interfaces.LocatedOp.mk.sizeOf_spec
 Concrete.Interfaces.LogicalFrame.mk.inj	
 Concrete.Interfaces.LogicalFrame.mk.injEq	propext
 Concrete.Interfaces.LogicalFrame.mk.sizeOf_spec	
-Concrete.Interfaces.LoweringFailures.mk.inj	Quot.sound propext
-Concrete.Interfaces.LoweringFailures.mk.injEq	Quot.sound propext
-Concrete.Interfaces.LoweringFailures.mk.sizeOf_spec	Quot.sound propext
-Concrete.Interfaces.LoweringInvariants.mk.inj	Quot.sound propext
-Concrete.Interfaces.LoweringInvariants.mk.injEq	Quot.sound propext
-Concrete.Interfaces.LoweringInvariants.mk.sizeOf_spec	Quot.sound propext
 Concrete.Interfaces.LoweringLanguage.mk.inj	
 Concrete.Interfaces.LoweringLanguage.mk.injEq	propext
 Concrete.Interfaces.LoweringLanguage.mk.sizeOf_spec	
@@ -1652,9 +1662,6 @@ Concrete.Interfaces.TrapEntry.mk.sizeOf_spec
 Concrete.Interfaces.TrapIndex.mk.inj	
 Concrete.Interfaces.TrapIndex.mk.injEq	propext
 Concrete.Interfaces.TrapIndex.mk.sizeOf_spec	
-Concrete.Interfaces.earlyEntry._proof_1	
-Concrete.Interfaces.earlyPayload._proof_1	
-Concrete.Interfaces.earlyPayload._proof_2	
 Concrete.Interfaces.instDecidableEqBackendKind._proof_1	
 Concrete.Interfaces.instDecidableEqBackendKind._proof_2	
 Concrete.Interfaces.instDecidableEqCheckDisposition._proof_1	

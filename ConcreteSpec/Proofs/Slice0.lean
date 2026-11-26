@@ -4,6 +4,7 @@ import ConcreteSpec.Proofs.Observe
 import ConcreteSpec.Proofs.Slice1
 import ConcreteSpec.Spec.Basics
 import ConcreteSpec.Spec.Slice0
+import ConcreteSpec.Spec.Slice0Syntax
 import ConcreteSpec.Spec.Slice1Ownership
 import ConcreteSpec.Spec.Slice1Semantics
 import ConcreteSpec.Spec.Slice1Syntax

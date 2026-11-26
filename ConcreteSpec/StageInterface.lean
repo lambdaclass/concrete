@@ -1,3 +1,5 @@
+import ConcreteSpec.Spec.Slice0Syntax
+import ConcreteSpec.Spec.Slice1Checker
 import ConcreteSpec.Spec.Hybrid
 import ConcreteSpec.Spec.Own
 import ConcreteSpec.Spec.Observation
@@ -11,6 +13,8 @@ open Core Core.SourcePathSpan
 abbrev Slice := Core.SliceId
 
 def Slice.val (slice : Slice) : Nat := slice.n.val
+
+def slice0 : Slice := ⟨⟨0, by decide⟩⟩
 
 abbrev FileId := Core.FileId
 
@@ -61,6 +65,17 @@ def TokenValue.kind : TokenValue → Terminal
   | .stringLiteral _ => .stringLiteral
   | .byteLiteral _ => .byteLiteral
   | .label _ => .label
+
+inductive SurfaceNode where
+  | program | body | binding | return_ | add
+  | extension (tag : Nat)
+
+inductive SyntaxTree where
+  | node (kind : SurfaceNode) (fields : List SyntaxTree)
+  | leaf (token : Located TokenValue)
+
+abbrev SurfaceAST (Extra : Slice → Type) (slice : Slice) :=
+  SyntaxTree ⊕ Extra slice
 
 abbrev RawPiece := Located ByteArray
 
@@ -224,6 +239,8 @@ structure CoreLanguage where
   operands : Exec.Operands
   hybridStore : operands.Store = Hybrid.State
   Declaration : Type
+  extraEarlyTypes : Type := Empty
+  extraEarlyExpressions : Type := Empty
   /-- Exact ordered operand reads and trap conditions of the integrated spec operation. -/
   expressionOperator : operands.Expr → Operator
   primitiveOperator : operands.Prim → Operator
@@ -308,14 +325,9 @@ inductive EarlyExpr where
 inductive EarlyPrim where
   | destructureEmpty (decl : DeclId)
 
-abbrev EarlyDeclaration := Unit
-
-structure EarlyCore (language : CoreLanguage) where
-  values : language.operands.Val = EarlyValue
-  types : language.operands.Ty = EarlyTy
-  expressions : language.operands.Expr = EarlyExpr
-  primitives : language.operands.Prim = EarlyPrim
-  declarations : language.Declaration = EarlyDeclaration
+structure EarlyCore (language : CoreLanguage) : Prop where
+  types : language.operands.Ty = (EarlyTy ⊕ language.extraEarlyTypes)
+  expressions : language.operands.Expr = (EarlyExpr ⊕ language.extraEarlyExpressions)
 
 structure Payload (language : CoreLanguage) where
   ownership : AList Var Own.Descriptor
@@ -323,6 +335,48 @@ structure Payload (language : CoreLanguage) where
   entry : FnId
   origins : AList SiteId Origin
   declarations : AList DeclId language.Declaration
+
+structure EarlyProgram where
+  bindings : List (ConcreteSpec.Slice0.Stmt × Surface0.Span)
+  ret : ConcreteSpec.Slice0.Atom
+  returnSpan : Surface0.Span
+
+def EarlyProgram.checkedSyntax (program : EarlyProgram) : ConcreteSpec.Program :=
+  ⟨[], program.bindings.map (ConcreteSpec.Slice0.Stmt.toCore ∘ Prod.fst), .ret program.ret.toCore⟩
+
+private def earlyOperand : ConcreteSpec.Slice0.Atom → EarlyOperand
+  | .lit n => .literal (.int .u8 n)
+  | .var id => .copy id
+
+private def earlyExpression : ConcreteSpec.Slice0.Expr → EarlyExpr
+  | .atom atom => .read (earlyOperand atom)
+  | .add left right => .add .u8 (earlyOperand left) (earlyOperand right)
+
+private def earlyOrigin (entry : FnId) (site : SiteId) (kind : ConstructKind)
+    (ordinal : Nat) (span : ConcreteSpec.Surface0.Span) : SiteId × Origin :=
+  (site, ⟨site, ⟨span.fileId, span.start, span.stop, span.line, span.column⟩,
+    ⟨.function entry, ⟨[⟨kind, .ordinal ordinal⟩]⟩⟩⟩)
+
+/-- The standalone Slice 0 program has one internal function identity. -/
+def earlyEntry : FnId :=
+  ⟨⟨⟨⟨"standalone"⟩, ⟨⟨"0"⟩⟩⟩, [⟨"main"⟩], by decide⟩, ⟨"main"⟩⟩
+
+/-- Embed the existing Slice 0 elaboration in the integrated carrier. -/
+def earlyPayload {language : CoreLanguage} (early : EarlyCore language)
+    (out : EarlyProgram) : Payload language :=
+  let entry := earlyEntry
+  let scalar : CTy := .int .u8
+  let ownership : AList ConcreteSpec.Var Own.Descriptor :=
+    out.bindings.map fun (bind, _) => (bind.x, ⟨scalar, true, false⟩)
+  let retSite : SiteId := ⟨out.bindings.length⟩
+  let body : Exec.Stmt (language.instrumented ownership) :=
+    out.bindings.foldr (fun (bind, _) rest =>
+      .seq (.bind bind.x (early.expressions.symm ▸ Sum.inl (earlyExpression bind.e)) ⟨bind.x.id⟩) rest)
+      (.ret (early.expressions.symm ▸ Sum.inl (EarlyExpr.read (earlyOperand out.ret))) retSite)
+  let origins := out.bindings.map fun (bind, span) =>
+    earlyOrigin entry ⟨bind.x.id⟩ .binding bind.x.id span
+  ⟨ownership, ⟨[(entry, ⟨[], early.types.symm ▸ Sum.inl (EarlyTy.scalar scalar), ⟨0⟩, body⟩)]⟩,
+    entry, origins ++ [earlyOrigin entry retSite .return 0 out.returnSpan], []⟩
 
 abbrev Payload.machine {language : CoreLanguage} (payload : Payload language) : Exec.Operands :=
   language.instrumented payload.ownership
@@ -418,14 +472,34 @@ structure Admitted (language : CoreLanguage) where
   core : CoreInput language
   discharges : Discharges language
 
-/-- The spec owns the fragment, independent statics, acceptance, and operation safety judgments.
-The checker is the single executable traversal. -/
-structure Admission (language : CoreLanguage) where
-  fragment : Slice → Payload language → Prop
-  statics : CoreInput language → Prop
-  accepted : CoreInput language → Prop
-  rejects : CoreInput language → CheckerRefusal → Prop
-  check : CoreInput language → Except CheckerRefusal (Discharges language)
+/-- Recognize Slice 0 in the integrated carrier by its canonical embedding.
+New spec fragments add their own cases when their integrated syntax is defined. -/
+def CoreInput.EarlyProgram {language : CoreLanguage} (input : CoreInput language)
+    (program : EarlyProgram) : Prop :=
+  input.slice = slice0 ∧ ∃ early : EarlyCore language, input.payload = earlyPayload early program
+
+def CoreInput.InFragment {language : CoreLanguage} (input : CoreInput language) : Prop :=
+  ∃ program, input.EarlyProgram program
+
+private def earlyBodyTyped (locals : TyCtx) : List ConcreteSpec.Slice0.Stmt → ConcreteSpec.Slice0.Atom → Prop
+  | [], ret => AtomTy locals ret.toCore (.int .u8)
+  | bind :: rest, ret =>
+    HasType [] locals bind.e.toCore (.scalar (.int .u8)) ∧
+      earlyBodyTyped ((bind.x, .scalar (.int .u8)) :: locals) rest ret
+
+/-- Independent typing for the unchecked path. A typed addition may still overflow. -/
+def CoreInput.StaticallyTyped {language : CoreLanguage} (input : CoreInput language) : Prop :=
+  ∃ program, input.EarlyProgram program ∧ earlyBodyTyped [] (program.bindings.map Prod.fst) program.ret
+
+/-- Acceptance uses the spec's independent checker judgment on the same fragment. -/
+def CoreInput.Accepted {language : CoreLanguage} (input : CoreInput language) : Prop :=
+  ∃ program, input.EarlyProgram program ∧ Checked program.checkedSyntax
+
+def CoreInput.CheckerRefuses {language : CoreLanguage} (input : CoreInput language)
+    (failure : CheckerRefusal) : Prop :=
+  ¬ input.Accepted ∧ failure.rule = ⟨``ProgramPermitted, 1⟩ ∧
+    failure.related = [] ∧ failure.obligation = none ∧
+    ∃ site origin, (site, origin) ∈ input.payload.origins ∧ failure.primary = origin.lexical
 
 def Payload.ConditionsAt {language : CoreLanguage} (payload : Payload language) (site : SiteId)
     (opcode : Opcode) (conditions : List (SafetyCondition language.operands.Ty)) : Prop :=
@@ -453,11 +527,19 @@ def ValidDischarges {language : CoreLanguage} (input : CoreInput language)
       (∀ label next, Exec.Step input.payload.body state label next →
         next.ctrl ≠ .trapped d.trap site)
 
-def Admission.Sound {language : CoreLanguage} (spec : Admission language) : Prop :=
-  ∀ input, input.WF → spec.fragment input.slice input.payload →
-    (spec.accepted input ↔ ∃ discharges, spec.check input = .ok discharges) ∧
-    (∀ discharges, spec.check input = .ok discharges →
-      spec.statics input ∧ ValidDischarges input discharges) ∧
-    (∀ refusal, spec.check input = .error refusal → spec.rejects input refusal)
+def Admitted.Valid {language : CoreLanguage} (admitted : Admitted language) : Prop :=
+  admitted.core.WF ∧ admitted.core.Accepted ∧ admitted.core.StaticallyTyped ∧
+  ValidDischarges admitted.core admitted.discharges
+
+def Admits {language : CoreLanguage} (input : CoreInput language) (out : Admitted language) : Prop :=
+  out.core = input ∧ input.Accepted ∧ input.StaticallyTyped ∧ ValidDischarges input out.discharges
+
+def AdmissionSound {language : CoreLanguage}
+    (check : CoreInput language → Except CheckerRefusal (Discharges language)) : Prop :=
+  ∀ input, input.WF → input.InFragment →
+    (input.Accepted ↔ ∃ discharges, check input = .ok discharges) ∧
+    (∀ discharges, check input = .ok discharges →
+      input.StaticallyTyped ∧ ValidDischarges input discharges) ∧
+    (∀ refusal, check input = .error refusal → input.CheckerRefuses refusal)
 
 end ConcreteSpec.StageInterface

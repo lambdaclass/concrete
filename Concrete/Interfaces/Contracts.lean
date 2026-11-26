@@ -1,4 +1,5 @@
 import Concrete.Interfaces.Carriers
+import Concrete.Lex
 import Concrete.Interfaces.Behavior
 import Concrete.Backend.Observation
 import Concrete.Interfaces.SurfaceElaboration
@@ -74,76 +75,73 @@ def Pipeline.run {A C : Type} (pipeline : Pipeline A C) (input : A) :
     | .error failure => .error ⟨_, failure⟩
     | .ok output => rest.run output
 
-structure FrontendSpec (Ast : Type) (language : CoreLanguage) where
-  lexes : Source → TokenStream → Prop
-  malformedToken : Source → RuleId → FileSpan → Prop
-  lexLimit : Source → ResourceRefusal → Prop
-  elabRefusal : Parsed Ast → ElabRefusal → Prop
+private def fileSpan (span : ConcreteSpec.Surface0.Span) : FileSpan :=
+  ⟨span.fileId, span.start, span.stop, span.line, span.column⟩
 
-def Lexes {Ast : Type} {language : CoreLanguage} (spec : FrontendSpec Ast language)
-    (source : Source) (stream : TokenStream) : Prop :=
-  stream.source = source ∧ spec.lexes source stream ∧ stream.parserView.WF ∧
+private def decodedValue : Concrete.Lex.LosslessValue → Option TokenValue
+  | .parsed (.fixed kind) => if h : Terminal.HasPayload kind = false then some (.fixed kind h) else none
+  | .parsed (.name name) => some (.name name)
+  | .parsed (.integer value radix suffix) => some (.integer value radix suffix)
+  | .stringLiteral text => some (.stringLiteral text.toUTF8.data.toList)
+  | .byteLiteral byte => some (.byteLiteral byte)
+  | .label name => some (.label ⟨name⟩)
+
+private def referencePiece : Concrete.Lex.Piece → Option (FileSpan × Option TokenValue)
+  | .token value span => (decodedValue value).map fun token => (fileSpan span, some token)
+  | .whitespace span | .lineComment span => some (fileSpan span, none)
+
+private def retainedPieces (stream : TokenStream) : List (FileSpan × Option TokenValue) :=
+  (stream.tokens.toList.zipIdx.flatMap fun (token, index) =>
+    (stream.trivia[index]?.getD #[]).toList.map (fun piece => (piece.span, none)) ++
+      [(token.decoded.span, some token.decoded.value)]) ++
+    (stream.trivia[stream.tokens.size]?.getD #[]).toList.map (fun piece => (piece.span, none))
+
+/-- The proved lossless lexer gives the fixed lexical meaning of the retained bytes,
+including token boundaries, trivia and the full decoded payloads. -/
+def Lexes (source : Source) (stream : TokenStream) : Prop :=
+  stream.source = source ∧ stream.parserView.WF ∧
   ∃ file, source.project.files[source.entryFile.index]? = some file ∧
     ∃ bytes, reconstruct source.entryFile stream.tokens stream.trivia = some bytes ∧
-      bytes.data.toList = file.source.toBytes
+      bytes.data.toList = file.source.toBytes ∧
+      ∃ reference, Concrete.Lex.lexLossless bytes source.entryFile = .ok reference ∧
+        reference.pieces.mapM referencePiece = some (retainedPieces stream)
 
-private def earlyOperand : ConcreteSpec.Slice0.Atom → EarlyOperand
-  | .lit n => .literal (.int .u8 n)
-  | .var id => .copy id
+def LexRefuses (source : Source) (failure : LexRefusal) : Prop :=
+  match source.project.fileAt source.entryFile with
+  | none => failure = .missingFile source.entryFile
+  | some file =>
+    let bytes : ByteArray := ⟨file.source.toBytes.toArray⟩
+    match failure with
+    | .missingFile _ => False
+    | .malformed diagnostic =>
+      Concrete.Lex.lexLossless bytes source.entryFile = .error (.syntaxError diagnostic)
+    | .digitLimit offset limit =>
+      Concrete.Lex.lexLossless bytes source.entryFile = .error (.lexerDigitLimit offset limit)
 
-private def earlyExpression : ConcreteSpec.Slice0.Expr → EarlyExpr
-  | .atom atom => .read (earlyOperand atom)
-  | .add left right => .add .u8 (earlyOperand left) (earlyOperand right)
+/-- Each slice contributes a repository rule over that member of the AST and Core
+families. Slice 0 uses the canonical injections of the shared carriers. -/
+def Elaboration (Extra : Slice → Type) (Core : Slice → CoreLanguage)
+    (slice : Slice) (ast : SurfaceAST Extra slice)
+    (result : Except ElabRefusal (Payload (Core slice))) : Prop :=
+  if h : slice = slice0 then
+    match (h ▸ ast : SurfaceAST Extra slice0) with
+    | .inl tree => ∃ program, Concrete.Elab.surfaceProgram tree = some program ∧
+      ∃ early : EarlyCore (Core slice0),
+        ((Concrete.Elab.elaborateLocated program).map (earlyPayload early)).mapError
+          ElabRefusal.slice0 = (h ▸ result)
+    | .inr _ => False
+  else False
 
-private def earlyOrigin (entry : FnId) (site : SiteId) (kind : ConstructKind)
-    (ordinal : Nat) (span : ConcreteSpec.Surface0.Span) : SiteId × Origin :=
-  (site, ⟨site, ⟨span.fileId, span.start, span.stop, span.line, span.column⟩,
-    ⟨.function entry, ⟨[⟨kind, .ordinal ordinal⟩]⟩⟩⟩)
-
-/-- The standalone Slice 0 program has one internal function identity. -/
-def earlyEntry : FnId :=
-  ⟨⟨⟨⟨"standalone"⟩, ⟨⟨"0"⟩⟩⟩, [⟨"main"⟩], by decide⟩, ⟨"main"⟩⟩
-
-/-- Embed the existing Slice 0 elaboration in the integrated carrier. -/
-def earlyPayload {language : CoreLanguage} (early : EarlyCore language)
-    (out : Concrete.Elab.LocatedOutput) : Payload language :=
-  let entry := earlyEntry
-  let scalar : CTy := .int .u8
-  let ownership : AList ConcreteSpec.Var Own.Descriptor :=
-    out.bindings.map fun (bind, _) => (bind.x, ⟨scalar, true, false⟩)
-  let retSite : SiteId := ⟨out.bindings.length⟩
-  let body : Exec.Stmt (language.instrumented ownership) :=
-    out.bindings.foldr (fun (bind, _) rest =>
-      .seq (.bind bind.x (early.expressions.symm ▸ earlyExpression bind.e) ⟨bind.x.id⟩) rest)
-      (.ret (early.expressions.symm ▸ EarlyExpr.read (earlyOperand out.ret)) retSite)
-  let origins := out.bindings.map fun (bind, span) =>
-    earlyOrigin entry ⟨bind.x.id⟩ .binding bind.x.id span
-  ⟨ownership, ⟨[(entry, ⟨[], early.types.symm ▸ EarlyTy.scalar scalar, ⟨0⟩, body⟩)]⟩,
-    entry, origins ++ [earlyOrigin entry retSite .return 0 out.returnSpan], []⟩
-
-/-- The registered edge has a fixed elaboration judgment. A later surface
-fragment extends the judgment with its own repository-defined rule. -/
-def Elaboration {Ast : Type} {language : CoreLanguage} (ast : Parsed Ast)
-    (payload : Payload language) : Prop :=
-  ∃ surface : Ast = ConcreteSpec.Surface0.Program, ∃ early : EarlyCore language,
-    ∃ out,
-      Concrete.Elab.elaborateLocated (surface ▸ ast.tree) = .ok out ∧
-      payload = earlyPayload early out
-
-def Elaborates {Ast : Type} {language : CoreLanguage}
+def Elaborates {Ast Extra : Type} {language : CoreLanguage}
+    (surface : Ast = SurfaceAST (fun _ => Extra) slice0)
     (ast : Parsed Ast) (core : CoreInput language) : Prop :=
-  core.project = ast.source.project ∧ core.slice = ast.source.slice ∧
-  core.WF ∧ Elaboration ast core.payload
+  core.project = ast.source.project ∧ core.slice = ast.source.slice ∧ core.WF ∧
+    Elaboration (fun _ => Extra) (fun _ => language) ast.source.slice (surface ▸ ast.tree) (.ok core.payload)
 
-/-- The actual admission entry calls exactly the function supplied by ConcreteSpec. -/
-def check {language : CoreLanguage} (spec : Admission language) (core : CoreInput language) :
-    Except CheckerRefusal (Admitted language) :=
-  (spec.check core).map fun discharges => ⟨core, discharges⟩
-
-def Admits {language : CoreLanguage} (spec : Admission language)
-    (core : CoreInput language) (out : Admitted language) : Prop :=
-  out.core = core ∧ spec.accepted core ∧ spec.statics core ∧
-    spec.fragment core.slice core.payload ∧ ValidDischarges core out.discharges
+def ElaborationRefuses {Ast Extra : Type} (language : CoreLanguage)
+    (surface : Ast = SurfaceAST (fun _ => Extra) slice0)
+    (ast : Parsed Ast) (failure : ElabRefusal) : Prop :=
+  Elaboration (fun _ => Extra) (fun _ => language) ast.source.slice (surface ▸ ast.tree) (.error failure)
 
 /-- Origin maps enumerate emitted copies as well as discharged and residual operations. -/
 def PreservesOrigins (source target : List Origin) : Prop :=
@@ -436,21 +434,56 @@ private def StoresValue (memory : Memory lang profile)
         state.bytes.load profile.memoryTarget {range.ptr with addr := range.ptr.addr + offset}
           bytes.length 1 = some bytes)
 
+/-- Ignore moved subtrees when checking for live linear fields at lifetime end or replacement. -/
+private def canDiscard (language : CoreLanguage) :
+    Nat → language.operands.Ty → language.operands.Val → List (List FieldId) → Bool
+  | fuel, ty, value, moved =>
+    if moved.contains [] then true
+    else if moved.isEmpty then language.operands.isCopy ty
+    else match fuel with
+      | 0 => false
+      | n + 1 =>
+        (language.activeFields ty value).any fun fields =>
+          fields.all fun field =>
+            let below := moved.filterMap fun path =>
+              match path with
+              | first :: rest => if first == field then some rest else none
+              | [] => none
+            match language.fieldType ty field, language.field value [field] with
+            | some fieldTy, some fieldValue => canDiscard language n fieldTy fieldValue below
+            | _, _ => false
+
+private def mayInitialize (memory : Memory lang profile)
+    (state : MemoryRegisters language profile) {ty : language.operands.Ty}
+    (place : MemoryPlace _ ty) : Bool :=
+  let root := place.logical.root
+  let path := place.logical.path
+  if !state.initialized.contains root then path.isEmpty
+  else if initializedAt state root path then true
+  else if state.movedFields.any (fun (owner, moved) =>
+      owner == root && moved != path && moved.isPrefixOf path) then false
+  else if state.movedFields.contains (root, path) then true
+  else
+    let moved := state.movedFields.filterMap fun (owner, moved) =>
+      if owner == root && path.isPrefixOf moved then some (moved.drop path.length) else none
+    !moved.isEmpty &&
+      (memory.loadBacking state place).any fun value =>
+        canDiscard language (moved.foldl (fun depth suffix => max depth suffix.length) 0) ty value moved
+
 def writeValue (memory : Memory lang profile)
     (state : MemoryRegisters language profile) {ty : language.operands.Ty}
     (place : MemoryPlace _ ty) (value : language.operands.Val) :
     Option (MemoryRegisters language profile) := do
   let root := place.logical.root
   if !state.live.contains root then none else
-  if !place.logical.path.isEmpty && !state.initialized.contains root then none else
   let path := place.logical.path
+  if !path.isEmpty && !state.initialized.contains root then none else
   if state.initialized.contains root && !initializedAt state root path &&
-      !(state.movedFields.contains (root, path)) then none else
-  let state := if path.isEmpty then
-      {state with
-        initialized := if state.initialized.contains root then state.initialized else root :: state.initialized
-        movedFields := state.movedFields.filter (fun (owner, _) => owner != root)}
-    else {state with movedFields := state.movedFields.erase (root, path)}
+      (hasLoan state root || !memory.mayInitialize state place) then none else
+  let state := {state with
+    initialized := if state.initialized.contains root then state.initialized else root :: state.initialized
+    movedFields := state.movedFields.filter (fun (owner, moved) =>
+      owner != root || !path.isPrefixOf moved)}
   match place.storage with
   | .virtual =>
     let stored ← if place.logical.path.isEmpty then some value else do
@@ -542,10 +575,10 @@ def Represents (memory : Memory lang profile)
         ∃ physical, language.representsValue profile.memoryTarget ranges ty value physical ∧
           memory.StoresValue state (ty := ty) ⟨⟨place, []⟩, storage⟩ physical
       else
-        ∀ path fieldTy, initializedAt state place path = true →
+        ∀ path fieldTy field, initializedAt state place path = true →
           path.foldlM language.fieldType ty = some fieldTy →
-          ∃ field physical, language.field value path = some field ∧
-            language.representsValue profile.memoryTarget ranges fieldTy field physical ∧
+          language.field value path = some field →
+          ∃ physical, language.representsValue profile.memoryTarget ranges fieldTy field physical ∧
             memory.StoresValue state (ty := fieldTy) ⟨⟨place, path⟩, storage⟩ physical
 
 end Memory
@@ -577,28 +610,10 @@ def Begins (memory : Memory lang profile) (state : MemoryRegisters language prof
       next = {live with bytes := bytes, materialized :=
         (place, ⟨⟨space, base, some block⟩, layout.size, layout.align⟩) :: state.materialized})))
 
-/-- Ignore moved subtrees when checking for live linear fields at lifetime end. -/
-private def canDiscard (language : CoreLanguage) :
-    Nat → language.operands.Ty → language.operands.Val → List (List FieldId) → Bool
-  | fuel, ty, value, moved =>
-    if moved.contains [] then true
-    else if moved.isEmpty then language.operands.isCopy ty
-    else match fuel with
-      | 0 => false
-      | n + 1 =>
-        (language.activeFields ty value).any fun fields =>
-          fields.all fun field =>
-            let below := moved.filterMap fun path =>
-              match path with
-              | first :: rest => if first == field then some rest else none
-              | [] => none
-            match language.fieldType ty field, language.field value [field] with
-            | some fieldTy, some fieldValue => canDiscard language n fieldTy fieldValue below
-            | _, _ => false
-
 def canEnd (memory : Memory lang profile) (state : MemoryRegisters language profile)
     (place : PlaceId) : Bool :=
-  !state.initialized.contains place ||
+  !hasLoan state place &&
+  (!state.initialized.contains place ||
     (memory.rootType state.frame place).any fun ty =>
       let moved := state.movedFields.filterMap fun (owner, path) =>
         if owner == place then some path else none
@@ -606,7 +621,7 @@ def canEnd (memory : Memory lang profile) (state : MemoryRegisters language prof
       else
         (memory.classAt state.frame place).any fun storage =>
           (memory.loadBacking state (ty := ty) ⟨⟨place, []⟩, storage⟩).any fun value =>
-            canDiscard language (moved.foldl (fun depth path => max depth path.length) 0) ty value moved
+            canDiscard language (moved.foldl (fun depth path => max depth path.length) 0) ty value moved)
 
 def Ends (memory : Memory lang profile) (state : MemoryRegisters language profile)
     (place : PlaceId) (next : MemoryRegisters language profile) : Prop :=

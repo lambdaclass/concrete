@@ -1,3 +1,4 @@
+import Concrete.Interfaces.SurfaceElaboration
 import ConcreteSpec.StageInterface
 import Concrete.Backend.LLVMIR
 import LeanCompilerBackend.Verified.Job
@@ -53,13 +54,13 @@ theorem Profile.targetWF (profile : Profile) : profile.memoryTarget.WellFormed :
   | mk _ platform _ _ => cases platform <;> exact example_existing_profile_is_well_formed
 
 inductive LexRefusal where
-  | malformed (rule : RuleId) (atSpan : FileSpan)
-  | resource (failure : ResourceRefusal)
+  | missingFile (entry : ConcreteSpec.Core.FileId)
+  | malformed (diagnostic : String)
+  | digitLimit (offset limit : Nat)
 
-structure ElabRefusal where
-  rule : RuleId
-  primary : FileSpan
-  related : List (ConcreteSpec.Name × FileSpan)
+inductive ElabRefusal where
+  | slice0 (reason : Concrete.Elab.Failure)
+  | diagnostic (rule : RuleId) (primary : FileSpan) (related : List (ConcreteSpec.Name × FileSpan))
 
 inductive StageFailure where
   | resource (failure : ResourceRefusal)
@@ -325,17 +326,26 @@ structure BIR {Ty : Type} (lang : LoweringLanguage Ty) (_profile : Profile) wher
   layouts : AList FnId (AList PlaceId Layout)
   sites : TrapTable
 
-/-- The register frame allocates a slot per definition, including block parameters.
-The ceiling is per activation, so the program uses the largest function frame. -/
-def BIR.frameSlots {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
-    (bir : BIR lang profile) : Nat :=
-  bir.functions.foldl (fun largest function =>
-    max largest (function.2.2.blocks.foldl (fun slots block =>
+/-- Each register definition and block parameter occupies one slot.
+Use the largest function frame, including for the pre-BIR resource refusal. -/
+private def registerFrameSlots {Ty T : Type} {lang : LoweringLanguage Ty}
+    (functions : AList FnId (LocalTypes Ty × CFG (Sigma (SSAValue Ty)) (LocatedOp (SSAInst lang)) T)) :
+    Nat :=
+  functions.foldl (fun largest (_, _, graph) =>
+    max largest (graph.blocks.foldl (fun slots block =>
       block.body.foldl (fun count inst => match inst.instruction with
         | .op .. | .load .. => count + 1
         | .destructure _ bindings => count + bindings.length
         | .call _ (some _) _ => count + 1
         | _ => count) (slots + block.params.length)) 0)) 0
+
+def SSA.frameSlots {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    (ssa : SSA lang profile) : Nat :=
+  registerFrameSlots ssa.functions
+
+def BIR.frameSlots {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    (bir : BIR lang profile) : Nat :=
+  registerFrameSlots bir.functions
 
 def Profile.llvmTriple (profile : Profile) : String :=
   match profile.backendTarget with
