@@ -123,10 +123,15 @@ structure ExecutableNote where
   target : Concrete.Backend.LCB.Target
   loweringPath : LoweringPath
 
+/-- The two kernel claims differ in whether the proof includes the final-image stack bound. -/
+inductive ImageClaim where
+  | conditionalStack
+  | provedStack
+
 /-- The strength of the receipt's final-image correspondence. -/
 inductive ImageBinding where
   | driverAttested
-  | imageValidated (evidence : Digest .evidence)
+  | imageValidated (claim : ImageClaim) (evidence : Digest .evidence)
 
 /-- A fact records its production status and the evidence nodes needed to re-evaluate current
 acceptance when a checker or assumption is revoked. -/
@@ -373,26 +378,37 @@ def factsFromEvidence (graph : List EvidenceNode) : List Fact :=
 
 def environmentPremises : List ExternalPremise := [.launch, .osLiveness, .stderrProgress]
 
-def OpenPremisesValid (path : LoweringPath) (binding : ImageBinding)
-    (openPremises : List ExternalPremise) : Prop :=
-  match binding with
-  | .driverAttested => openPremises = path.premises
-  | .imageValidated _ => openPremises.Sublist path.premises ∧
-    ∀ p ∈ environmentPremises, p ∈ openPremises
+def ImageClaim.openPremises : ImageClaim → List ExternalPremise
+  | .conditionalStack => .imageStack :: environmentPremises
+  | .provedStack => environmentPremises
 
-def ImageDependencies (binding : ImageBinding) (openPremises : List ExternalPremise) :
-    List Obligation :=
+def ImageBinding.openPremises (path : LoweringPath) : ImageBinding → List ExternalPremise
+  | .driverAttested => path.premises
+  | .imageValidated claim _ => claim.openPremises
+
+def ImageDependencies (path : LoweringPath) (binding : ImageBinding) : List Obligation :=
   (match binding with
    | .driverAttested => [.toolHandoffs]
-   | .imageValidated _ => [.frontend]) ++ openPremises.map Obligation.external
+   | .imageValidated .. => [.frontend]) ++ (binding.openPremises path).map Obligation.external
 
-/-- The exact-byte validation path may discharge build-time correspondence. It remains
-conditional on the verifier's selected reference and the continuing environment assumptions. -/
+/-- Replay selects one of two fixed propositions. The checked claim supplies the
+dependency list, which is never inferred from the receipt's declared premises. -/
+def ImageClaim.proposition {Env : Type} {profile : Profile}
+    {reference : TargetReference Env profile.target} (claim : ImageClaim)
+    (n : NativeModels Env profile reference) (path : String) (core : Elab.Output)
+    (exe : ByteArray) : Prop :=
+  (∃ decoded, reference.decode exe = some decoded) ∧
+  (∃ env, RunReady n exe env) ∧ ImageCorrect n admittedCoreSemantics path core exe ∧
+  match claim with
+  | .conditionalStack => True
+  | .provedStack => ∀ env, n.launchAdmitted exe env →
+      n.stackAdequate exe env profile.maxImageStackBytes
+
+/-- Exact-byte replay uses the verifier's target reference and resource policy. -/
 def ReceiptValid {Env : Type} (policy : ExecutionPolicy Env)
     (codec : Codec) (ctx : ReplayContext) (format : NoteFormat)
     (tools : NativeTools) (input : Stages.Input) (out : Stages.Output) (build : ExactBuild)
-    (exe : ByteArray) (r : Receipt) {execution : Contracts.Semantics (ByteArray × Env)}
-    {platform : Platform Env r.certificate.profile.target execution}
+    (exe : ByteArray) (r : Receipt) (platform : TargetReference Env r.certificate.profile.target)
     (n : NativeModels Env r.certificate.profile platform) : Prop :=
   r.schemaVersion = codec.version ∧ PreLinkValid codec ctx tools input out build r.certificate ∧
   r.executable = codec.hash .executable exe ∧
@@ -408,22 +424,19 @@ def ReceiptValid {Env : Type} (policy : ExecutionPolicy Env)
   OrderedGraph (r.certificate.evidenceGraph ++ r.evidenceGraph) ∧
   r.replay = ctx.commands ∧ r.executionTrust = ctx.executionTrust ∧
   r.facts = factsFromEvidence (r.certificate.evidenceGraph ++ r.evidenceGraph) ∧
-  OpenPremisesValid r.certificate.loweringPath r.binding r.openPremises ∧
+  r.openPremises = r.binding.openPremises r.certificate.loweringPath ∧
   (∀ p, p ∈ r.openPremises ↔ HasEvidence r.evidenceGraph (.external p) (.openPremise p.name)) ∧
   (∀ node ∈ r.evidenceGraph, node.obligation = .finalImage ∨
     ∃ p ∈ r.openPremises, node.obligation = .external p) ∧
   (∀ p, HasDependencies (r.certificate.evidenceGraph ++ r.evidenceGraph) (.external p) []) ∧
   HasDependencies (r.certificate.evidenceGraph ++ r.evidenceGraph) .finalImage
-    (ImageDependencies r.binding r.openPremises) ∧
+    (ImageDependencies r.certificate.loweringPath r.binding) ∧
   match r.binding with
   | .driverAttested => HasEvidence r.evidenceGraph .finalImage .driverAttested
-  | .imageValidated d =>
+  | .imageValidated claim d =>
     policy.Anchors n ∧
     HasEvidence r.evidenceGraph .finalImage (.kernelChecked d) ∧
-    Checked codec d ((∃ decoded, platform.decode exe = some decoded) ∧
-      (∃ env, RunReady n exe env) ∧ ImageCorrect n admittedCoreSemantics input.path out.core exe ∧
-      (.imageStack ∉ r.openPremises → ∀ env, n.launchAdmitted exe env →
-        n.stackAdequate exe env r.certificate.profile.maxImageStackBytes))
+    Checked codec d (claim.proposition n input.path out.core exe)
 
 
 example : OrderedGraph [⟨0, .frontend, .driverAttested, []⟩,
@@ -498,15 +511,14 @@ example (graph : List EvidenceNode) (fact : Fact) (h : fact ∈ factsFromEvidenc
   dsimp at found
   split at found <;> cases found <;> simp
 
-example : OpenPremisesValid .llvm (.imageValidated ⟨ByteArray.empty⟩) environmentPremises := by
-  exact ⟨by decide, fun _ h => h⟩
+example : (.external .imageStack : Obligation) ∈
+    ImageDependencies .llvm (.imageValidated .conditionalStack ⟨ByteArray.empty⟩) := by decide
 
-example : ¬ OpenPremisesValid .llvm .driverAttested environmentPremises := by
-  change environmentPremises ≠ LoweringPath.premises .llvm
-  decide
+example : (.external .imageStack : Obligation) ∉
+    ImageDependencies .llvm (.imageValidated .provedStack ⟨ByteArray.empty⟩) := by decide
 
-example : .toolHandoffs ∉ ImageDependencies (.imageValidated ⟨ByteArray.empty⟩)
-    environmentPremises := by decide
+example : .toolHandoffs ∉
+    ImageDependencies .llvm (.imageValidated .provedStack ⟨ByteArray.empty⟩) := by decide
 
 example : RefusalAt ImageTheorem.Sanity.answerInput
     (.birSlotLimit { ImageTheorem.Sanity.sampleProfile with maxBIRSlots := 0 } .llvm)
@@ -554,7 +566,7 @@ private def testPreLink : PreLinkCertificate :=
      ⟨2, .llvmPrint, .kernelChecked testEvidence, [1]⟩,
      ⟨3, .toolHandoffs, .driverAttested, [2]⟩]⟩
 
-private theorem testPreLinkValid : PreLinkValid testCodec testContext (testTools answerImage)
+private theorem testPreLinkValid : PreLinkValid testCodec testContext testTools
     answerInput answerOutput testBuild testPreLink := by
   with_unfolding_all
     refine ⟨rfl, ⟨rfl, rfl, rfl, rfl⟩, rfl, ⟨rfl, rfl⟩, rfl, ⟨rfl, ?_⟩, rfl,
@@ -594,15 +606,15 @@ private def testImageGraph : List EvidenceNode :=
 
 private def testReceipt : Receipt :=
   ⟨1, ⟨answerImage⟩, none, testPreLink, ⟨testCodec.certificate testPreLink⟩,
-    .imageValidated testEvidence, testImageGraph, factsFromEvidence (testPreLink.evidenceGraph ++ testImageGraph),
+    .imageValidated .provedStack testEvidence, testImageGraph, factsFromEvidence (testPreLink.evidenceGraph ++ testImageGraph),
     environmentPremises, [], []⟩
 
-example : ReceiptValid (testExecutionPolicy bytecodeObservation) testCodec testContext testNoteFormat (testTools answerImage)
-    answerInput answerOutput testBuild answerImage testReceipt
-    (testNative sampleProfile bytecodeObservation answerImage) := by
+example : ReceiptValid testExecutionPolicy testCodec testContext testNoteFormat testTools
+    answerInput answerOutput testBuild answerImage testReceipt testReference
+    testNative := by
   with_unfolding_all
     refine ⟨rfl, testPreLinkValid, rfl, rfl, ⟨rfl, rfl⟩, rfl, ?_, ?_, ?_, rfl, rfl, rfl,
-      ⟨by decide, fun _ h => h⟩, ?_, ?_, ?_, ?_, ?_⟩
+      rfl, ?_, ?_, ?_, ?_, ?_⟩
     · intro env ready
       exact ⟨ready, (instantRefines _ _ (answerImage, env) (answerImage, env) rfl).1⟩
     · intro env ready
@@ -612,11 +624,24 @@ example : ReceiptValid (testExecutionPolicy bytecodeObservation) testCodec testC
       cases p <;> simp [testReceipt, testImageGraph, environmentPremises, HasEvidence]
     · simp [testReceipt, testImageGraph, environmentPremises]
     · simp [testReceipt, testImageGraph, testPreLink, HasDependencies]
-    · simp [testReceipt, testImageGraph, testPreLink, HasDependencies, ImageDependencies, environmentPremises]
-    · refine ⟨testAnchor _ _, ?_, ⟨⟨_, rfl⟩, ⟨(), ⟨trivial, trivial⟩, trivial, trivial⟩,
+    · simp [testReceipt, testImageGraph, testPreLink, HasDependencies, ImageDependencies, ImageBinding.openPremises, ImageClaim.openPremises, environmentPremises]
+    · refine ⟨testAnchor, ?_, ⟨⟨_, rfl⟩, ⟨(), ⟨trivial, trivial⟩, trivial, trivial⟩,
         ⟨fun _ _ => answerImageRefines.1, fun _ _ => answerImageRefines.2,
-          fun _ env _ => ⟨exit42, instantObserves _ (answerImage, env)⟩⟩, fun _ _ _ => trivial⟩, trivial⟩
+          fun _ env _ => ⟨exit42, instantObserves _ (answerImage, env)⟩⟩, fun _ _ => trivial⟩, trivial⟩
       exact ⟨_, List.Mem.tail _ (List.Mem.tail _ (List.Mem.tail _ (List.Mem.head _))), rfl, rfl⟩
+
+/-- Relabeling the proof as stack-conditional requires both a premise and a graph edge. -/
+example : ¬ ReceiptValid testExecutionPolicy testCodec testContext testNoteFormat testTools
+    answerInput answerOutput testBuild answerImage
+    {testReceipt with binding := .imageValidated .conditionalStack testEvidence}
+    testReference testNative := by
+  intro valid
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, premises, _⟩ := valid
+  have stackListed : .imageStack ∈ environmentPremises := by
+    rw [show environmentPremises = _ from premises]
+    exact List.Mem.head _
+  exact (by decide : .imageStack ∉ environmentPremises) stackListed
+
 
 end Sanity
 
