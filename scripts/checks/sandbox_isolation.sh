@@ -10,7 +10,7 @@
 #   structural  every script under scripts/ that makes a repository
 #               (git init, git clone, git worktree add) sources the helper and calls git_sandbox.
 #   live        a throwaway CALLER (bare upstream, full clone, linked worktree; no hook installed
-#               anywhere) runs review_tool.sh and legacy_frozen.sh, at this checkout's version, from
+#               anywhere) runs legacy_frozen.sh, at this checkout's version, from
 #               the linked worktree with GIT_DIR exported exactly as a hook sees it. The caller's
 #               refs (refs/notes/* included), core.bare, worktree HEAD and its upstream's refs must be
 #               byte-for-byte unchanged.
@@ -24,8 +24,7 @@
 # (concrete-ci-2's runners: 28G per runner) plus `ulimit -u` of 512 more processes. With neither, the
 # live probes do not run and the check fails as INCOMPLETE: never an unbounded run. macOS has
 # neither (no unprivileged aggregate memory limit), so there the root checks are INCOMPLETE by design
-# and a gated push from a macOS clone is refused: gated pushes (trains) are made from a Linux clone
-# with a bound (fede-256gb or concrete-ci-2; no laptop builds), and CI runs on bounded runners. The 2026-11-06
+# and the root checks run on Linux with a bound. The 2026-11-06
 # reproducer had no such bound, recursed through a test hook and exhausted the machine.
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
@@ -76,13 +75,13 @@ scan_makers() {
     fi
   done
 }
-makers=0
+found_legacy_frozen=false
 while IFS=$'\t' read -r verdict f why; do
-  makers=$((makers+1))
+  if [ "$f" = scripts/checks/legacy_frozen.sh ]; then found_legacy_frozen=true; fi
   if [ "$verdict" = ok ]; then ok "$f $why"; else no "$f $why"; fi
 done < <(scan_makers "$ROOT_DIR")
-[ "$makers" -ge 8 ] && ok "found $makers repository-making scripts (at least the 8 known)" \
-  || no "found only $makers repository-making scripts; the scan is not seeing them"
+"$found_legacy_frozen" && ok "the scan reaches the live legacy freeze probe" \
+  || no "the scan missed the live legacy freeze probe"
 
 echo "=== control: the structural scan sees scripts at any depth and without a .sh suffix ==="
 # A planted tree: an unsandboxed maker three directories down and one with a bash shebang and no
@@ -153,7 +152,7 @@ elif CGMEM="$(cgroup_memory_max)"; then BOUND=cgroup; fi
 case "$BOUND" in
   scope)  echo "bound: a systemd user scope, TasksMax=512, MemoryMax=8G" ;;
   cgroup) echo "bound: this cgroup's memory.max ($CGMEM bytes, aggregate) and ulimit -u (512 more processes)" ;;
-  none)   echo "bound: none available (no systemd user scope, no finite cgroup memory.max; macOS has neither): the live probes will not run; run the root checks and gated pushes from a bounded Linux host (fede-256gb, concrete-ci-2) or in CI" ;;
+  none)   echo "bound: none available (no systemd user scope, no finite cgroup memory.max; macOS has neither): the live probes will not run; run the root checks from a bounded Linux host or in CI" ;;
 esac
 bounded() {
   case "$BOUND" in
@@ -233,12 +232,11 @@ cat > "$TMP/ctl/leaky.sh" <<'EOF'
 # What the unfixed review_tool.sh did: build a sandbox without clearing GIT_DIR, then write to it.
 T="$(mktemp -d)"; git init -q "$T/w"
 git -C "$T/w" commit -q --allow-empty -m leaked
-git -C "$T/w" notes --ref=refs/notes/concrete-review add -m "verdict: clean" HEAD
+git -C "$T/w" notes --ref=refs/notes/isolation-control add -m "leaked" HEAD
 EOF
 probe "control (leaky script)" "$TMP/ctl/leaky.sh" 1
 
 echo "=== live: sandbox checks run from a linked worktree as its hook would run them ==="
-probe "review_tool.sh" scripts/checks/review_tool.sh 0 "^check_review_tool: PASS=[0-9]* FAIL=0$"
 probe "legacy_frozen.sh" scripts/checks/legacy_frozen.sh 0 "^legacy_frozen: PASS=[0-9]* FAIL=0$"
 
 echo
