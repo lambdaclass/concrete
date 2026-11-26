@@ -696,10 +696,6 @@ def matRange : Range := ⟨⟨⟨0⟩, 40, some ⟨0⟩⟩, 1, 1⟩
 def matBlock : Block := { candidate ⟨0⟩ 40 1 1 with bytes := [.init 1 none] }
 def matMemory : Memory := ⟨[(⟨0⟩, matBlock)], 1⟩
 def matState : State := ({ structState with memory := matMemory }).set ⟨0⟩ ⟨(.int .u8), .materialized matRange⟩
-def matExposedBlock : Block := { matBlock with exposed := true }
-def matExposedState : State :=
-  ⟨[(⟨0⟩, ⟨(.int .u8), .materialized matRange⟩), (⟨0⟩, ⟨(.int .u8), .structured (.int .u8 1)⟩)],
-    ⟨[(⟨0⟩, matExposedBlock)], 1⟩⟩
 
 /-- Mutate only the allocation counter; bytes, projections and all other geometry are retained. -/
 def forgetFreshness (st : State) : State :=

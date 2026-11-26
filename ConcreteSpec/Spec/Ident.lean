@@ -505,6 +505,31 @@ instance (k : ConstructKind) (target : KeyConstruct) (route : Numbers) :
   unfold KeyConstruct.SubtreeAvoidsKind
   infer_instance
 
+/-- Count the lexical sites in a forest, including all descendants. -/
+def KeyConstruct.siteCount : List KeyConstruct → Nat
+  | [] => 0
+  | root :: rest => 1 + KeyConstruct.siteCount root.children + KeyConstruct.siteCount rest
+termination_by forest => sizeOf forest
+decreasing_by
+  all_goals simp_wf
+  all_goals cases root <;> simp_all <;> omega
+
+/-- The zero-based lexical index of a route in preorder. Each preceding sibling contributes its
+whole subtree. The empty route and routes that leave the forest have no lexical index. -/
+def KeyConstruct.lexicalIndex : List KeyConstruct → Numbers → Option Nat
+  | [], _ => none
+  | _ :: _, [] => none
+  | _ :: _, [0] => some 0
+  | root :: _, 0 :: child :: route =>
+    (KeyConstruct.lexicalIndex root.children (child :: route)).map Nat.succ
+  | root :: rest, (index + 1) :: route =>
+    (KeyConstruct.lexicalIndex rest (index :: route)).map
+      (fun offset => 1 + KeyConstruct.siteCount root.children + offset)
+termination_by forest _ => sizeOf forest
+decreasing_by
+  all_goals simp_wf
+  all_goals cases root <;> simp_all <;> omega
+
 /-- Collect the persistent function-relative keys of a construct forest in order within the
 inherited unnamed-ancestor scope `scope`. -/
 def KeyConstruct.collectKeysIn (scope : List KeyConstruct) :
@@ -1628,7 +1653,10 @@ theorem example_FieldId_mk_variant_ModuleId_mk : FieldId.mk (.variant ⟨⟨Modu
     FieldId.mk (.variant ⟨⟨ModuleId.mk ⟨⟨"p"⟩, ⟨⟨"1"⟩⟩⟩ [⟨"m"⟩] (by decide), ⟨"E"⟩⟩, ⟨"B"⟩⟩) ⟨"value"⟩ := by decide
 
 /-- The first and the last slice. -/
-theorem example_first_and_last_slice : (SliceId.mk 0).n.val = 0 ∧ (SliceId.mk 21).n.val = 21 := ⟨rfl, rfl⟩
+theorem example_first_and_last_slice :
+    (SliceId.mk 0).n.val = 0 ∧ (SliceId.mk 21).n.val = 21 ∧
+      (∀ slice : SliceId, slice.n.val ≤ 21) :=
+  ⟨rfl, rfl, fun slice => Nat.le_of_lt_succ slice.n.isLt⟩
 
 /-- Bytes for `a`, a tab, and `b`. After the tab, the range starts at line 1, byte column 3. -/
 def tabSource : SourceText := SourceText.ofBytes [97, 9, 98]

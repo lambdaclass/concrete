@@ -181,11 +181,27 @@ theorem KeyConstruct.collectKeysIn_collectionSound (scope forest : List KeyConst
   intro key member
   exact collectKeysIn_sound scope forest key member
 
-/-- Law (subject `ConcreteSpec.Core.KeyConstruct.collectKeysIn`).
-Every successfully located occurrence is collected; no nested site can disappear. -/
-theorem KeyConstruct.collectKeysIn_complete (scope forest : List KeyConstruct)
+/-- Helper (computation). Collection has one entry per lexical site, independent of scope. -/
+theorem KeyConstruct.collectKeysIn_length (scope forest : List KeyConstruct) :
+    (collectKeysIn scope forest).length = siteCount forest := by
+  cases forest with
+  | nil => simp [collectKeysIn, siteCount]
+  | cons root rest =>
+    simp only [collectKeysIn, siteCount, List.length_cons, List.length_append, List.length_map,
+      collectKeysIn_length (root.childScope scope) root.children,
+      collectKeysIn_length (scope ++ [root]) rest]
+    omega
+termination_by sizeOf forest
+decreasing_by
+  all_goals simp_wf
+  all_goals cases root <;> simp_all <;> omega
+
+/-- Helper (computation). A resolved path occurs at its preorder index in the collected keys. -/
+theorem KeyConstruct.collectKeysIn_at_route (scope forest : List KeyConstruct)
     (route : Numbers) (key : FunctionRelativeKey) (nonempty : route ≠ [])
-    (found : pathAtIn scope forest route = some key) : key ∈ collectKeysIn scope forest := by
+    (found : pathAtIn scope forest route = some key) :
+    ∃ index, lexicalIndex forest route = some index ∧
+      (collectKeysIn scope forest)[index]? = some key := by
   cases forest with
   | nil => cases route <;> simp_all [pathAtIn]
   | cons root rest =>
@@ -198,30 +214,49 @@ theorem KeyConstruct.collectKeysIn_complete (scope forest : List KeyConstruct)
         | nil =>
           simp [pathAtIn] at found
           subst key
-          simp [collectKeysIn, KeyConstruct.key]
-        | cons index route =>
+          exact ⟨0, by simp [lexicalIndex], by simp [collectKeysIn, KeyConstruct.key]⟩
+        | cons child route =>
           rw [pathAtIn] at found
-          simp only [List.getElem?_cons_zero, List.take_zero, List.append_nil, Option.bind_eq_bind, Option.bind_some] at found
-          cases child : pathAtIn (root.childScope scope) root.children (index :: route) with
-          | none => simp [child] at found
+          simp only [List.getElem?_cons_zero, List.take_zero, List.append_nil,
+            Option.bind_eq_bind, Option.bind_some] at found
+          cases resolved : pathAtIn (root.childScope scope) root.children (child :: route) with
+          | none => simp [resolved] at found
           | some suffix =>
             have equal : (⟨root.segment scope :: suffix.path⟩ : FunctionRelativeKey) = key := by
-              simpa [child] using found
+              simpa [resolved] using found
             subst key
-            have member := collectKeysIn_complete (root.childScope scope) root.children
-              (index :: route) suffix (by simp) child
-            simp only [collectKeysIn, List.mem_cons, List.mem_append, List.mem_map]
-            exact Or.inr (Or.inl ⟨suffix, member, rfl⟩)
+            obtain ⟨offset, located, indexed⟩ :=
+              collectKeysIn_at_route (root.childScope scope) root.children
+                (child :: route) suffix (by simp) resolved
+            refine ⟨offset + 1, by simp [lexicalIndex, located], ?_⟩
+            simp only [collectKeysIn, List.getElem?_cons_succ]
+            rw [List.getElem?_append_left (by simpa using (List.getElem?_eq_some_iff.mp indexed).1)]
+            simp [indexed]
       | succ index =>
         rw [pathAtIn_succ] at found
-        have member := collectKeysIn_complete (scope ++ [root]) rest (index :: route) key
-          (by simp) found
-        simp only [collectKeysIn, List.mem_cons, List.mem_append]
-        exact Or.inr (Or.inr member)
+        obtain ⟨offset, located, indexed⟩ :=
+          collectKeysIn_at_route (scope ++ [root]) rest (index :: route) key (by simp) found
+        refine ⟨1 + siteCount root.children + offset, by simp [lexicalIndex, located], ?_⟩
+        rw [collectKeysIn]
+        have size : ((collectKeysIn (root.childScope scope) root.children).map
+            (fun key => (⟨root.segment scope :: key.path⟩ : FunctionRelativeKey))).length =
+            siteCount root.children := by simp [collectKeysIn_length]
+        rw [show 1 + siteCount root.children + offset =
+            (siteCount root.children + offset) + 1 by omega, List.getElem?_cons_succ,
+          List.getElem?_append_right (by rw [size]; omega)]
+        simpa [size] using indexed
 termination_by sizeOf forest
 decreasing_by
   all_goals simp_wf
   all_goals cases root <;> simp_all <;> omega
+
+/-- Law (subject `ConcreteSpec.Core.KeyConstruct.collectKeysIn`).
+Every successfully located occurrence is collected; no nested site can disappear. -/
+theorem KeyConstruct.collectKeysIn_complete (scope forest : List KeyConstruct)
+    (route : Numbers) (key : FunctionRelativeKey) (nonempty : route ≠ [])
+    (found : pathAtIn scope forest route = some key) : key ∈ collectKeysIn scope forest := by
+  obtain ⟨_, _, indexed⟩ := collectKeysIn_at_route scope forest route key nonempty found
+  exact List.mem_of_getElem? indexed
 
 /-- Law (subject `ConcreteSpec.Core.KeyConstruct.assignFunctionTable`).
 The assigned table contains precisely the complete paths of real nonempty occurrences. Lexical
@@ -261,17 +296,17 @@ theorem KeyConstruct.assignFunctionTable_lookup (f : FnId) (startSite index : Na
   · rintro ⟨indexed, _⟩
     simp [indexed]
 
-/-- A resolved occurrence's persistent key is available in the assigned certificate table
-at some lexical site, for any choice of the starting offset. This lifts path stability laws
-to table lookups even when an edit changes the lexical site. -/
+/-- Law (subject `ConcreteSpec.Core.KeyConstruct.assignFunctionTable`).
+At any starting offset, the table maps the lexical site of a resolved occurrence to
+that occurrence's persistent key. -/
 theorem KeyConstruct.assignFunctionTable_lookup_of_path (f : FnId) (startSite : Nat)
     (body : List KeyConstruct) (route : Numbers) (key : FunctionRelativeKey)
     (nonempty : route ≠ []) (found : pathAt body route = some key) :
-    ∃ index, AList.lookup (assignFunctionTable f startSite body) ⟨startSite + index⟩ =
-      some ⟨.function f, key⟩ := by
-  have member := collectKeysIn_complete [] body route key nonempty found
-  obtain ⟨index, indexed⟩ := List.mem_iff_getElem?.mp member
-  exact ⟨index, (assignFunctionTable_lookup f startSite index body key).mpr
+    ∃ index, lexicalIndex body route = some index ∧
+      AList.lookup (assignFunctionTable f startSite body) ⟨startSite + index⟩ =
+        some ⟨.function f, key⟩ := by
+  obtain ⟨index, located, indexed⟩ := collectKeysIn_at_route [] body route key nonempty found
+  exact ⟨index, located, (assignFunctionTable_lookup f startSite index body key).mpr
     ⟨indexed, route, nonempty, found⟩⟩
 
 /-- Law (subject `ConcreteSpec.Core.KeyConstruct.assignProgramTables`, `ConcreteSpec.Core.OutsideFunctionEdit`).
@@ -1286,6 +1321,35 @@ def namedBinding : KeyConstruct := KeyConstruct.mk .binding (.named ⟨"x"⟩) [
 def namedCall : KeyConstruct := KeyConstruct.mk .call (.named ⟨"work"⟩) []
 def unnamedLoop : KeyConstruct := KeyConstruct.mk .loop (.unnamed none) []
 def unnamedBlock : KeyConstruct := KeyConstruct.mk .block (.unnamed none) []
+
+/-- A nested call followed in preorder by a sibling binding. -/
+def routeBody : List KeyConstruct := [{ unnamedBlock with children := [namedCall] }, unnamedBinding]
+
+/-- Both lexical sites stay fixed while their persistent keys trade places. -/
+def swapOccurrenceKeys : SiteKeyTable → SiteKeyTable
+  | root :: (firstSite, firstKey) :: (secondSite, secondKey) :: rest =>
+    root :: (firstSite, secondKey) :: (secondSite, firstKey) :: rest
+  | table => table
+
+/-- The two routes resolve to their own keys at lexical sites 11 and 12. -/
+def routeLookupsAgree (table : SiteKeyTable) : Prop :=
+  (KeyConstruct.lexicalIndex routeBody [0, 0] = some 1 ∧
+    AList.lookup table ⟨11⟩ =
+      (KeyConstruct.pathAt routeBody [0, 0]).map (fun key => ⟨.function function, key⟩)) ∧
+  (KeyConstruct.lexicalIndex routeBody [1] = some 2 ∧
+    AList.lookup table ⟨12⟩ =
+      (KeyConstruct.pathAt routeBody [1]).map (fun key => ⟨.function function, key⟩))
+
+/-- Planted (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_lookup_of_path`, case `ConcreteSpec.Core.Vacuity.routeBody`, subject `ConcreteSpec.Core.KeyConstruct.assignFunctionTable`, mutant `ConcreteSpec.Core.Vacuity.swapOccurrenceKeys`).
+The same routes and offset accept the assigned table and reject the swapped table. -/
+theorem lookup_of_path_planted_routeBody_swapOccurrenceKeys :
+    let table := KeyConstruct.assignFunctionTable function 10 routeBody
+    routeLookupsAgree table ∧ ¬ routeLookupsAgree (swapOccurrenceKeys table) := by
+  simp [routeLookupsAgree, routeBody, KeyConstruct.lexicalIndex, KeyConstruct.siteCount,
+    KeyConstruct.assignFunctionTable, KeyConstruct.numberFunctionKeys, KeyConstruct.collectKeys,
+    KeyConstruct.collectKeysIn, KeyConstruct.pathAt, KeyConstruct.pathAtIn, KeyConstruct.key,
+    KeyConstruct.segment, KeyConstruct.childScope, namedCall, unnamedBlock, unnamedBinding,
+    swapOccurrenceKeys, AList.lookup] <;> decide
 
 /-- Function bodies before and after editing `otherFunction`: `function`'s body is unchanged. -/
 def bodiesBefore (f : FnId) : List KeyConstruct :=
