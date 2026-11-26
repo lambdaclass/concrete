@@ -79,6 +79,17 @@ promoted root. It simultaneously defines the typed field registers and requires
 each active linear field to have a distinct binding. Split the SSA construction
 currently inside `SSA.lower` from its BIR output. The registered MIR, Memory and SSA handoffs require an entry in the function table and project-bound origins. Memory table validity excludes invalid terminators.
 
+MIR, Memory, SSA and BIR carry mutable root declarations. The shared
+interpreter uses them, or the existing owner slot's checked descriptor when
+an identity already has a slot. The interpreter projects its selected field
+into the owner slot used for permission while retaining the original root
+for loan exclusion. Copy reads, consuming reads, writes and lifetime ends
+use the corresponding `Own` decisions. Storage initialization and field
+liveness remain separate from those decisions. The registered handoffs
+preserve the declared mutable roots from MIR through BIR. The SSA and BIR
+views also allow Copy replacement in their own synthetic register slots so
+loop iterations can define a register again.
+
 ## SSA → BIR
 
 Fix (a) owns the validated handoff and profile slot check. BIR formation preserves the decoded entry graph and refines the linked execution from that entry. Both stages run the same interpreter on their decoded graphs. Unreachable helper bodies can differ. Fix (d) owns the trap table and its origin proof. `BIR` indexes traps through `TrapIndex`; `BuildsBIR` requires valid lookup, origin preservation, behavior refinement against the graph’s execution rules and the resolved profile's BIR slot ceiling. The count is the largest function's number of BIR definitions, including block parameters,
@@ -89,7 +100,7 @@ identity passed to spec address operations. An unresolved trap slot has neither 
 successor nor a terminal result, including inside a callee. The resolved platform supplies the ISA, byte order and spec memory layout for either backend. Dominance-scoped validation can strengthen the invariant on the same graph before slice 3. Retire SSA's positional site creation and BIR's duplicate diagnostic identity and scalar vocabulary at cutover.
 
 The handoff preserves the exact project used to resolve source locations and
-produce runtime diagnostics, including sites in unreachable blocks. Both backend entries require a duplicate-free BIR function table, a present entry function and project-bound trap sites.
+produce runtime diagnostics, including sites in unreachable blocks. Both backend entries require a duplicate-free BIR function table, a present entry function, project-bound trap sites and well-formed tables in the decoded Memory view.
 
 ## BIR → LLVM
 
@@ -103,7 +114,11 @@ carries the hosted body, auxiliary jobs keyed by BIR function identity, runtime
 bytes and the exact trap table. The verified handoff validates the emitted
 jobs, checks symbol uniqueness, and runs the entry job in the pinned LCB
 semantics. A job-admission refusal identifies a validation error on the exact candidate produced by the emitter. The candidate must still satisfy the encoding contract. The runtime projection uses the emitted diagnostic table to
-distinguish returning from trapping. The guard rejects calls in the entry
+distinguish returning from trapping. The LCB return word reserves codes 0
+through 255 for normal exits. The LCB adapter refuses more than
+`2^32 - 256` trap entries before it invokes the emitter. This capacity
+belongs to the hosted ABI at the LCB edge. BIR table validity is independent
+of that limit. The guard also rejects calls in the entry
 graph before invoking the emitter when their blocks are reachable by following
 CFG edges from the entry block. Multi-job execution requires
 a pinned linked semantics and a proof of behavior preservation. The
@@ -214,11 +229,13 @@ current source grammar cannot produce.
   Refusals must satisfy the precise resource, profile, linking or encoded
   job-validation predicates of their respective stages.
 
-The permanent compiler gate runs `return 42` through both checked and
-unchecked registered LCB routes and observes exit 42 with empty stderr in
-the fixed LCB semantics. A planted lowering refusal produces no artifact,
-and an elaborator that changes the literal to `43` fails validation.
-These controls exercise one source through the full chain.
+The permanent compiler gate checks `Pipeline.Corresponds` for `return 42`
+on both registered LCB routes and observes exit 42 with empty stderr in
+the fixed LCB semantics. The checked route uses the spec checker and
+refuses `return 256` for `u8`. Boundary controls cover the zero-slot
+self-loop, the first oversized trap table and malformed syntax. A planted
+lowering refusal produces no artifact, and an elaborator that changes the
+literal to `43` fails validation.
 
 When an atomic retirement spans owners, each writer prepares the replacement for its own files. The integration writer applies the coordinated deletion and updates the trusted-base inventories and cross-stage fixtures with the cutover. Frozen paths and the digest manifest belong to the interface round. Fixes (e) and (f) provide production definitions in their owned modules before the integration writer replaces the bootstrap instance bodies at cutover.
 
@@ -226,3 +243,8 @@ ISS-XXXX (coordinator assignment pending) tracks D5 controls on the fixed slice
 instances for checked and unchecked Core lowering, Memory lowering, SSA, BIR
 and LCB. Each edge needs a reachable program and a rejected substitution at the
 registered boundary.
+
+
+ISS-XXXX (coordinator assignment pending) tracks indexed type-family
+inspection in the semantic-parameter audit. ISS-XXXX tracks aligning
+intermediate slice domains with production backend coverage before cutover.

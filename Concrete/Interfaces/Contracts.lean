@@ -368,10 +368,35 @@ def initializedAt (state : MemoryRegisters language profile) (root : PlaceId)
   state.initialized.contains root &&
     !(state.movedFields.any fun (owner, moved) => owner == root && pathsOverlap path moved)
 
-private def hasLoan (state : MemoryRegisters language profile) (root : PlaceId)
-    (conflicts : Own.Mode → Bool := fun _ => true) : Bool :=
-  (AList.lookup state.addressIds root).any fun id =>
-    state.ownership.loans.any fun loan => loan.root == id && conflicts loan.mode
+/-- Select the owner whose permission is needed. Storage tracks initialization at
+field granularity while the spec tracks loan exclusion at the root. The slot view
+uses the selected field's Copy/status information without changing the loan root.
+Unaddressed owners use the next unused identity for the permission check. -/
+def ownerView (memory : Memory lang profile) (state : MemoryRegisters language profile)
+    (root : PlaceId) (ty : language.operands.Ty) (status : Own.Status) :
+    Own.State × Hybrid.Place :=
+  let id := (AList.lookup state.addressIds root).getD
+    ⟨max state.nextAddressId state.ownership.nextPlace⟩
+  let slot := Own.slot state.ownership id
+  let mutable := (slot.map (·.desc.mutable)).getD
+    (((AList.lookup memory.mutableLocals state.frame).getD []).contains root)
+  let desc : Own.Descriptor :=
+    ⟨(language.scalarType ty).getD .unit, language.operands.isCopy ty, mutable⟩
+  let activation := (slot.map (·.activation)).getD 0
+  let status := if (slot.map (·.status)).getD .owned == .moved then .moved else status
+  ({state.ownership with slots := ⟨id, activation, desc, status⟩ ::
+    state.ownership.slots.filter (·.place != id)}, id)
+
+/-- Commit the root status from the spec transition to an existing instrumented
+slot. A field transition only changes the interpreter's field liveness. -/
+private def commitOwner (state : MemoryRegisters language profile) (root : PlaceId)
+    (owners : Own.State) : Own.State :=
+  match AList.lookup state.addressIds root with
+  | none => state.ownership
+  | some id =>
+    {state.ownership with slots := state.ownership.slots.map fun slot =>
+      if slot.place == id then {slot with status := ((Own.slot owners id).map (·.status)).getD slot.status}
+      else slot}
 
 private def loadBacking (memory : Memory lang profile)
     (state : MemoryRegisters language profile) {ty : language.operands.Ty}
@@ -443,7 +468,7 @@ private def canDiscard (language : CoreLanguage) :
             | some fieldTy, some fieldValue => canDiscard language n fieldTy fieldValue below
             | _, _ => false
 
-private def mayInitialize (memory : Memory lang profile)
+def mayInitialize (memory : Memory lang profile)
     (state : MemoryRegisters language profile) {ty : language.operands.Ty}
     (place : MemoryPlace _ ty) : Bool :=
   let root := place.logical.root
@@ -465,12 +490,13 @@ def writeValue (memory : Memory lang profile)
     (place : MemoryPlace _ ty) (value : language.operands.Val) :
     Option (MemoryRegisters language profile) := do
   let root := place.logical.root
-  if !state.live.contains root || hasLoan state root then none else
   let path := place.logical.path
-  if !path.isEmpty && !state.initialized.contains root then none else
-  if state.initialized.contains root && !initializedAt state root path &&
-      !memory.mayInitialize state place then none else
+  if !state.live.contains root || !memory.mayInitialize state place then none else
+  let status := if initializedAt state root path then .owned else .moved
+  let (owners, id) := memory.ownerView state root ty status
+  let owners ← Own.reinitialize owners id
   let state := {state with
+    ownership := if path.isEmpty then commitOwner state root owners else state.ownership
     initialized := if state.initialized.contains root then state.initialized else root :: state.initialized
     movedFields := state.movedFields.filter (fun (owner, moved) =>
       owner != root || !path.isPrefixOf moved)}
@@ -508,21 +534,60 @@ def readValue (memory : Memory lang profile)
           (fun scalar => language.valueShape.symm ▸ CoreValue.scalar scalar)
       | _ => language.literal ty value.encoding
     return (decoded, state)
-  | .copy place =>
-    if language.operands.isCopy ty && !hasLoan state place.logical.root (· == .mutable) then
-      return (← memory.loadValue state place, state)
-    else none
+  | .copy place => do
+    let root := place.logical.root
+    let (owners, id) := memory.ownerView state root ty .owned
+    if !(language.operands.isCopy ty && Own.ownerAccess owners id .shared) then none else
+    return (← memory.loadValue state place, state)
   | .move place => do
     let root := place.logical.root
-    if hasLoan state root then none else
+    let (owners, id) := memory.ownerView state root ty .owned
+    let owners ← Own.move owners id
     let value ← memory.loadValue state place
     if !place.logical.path.isEmpty then
       return (value, {state with movedFields := (root, place.logical.path) :: state.movedFields})
     let moved := {state with
+      ownership := commitOwner state root owners
       initialized := state.initialized.erase root
       virtualValues := AList.erase state.virtualValues root
       zeroValues := AList.erase state.zeroValues root}
     return (value, moved)
+
+theorem copyRead_iff (memory : Memory lang profile) (state : MemoryRegisters language profile)
+    {ty : language.operands.Ty} (place : MemoryPlace _ ty) (value : language.operands.Val)
+    (next : MemoryRegisters language profile) :
+    memory.readValue state (.copy place) = some (value, next) ↔
+      let view := memory.ownerView state place.logical.root ty .owned
+      language.operands.isCopy ty = true ∧ Own.ownerAccess view.1 view.2 .shared = true ∧
+        memory.loadValue state place = some value ∧ next = state := by
+  simp only [readValue]
+  generalize (memory.ownerView state place.logical.root ty .owned) = view
+  cases language.operands.isCopy ty <;>
+    cases Own.ownerAccess view.1 view.2 .shared <;>
+    cases memory.loadValue state place <;> simp [eq_comm]
+
+theorem moveRead_iff (memory : Memory lang profile) (state : MemoryRegisters language profile)
+    {ty : language.operands.Ty} (place : MemoryPlace _ ty) :
+    (memory.readValue state (.move place)).isSome = true ↔
+      let view := memory.ownerView state place.logical.root ty .owned
+      (Own.move view.1 view.2).isSome = true ∧ (memory.loadValue state place).isSome = true := by
+  simp only [readValue]
+  generalize (memory.ownerView state place.logical.root ty .owned) = view
+  cases Own.move view.1 view.2 <;> cases memory.loadValue state place <;> simp
+  split <;> rfl
+
+theorem write_authorized (memory : Memory lang profile) (state : MemoryRegisters language profile)
+    {ty : language.operands.Ty} (place : MemoryPlace _ ty) (value : language.operands.Val) {next} :
+    memory.writeValue state place value = some next →
+      let status := if initializedAt state place.logical.root place.logical.path then .owned else .moved
+      let view := memory.ownerView state place.logical.root ty status
+      (Own.reinitialize view.1 view.2).isSome = true := by
+  simp only [writeValue]
+  split
+  · simp
+  · generalize (memory.ownerView state place.logical.root ty
+      (if initializedAt state place.logical.root place.logical.path then .owned else .moved)) = view
+    cases Own.reinitialize view.1 view.2 <;> simp
 
 def Writes (memory : Memory lang profile)
     (state : MemoryRegisters language profile) {ty : language.operands.Ty}
@@ -600,23 +665,41 @@ def Begins (memory : Memory lang profile) (state : MemoryRegisters language prof
       next = {live with bytes := bytes, materialized :=
         (place, ⟨⟨space, base, some block⟩, layout.size, layout.align⟩) :: state.materialized})))
 
-def canEnd (memory : Memory lang profile) (state : MemoryRegisters language profile)
-    (place : PlaceId) : Bool :=
-  !hasLoan state place &&
-  (!state.initialized.contains place ||
-    (memory.rootType state.frame place).any fun ty =>
-      let moved := state.movedFields.filterMap fun (owner, path) =>
-        if owner == place then some path else none
-      if moved.isEmpty then language.operands.isCopy ty
-      else
+def endOwnerView (memory : Memory lang profile) (state : MemoryRegisters language profile)
+    (place : PlaceId) : Option (Own.State × Hybrid.Place) :=
+  (memory.rootType state.frame place).map fun ty =>
+    let moved := state.movedFields.filterMap fun (owner, path) =>
+      if owner == place then some path else none
+    let discharged := !state.initialized.contains place ||
+      (!moved.isEmpty &&
         (memory.classAt state.frame place).any fun storage =>
           (memory.loadBacking state (ty := ty) ⟨⟨place, []⟩, storage⟩).any fun value =>
             canDiscard language (moved.foldl (fun depth path => max depth path.length) 0) ty value moved)
+    memory.ownerView state place ty (if discharged then .moved else .owned)
+
+def canEnd (memory : Memory lang profile) (state : MemoryRegisters language profile)
+    (place : PlaceId) : Bool :=
+  (memory.endOwnerView state place).any fun (owners, id) => Own.canDropPlaces owners [id]
+
+theorem canEnd_iff (memory : Memory lang profile) (state : MemoryRegisters language profile)
+    (place : PlaceId) :
+    memory.canEnd state place = true ↔
+      ∃ view, memory.endOwnerView state place = some view ∧ Own.canDropPlaces view.1 [view.2] = true := by
+  simp only [canEnd]
+  cases found : memory.endOwnerView state place
+  · simp
+  · rename_i view
+    cases view
+    simp
 
 def Ends (memory : Memory lang profile) (state : MemoryRegisters language profile)
     (place : PlaceId) (next : MemoryRegisters language profile) : Prop :=
   (place ∈ state.live ∧ memory.canEnd state place) ∧
+  let ownership := match AList.lookup state.addressIds place with
+    | none => state.ownership
+    | some id => Own.erasePlaces state.ownership [id]
   let dead := {state with
+    ownership
     live := state.live.erase place
     initialized := state.initialized.erase place
     zeroValues := AList.erase state.zeroValues place
@@ -955,6 +1038,7 @@ def logicalView (mir : MIR lang profile) : Memory lang profile where
         boundaryOrigins := block.boundaryOrigins } }
     (locals, body)
   layouts := []
+  mutableLocals := mir.mutableLocals
   storage := mir.functions.map fun (locals, _) =>
     locals.map fun _ => .virtual
 
@@ -1256,9 +1340,10 @@ private def registerView {T : Type} (project : Project) (entry : FnId)
     (signatures : AList FnId (FunctionSignature language.operands.Ty))
     (functions : AList FnId (LocalTypes language.operands.Ty ×
       CFG (Sigma (SSAValue language.operands.Ty)) (LocatedOp (SSAInst lang)) T))
-    (layouts : AList FnId (AList PlaceId Layout)) (lowerTerm : Nat → T → MemoryTerm lang) :
+    (layouts : AList FnId (AList PlaceId Layout)) (mutableLocals : AList FnId (List PlaceId))
+    (lowerTerm : Nat → T → MemoryTerm lang) :
     Memory lang profile :=
-  let functions := List.map (fun (fn, locals, graph) =>
+  let views := List.map (fun (fn, locals, graph) =>
     let declaredLimit := List.foldl (fun limit (root, _) => max limit (root.id + 1)) 0 locals
     -- Even an undeclared physical lifetime operand must not alias a virtual register.
     let base := graph.blocks.foldl (fun limit block =>
@@ -1275,12 +1360,18 @@ private def registerView {T : Type} (project : Project) (entry : FnId)
         lowerTerm base block.ending, block.boundaryOrigins⟩⟩
     ((fn, locals ++ registers, body),
       (fn, List.map (fun p => (p.1, StorageClass.materialized)) locals ++
-        List.map (fun p => (p.1, StorageClass.virtual)) registers))) functions
-  ⟨project, entry, signatures, functions.map Prod.fst, layouts, functions.map Prod.snd⟩
+        List.map (fun p => (p.1, StorageClass.virtual)) registers),
+      (fn, registers.map Prod.fst))) functions
+  -- Register definitions recur on loop iterations. Their synthetic backing
+  -- slots permit replacement of Copy values without granting source mutation.
+  let mutableLocals := views.foldl (fun table (_, _, fn, registers) =>
+    if registers.isEmpty then table
+    else (fn, registers ++ (AList.lookup table fn).getD []) :: AList.erase table fn) mutableLocals
+  ⟨project, entry, signatures, views.map Prod.fst, layouts, views.map (·.2.1), mutableLocals⟩
 
 
 def memoryView (bir : BIR lang profile) : Memory lang profile :=
-  registerView bir.project bir.entry bir.signatures bir.functions bir.layouts (terminator bir)
+  registerView bir.project bir.entry bir.signatures bir.functions bir.layouts bir.mutableLocals (terminator bir)
 
 def entryState (bir : BIR lang profile) : MemoryRegisters language profile :=
   entryStateFor (bir.memoryView (language := language))
@@ -1314,7 +1405,7 @@ def LLVMMetadataMatches {Ty : Type} {lang : LoweringLanguage Ty}
   output.dataLayout = profile.llvmDataLayout ∧ output.sites = bir.sites
 
 def SSA.memoryView (ssa : SSA lang profile) : Memory lang profile :=
-  BIR.registerView ssa.project ssa.entry ssa.signatures ssa.functions ssa.layouts fun base ending =>
+  BIR.registerView ssa.project ssa.entry ssa.signatures ssa.functions ssa.layouts ssa.mutableLocals fun base ending =>
     match ending with
     | .ret value => .ret (value.map (BIR.operand base))
     | .jump edge => .jump ⟨edge.target, edge.arguments.map (BIR.operand base)⟩

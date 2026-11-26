@@ -1517,9 +1517,19 @@ Concrete.Interfaces.MIRInst.op.injEq	propext
 Concrete.Interfaces.MIRInst.op.sizeOf_spec	
 Concrete.Interfaces.Memory.EndLocals.brecOn	Quot.sound propext
 Concrete.Interfaces.Memory.WriteParams.brecOn	Quot.sound propext
+Concrete.Interfaces.Memory.canEnd.eq_1	Quot.sound propext
+Concrete.Interfaces.Memory.canEnd_iff	Quot.sound propext
+Concrete.Interfaces.Memory.copyRead_iff	Quot.sound propext
+Concrete.Interfaces.Memory.copyRead_iff._simp_1_5	propext
 Concrete.Interfaces.Memory.mk.inj	Quot.sound propext
 Concrete.Interfaces.Memory.mk.injEq	Quot.sound propext
 Concrete.Interfaces.Memory.mk.sizeOf_spec	Quot.sound propext
+Concrete.Interfaces.Memory.moveRead_iff	Quot.sound propext
+Concrete.Interfaces.Memory.readValue.eq_1	Quot.sound propext
+Concrete.Interfaces.Memory.readValue.eq_2	Quot.sound propext
+Concrete.Interfaces.Memory.readValue.eq_3	Quot.sound propext
+Concrete.Interfaces.Memory.writeValue.eq_1	Quot.sound propext
+Concrete.Interfaces.Memory.write_authorized	Quot.sound propext
 Concrete.Interfaces.MemoryContinuation.mk.inj	
 Concrete.Interfaces.MemoryContinuation.mk.injEq	propext
 Concrete.Interfaces.MemoryContinuation.mk.sizeOf_spec	
@@ -2572,6 +2582,11 @@ _private.Concrete.Driver.Launcher.0.Concrete.Driver.Launcher.LLVMInputs.mk.inj
 _private.Concrete.Driver.Launcher.0.Concrete.Driver.Launcher.LLVMInputs.mk.injEq	propext
 _private.Concrete.Driver.Launcher.0.Concrete.Driver.Launcher.LLVMInputs.mk.sizeOf_spec	
 _private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.Memory.loadBacking._proof_1	
+_private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.Memory.loadBacking.match_3.eq_1	
+_private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.Memory.loadBacking.match_3.eq_2	
+_private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.Memory.readValue.match_4.eq_1	
+_private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.Memory.readValue.match_4.eq_2	
+_private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.Memory.readValue.match_4.eq_3	
 _private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.hostedExecution._proof_1	
 _private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.hostedExecution._proof_2	
 _private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.hostedExecution._proof_3	

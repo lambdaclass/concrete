@@ -312,12 +312,12 @@ private def testMIR (project : Project) (checks : List OperationCheck)
   let instructions := if withCall then [operation, call] else [operation]
   let raw : Block _ _ _ := ⟨⟨1⟩, [], instructions.map (LocatedOp.mk testOrigin), .ret none, []⟩
   let trap : Block _ _ _ := ⟨⟨2⟩, [], [], .trap .divisionByZero testOrigin, []⟩
-  ⟨project, Exec.Demo.mainF, [], [(Exec.Demo.mainF, [], ⟨⟨0⟩, #[entry, raw, trap]⟩)]⟩
+  ⟨project, Exec.Demo.mainF, [], [(Exec.Demo.mainF, [], ⟨⟨0⟩, #[entry, raw, trap]⟩)], []⟩
 
 private def badBody : LeanCompilerBackend.Verified.Source.Function := ⟨.word, #[], #[], #[]⟩
 
 private def testBIR (project : Project) {profile : Profile} : BIR testLowering profile :=
-  ⟨project, Exec.Demo.mainF, [], [], [], #[]⟩
+  ⟨project, Exec.Demo.mainF, [], [], [], #[], []⟩
 
 private def testOutput {profile : Profile} : LCBInput profile := ⟨badBody, [], #[], ByteArray.empty⟩
 
@@ -642,6 +642,46 @@ private theorem parsedReturnDomain : Parsed.ElaborationDomain slice0 parsedRetur
   subst payload
   exact returnedCoreWF 42
 
+private theorem firstTokenConsumes {count : Nat} {g : SharedGrammar count} {slice : Slice}
+    {rhs tokens args steps} (parsed : DerivesArgs g slice rhs tokens args steps) :
+    (∃ terminal tail, rhs = .t terminal :: tail) → tokens ≠ [] := by
+  cases parsed with
+  | nil =>
+    rintro ⟨_, _, impossible⟩
+    cases impossible
+  | token => exact fun _ => List.cons_ne_nil _ _
+  | child =>
+    rintro ⟨_, _, impossible⟩
+    cases impossible
+
+private theorem firstTokenDerivation {count : Nat} {g : SharedGrammar count} {slice : Slice}
+    {n tokens tree steps} (parsed : Derives g slice n tokens tree steps)
+    (first : ∀ p ∈ g.productions.toList, ∃ terminal tail, p.rhs = .t terminal :: tail) :
+    tokens ≠ [] := by
+  cases parsed with
+  | apply p tokens args member _ parsed => exact firstTokenConsumes parsed (first p member)
+
+-- A malformed stream has an admissible parser refusal. A fabricated tree
+-- cannot be passed on to the elaborator as a successful parser output.
+set_option maxRecDepth 4096 in
+example :
+    let edge := (registry (returnPasses fixtureElaborate)).parser
+    let empty := {returnStream with tokens := #[]}
+    edge.inputInvariant empty ∧
+      ∃ failure, edge.run empty = .error failure ∧ edge.refusal empty failure := by
+  dsimp only
+  let failure : ParseRefusal := .malformed (sliceParser slice0).malformedRule ⟨⟨0⟩, 0, 0, 1, 1⟩
+  refine ⟨⟨by with_unfolding_all rfl, rfl⟩, failure, by with_unfolding_all rfl,
+    by with_unfolding_all rfl, ?_, by with_unfolding_all decide⟩
+  rintro ⟨tree, slice, steps, derives⟩
+  have first (p : Production (sliceGrammar slice0).value)
+      (member : p ∈ (sliceGrammar slice0).productions.toList) :
+      ∃ terminal tail, p.rhs = .t terminal :: tail := by
+    have same := List.mem_singleton.mp member
+    subst p
+    exact ⟨.fn, _, rfl⟩
+  exact (firstTokenDerivation derives first) rfl
+
 set_option maxRecDepth 4096 in
 example :
     let registered := registry (returnPasses fixtureElaborate)
@@ -783,6 +823,38 @@ private theorem wrongLiteralElaboratorInvalid (passes : Passes slice0 testProfil
   have ops := congrArg (fun result => result.toOption.map Payload.operations) matching
   cases ops
 
+set_option maxRecDepth 4096 in
+private theorem returnLexerContract :
+    Lexes elaborationSource returnStream := by
+  refine ⟨rfl, by with_unfolding_all rfl, _, rfl, elaborationSourceText.toUTF8, ?_, rfl, _, rfl, ?_⟩
+  all_goals with_unfolding_all rfl
+
+set_option maxRecDepth 4096 in
+private theorem returnParserContract :
+    (registry (returnPasses fixtureElaborate)).parser.success returnStream parsedReturn := by
+  let g := sliceGrammar slice0
+  let p := g.productions[0]'(by with_unfolding_all decide)
+  let ts := returnView.tokens
+  let args : ActionArgs g.value p.rhs :=
+    ⟨ts[0]'(by decide), ts[1]'(by decide), ts[2]'(by decide), ts[3]'(by decide),
+      ts[4]'(by decide), ts[5]'(by decide), ts[6]'(by decide), ts[7]'(by decide),
+      ts[8]'(by decide), ts[9]'(by decide), ts[10]'(by decide), ()⟩
+  let steps := 11 + 1 + (p.action.eval args).1
+  refine ⟨by with_unfolding_all rfl, ⟨rfl, steps, ?_, ?_, by with_unfolding_all decide,
+    returnLexerContract.2.1⟩, by with_unfolding_all decide⟩
+  · with_unfolding_all
+      exact Derives.apply p ts.toList args (List.mem_singleton_self _) (by decide)
+        (.token rfl (by decide) (.token rfl (by decide) (.token rfl (by decide)
+        (.token rfl (by decide) (.token rfl (by decide) (.token rfl (by decide)
+        (.token rfl (by decide) (.token rfl (by decide) (.token rfl (by decide)
+        (.token rfl (by decide) (.token rfl (by decide) .nil)))))))))))
+  · with_unfolding_all
+      exact Predictive.apply p 0 ts.toList [] args rfl rfl (by decide)
+        (.token rfl (by decide) (.token rfl (by decide) (.token rfl (by decide)
+        (.token rfl (by decide) (.token rfl (by decide) (.token rfl (by decide)
+        (.token rfl (by decide) (.token rfl (by decide) (.token rfl (by decide)
+        (.token rfl (by decide) (.token rfl (by decide) (.nil []))))))))))))
+
 -- Read the literal and locations from the grammar's token leaves. The registered
 -- elaborator consumes the AST returned by the same checked parser.
 set_option maxRecDepth 4096 in
@@ -798,8 +870,7 @@ example :
     ¬ mutant.elaborator.Validated ∧ ¬ refusing.elaborator.Validated := by
   refine ⟨?_, rfl, by with_unfolding_all rfl, rfl,
     ⟨rfl, rfl, returnedCoreWF 42, returnProgram, rfl, rfl⟩, ?_, ?_⟩
-  · refine ⟨rfl, by with_unfolding_all rfl, _, rfl, elaborationSourceText.toUTF8, ?_, rfl, _, rfl, ?_⟩
-    all_goals with_unfolding_all rfl
+  · exact returnLexerContract
   · exact wrongLiteralElaboratorInvalid _ rfl
   · intro validated
     have matching := validated.2 parsedReturn _ parsedReturnDomain rfl
@@ -811,7 +882,7 @@ example :
 -- The spec admits the reachable return program with no operation discharges.
 -- The same fixed judgment rules out an unconditional checker refusal.
 set_option maxRecDepth 2048 in
-example :
+private theorem returnAdmissionContract :
     Admits (elaboratedReturn 42) ⟨elaboratedReturn 42, []⟩ ∧
     ∀ failure, ¬ (elaboratedReturn 42).CheckerRefuses failure := by
   let program : EarlyProgram := ⟨[], .lit 42, resultSpan⟩
@@ -936,7 +1007,7 @@ example (project : Project) :
     let value : Read Unit (Literal Unit) () := .literal ⟨[42]⟩
     let block : Block _ _ _ := ⟨⟨0⟩, [], [], .ret (some ⟨(), value⟩), [testOrigin]⟩
     let mir : MIR testLowering testProfile :=
-      ⟨project, Exec.Demo.mainF, [], [(Exec.Demo.mainF, [], ⟨⟨0⟩, #[block]⟩)]⟩
+      ⟨project, Exec.Demo.mainF, [], [(Exec.Demo.mainF, [], ⟨⟨0⟩, #[block]⟩)], []⟩
     mir.operations = [] ∧ PreservesOrigins [testOrigin] mir.origins := by
   exact ⟨rfl, fun _ h => h, fun _ h => h⟩
 
@@ -948,11 +1019,11 @@ example (project : Project) :
         [(Exec.Demo.mainF, [(⟨0⟩, ())], ⟨⟨0⟩, #[⟨⟨0⟩, [],
           [⟨testOrigin, .bind place (.literal ⟨[42]⟩)⟩],
           .ret (some ⟨(), .copy place⟩), []⟩]⟩)],
-        [], [(Exec.Demo.mainF, [(⟨0⟩, .virtual)])]⟩
+        [], [(Exec.Demo.mainF, [(⟨0⟩, .virtual)])], []⟩
     let ssa : SSA testLowering testProfile :=
       ⟨project, Exec.Demo.mainF, [],
         [(Exec.Demo.mainF, [], ⟨⟨0⟩, #[⟨⟨0⟩, [], [],
-          .ret (some ⟨(), .literal ⟨[42]⟩⟩), [testOrigin]⟩]⟩)], []⟩
+          .ret (some ⟨(), .literal ⟨[42]⟩⟩), [testOrigin]⟩]⟩)], [], []⟩
     PreservesOrigins memory.origins ssa.origins :=
   ⟨fun _ h => h, fun _ h => h⟩
 
@@ -1050,7 +1121,7 @@ private def checkedArgMIR (project : Project) : MIR argLowering testProfile :=
     (.cons (.literal ⟨[8]⟩) (.cons (.literal ⟨[2]⟩) .nil)) [argCheck]
   let call : MIRInst argLowering := .call callee none [⟨(), .copy argPlace⟩] []
   ⟨project, Exec.Demo.mainF, [], [(Exec.Demo.mainF, [(argPlace.root, ())],
-    ⟨⟨0⟩, #[⟨⟨0⟩, [], [⟨testOrigin, div⟩, ⟨callOrigin, call⟩], .ret none, []⟩]⟩)]⟩
+    ⟨⟨0⟩, #[⟨⟨0⟩, [], [⟨testOrigin, div⟩, ⟨callOrigin, call⟩], .ret none, []⟩]⟩)], []⟩
 
 private def argDivOccurrence : MIR.Occurrence argLanguage.operands.Ty :=
   ⟨Exec.Demo.mainF, ⟨0⟩, 0, testOrigin, .operator divOpcode, divReads, [argCheck]⟩
@@ -1141,7 +1212,8 @@ private def storingMemory (project : Project) : Memory testLowering testProfile 
     [⟨testOrigin, .beginLifetime storeRoot⟩, ⟨testOrigin, .bind storePlace (.literal ⟨[42]⟩)⟩],
     .ret none, []⟩
   ⟨project, Exec.Demo.mainF, [], [(Exec.Demo.mainF, [(storeRoot, ())], ⟨⟨0⟩, #[block]⟩)],
-    [(Exec.Demo.mainF, [(storeRoot, ⟨1, 1⟩)])], [(Exec.Demo.mainF, [(storeRoot, .materialized)])]⟩
+    [(Exec.Demo.mainF, [(storeRoot, ⟨1, 1⟩)])], [(Exec.Demo.mainF, [(storeRoot, .materialized)])],
+    [(Exec.Demo.mainF, [storeRoot])]⟩
 
 private def storeInitial : MemoryRegisters testLanguage testProfile :=
   ⟨⟨Exec.Demo.mainF, ⟨0⟩, 0, [], [], [], [], [], [], []⟩, Mem.Memory.empty, [], [], {}, 0⟩
@@ -1212,12 +1284,12 @@ example (project : Project) (m : LoweringModels testLanguage testLowering testPr
 
 private def returningMIR (project : Project) : MIR testLowering testProfile :=
   ⟨project, Exec.Demo.mainF, [(Exec.Demo.mainF, ⟨[], some ()⟩)],
-    [(Exec.Demo.mainF, [], ⟨⟨0⟩, #[⟨⟨0⟩, [], [], .ret (some ⟨(), .literal ⟨[42]⟩⟩), []⟩]⟩)]⟩
+    [(Exec.Demo.mainF, [], ⟨⟨0⟩, #[⟨⟨0⟩, [], [], .ret (some ⟨(), .literal ⟨[42]⟩⟩), []⟩]⟩)], []⟩
 
 private def returningMemory (project : Project) : Memory testLowering testProfile :=
   ⟨project, Exec.Demo.mainF, (returningMIR project).signatures,
     [(Exec.Demo.mainF, [], ⟨⟨0⟩, #[⟨⟨0⟩, [], [], .ret (some ⟨(), .literal ⟨[0]⟩⟩), []⟩]⟩)],
-    [], []⟩
+    [], [], []⟩
 
 private def terminalModel (A : Type) (observed : Observation) (runtime : Concrete.Contracts.Observation)
     (same : observed.SameRuntimeResult runtime) : Model A Nat where
@@ -1321,7 +1393,7 @@ private def twoCallMemory (project : Project) : Memory testLowering testProfile 
       .ret (some ⟨(), .literal ⟨[0]⟩⟩), []⟩
   let helper : MemoryBlock testLowering := ⟨⟨0⟩, [], [], .ret none, []⟩
   ⟨project, Exec.Demo.mainF, [(Exec.Demo.mainF, ⟨[], some ()⟩), (callee, ⟨[], none⟩)],
-    [(Exec.Demo.mainF, [], ⟨⟨0⟩, #[caller]⟩), (callee, [], ⟨⟨0⟩, #[helper]⟩)], [], []⟩
+    [(Exec.Demo.mainF, [], ⟨⟨0⟩, #[caller]⟩), (callee, [], ⟨⟨0⟩, #[helper]⟩)], [], [], []⟩
 
 private def resumeAt (index : Nat) : MemoryRegisters testLanguage testProfile :=
   {storeInitial with instruction := index}
@@ -1434,7 +1506,7 @@ private def shadowRoot : PlaceId := ⟨1⟩
 private def shadowMIR (project : Project) : MIR testLowering testProfile :=
   let block : MIRGraph testLowering := ⟨⟨0⟩, #[⟨⟨0⟩, [],
     [⟨testOrigin, .bind (ty := ()) ⟨storeRoot, []⟩ (.literal ⟨[]⟩)⟩], .ret none, []⟩]⟩
-  ⟨project, Exec.Demo.mainF, [], [(Exec.Demo.mainF, [(storeRoot, ())], block)]⟩
+  ⟨project, Exec.Demo.mainF, [], [(Exec.Demo.mainF, [(storeRoot, ())], block)], []⟩
 
 private def shadowMemory (project : Project) : Memory testLowering testProfile :=
   let place : MemoryPlace Unit () := ⟨⟨shadowRoot, []⟩, .virtual⟩
@@ -1705,7 +1777,7 @@ private def residualMIR (project : Project) : MIR testLowering testProfile :=
     [⟨testOrigin, .op (opcode := .arithmetic (.plain .div)) (types := [()]) (ty := ()) ⟨storeRoot, []⟩ ()
       (.cons (.literal ⟨[0]⟩) .nil) [runtimeCheck]⟩], .trap .abort testOrigin, []⟩
   ⟨project, Exec.Demo.mainF, [(Exec.Demo.mainF, ⟨[], none⟩)],
-    [(Exec.Demo.mainF, [(storeRoot, ())], ⟨⟨0⟩, #[block]⟩)]⟩
+    [(Exec.Demo.mainF, [(storeRoot, ())], ⟨⟨0⟩, #[block]⟩)], []⟩
 
 private def residualMemory (project : Project) (checks : List OperationCheck) :
     Memory testLowering testProfile :=
@@ -1715,7 +1787,87 @@ private def residualMemory (project : Project) (checks : List OperationCheck) :
       (.cons (.literal ⟨[0]⟩) .nil) checks⟩], .trap .abort testOrigin, []⟩
   ⟨project, Exec.Demo.mainF, (residualMIR project).signatures,
     [(Exec.Demo.mainF, [(storeRoot, ())], ⟨⟨0⟩, #[block]⟩)], [],
-    [(Exec.Demo.mainF, [(storeRoot, .virtual)])]⟩
+    [(Exec.Demo.mainF, [(storeRoot, .virtual)])], []⟩
+
+private abbrev ownerFixtureLowering := sliceLoweringLanguage slice0
+private def ownerFixtureType : earlyFixtureLanguage.operands.Ty := .inl (.scalar (.int .u8))
+
+private def ownerFixtureMIR (consuming mutable : Bool) : MIR ownerFixtureLowering testProfile :=
+  let place : Place _ ownerFixtureType := ⟨storeRoot, []⟩
+  let read : Read _ ownerFixtureLowering.literal ownerFixtureType :=
+    if consuming then .move place else .copy place
+  let block : Block _ _ _ := ⟨⟨0⟩, [],
+    [⟨testOrigin, .bind place (.literal ⟨[42]⟩)⟩], .ret (some ⟨ownerFixtureType, read⟩), []⟩
+  ⟨tabProject, earlyEntry, [(earlyEntry, ⟨[], some ownerFixtureType⟩)],
+    [(earlyEntry, [(storeRoot, ownerFixtureType)], ⟨⟨0⟩, #[block]⟩)],
+    if mutable then [(earlyEntry, [storeRoot])] else []⟩
+
+private def ownerFixtureStart : MemoryRegisters earlyFixtureLanguage testProfile :=
+  {frame := earlyEntry, block := ⟨0⟩, instruction := 0, virtualValues := [],
+    materialized := [], live := [], initialized := [], bytes := Mem.Memory.empty}
+
+private def ownerFixtureBound : MemoryRegisters earlyFixtureLanguage testProfile :=
+  {ownerFixtureStart with
+    instruction := 1
+    live := [storeRoot]
+    initialized := [storeRoot]
+    virtualValues := [(storeRoot, .scalar (.int .u8 42))]}
+
+set_option maxRecDepth 4096 in
+example :
+    (ownerFixtureMIR true false).Step ownerFixtureStart ownerFixtureBound ∧
+    (ownerFixtureMIR false false).Step ownerFixtureStart ownerFixtureBound ∧
+    (ownerFixtureMIR true false).terminalObservation ownerFixtureBound = none ∧
+    (ownerFixtureMIR false false).terminalObservation ownerFixtureBound = some (.returned 42 ByteArray.empty) := by
+  have binds (consuming : Bool) : (ownerFixtureMIR consuming false).Step ownerFixtureStart ownerFixtureBound := by
+    with_unfolding_all
+      refine ⟨rfl, _, ownerFixtureStart, {ownerFixtureBound with instruction := 0}, rfl, ?_, rfl⟩
+      apply Memory.WriteParams.cons (started := {ownerFixtureStart with live := [storeRoot]})
+      · exact ⟨nofun, Or.inl ⟨rfl, rfl⟩⟩
+      · exact ⟨⟨rfl, fun _ => rfl⟩, nofun, rfl, rfl, nofun⟩
+      · exact .nil _
+  exact ⟨binds true, binds false, by with_unfolding_all rfl, by with_unfolding_all rfl⟩
+
+set_option maxRecDepth 4096 in
+example :
+    let place : MemoryPlace _ ownerFixtureType := ⟨⟨storeRoot, []⟩, .virtual⟩
+    let inst : MemoryInst ownerFixtureLowering := .assign place (.literal ⟨[25]⟩)
+    let before := ownerFixtureBound
+    let immutable := (ownerFixtureMIR false false).logicalView
+    let mutable := (ownerFixtureMIR false true).logicalView
+    (∀ next, ¬ immutable.InstructionStep before next false inst) ∧
+      ∃ next, mutable.InstructionStep before next false inst ∧
+        next.virtualValues = [(storeRoot, .scalar (.int .u8 25))] := by
+  dsimp only
+  constructor
+  · rintro next ⟨value, after, stored, read, write, _⟩
+    have result : some (CoreValue.scalar (.int .u8 25), ownerFixtureBound) = some (value, after) := by
+      with_unfolding_all exact read
+    cases Option.some.inj result
+    have impossible : none = some stored := by with_unfolding_all exact write.2.2.1
+    cases impossible
+  · with_unfolding_all
+      exact ⟨_, ⟨_, _, _, rfl, ⟨⟨rfl, fun _ => rfl⟩, nofun, rfl, rfl, nofun⟩, rfl⟩, rfl⟩
+
+-- Check the same decisions with an explicitly instrumented owner and no loans.
+set_option maxRecDepth 4096 in
+example :
+    let memory := (ownerFixtureMIR false false).logicalView
+    let place : MemoryPlace _ ownerFixtureType := ⟨⟨storeRoot, []⟩, .virtual⟩
+    let bound (mutable : Bool) : MemoryRegisters earlyFixtureLanguage testProfile :=
+      {ownerFixtureBound with
+        addressIds := [(storeRoot, ⟨0⟩)]
+        nextAddressId := 1
+        ownership :=
+          {slots := [⟨⟨0⟩, 0, ⟨.int .u8, true, mutable⟩, .owned⟩]
+           frames := [⟨0, [(⟨0⟩, ⟨0⟩)], []⟩]
+           nextPlace := 1
+           nextActivation := 1}}
+    memory.readValue (bound false) (.move place) = none ∧
+      (memory.readValue (bound false) (.copy place)).isSome = true ∧
+      memory.writeValue (bound false) place (.scalar (.int .u8 25)) = none ∧
+      (memory.writeValue (bound true) place (.scalar (.int .u8 25))).isSome = true := by
+  with_unfolding_all exact ⟨rfl, rfl, rfl, rfl⟩
 
 -- The residual trap takes place at the same operation in both IRs, with
 -- no synthetic boolean local. Deleting the check loses the observation.
@@ -1750,7 +1902,7 @@ private def lowerLiteralReturn (core : CoreInput earlyFixtureLanguage) :
       let graph : MIRGraph returnLowering :=
         singleBlockGraph (.ret (some ⟨returnType, .literal ⟨[UInt8.ofNat value.toNat]⟩⟩)) [origin]
       .ok ⟨core.project, core.payload.entry, [(core.payload.entry, ⟨[], some returnType⟩)],
-        [(core.payload.entry, [], graph)]⟩
+        [(core.payload.entry, [], graph)], []⟩
     | none => .error (.invalidInput rule)
   | _ => .error (.invalidInput rule)
 
@@ -1767,9 +1919,29 @@ private def ssaLiteral (ssa : SSA returnLowering testProfile) :
     Except StageFailure (List UInt8 × List Origin) :=
   memoryLiteral (ssa.memoryView (language := earlyFixtureLanguage))
 
+/-- Extract the fixture's literal program and send it through the spec checker. -/
+private def checkLiteralReturn (core : CoreInput earlyFixtureLanguage) :
+    Except CheckerRefusal (Discharges earlyFixtureLanguage) := do
+  match core.payload.operations with
+  | [(site, .expression (.inl (.read (.literal (.int .u8 value)))))] =>
+    let program : ConcreteSpec.Program := ⟨[], [], .ret (.int .u8 value)⟩
+    if ConcreteSpec.check program then return []
+    else
+      let primary := (AList.lookup core.payload.origins site).map Origin.lexical
+      throw ⟨⟨``ConcreteSpec.ProgramPermitted, 1⟩, primary.getD span, [], none⟩
+  | _ => throw ⟨⟨``ConcreteSpec.ProgramPermitted, 1⟩, span, [], none⟩
+
+private def typeLiteralReturn (core : CoreInput earlyFixtureLanguage) : Except StageFailure Unit :=
+  match core.payload.operations with
+  | [(_, .expression (.inl (.read (.literal (.int .u8 value)))))] =>
+    if ConcreteSpec.IntTy.u8.inRange value then .ok ()
+    else .error (.invalidInput ⟨``CoreInput.StaticallyTyped, 1⟩)
+  | _ => .error (.invalidInput ⟨``CoreInput.StaticallyTyped, 1⟩)
+
 private def literalReturnPasses : Passes slice0 testProfile :=
   { returnPasses fixtureElaborate with
-    checkCore := fun _ => .ok []
+    checkCore := checkLiteralReturn
+    typeCore := typeLiteralReturn
     lowerCore := fun input => lowerLiteralReturn input.core
     lowerUnchecked := lowerLiteralReturn
     lowerMemory := fun mir => .ok (mir.logicalView (language := earlyFixtureLanguage))
@@ -1777,17 +1949,48 @@ private def literalReturnPasses : Passes slice0 testProfile :=
       let (bytes, origins) ← memoryLiteral memory
       let graph : SSAGraph returnLowering :=
         singleBlockGraph (.ret (some ⟨returnType, .literal ⟨bytes⟩⟩)) origins
-      return ⟨memory.project, memory.entry, memory.signatures, [(memory.entry, [], graph)], memory.layouts⟩
+      return ⟨memory.project, memory.entry, memory.signatures, [(memory.entry, [], graph)], memory.layouts, []⟩
     buildBIR := fun ssa => do
       let (bytes, origins) ← ssaLiteral ssa
       let graph : BIRGraph returnLowering :=
         singleBlockGraph (.ret (some ⟨returnType, .literal ⟨bytes⟩⟩)) origins
-      return ⟨ssa.project, ssa.entry, ssa.signatures, [(ssa.entry, [], graph)], ssa.layouts, #[]⟩
+      return ⟨ssa.project, ssa.entry, ssa.signatures, [(ssa.entry, [], graph)], ssa.layouts, #[], []⟩
     emitLCB := fun bir => do
       let (bytes, _) ← memoryLiteral (bir.memoryView (language := earlyFixtureLanguage))
       match bytes with
       | [status] => return lcbReturnJob (BitVec.ofNat 32 status.toNat)
       | _ => throw (.invalidInput rule) }
+
+set_option maxRecDepth 4096 in
+example :
+    let edge := (registry literalReturnPasses).admission
+    let core := elaboratedReturn 256
+    edge.inputInvariant core ∧
+      ∃ failure, edge.run core = .error failure ∧ edge.refusal core failure := by
+  let failure : CheckerRefusal :=
+    ⟨⟨``ConcreteSpec.ProgramPermitted, 1⟩, ((AList.lookup (returnPayload 256).origins ⟨0⟩).map Origin.lexical).getD span, [], none⟩
+  refine ⟨⟨returnedCoreWF 256, ⟨⟨[], .lit 256, resultSpan⟩, rfl, fixtureEarly, rfl⟩⟩,
+    failure, ?_, ?_⟩
+  · with_unfolding_all rfl
+  · refine ⟨?_, rfl, rfl, rfl, ⟨_, _, List.mem_singleton_self _, rfl⟩⟩
+    rintro ⟨⟨bindings, ret, location⟩, ⟨_, _, equal⟩, accepted⟩
+    have noBindings : bindings = [] := List.map_eq_nil_iff.mp (congrArg Payload.ownership equal).symm
+    subst bindings
+    have operations := congrArg Payload.operations equal
+    cases ret with
+    | var x => cases operations
+    | lit n =>
+      have same : 256 = n := by
+        with_unfolding_all
+          change [(SiteId.mk 0, CoreOperation.expression (O := earlyFixtureLanguage.operands)
+            (.inl (.read (.literal (.int .u8 256)))))] =
+            [(SiteId.mk 0, CoreOperation.expression (O := earlyFixtureLanguage.operands)
+            (.inl (.read (.literal (.int .u8 n)))))] at operations
+        cases operations
+        rfl
+      subst n
+      have rejected : ConcreteSpec.check (⟨[], [], .ret (.int .u8 256)⟩ : ConcreteSpec.Program) = false := rfl
+      exact Bool.noConfusion (rejected.symm.trans ((ConcreteSpec.check_iff _).mpr accepted))
 
 -- Compose both registered routes through LCB job validation, then observe the exact
 -- emitted body with the fixed LCB semantics. This control exercises a single source.
@@ -2134,6 +2337,7 @@ private def addressBlock : MemoryBlock testLowering :=
 
 private def addressMemory (project : Project) : Memory testLowering testProfile :=
   {(storingMemory project) with
+    mutableLocals := [(Exec.Demo.mainF, [storeRoot, shadowRoot])]
     signatures := [(Exec.Demo.mainF, ⟨[], some ()⟩)]
     functions := [(Exec.Demo.mainF, [(storeRoot, ()), (shadowRoot, ())], ⟨⟨0⟩, #[addressBlock]⟩)]
     storage := [(Exec.Demo.mainF, [(storeRoot, .materialized), (shadowRoot, .virtual)])]}
@@ -2207,7 +2411,8 @@ private def logicalAddressProgram (project : Project) : MIR testLowering testPro
   ⟨project, Exec.Demo.mainF, (addressMemory project).signatures,
     [(Exec.Demo.mainF, [(storeRoot, ()), (shadowRoot, ())], ⟨⟨0⟩, #[⟨⟨0⟩, [],
       [⟨testOrigin, .bind (ty := ()) ⟨storeRoot, []⟩ (.literal ⟨[42]⟩)⟩,
-        ⟨testOrigin, address⟩, ⟨testOrigin, indirect⟩], .ret (some ⟨(), .copy ⟨shadowRoot, []⟩⟩), []⟩]⟩)]⟩
+        ⟨testOrigin, address⟩, ⟨testOrigin, indirect⟩], .ret (some ⟨(), .copy ⟨shadowRoot, []⟩⟩), []⟩]⟩)],
+    [(Exec.Demo.mainF, [shadowRoot])]⟩
 
 private def logicalAddressBefore : MemoryRegisters addressLanguage testProfile :=
   {storeInitial with
@@ -2546,6 +2751,292 @@ private theorem stationaryRejects {A B E : Type} {a : A} {b : B}
   obtain rfl := reachableTerminal s a p expected initial sResult state finite
   exact wrong observation
 
+private theorem refinesToTerminal {A B E : Type} {a : A} {b : B}
+    (s : Concrete.Contracts.Semantics A E) (t : Concrete.Contracts.Semantics B E)
+    (p : s.State) (q : t.State) (result : Concrete.Contracts.Observation)
+    (reached : s.finite a p) (sResult : s.result a p result) (tResult : t.result b q result)
+    (tInitial : ∀ x, t.initial b x → x = q)
+    (onlyResult : ∀ o, t.result b q o → o = result)
+    (trace : s.trace a p = t.trace b q) :
+    BehaviorRefinement s t s.result t.result a b := by
+  have onlyT := reachableTerminal t b q result tInitial tResult
+  intro _
+  refine ⟨?_, ?_, ?_⟩
+  · intro x o path observed
+    obtain rfl := onlyT x path
+    obtain rfl := onlyResult o observed
+    exact ⟨p, reached, sResult, trace⟩
+  · intro run infinite
+    exact (t.terminal b q result tResult _ (tInitial _ infinite.1 ▸ infinite.2 0)).elim
+  · intro x stuck
+    obtain rfl := onlyT x stuck.1
+    exact stuck.2.2 result tResult
+
+private abbrev literalCore := elaboratedReturn 42
+private abbrev literalCoreExecution := CoreInput.Execution (language := earlyFixtureLanguage)
+private abbrev literalMIRExecution := MIR.Execution (language := earlyFixtureLanguage)
+  (lang := returnLowering) (profile := testProfile)
+private abbrev literalMemoryExecution := Memory.Execution (language := earlyFixtureLanguage)
+  (lang := returnLowering) (profile := testProfile)
+private abbrev literalSSAExecution := SSA.Execution (language := earlyFixtureLanguage)
+  (lang := returnLowering) (profile := testProfile)
+private abbrev literalBIRExecution := BIR.Execution (language := earlyFixtureLanguage)
+  (lang := returnLowering) (profile := testProfile)
+private abbrev literalJobExecution := LCBInput.Execution (profile := testProfile)
+  earlyFixtureLanguage.operands.Event elaborationSource.project
+
+private def literalOrigin : Origin :=
+  ⟨⟨0⟩, ⟨⟨0⟩, 25, 27, 1, 26⟩, ⟨.function earlyEntry, ⟨[⟨.return, .ordinal 0⟩]⟩⟩⟩
+
+private def literalSignatures : AList FnId (FunctionSignature earlyFixtureLanguage.operands.Ty) :=
+  [(earlyEntry, ⟨[], some returnType⟩)]
+
+private def literalMIR : MIR returnLowering testProfile :=
+  ⟨elaborationSource.project, earlyEntry, literalSignatures,
+    [(earlyEntry, [], singleBlockGraph (.ret (some ⟨returnType, .literal ⟨[42]⟩⟩)) [literalOrigin])], []⟩
+
+private def literalMemory : Memory returnLowering testProfile := literalMIR.logicalView
+
+private def literalSSA : SSA returnLowering testProfile :=
+  ⟨elaborationSource.project, earlyEntry, literalSignatures,
+    [(earlyEntry, [], singleBlockGraph (.ret (some ⟨returnType, .literal ⟨[42]⟩⟩)) [literalOrigin])], [], []⟩
+
+private def literalBIR : BIR returnLowering testProfile :=
+  ⟨elaborationSource.project, earlyEntry, literalSignatures,
+    [(earlyEntry, [], singleBlockGraph (.ret (some ⟨returnType, .literal ⟨[42]⟩⟩)) [literalOrigin])], [], #[], []⟩
+
+private def literalRegisters : MemoryRegisters earlyFixtureLanguage testProfile :=
+  {ownerFixtureStart with frame := earlyEntry}
+
+private def literalResult : Concrete.Contracts.Observation := .returned 42 ByteArray.empty
+
+set_option maxRecDepth 4096 in
+private theorem literalCoreReaches :
+    ∃ s, literalCoreExecution.finite literalCore s ∧
+      literalCoreExecution.result literalCore s literalResult ∧ literalCoreExecution.trace literalCore s = [] := by
+  let start := literalCore.payload.initial
+  let next (q : Exec.Config literalCore.payload.machine) :=
+    match Exec.step literalCore.payload.body q with
+    | some (.next result) => result
+    | _ => q
+  let frame (q : Exec.Config literalCore.payload.machine) : literalCoreExecution.State :=
+    (⟨literalCore.payload.ownership, q⟩, [])
+  let returned := next start
+  let unscoped := next returned
+  let finished := next unscoped
+  have tick (p : Exec.Config literalCore.payload.machine)
+      (dispatch : Exec.step literalCore.payload.body p = some (.next (next p)))
+      (active : p.final? = none)
+      (trace : literalCoreExecution.trace literalCore (frame p) = [])
+      (afterTrace : literalCoreExecution.trace literalCore (frame (next p)) = []) :
+      literalCoreExecution.step literalCore (frame p) (frame (next p)) := by
+    refine ⟨?_, ⟨p, next p, .silent, rfl, rfl, .silent dispatch, rfl⟩, ?_⟩
+    · with_unfolding_all
+        change Option.bind p.final? _ = none
+        rw [active]
+        rfl
+    · change Concrete.Contracts.TracePrefix (literalCoreExecution.trace literalCore (frame p))
+          (literalCoreExecution.trace literalCore (frame (next p)))
+      rw [trace, afterTrace]
+      exact ⟨[], rfl⟩
+  refine ⟨frame finished, ⟨frame start, rfl,
+    .cons (tick start ?_ ?_ ?_ ?_)
+      (.cons (tick returned ?_ ?_ ?_ ?_) (.cons (tick unscoped ?_ ?_ ?_ ?_) (.nil _)))⟩, ?_, ?_⟩
+  all_goals with_unfolding_all first | rfl | exact nofun
+
+set_option maxRecDepth 4096 in
+private theorem literalTables : literalMemory.TablesWF := by
+  with_unfolding_all
+    refine ⟨.cons nofun .nil, .cons nofun .nil, .cons nofun .nil, .nil, ?_, nofun, ?_⟩
+    · intro fn classes member
+      cases List.mem_singleton.mp member
+      exact .nil
+    · intro fn locals graph member
+      cases List.mem_singleton.mp member
+      refine ⟨.nil, ⟨.cons nofun .nil, ⟨_, List.mem_singleton_self _, rfl⟩, ?_⟩,
+        ⟨_, rfl, ⟨_, List.mem_singleton_self _, rfl, rfl⟩, ?_⟩⟩
+      · intro block present edge follows
+        cases List.mem_singleton.mp present
+        cases follows
+      · intro block present
+        cases List.mem_singleton.mp present
+        exact ⟨rfl, nofun⟩
+
+set_option maxRecDepth 4096 in
+private theorem literalHandoff : literalMemory.HandoffWF := by
+  refine ⟨literalTables, List.mem_singleton_self _, ?_⟩
+  intro origin present
+  have member : origin ∈ [literalOrigin] := by with_unfolding_all exact present
+  obtain rfl := List.mem_singleton.mp member
+  let checkedSpan : ConcreteSpec.Core.Span :=
+    ⟨⟨0⟩, 25, 27, by decide, 1, 26, by decide, by decide⟩
+  exact ⟨checkedSpan, _, rfl, rfl, by decide, rfl, rfl, rfl, rfl⟩
+
+set_option maxRecDepth 4096 in
+private theorem literalConsumes : ConsumesEvidence literalCore [] literalMIR := by
+  refine ⟨.nil, ?_, nofun, ?_, ?_⟩
+  · rintro site opcode conditions ⟨op, present, _, _, rfl⟩ nonempty
+    cases List.mem_singleton.mp present
+    exact (nonempty rfl).elim
+  · rintro _ _ ⟨_, found, _⟩
+    cases found
+  · exact (returnedCoreWF 42).2
+
+set_option maxRecDepth 4096 in
+private theorem literalUnchecked :
+    LowersUnchecked (language := earlyFixtureLanguage) literalCore literalMIR := by
+  with_unfolding_all
+    obtain ⟨reached, finite, result, trace⟩ := literalCoreReaches
+    refine ⟨rfl, rfl, ⟨fun _ h => h, fun _ h => h⟩, literalConsumes, ?_⟩
+    apply refinesToTerminal literalCoreExecution literalMIRExecution reached literalRegisters literalResult
+      finite result
+    · with_unfolding_all rfl
+    · intro _ h
+      exact h
+    · intro _ h
+      exact (Option.some.inj h).symm
+    · exact trace
+
+set_option maxRecDepth 4096 in
+private theorem literalMemoryContract : LowersMemory (language := earlyFixtureLanguage) literalMIR literalMemory := by
+  with_unfolding_all
+    have sourceFinal : literalMIRExecution.result literalMIR literalRegisters literalResult := by with_unfolding_all rfl
+    have targetFinal : literalMemoryExecution.result literalMemory literalRegisters literalResult := by with_unfolding_all rfl
+    have sourceOnly := reachableTerminal literalMIRExecution literalMIR literalRegisters literalResult (fun _ h => h) sourceFinal
+    have targetOnly := reachableTerminal literalMemoryExecution literalMemory literalRegisters literalResult (fun _ h => h) targetFinal
+    have layout : LayoutsMatch earlyFixtureLanguage.layout literalMemory := by
+      refine ⟨?_, nofun⟩
+      intro fn locals graph present place ty member
+      cases List.mem_singleton.mp present
+      cases member
+    have promotes : PromotionSound (language := earlyFixtureLanguage) literalMIR literalMemory := by
+      constructor
+      · intro fn locals graph present place ty member
+        cases List.mem_singleton.mp present
+        cases member
+      · intro fn classes place present member
+        cases List.mem_singleton.mp present
+        cases member
+    refine ⟨rfl, rfl, ⟨fun _ h => h, fun _ h => h⟩, layout, rfl, promotes, literalTables, literalTables,
+      refinesToTerminal literalMIRExecution literalMemoryExecution literalRegisters literalRegisters literalResult
+        ⟨_, rfl, .nil _⟩ sourceFinal targetFinal (fun _ h => h) (fun _ h => (Option.some.inj h).symm) rfl, ?_⟩
+    intro _
+    refine ⟨⟨fun p q => p = q, fun _ _ => 0, ?_, ?_, ?_⟩, ?_⟩
+    · intro q atEntry
+      obtain rfl := atEntry
+      exact ⟨literalRegisters, rfl, rfl⟩
+    · intro p q q' _ finite _ tick
+      obtain rfl := targetOnly q finite
+      exact (literalMemoryExecution.terminal _ _ _ targetFinal _ tick).elim
+    · intro p q o _ finite same observed
+      obtain rfl := targetOnly q finite
+      subst p
+      obtain rfl := (Option.some.inj (targetFinal.symm.trans observed)).symm
+      exact ⟨literalRegisters, .nil _, sourceFinal, rfl⟩
+    · intro p q finite reached _
+      obtain rfl := sourceOnly p finite
+      obtain rfl := targetOnly q reached
+      have frame : literalMemory.RepresentsActivation (language := earlyFixtureLanguage)
+          literalRegisters.toMemoryFrame literalRegisters.toMemoryFrame literalRegisters.bytes := by
+        exact ⟨⟨⟨Mem.empty_wellFormed _, .nil, .nil, nofun⟩, rfl⟩, rfl, nofun, .nil, .nil, .nil, .nil, nofun,
+          fun _ => ⟨nofun, nofun⟩, nofun, nofun, nofun, nofun⟩
+      exact ⟨frame, rfl, nofun, ⟨rfl, nofun⟩, .nil, rfl, rfl⟩
+
+set_option maxRecDepth 4096 in
+private theorem literalSSAContract : BuildsSSA (language := earlyFixtureLanguage) literalMemory literalSSA := by
+  with_unfolding_all
+    refine ⟨rfl, rfl, rfl, rfl, ⟨fun _ h => h, fun _ h => h⟩, ?_⟩
+    exact refinesToTerminal literalMemoryExecution literalSSAExecution literalRegisters literalRegisters literalResult
+      ⟨_, rfl, .nil _⟩ (by with_unfolding_all rfl) (by with_unfolding_all rfl)
+      (fun _ h => h) (fun _ h => (Option.some.inj h).symm) rfl
+
+set_option maxRecDepth 4096 in
+private theorem literalBIRContract : BuildsBIR (language := earlyFixtureLanguage) literalSSA literalBIR := by
+  with_unfolding_all
+    refine ⟨rfl, ?_, ?_, ⟨fun _ h => h, fun _ h => h⟩, by decide, ⟨rfl, rfl⟩, BIR.refinesOfViewEq rfl⟩
+    · intro fn present block inside slot trap
+      cases List.mem_singleton.mp present
+      cases List.mem_singleton.mp inside
+      cases trap
+    · intro fn present block inside kind site trap
+      cases List.mem_singleton.mp present
+      cases List.mem_singleton.mp inside
+      cases trap
+
+set_option maxRecDepth 4096 in
+private theorem literalLCBContract : EmitsLCB earlyFixtureLanguage literalBIR (lcbReturnJob 42) := by
+  with_unfolding_all
+    let job := lcbReturnJob 42
+    let jobEntry : literalJobExecution.State := (LeanCompilerBackend.Verified.Source.initial job.body #[]).toOption
+    refine ⟨rfl, by with_unfolding_all rfl, nofun, .cons nofun .nil, rfl, ⟨[], rfl, rfl⟩, ?_,
+      .cons nofun .nil, .cons nofun .nil, fun _ => Iff.rfl, by with_unfolding_all rfl, literalBIRContract.2.1⟩
+    exact refinesToTerminal literalBIRExecution literalJobExecution literalRegisters jobEntry literalResult
+      ⟨_, rfl, .nil _⟩ (by with_unfolding_all rfl) (by with_unfolding_all rfl)
+      (fun _ h => h) (fun _ h => (Option.some.inj h).symm) rfl
+
+set_option maxRecDepth 4096 in
+example (unchecked : Bool) :
+    let pipeline := (registry literalReturnPasses).lcbPipeline unchecked
+    pipeline.Ready elaborationSource ∧ pipeline.Corresponds elaborationSource (lcbReturnJob 42) := by
+  have typed := returnAdmissionContract.1.2.2.1
+  have checked := returnAdmissionContract.1
+  have admitted : (⟨literalCore, []⟩ : Admitted earlyFixtureLanguage).Valid :=
+    ⟨returnedCoreWF 42, checked.2⟩
+  have fragment : literalCore.InFragment := ⟨⟨[], .lit 42, resultSpan⟩, rfl, fixtureEarly, rfl⟩
+  have elaborates : (registry literalReturnPasses).elaborator.success parsedReturn literalCore :=
+    ⟨rfl, rfl, returnedCoreWF 42, returnProgram, rfl, rfl⟩
+  have birWF : BIR.WF (language := earlyFixtureLanguage) literalBIR :=
+    ⟨literalBIRContract.2.1, by decide, .cons nofun .nil, List.mem_singleton_self _, nofun, by with_unfolding_all exact literalTables⟩
+  have ready : Source.WF elaborationSource ∧ elaborationSource.slice = slice0 := ⟨parsedReturnDomain.1, rfl⟩
+  have front := returnLexerContract
+  have parse := returnParserContract
+  have lowerCore : LowersCore (language := earlyFixtureLanguage) ⟨literalCore, []⟩ literalMIR := literalUnchecked
+  have back :
+      ∃ bir, Concrete.Contracts.Graph (registry literalReturnPasses).buildBIR.run literalSSA bir ∧
+        (registry literalReturnPasses).buildBIR.outputInvariant bir ∧
+        (registry literalReturnPasses).buildBIR.success literalSSA bir ∧
+        (registry literalReturnPasses).buildBIR.trust literalSSA bir ∧
+        (Pipeline.next (registry literalReturnPasses).emitLCB .done).Corresponds bir (lcbReturnJob 42) := by
+    exact ⟨literalBIR, by with_unfolding_all rfl, birWF, ⟨literalBIRContract, rfl⟩, trivial, lcbReturnJob 42,
+      by with_unfolding_all rfl, ⟨literalBIR, literalLCBContract⟩, literalLCBContract, trivial, rfl⟩
+  cases unchecked
+  · exact ⟨ready, returnStream, rfl, ⟨front.2.1, rfl⟩, front, trivial,
+      parsedReturn, by with_unfolding_all rfl, parsedReturnDomain, parse, trivial,
+      literalCore, rfl, ⟨returnedCoreWF 42, fragment⟩, elaborates, trivial,
+      ⟨literalCore, []⟩, by with_unfolding_all rfl, admitted, checked, trivial,
+      literalMIR, rfl, literalHandoff, lowerCore, trivial,
+      literalMemory, rfl, literalHandoff, ⟨literalMemoryContract, rfl⟩, trivial,
+      literalSSA, by with_unfolding_all rfl, by with_unfolding_all exact literalHandoff, ⟨literalSSAContract, rfl⟩, trivial, back⟩
+  · exact ⟨ready, returnStream, rfl, ⟨front.2.1, rfl⟩, front, trivial,
+      parsedReturn, by with_unfolding_all rfl, parsedReturnDomain, parse, trivial,
+      literalCore, rfl, ⟨returnedCoreWF 42, fragment⟩, elaborates, trivial,
+      literalCore, by with_unfolding_all rfl, ⟨returnedCoreWF 42, typed⟩, rfl, trivial,
+      literalMIR, rfl, literalHandoff, literalUnchecked, trivial,
+      literalMemory, rfl, literalHandoff, ⟨literalMemoryContract, rfl⟩, trivial,
+      literalSSA, by with_unfolding_all rfl, by with_unfolding_all exact literalHandoff, ⟨literalSSAContract, rfl⟩, trivial, back⟩
+
+private theorem birReturnTables (project : Project) (profile : Profile) :
+    let original := birReturn project false
+    let input : BIR testLowering profile :=
+      ⟨project, original.entry, [(Exec.Demo.mainF, ⟨[], some ()⟩)],
+        original.functions, original.layouts, original.sites, []⟩
+    (input.memoryView (language := testLanguage)).TablesWF := by
+  with_unfolding_all
+    refine ⟨(by exact .cons nofun .nil), (by exact .cons nofun .nil), (by exact .cons nofun .nil), .nil, ?_, nofun, ?_⟩
+    · intro fn classes member
+      cases List.mem_singleton.mp member
+      exact List.nodup_nil
+    · intro fn locals graph member
+      cases List.mem_singleton.mp member
+      refine ⟨List.nodup_nil, ⟨(by exact .cons nofun .nil), ⟨_, List.mem_singleton_self _, rfl⟩, ?_⟩,
+        ⟨_, rfl, ⟨_, List.mem_singleton_self _, rfl, rfl⟩, ?_⟩⟩
+      · intro block inside edge successor
+        cases List.mem_singleton.mp inside
+        cases successor
+      · intro block inside
+        cases List.mem_singleton.mp inside
+        exact ⟨rfl, nofun⟩
+
 private def llvmReturn (status : Nat) : LLVMInput macLLVM :=
   ⟨macLLVM.llvmTriple, macLLVM.llvmDataLayout,
     [.define false (.integer .u32) .body [], .label .entry,
@@ -2559,7 +3050,8 @@ example (parser : Parser grammar) (project : Project) :
       {testPasses [] with emitLLVM := fun _ => .ok (llvmReturn status)}
     let original := birReturn project false
     let input : BIR testLowering macLLVM :=
-      ⟨project, original.entry, original.signatures, original.functions, original.layouts, original.sites⟩
+      ⟨project, original.entry, [(Exec.Demo.mainF, ⟨[], some ()⟩)],
+        original.functions, original.layouts, original.sites, []⟩
     let expected : Behavior Nat := .terminates (.returned 0 ByteArray.empty) []
     (stages 0).emitLLVM.run input = .ok (llvmReturn 0) ∧
       (stages 42).emitLLVM.run input = .ok (llvmReturn 42) ∧
@@ -2578,7 +3070,7 @@ example (parser : Parser grammar) (project : Project) :
   intro observed sound
   have eligible : (stages 42).emitLLVM.inputInvariant input := by
     refine ⟨?_, (by decide : 0 ≤ 2), by simp [input, original, birReturn, testBIR],
-      by simp [input, original, birReturn, testBIR], nofun⟩
+      by simp [input, original, birReturn, testBIR], nofun, birReturnTables project macLLVM⟩
     intro fn member block included slot trap
     cases List.mem_singleton.mp member
     cases List.mem_singleton.mp included
@@ -2830,11 +3322,95 @@ example (parser : Parser grammar) :
 example (m : LoweringModels testLanguage testLowering testProfile) (parser : Parser grammar) :
     (r m parser).emitLCB.Trusted := fun _ _ _ _ => trivial
 
+private theorem oversizedLCBRefused (passes : Passes slice0 testProfile)
+    (bir : BIR returnLowering testProfile) (over : LCBInput.trapCapacity < bir.sites.size) :
+    let edge := (registry passes).emitLCB
+    let failure := StageFailure.resource (LCBInput.trapCapacityRefusal bir.sites.size)
+    edge.run bir = .error failure ∧ edge.refusal bir failure := by
+  refine ⟨?_, rfl, over⟩
+  change passes.emitSingleLCB bir = .error _
+  simp [PassFunctions.emitSingleLCB, over]
+
+-- Keep the huge table symbolic in the refusal proof. Only its size is needed.
+set_option maxRecDepth 4096 in
+example :
+    let sites : TrapTable :=
+      (Array.replicate LCBInput.trapCapacity ⟨.divisionByZero, testOrigin⟩).push ⟨.abort, testOrigin⟩
+    let trap := singleBlockGraph (.trap ⟨LCBInput.trapCapacity⟩) []
+    let bir : BIR returnLowering testProfile :=
+      ⟨tabProject, earlyEntry, [(earlyEntry, ⟨[], none⟩)], [(earlyEntry, [], trap)], [], sites, []⟩
+    let passes := {literalReturnPasses with emitLCB := fun _ => .ok (lcbReturnJob 42)}
+    let edge := (registry passes).emitLCB
+    let failure := StageFailure.resource (LCBInput.trapCapacityRefusal bir.sites.size)
+    bir.sites.size = LCBInput.trapCapacity + 1 ∧
+      edge.run bir = .error failure ∧ edge.refusal bir failure := by
+  intro sites trap bir passes edge failure
+  have size : bir.sites.size = LCBInput.trapCapacity + 1 := by
+    change sites.size = _
+    simp [sites]
+  exact ⟨size, oversizedLCBRefused passes bir (size.symm ▸ Nat.lt_succ_self _)⟩
+
+-- A zero-slot self-loop remains a real graph and needs no result slot.
+set_option maxRecDepth 4096 in
+example :
+    let ssa : SSA returnLowering testProfile :=
+      ⟨tabProject, earlyEntry, [(earlyEntry, ⟨[], none⟩)],
+        [(earlyEntry, [], singleBlockGraph (.jump ⟨⟨0⟩, []⟩) [])], [], []⟩
+    let bir : BIR returnLowering testProfile :=
+      ⟨tabProject, ssa.entry, ssa.signatures,
+        [(earlyEntry, [], singleBlockGraph (.jump ⟨⟨0⟩, []⟩) [])], [], #[], []⟩
+    let edge := (registry {literalReturnPasses with buildBIR := fun _ => .ok bir}).buildBIR
+    ssa.frameSlots = 0 ∧ edge.inputInvariant ssa ∧ edge.outputInvariant bir ∧
+      edge.run ssa = .ok bir ∧ edge.success ssa bir := by
+  intro ssa bir edge
+  have tables : (ssa.memoryView (language := earlyFixtureLanguage)).TablesWF := by
+    with_unfolding_all
+      refine ⟨.cons nofun .nil, .cons nofun .nil, .cons nofun .nil, .nil, ?_, nofun, ?_⟩
+      · intro fn classes present
+        cases List.mem_singleton.mp present
+        exact .nil
+      · intro fn locals graph present
+        cases List.mem_singleton.mp present
+        refine ⟨.nil, ⟨.cons nofun .nil, ⟨_, List.mem_singleton_self _, rfl⟩, ?_⟩,
+          ⟨_, rfl, ⟨_, List.mem_singleton_self _, rfl, rfl⟩, ?_⟩⟩
+        · intro block inside edge target
+          cases List.mem_singleton.mp inside
+          cases List.mem_singleton.mp target
+          exact ⟨_, List.mem_singleton_self _, rfl, rfl⟩
+        · intro block inside
+          cases List.mem_singleton.mp inside
+          exact ⟨trivial, nofun⟩
+  have noTrap : bir.TrapSlotsWF := by
+    intro fn present block inside site trap
+    cases List.mem_singleton.mp present
+    cases List.mem_singleton.mp inside
+    cases trap
+  refine ⟨rfl, ⟨tables, List.mem_singleton_self _, by with_unfolding_all exact nofun⟩, ⟨noTrap, by decide, .cons nofun .nil,
+    List.mem_singleton_self _, nofun, ?_⟩, rfl,
+    ⟨rfl, noTrap, ?_, ?_, by decide, ⟨rfl, by with_unfolding_all rfl⟩, ?_⟩, rfl⟩
+  · with_unfolding_all exact tables
+  · intro fn present block inside kind site trap
+    cases List.mem_singleton.mp present
+    cases List.mem_singleton.mp inside
+    cases trap
+  · with_unfolding_all exact ⟨nofun, nofun⟩
+  · exact BIR.refinesOfViewEq (by with_unfolding_all rfl)
+
+-- A signature missing from an otherwise eligible return graph is rejected
+-- by the decoded Memory tables at both backend entries.
+example :
+    ¬ BIR.WF (language := testLanguage) (birReturn tabProject false) := by
+  intro wf
+  have checked := wf.2.2.2.2.2
+  obtain ⟨_, _, signature⟩ := checked.2.2.2.2.2.2 _ _ _ (List.mem_singleton_self _)
+  obtain ⟨_, found, _⟩ := signature
+  cases found
+
 -- Missing and duplicate entries cannot enter the backend stage.
 example :
     let input := birReturn tabProject false
-    (¬ BIR.WF ({input with functions := []} : BIR testLowering testProfile)) ∧
-    (¬ BIR.WF ({input with functions := input.functions ++ input.functions} : BIR testLowering testProfile)) := by
+    (¬ BIR.WF (language := testLanguage) ({input with functions := []} : BIR testLowering testProfile)) ∧
+    (¬ BIR.WF (language := testLanguage) ({input with functions := input.functions ++ input.functions} : BIR testLowering testProfile)) := by
   refine ⟨fun h => ?_, fun h => ?_⟩
   · exact List.not_mem_nil h.2.2.2.1
   · simpa [birReturn] using h.2.2.1
@@ -2842,10 +3418,10 @@ example :
 example :
     let input := birReturn tabProject false
     let unbound := {testOrigin with lexical := {testOrigin.lexical with file := ⟨99⟩}}
-    ¬ BIR.WF ({input with sites := #[⟨.abort, unbound⟩]} : BIR testLowering testProfile) := by
+    ¬ BIR.WF (language := testLanguage) ({input with sites := #[⟨.abort, unbound⟩]} : BIR testLowering testProfile) := by
   dsimp only
   intro invalid
-  obtain ⟨_, _, found, _⟩ := invalid.2.2.2.2 _ (List.mem_singleton_self _)
+  obtain ⟨_, _, found, _⟩ := invalid.2.2.2.2.1 _ (List.mem_singleton_self _)
   cases found
 
 private theorem noInvalidEnding {memory : Memory testLowering testProfile} (wellFormed : memory.TablesWF)
@@ -2863,13 +3439,14 @@ example (parser : Parser grammar) :
       {testPasses (profile := testProfile) [] with emitLCB := fun _ => .error .lcbLinkingUnavailable}
     ¬ stages.emitLCB.Validated := by
   intro stages valid
-  let input := birReturn tabProject false
+  let input : BIR testLowering testProfile := {birReturn tabProject false with signatures := [(Exec.Demo.mainF, ⟨[], some ()⟩)]}
   have eligible : stages.emitLCB.inputInvariant input := by
-    refine ⟨?_, (by decide : 0 ≤ 3), by simp [input, birReturn, testBIR], by simp [input, birReturn, testBIR], nofun⟩
-    intro fn member block included slot trap
-    cases List.mem_singleton.mp member
-    cases List.mem_singleton.mp included
-    cases trap
+    refine ⟨?_, (by decide : 0 ≤ 3), by simp [input, birReturn, testBIR], by simp [input, birReturn, testBIR], nofun, ?_⟩
+    · intro fn member block included slot trap
+      cases List.mem_singleton.mp member
+      cases List.mem_singleton.mp included
+      cases trap
+    · exact birReturnTables tabProject testProfile
   have wrong : false = true := by
     with_unfolding_all exact valid.2 input .lcbLinkingUnavailable eligible rfl
   cases wrong
@@ -2953,7 +3530,7 @@ private def partialMIR (sibling : List FieldId) : MIR testLowering testProfile :
   ⟨tabProject, Exec.Demo.mainF, [(Exec.Demo.mainF, ⟨[], some ()⟩)],
     [(Exec.Demo.mainF, [(storeRoot, ()), (⟨1⟩, ()), (⟨2⟩, ()), (⟨3⟩, ())],
       ⟨⟨0⟩, #[⟨⟨0⟩, [], body.map (LocatedOp.mk testOrigin),
-        .ret (some ⟨(), .move ⟨⟨3⟩, []⟩⟩), []⟩]⟩)]⟩
+        .ret (some ⟨(), .move ⟨⟨3⟩, []⟩⟩), []⟩]⟩)], []⟩
 
 private def firstMoved : MemoryRegisters twoFieldLanguage testProfile :=
   {erasureBound with
@@ -3037,7 +3614,7 @@ private def loanLowering : LoweringLanguage loanFieldLanguage.operands.Ty :=
 private def loanMemory : Memory loanLowering testProfile :=
   ⟨tabProject, Exec.Demo.mainF, [],
     [(Exec.Demo.mainF, [(storeRoot, .inr false)], ⟨⟨0⟩, #[]⟩)],
-    [], [(Exec.Demo.mainF, [(storeRoot, .virtual)])]⟩
+    [], [(Exec.Demo.mainF, [(storeRoot, .virtual)])], []⟩
 
 private def loanRoot : Hybrid.Place := ⟨0⟩
 
@@ -3225,12 +3802,12 @@ private def physicalFieldSSA : SSA testLowering testProfile :=
   ⟨tabProject, Exec.Demo.mainF, [],
     [(Exec.Demo.mainF, [(storeRoot, ())], ⟨⟨0⟩, #[⟨⟨0⟩, [],
       physicalFieldLoads, .ret none, []⟩]⟩)],
-    [(Exec.Demo.mainF, [(storeRoot, ⟨2, 1⟩)])]⟩
+    [(Exec.Demo.mainF, [(storeRoot, ⟨2, 1⟩)])], []⟩
 
 private def physicalFieldBIR : BIR testLowering testProfile :=
   ⟨tabProject, Exec.Demo.mainF, [],
     [(Exec.Demo.mainF, [(storeRoot, ())], ⟨⟨0⟩, #[⟨⟨0⟩, [], physicalFieldLoads, .ret none, []⟩]⟩)],
-    physicalFieldSSA.layouts, #[]⟩
+    physicalFieldSSA.layouts, #[], []⟩
 
 -- Both register stages consume a projected linear load through the shared
 -- byte interpreter. The sibling remains readable from its separate range.
@@ -3279,14 +3856,14 @@ private def splitSSA (project : Project) (dropSecond : Bool := false) : SSA test
     [(Exec.Demo.mainF, [(storeRoot, ())], ⟨⟨0⟩, #[⟨⟨0⟩, [],
       [⟨testOrigin, .destructure (.materialized (ty := ()) ⟨storeRoot, []⟩)
         (if dropSecond then splitRegisters.take 1 else splitRegisters)⟩], .ret none, []⟩]⟩)],
-    [(Exec.Demo.mainF, [(storeRoot, ⟨1, 1⟩)])]⟩
+    [(Exec.Demo.mainF, [(storeRoot, ⟨1, 1⟩)])], []⟩
 
 private def splitBIR (project : Project) : BIR testLowering testProfile :=
   ⟨project, Exec.Demo.mainF, [],
     [(Exec.Demo.mainF, [(storeRoot, ())], ⟨⟨0⟩, #[⟨⟨0⟩, [],
       [⟨testOrigin, .destructure (.materialized (ty := ()) ⟨storeRoot, []⟩)
         splitRegisters⟩], .ret none, []⟩]⟩)],
-    [(Exec.Demo.mainF, [(storeRoot, ⟨1, 1⟩)])], #[]⟩
+    [(Exec.Demo.mainF, [(storeRoot, ⟨1, 1⟩)])], #[], []⟩
 
 private def splitBefore : MemoryRegisters twoFieldLanguage testProfile :=
   {backingAfter ⟨0⟩ 1 with instruction := 0}
@@ -3308,7 +3885,8 @@ private def splitMemory (project : Project) : Memory testLowering testProfile :=
   ⟨project, Exec.Demo.mainF, [],
     [(Exec.Demo.mainF, [(storeRoot, ()), (⟨1⟩, ()), (⟨2⟩, ())], ⟨⟨0⟩, #[splitBlock]⟩)],
     [(Exec.Demo.mainF, [(storeRoot, ⟨1, 1⟩)])],
-    [(Exec.Demo.mainF, [(storeRoot, .materialized), (⟨1⟩, .virtual), (⟨2⟩, .virtual)])]⟩
+    [(Exec.Demo.mainF, [(storeRoot, .materialized), (⟨1⟩, .virtual), (⟨2⟩, .virtual)])],
+    [(Exec.Demo.mainF, [⟨1⟩, ⟨2⟩])]⟩
 
 private theorem splitShape :
     Memory.DestructureFields twoFieldLanguage () (.other ())
@@ -3616,7 +4194,7 @@ example (project : Project) :
 
 private def returnSSA (project : Project) : SSA testLowering testProfile :=
   let block : Block _ _ _ := ⟨⟨0⟩, [], [], .ret (some ⟨(), .literal ⟨[0]⟩⟩), []⟩
-  ⟨project, Exec.Demo.mainF, [], [(Exec.Demo.mainF, [], ⟨⟨0⟩, #[block]⟩)], []⟩
+  ⟨project, Exec.Demo.mainF, [], [(Exec.Demo.mainF, [], ⟨⟨0⟩, #[block]⟩)], [], []⟩
 
 -- The substituted project leaves the reached behavior and all the old
 -- handoff checks unchanged. The project equality rejects it on this edge.
@@ -3651,7 +4229,7 @@ private def callingSSA (kind : TrapKind) : SSA testLowering testProfile :=
     .ret (some ⟨(), .literal ⟨[0]⟩⟩), []⟩
   let helper : Block _ _ _ := ⟨⟨0⟩, [], [], .trap kind testOrigin, []⟩
   ⟨tabProject, Exec.Demo.mainF, [(callee, ⟨[], none⟩)],
-    [(Exec.Demo.mainF, [], ⟨⟨0⟩, #[entry]⟩), (callee, [], ⟨⟨0⟩, #[helper]⟩)], []⟩
+    [(Exec.Demo.mainF, [], ⟨⟨0⟩, #[entry]⟩), (callee, [], ⟨⟨0⟩, #[helper]⟩)], [], []⟩
 
 private abbrev memoryExecution := Memory.Execution (language := testLanguage)
   (lang := testLowering) (profile := testProfile)
@@ -3815,7 +4393,7 @@ private theorem coreWrongBody : ¬ LowersUnchecked (language := testLanguage) ab
 
 private def abortMIR (kind : TrapKind) : MIR testLowering testProfile :=
   let block : Block _ _ _ := ⟨⟨0⟩, [], [], .trap kind testOrigin, []⟩
-  ⟨tabProject, Exec.Demo.mainF, [(Exec.Demo.mainF, ⟨[], none⟩)], [(Exec.Demo.mainF, [], ⟨⟨0⟩, #[block]⟩)]⟩
+  ⟨tabProject, Exec.Demo.mainF, [(Exec.Demo.mainF, ⟨[], none⟩)], [(Exec.Demo.mainF, [], ⟨⟨0⟩, #[block]⟩)], []⟩
 
 private abbrev mirExecution := MIR.Execution (language := testLanguage)
   (lang := testLowering) (profile := testProfile)
@@ -4053,7 +4631,7 @@ private theorem aggregateWrite (project : Project) (space : AddrSpace) (base : N
     rfl
   refine ⟨⟨rfl, fun _ => rfl⟩, (fun _ => ⟨⟨1, 1⟩, rfl, ⟨nofun, nofun⟩⟩),
     ?_, ?_, fun _ => Or.inr ⟨backingRange space base, [(0, [.init 42 none])], rfl, rfl, ?_, ?_⟩⟩
-  · simp [Memory.writeValue, Memory.zeroRoot, Memory.rangeAt, Memory.byteRuns,
+  · simp [Memory.writeValue, Memory.mayInitialize, Memory.ownerView, Memory.zeroRoot, Memory.rangeAt, Memory.byteRuns,
       Memory.layoutAt, materializedBinding, immediateReturn, zeroMemory, storePlace,
       backingBefore, backingAfter, backingRange, storeBefore, storeInitial, storeRoot,
       Mem.Memory.store, Mem.Memory.access, Mem.Memory.block, Mem.Memory.modify,
@@ -4532,7 +5110,7 @@ private theorem AddressAllocation.storeScalar (allocation : AddressAllocation) (
   have encoded : Hybrid.encode testProfile.memoryTarget (.int .u8 42) = some [.init 42 none] := rfl
   refine ⟨⟨rfl, fun _ => rfl⟩, (fun _ => ⟨⟨1, 1⟩, rfl, ⟨nofun, nofun⟩⟩),
     ?_, ?_, fun _ => Or.inr ⟨allocation.range, [(0, [.init 42 none])], rfl, rfl, ?_, ?_⟩⟩
-  · simp [Memory.writeValue, Memory.zeroRoot, Memory.rangeAt, Memory.byteRuns, Memory.layoutAt,
+  · simp [Memory.writeValue, Memory.mayInitialize, Memory.ownerView, Memory.zeroRoot, Memory.rangeAt, Memory.byteRuns, Memory.layoutAt,
       addressMemory, storingMemory, storePlace, AddressAllocation.before, AddressAllocation.bound,
       backingBefore, backingAfter, backingRange, storeBefore, storeInitial, storeRoot,
       Mem.Memory.store, Mem.Memory.access, Mem.Memory.block, Mem.Memory.modify,
@@ -4869,7 +5447,8 @@ private theorem physicalIndirectExact (project : Project) (a : AddressAllocation
       subst ptr
       have exactBytes := Option.some.inj (a.storeBound.symm.trans written)
       subst bytes
-      have exactWrite : some storedState = some stored := writes.2.2.1
+      have exactWrite : some storedState = some stored := by
+        with_unfolding_all exact writes.2.2.1
       cases exactWrite
       exact ends
   · rintro rfl
@@ -5599,12 +6178,12 @@ private def abortMemory (kind : TrapKind) : Memory testLowering testProfile :=
 private def abortSSA (kind : TrapKind) : SSA testLowering testProfile :=
   let block : Block _ _ _ := ⟨⟨0⟩, [], [], .trap kind testOrigin, []⟩
   ⟨tabProject, Exec.Demo.mainF, (abortMIR kind).signatures,
-    [(Exec.Demo.mainF, [], ⟨⟨0⟩, #[block]⟩)], []⟩
+    [(Exec.Demo.mainF, [], ⟨⟨0⟩, #[block]⟩)], [], []⟩
 
 private def abortBIR (kind : TrapKind) : BIR testLowering testProfile :=
   let block := {birReturnBlock false with ending := .trap ⟨0⟩}
   ⟨tabProject, Exec.Demo.mainF, (abortMIR kind).signatures,
-    [(Exec.Demo.mainF, [], ⟨⟨0⟩, #[block]⟩)], [], #[⟨kind, testOrigin⟩]⟩
+    [(Exec.Demo.mainF, [], ⟨⟨0⟩, #[block]⟩)], [], #[⟨kind, testOrigin⟩], []⟩
 
 private def abortJob (kind : TrapKind) : LCBInput testProfile :=
   let diagnostic :=

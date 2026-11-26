@@ -2225,6 +2225,7 @@ ConcreteSpec.Core.Own.callLife.eq_2	propext
 ConcreteSpec.Core.Own.callLife_call_preserves	Quot.sound propext
 ConcreteSpec.Core.Own.callLife_erasure_result	Quot.sound propext
 ConcreteSpec.Core.Own.callLife_preserves	Quot.sound propext
+ConcreteSpec.Core.Own.canDropPlaces.eq_1	propext
 ConcreteSpec.Core.Own.defer_keeps_store_result	Quot.sound propext
 ConcreteSpec.Core.Own.directOwner_roundtrip	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Own.directOwner_roundtrip._proof_1_1	Quot.sound propext

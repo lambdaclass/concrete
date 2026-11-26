@@ -188,6 +188,7 @@ structure MIR {Ty : Type} (lang : LoweringLanguage Ty) (_profile : Profile) wher
   entry : FnId
   signatures : AList FnId (FunctionSignature Ty)
   functions : AList FnId (LocalTypes Ty × MIRGraph lang)
+  mutableLocals : AList FnId (List PlaceId) := []
 
 /-- Virtual scalar storage, or a logical place with a target-materialized representation.
 Materialization can have zero byte extent. -/
@@ -234,6 +235,7 @@ structure Memory {Ty : Type} (lang : LoweringLanguage Ty) (profile : Profile) wh
   functions : AList FnId (LocalTypes Ty × MemoryGraph lang)
   layouts : AList FnId (AList PlaceId Layout)
   storage : AList FnId (AList PlaceId StorageClass)
+  mutableLocals : AList FnId (List PlaceId) := []
 
 /-- An activation owns its locals. Suspended activations share byte memory
 with the running activation, but retain their own ranges and logical lifetimes. -/
@@ -304,6 +306,7 @@ structure SSA {Ty : Type} (lang : LoweringLanguage Ty) (_profile : Profile) wher
   signatures : AList FnId (FunctionSignature Ty)
   functions : AList FnId (LocalTypes Ty × SSAGraph lang)
   layouts : AList FnId (AList PlaceId Layout)
+  mutableLocals : AList FnId (List PlaceId) := []
 
 structure TrapIndex where
   index : Nat
@@ -332,6 +335,7 @@ structure BIR {Ty : Type} (lang : LoweringLanguage Ty) (_profile : Profile) wher
   functions : AList FnId (LocalTypes Ty × BIRGraph lang)
   layouts : AList FnId (AList PlaceId Layout)
   sites : TrapTable
+  mutableLocals : AList FnId (List PlaceId) := []
 
 /-- Each register definition and block parameter occupies one slot.
 Use the largest function frame, including for the pre-BIR resource refusal. -/

@@ -87,10 +87,11 @@ def Memory.HandoffWF {Ty : Type} {lowering : LoweringLanguage Ty}
 def SSA.WF (ssa : SSA lang profile) : Prop :=
   (ssa.memoryView (language := language)).HandoffWF
 
-def BIR.WF {Ty : Type} {lowering : LoweringLanguage Ty} (bir : BIR lowering profile) : Prop :=
+def BIR.WF (bir : BIR lang profile) : Prop :=
   bir.TrapSlotsWF ∧ bir.frameSlots ≤ profile.maxBIRSlots ∧
   (List.map Prod.fst bir.functions).Nodup ∧ bir.entry ∈ List.map Prod.fst bir.functions ∧
-  ∀ site ∈ bir.sites.toList, ∃ span, site.origin.lexical.Binds bir.project span
+  (∀ site ∈ bir.sites.toList, ∃ span, site.origin.lexical.Binds bir.project span) ∧
+  (bir.memoryView (language := language)).TablesWF
 
 private def Profile.Refuses (profile : Profile) (backend : BackendKind) : StageFailure → Prop
   | .unsupportedProfile rule =>
@@ -127,13 +128,22 @@ private def LCBInput.validateJobs (output : LCBInput profile) :
   LeanCompilerBackend.Verified.validateJob (Backend.LCB.job output.body)
   output.additionalJobs.forM fun pair => LeanCompilerBackend.Verified.validateJob pair.2
 
-/-- Check for linked execution and validate the exact jobs prepared by the emitter. -/
+/-- The hosted LCB word reserves 0 through 255 for ordinary exits. -/
+def LCBInput.trapCapacity : Nat := 2 ^ 32 - 256
+
+def LCBInput.trapCapacityRefusal (sites : Nat) : ResourceRefusal :=
+  ⟨⟨``LCBInput.trapCapacity, 1⟩, sites, LCBInput.trapCapacity⟩
+
+/-- Check hosted ABI limits and validate the exact jobs prepared by the emitter. -/
 def PassFunctions.emitSingleLCB (passes : PassFunctions grammar language lang profile)
-    (bir : BIR lang profile) : Except StageFailure (LCBInput profile) := do
-  if bir.requiresLCBLinking then throw .lcbLinkingUnavailable
-  let output ← passes.emitLCB bir
-  output.validateJobs.mapError StageFailure.invalidLCBJob
-  return output
+    (bir : BIR lang profile) : Except StageFailure (LCBInput profile) :=
+  if LCBInput.trapCapacity < bir.sites.size then
+    .error (.resource (LCBInput.trapCapacityRefusal bir.sites.size))
+  else do
+    if bir.requiresLCBLinking then throw .lcbLinkingUnavailable
+    let output ← passes.emitLCB bir
+    output.validateJobs.mapError StageFailure.invalidLCBJob
+    return output
 
 def PassFunctions.lowerUncheckedEntry (passes : PassFunctions grammar language lang profile) :
     Stage (CoreInput language) StageFailure (MIR lang profile) :=
@@ -143,15 +153,17 @@ def PassFunctions.lowerUncheckedEntry (passes : PassFunctions grammar language l
 
 def PassFunctions.emitLLVMEntry (passes : PassFunctions grammar language lang profile) :
     Stage (BIR lang profile) StageFailure (LLVMInput profile) :=
-  ⟨passes.emitLLVM, .namedPremise "P_print", BIR.WF,
+  ⟨passes.emitLLVM, .namedPremise "P_print", BIR.WF (language := language),
     fun output => ∃ bir : BIR lang profile, LLVMMetadataMatches bir output, LLVMMetadataMatches,
     fun _ => profile.Refuses .llvm, P_print (language := language)⟩
 
 def PassFunctions.emitLCBEntry (passes : PassFunctions grammar language lang profile) :
     Stage (BIR lang profile) StageFailure (LCBInput profile) :=
-  ⟨passes.emitSingleLCB, .directProof, BIR.WF,
+  ⟨passes.emitSingleLCB, .directProof, BIR.WF (language := language),
     fun output => ∃ bir : BIR lang profile, EmitsLCB language bir output, EmitsLCB language, fun bir failure =>
       match failure with
+      | .resource bound =>
+        bound = LCBInput.trapCapacityRefusal bir.sites.size ∧ LCBInput.trapCapacity < bir.sites.size
       | .lcbLinkingUnavailable => bir.requiresLCBLinking = true
       | .invalidLCBJob reason =>
         profile.backend = .lcb ∧ ∃ output, passes.emitLCB bir = .ok output ∧
@@ -204,11 +216,17 @@ def registry {slice : Slice} (passes : Passes slice profile) : Registry slice pr
     fun mir => mir.logicalView.HandoffWF, LowersCore (language := sliceLanguage slice), fun _ _ => False, fun _ _ => True⟩
   lowerUnchecked := passes.lowerUncheckedEntry
   lowerMemory := ⟨passes.lowerMemory, .directProof, fun mir => mir.logicalView.HandoffWF,
-    Memory.HandoffWF, LowersMemory (language := sliceLanguage slice), fun _ _ => False, fun _ _ => True⟩
+    Memory.HandoffWF, (fun mir memory =>
+      LowersMemory (language := sliceLanguage slice) mir memory ∧ memory.mutableLocals = mir.mutableLocals),
+    fun _ _ => False, fun _ _ => True⟩
   buildSSA := ⟨passes.buildSSA, .provedValidator, Memory.HandoffWF,
-    SSA.WF (language := sliceLanguage slice), BuildsSSA (language := sliceLanguage slice), fun _ _ => False, fun _ _ => True⟩
+    SSA.WF (language := sliceLanguage slice), (fun memory ssa =>
+      BuildsSSA (language := sliceLanguage slice) memory ssa ∧ ssa.mutableLocals = memory.mutableLocals),
+    fun _ _ => False, fun _ _ => True⟩
   buildBIR := ⟨passes.buildBIR, .provedValidator, SSA.WF (language := sliceLanguage slice),
-    BIR.WF, BuildsBIR (language := sliceLanguage slice), fun ssa failure =>
+    BIR.WF (language := sliceLanguage slice), (fun ssa bir =>
+      BuildsBIR (language := sliceLanguage slice) ssa bir ∧ bir.mutableLocals = ssa.mutableLocals),
+    fun ssa failure =>
       match failure with
       | .resource bound =>
         bound.rule = ⟨``BIR.frameSlots, 1⟩ ∧ bound.limit = profile.maxBIRSlots ∧
