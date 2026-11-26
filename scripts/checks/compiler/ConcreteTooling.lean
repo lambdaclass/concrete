@@ -11,7 +11,7 @@ open Lean in
 /-- The trusted-base report: one line per premise, then for each theorem its sorted axioms, then
     each axiom once with its type (so an axiom restated under the same name changes the report). -/
 def report (thms : List Name) : CoreM (List String) := do
-  let mut lines := all.map Premise.line
+  let mut lines := all.map Premise.line ++ imageReportLines
   let mut seen : Array Name := #[]
   for n in thms do
     let axs := (← collectAxioms n).qsort Name.lt

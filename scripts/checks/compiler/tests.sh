@@ -37,9 +37,15 @@ if [[ ${CONCRETE_TEST_EMIT_ONLY:-0} != 1 ]]; then
   cmp "$work/artifact-utc/vectors" "$work/artifact-pacific/vectors"
   echo "ok   canonical artifact bytes and SHA-256 goldens in two environments, payload substitutions"
   bash scripts/checks/compiler/f31_census.sh
-  # The scaling fixture uses the project admission proof, outside Concrete's build closure.
-  build span-proof-deps "$work/span-proof-deps.log" bounded 1800 lake build ConcreteSpec.Proofs.Ident
+  # The scaling fixture uses the span controls, outside Concrete's build closure.
+  build span-proof-deps "$work/span-proof-deps.log" bounded 1800 lake build ConcreteSpecEvidence.Ident
   bounded 120 lake env lean --run scripts/checks/compiler/span_scaling.lean
+  build lexer-digit-limit "$work/lexer-digit-limit.log" bounded 120 \
+    lake env lean --run scripts/checks/compiler/lexer_digit_limit.lean
+  echo "ok   lexer digit limit controls"
+  build lexer-stream "$work/lexer-stream.log" bounded 120 \
+    lake env lean --run scripts/checks/compiler/lexer_stream.lean
+  echo "ok   lexer stream controls"
   build llvm-mutation-controls "$work/llvm-mutation-controls.log" bounded 120 \
     lake env python3 -B scripts/checks/compiler/llvm_mutation_controls.py
   cat "$work/llvm-mutation-controls.log"

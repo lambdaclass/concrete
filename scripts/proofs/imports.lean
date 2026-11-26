@@ -23,7 +23,7 @@ partial def owner (env : Environment) (n : Name) : Name := Id.run do
   return n
 
 def auditedModule (m : Name) : Bool :=
-  [`ConcreteSpec, `Concrete, `LeanCompilerBackend].contains m.getRoot ||
+  [`ConcreteSpec, `ConcreteSpecEvidence, `Concrete, `LeanCompilerBackend].contains m.getRoot ||
     m == `Std.Data.HashMap.Lemmas
 
 def aliasOwners (env : Environment) : Std.HashMap (Name × Name) (List Name) := Id.run do

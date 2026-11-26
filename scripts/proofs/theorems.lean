@@ -1,6 +1,6 @@
 /-
 The proof population of the specification, read from the elaborated environment (not grepped from
-source): every constant the `ConcreteSpec` library declares. The proof-integrity checks
+source): every constant in the selected library. The proof-integrity checks
 (scripts/proofs/axioms.sh, trust_ban.sh, external.sh) all read it from here, so they agree on what
 "every ConcreteSpec theorem" means.
 
@@ -9,8 +9,9 @@ source): every constant the `ConcreteSpec` library declares. The proof-integrity
       EVERY theorem constant is listed: private ones (`_private.…`) and generated ones (`proof_N`,
       `match_N.eq_N`, `eq_N`) included, so none can be dropped from the inventory or the export.
   PROOF_PKG=Concrete …
-      selects compiler constants/imported modules; the default is ConcreteSpec. Both roots are
-      imported explicitly, and an unknown package fails before any row is written.
+      selects compiler constants/imported modules; the default is ConcreteSpec. ConcreteSpecEvidence
+      selects evidence only, and SpecAndEvidence selects both specification and evidence for export.
+      An unknown package fails before any row is written.
   PROOF_MODE=encoded …
       one line per theorem: `<name as Lean writes it>\t<encoded name>` (encoding below). The first is
       what lean4export reads on its command line; the second is what the stream is compared by.
@@ -21,7 +22,9 @@ source): every constant the `ConcreteSpec` library declares. The proof-integrity
   PROOF_MODE=modules …
       the modules that declare at least one theorem of the population, one per line.
   PROOF_MODE=imported …
-      every `ConcreteSpec` module in the import closure of this file (the root `ConcreteSpec`).
+      the selected source modules in the actual import closure of the selected root.
+  PROOF_MODE=environment …
+      the selected source modules in the environment used for constant and theorem queries.
   PROOF_MODE=decls PROOF_NAMES=<file> PROOF_OUT=<out> …
       writes to <out> every constant whose name is listed in <file> (one per line; the declarations
       of a lean4export stream), rendered in the canonical declaration form `export_inventory.py decls` renders from
@@ -40,7 +43,7 @@ annotations and the let `nondep` flag (lean4export shares one index among expres
 `Expr` BEq, which ignores exactly those, so the export legitimately carries whichever spelling it
 met first).
 
-NEGATIVE CONTROLS. Declarations in this file under `ConcreteSpecControl` or `ConcreteControl`
+NEGATIVE CONTROLS. Declarations in this file under `ConcreteSpecControl`, `ConcreteSpecEvidenceControl` or `ConcreteControl`
 belong to the corresponding package population. The checks insert their deliberately bad declarations (a `sorry`, a
 `native_decide`, an extra axiom) at the marker line below, in a temporary copy, and require the run to
 fail; nothing else is ever declared under that namespace.
@@ -48,14 +51,21 @@ fail; nothing else is ever declared under that namespace.
 import Lean
 import Lean.Replay
 import ConcreteSpec
+import ConcreteSpecEvidence
 import Concrete
 
 open Lean
 
 def inPopulation (env : Environment) (n : Name) (pkg : Name := `ConcreteSpec) : Bool :=
   match env.getModuleIdxFor? n with
-  | some i => (env.header.moduleNames[i.toNat]?.map (·.getRoot)) == some pkg
-  | none => (Name.mkSimple (toString pkg ++ "Control")).isPrefixOf (privateToUserName n)
+  | some i =>
+    let root := env.header.moduleNames[i.toNat]?.map (·.getRoot)
+    if pkg == `SpecAndEvidence then
+      root == some `ConcreteSpec || root == some `ConcreteSpecEvidence
+    else root == some pkg
+  | none =>
+    let controlPkg := if pkg == `SpecAndEvidence then `ConcreteSpec else pkg
+    (Name.mkSimple (toString controlPkg ++ "Control")).isPrefixOf (privateToUserName n)
 
 def nm : Name → String
   | .anonymous => ""
@@ -209,11 +219,11 @@ def replayClosure (env : Environment) (root : Name) : IO (Std.HashSet Name) := d
 #eval show CoreM Unit from do
   let env ← getEnv
   let pkgString := (← IO.getEnv "PROOF_PKG").getD "ConcreteSpec"
-  unless ["ConcreteSpec", "Concrete", "Main"].contains pkgString do
+  unless ["ConcreteSpec", "ConcreteSpecEvidence", "Concrete", "Main", "SpecAndEvidence"].contains pkgString do
     throwError s!"unknown PROOF_PKG '{pkgString}'"
   let pkg := Name.mkSimple pkgString
   let mode := (← IO.getEnv "PROOF_MODE").getD "theorems"
-  unless ["theorems", "encoded", "constants", "modules", "imported", "decls", "heads", "examples", "compiler-closure", "compiler-kernel", "compiler-kernel-control"].contains mode do
+  unless ["theorems", "encoded", "constants", "modules", "imported", "environment", "decls", "heads", "examples", "compiler-closure", "compiler-kernel", "compiler-kernel-control"].contains mode do
     throwError s!"unknown PROOF_MODE '{mode}'"
   -- Fail closed, once, before any mode writes a row: every constant and module name of the
   -- environment (the population, the axioms its constants depend on, the inductive heads of
@@ -275,9 +285,13 @@ def replayClosure (env : Environment) (root : Name) : IO (Std.HashSet Name) := d
       if let .str _ s := n then
         if s.startsWith "⟪example⟫" then
           rows := rows.push s!"{n}\t{" ".intercalate (((← collectAxioms n).map toString).qsort (· < ·)).toList}"
-  else if mode == "imported" then
-    for m in env.header.moduleNames do
-      if m.getRoot == pkg then rows := rows.push (nm m)
+  else if mode == "imported" || mode == "environment" then
+    let root := if pkg == `SpecAndEvidence then `ConcreteSpecEvidence else pkg
+    let closure ← if mode == "imported" then importModules #[{ module := root }] {} else pure env
+    for m in closure.header.moduleNames do
+      if m.getRoot == pkg || (pkg == `SpecAndEvidence &&
+          (m.getRoot == `ConcreteSpec || m.getRoot == `ConcreteSpecEvidence)) then
+        rows := rows.push (nm m)
   else
     let consts := env.constants.map₁.toList ++ env.constants.map₂.toList
     for (n, ci) in consts do

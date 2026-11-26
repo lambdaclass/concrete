@@ -113,6 +113,9 @@ end Witness{index}
             compiler = Path(tmp) / 'Concrete/Proof.lean'
             compiler.parent.mkdir()
             compiler.write_text('theorem witness : True := trivial\n')
+            evidence = Path(tmp) / 'ConcreteSpecEvidence/Fixture.lean'
+            evidence.parent.mkdir()
+            evidence.write_text('import ConcreteSpec.Spec.Basics\n')
             for body, message in (
                     ('open ConcreteSpec\n example : True := by trivial\n', '3: an `example`'),
                     ('/- unterminated', 'unterminated comment')):
@@ -151,12 +154,13 @@ end Witness{index}
                                 ("Std.Data.String.ToNat", False),
                                 ("Std.Data.String.ToInt", False), ("Std", False),
                                 ("Init", False), ("Lean.DoesNotExist", False),
+                                ("ConcreteSpecEvidence", False), ("ConcreteSpecEvidence.Own", False),
                                 ("Concrete.DoesNotExist", False)):
             self.assertEqual(bool(header.match("import " + module)), allowed, module)
         self.assertIsNone(lexer.HEADER.match("import Std.Data.HashMap.Lemmas"))
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "C.lean"
-            for command in ("import Std", "set_option maxRecDepth 100000", "def bad := sorry"):
+            for command in ("import Std", "import ConcreteSpecEvidence", "set_option maxRecDepth 100000", "def bad := sorry"):
                 path.write_text('import Concrete.Lex\n' + command + '\n')
                 output = io.StringIO()
                 with contextlib.redirect_stdout(output):

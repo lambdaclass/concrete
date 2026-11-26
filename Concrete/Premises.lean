@@ -30,6 +30,7 @@ import ConcreteSpec.Spec.Surface0
 import LeanCompilerBackend.Verified.Source
 import Concrete.Backend.LCB
 import Concrete.Backend.LLVM
+import Concrete.Theorem
 
 namespace Concrete
 
@@ -170,6 +171,12 @@ def theorems : List Lean.Name := [
   ``ConcreteSpec.Surface0.grammar0_ll1,
   ``Concrete.Parse.table0_checked,
   ``Concrete.Lex.lex_correct,
+  ``Concrete.Lex.lexLossless_correct,
+  ``Concrete.Lex.lexLossless_pieces,
+  ``Concrete.Lex.PieceStream.pieceFileId,
+  ``Concrete.Lex.lex_projection,
+  ``Concrete.Lex.lexLossless_roundTrip,
+  ``Concrete.Lex.LosslessStream.reconstruct_eq,
   ``Concrete.Stages.compile_lexes,
   ``Concrete.Admission.admit_checked,
   ``Concrete.Admission.check_evidence,
@@ -303,5 +310,33 @@ def Premise.tableRow (p : Premise) : String :=
 
 def Premise.line (p : Premise) : String :=
   s!"premise {p.id} [{p.trust.name}] retired-by: {p.retiredBy} :: {p.statement}"
+
+/-- A production discharge entry must bind an actual registered reference and
+the correctness proof for the same profile. -/
+abbrev ImageDischarge := { profile : ImageTheorem.Profile // ImageTheorem.ProductionDischarge profile }
+
+def imageDischarges : List ImageDischarge := []
+
+private def imageDischargeLines (entries : List ImageDischarge) : List String :=
+  entries.map fun entry => s!"image claim discharged: {reprStr entry.val}"
+
+def imageObligation : String :=
+  "image claim open [LP0 / R-0505]: production reference registration and joint backend non-vacuity witnesses for the same profile, reference, policy, models and tools"
+
+/-- Even a vacuous conditional proof cannot populate the report while every
+production target lookup is empty. This exercises the input to the report's
+discharge renderer, including attempted alternative entries. -/
+example (entries : List ImageDischarge) : imageDischargeLines entries = [] := by
+  cases entries with
+  | nil => rfl
+  | cons entry _ =>
+    obtain ⟨profile, ⟨env, reference, _, _, _, _, registered, _⟩⟩ := entry
+    have missing : ImageTheorem.nativeReference profile.target = none := by
+      cases profile.target <;> rfl
+    rw [missing] at registered
+    cases registered
+
+def imageReportLines : List String :=
+  [imageObligation] ++ imageDischargeLines imageDischarges
 
 end Concrete.Premises

@@ -1,6 +1,7 @@
 # Direct proof imports
 
-Direct proof imports are checked by `imports.py` inside the required trust-ban
+Direct imports in `ConcreteSpec/Proofs/` and `ConcreteSpecEvidence/` are checked by
+`imports.py` inside the required trust-ban
 job. It elaborates complete proof commands (naming anonymous examples) and
 compares imports with the modules defining their directly used constants.
 Controls verify rejection of unused imports and of direct imports omitted in
