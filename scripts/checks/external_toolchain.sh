@@ -55,7 +55,7 @@ rows=[{"meta": {k: {"version": v} for k,v in [("lean","4.35.0"),("exporter","fix
       {"ie":1,"sort":0}, {"ie":2,"natVal":0}, {"ie":3,"natVal":1},
       {"in":2,"str":{"pre":1,"str":"definition"}},
       {"def":{"name":2,"levelParams":[],"type":1,"value":2,"hints":"abbrev","safety":"safe","all":[]}}]
-for i in range(100):
+for i in range(101):
     rows += [{"in":i+3,"str":{"pre":1,"str":f"theorem{i:03}"}},
              {"thm":{"name":i+3,"levelParams":[],"type":1,"value":2+i%2,"all":[]}}]
 with open(sys.argv[1], 'w') as f:
@@ -128,6 +128,9 @@ case "$*" in
   'build ConcreteSpec ConcreteSpecEvidence Concrete') echo project >> "$PHASE_LOG" ;;
   'env lean '*)
     echo "population-$PROOF_MODE" >> "$PHASE_LOG"
+    if [ "${FIXTURE_EMPTY_SELECTION:-0}" = 1 ] && [ "$PROOF_PKG" = SpecAndEvidence ]; then
+      case "$PROOF_MODE" in theorems|encoded) exit 0 ;; esac
+    fi
     case "$PROOF_MODE" in
       imported)
         case "$PROOF_PKG" in
@@ -146,12 +149,20 @@ case "$*" in
         if [ "${FIXTURE_INCOMPLETE_ENUMERATOR:-0}" = 0 ]; then
           printf '%s\n' ConcreteSpec.SpecificationOnly
         fi ;;
-      theorems) for i in $(seq -w 0 99); do printf 'ConcreteSpec.theorem%03d\t\n' "$((10#$i))"; done ;;
+      theorems)
+        for i in $(seq 0 99); do printf 'ConcreteSpec.theorem%03d\t\n' "$i"; done
+        if [ "${FIXTURE_OMIT_EVIDENCE:-0}" = 0 ]; then printf 'ConcreteSpec.theorem100\t\n'; fi ;;
       encoded)
         if [[ "$3" == */control-* ]]; then
           printf '%s\n' 'ConcreteSpecControl.«a.b»	s19:ConcreteSpecControls3:a.b' 'ConcreteSpecControl.a.b	s19:ConcreteSpecControls1:as1:b' 'ConcreteSpecControl.«λ»	s19:ConcreteSpecControls2:λ'
         else
-          for i in $(seq 0 99); do printf 'ConcreteSpec.theorem%03d\ts12:ConcreteSpecs10:theorem%03d\n' "$i" "$i"; done
+          if [ "$PROOF_PKG" != ConcreteSpecEvidence ]; then
+            for i in $(seq 0 99); do printf 'ConcreteSpec.theorem%03d\ts12:ConcreteSpecs10:theorem%03d\n' "$i" "$i"; done
+          fi
+          if [ "$PROOF_PKG" = ConcreteSpecEvidence ] ||
+             { [ "$PROOF_PKG" = SpecAndEvidence ] && [ "${FIXTURE_OMIT_EVIDENCE:-0}" = 0 ]; }; then
+            printf 'ConcreteSpec.theorem100\ts12:ConcreteSpecs10:theorem100\n'
+          fi
         fi ;;
       decls) python3 scripts/proofs/export_inventory.py decls "$FIXTURE_STREAM" > "$PROOF_OUT" ;;
       heads)
@@ -257,7 +268,7 @@ run_driver() {
   local diagnostic=$1
   local expected_rc=${2:-1}
   local rc=0
-  bounded_run 30 -- bash "$TMP/project/scripts/proofs/external.sh" > "$TMP/out" 2>&1 || rc=$?
+  (cd "$TMP/project/scripts" && bounded_run 30 -- bash proofs/external.sh) > "$TMP/out" 2>&1 || rc=$?
   if bounded_is_incomplete "$rc"; then bounded_gate_status; exit 1; fi
   if [ "$rc" != "$expected_rc" ] || ! grep -qF "$diagnostic" "$TMP/out"; then
     cat "$TMP/out"; echo "FAIL: expected refusal at $diagnostic, rc=$rc"; exit 1
@@ -295,7 +306,8 @@ rm -rf "$CONCRETE_EXT_TOOLS"
 : > "$PHASE_LOG"
 # Cold relative cache: every derived path must survive recipe directory changes,
 # and Cargo must see a registry symlink that resolves to an existing directory.
-CONCRETE_EXT_TOOLS=../tools CONCRETE_EXT_ELAN=../bin/elan run_driver 'PROOF-EXTERNAL:' 0
+CONCRETE_EXT_TOOLS=../tools CONCRETE_EXT_ELAN=../bin/elan \
+  run_driver 'con-leche runs as --verified --jobs=1 at every call site' 0
 # Check obligations by phase, without relying on the placement of source lines.
 for phase in project population-theorems population-encoded exporter population-decls population-heads conleche-spec.ndjson nanoda-spec.ndjson; do
   grep -qxF "$phase" "$PHASE_LOG"
@@ -310,11 +322,28 @@ FIXTURE_INCOMPLETE_EXPORT=1 run_driver 'source modules outside the export root: 
 : > "$PHASE_LOG"
 FIXTURE_INCOMPLETE_ENUMERATOR=1 run_driver 'source modules outside the export theorem environment: ConcreteSpec.SpecificationOnly'
 ! grep -qxF exporter "$PHASE_LOG"
+# A complete import closure can coexist with an empty evidence arm of the export selector.
+head -n -2 "$FIXTURE_STREAM" > "$TMP/spec-only.ndjson"
+: > "$PHASE_LOG"
+FIXTURE_OMIT_EVIDENCE=1 FIXTURE_STREAM="$TMP/spec-only.ndjson" \
+  run_driver 'theorems missing from the export selection: s12:ConcreteSpecs10:theorem100'
+! grep -qxF exporter "$PHASE_LOG"
+# The gate refuses an entirely empty combined selection before calling the exporter.
+FIXTURE_EMPTY_SELECTION=1 run_driver 'theorems missing from the export selection:'
+! grep -qxF exporter "$PHASE_LOG"
+# A complete selection also cannot mask an exporter that drops the evidence theorem.
+FIXTURE_STREAM="$TMP/spec-only.ndjson" \
+  run_driver 'theorems missing from the export: s12:ConcreteSpecs10:theorem100'
 # Cache hits must succeed even when the nanoda upstream is unavailable.
 mv "$TMP/source" "$TMP/source-offline"
 run_driver 'PROOF-EXTERNAL:' 0
 mv "$TMP/source-offline" "$TMP/source"
 cmp "$TMP/expected" "$DISPATCH_LOG"
+
+# A path relative to the starting directory is unreadable after the driver changes directory.
+sed 's|grep -nE \(.*\) "$SELF_DIR/external.sh"|grep -nE \1 "$0"|' "$TMP/driver" > "$TMP/project/scripts/proofs/external.sh"
+run_driver 'could not scan con-leche call sites'
+cp "$TMP/driver" "$TMP/project/scripts/proofs/external.sh"
 # A different resolved elan path must produce distinct homes and Lake tool trees.
 cp "$TMP/bin/elan" "$TMP/bin/elan-other"
 CONCRETE_EXT_ELAN="$TMP/bin/elan-other" run_driver 'PROOF-EXTERNAL:' 0

@@ -1,0 +1,2259 @@
+; fixture answer
+declare {i8, i1} @llvm.uadd.with.overflow.i8(i8, i8)
+
+define i32 @concrete_body() {
+b0:
+  %o0 = call {i8, i1} @llvm.uadd.with.overflow.i8(i8 20, i8 22)
+  %r0 = extractvalue {i8, i1} %o0, 0
+  %r1 = extractvalue {i8, i1} %o0, 1
+  br i1 %r1, label %b1, label %b2
+b1:
+  ret i32 256
+b2:
+  %r2 = phi i8 [ %r0, %b0 ]
+  %ret2 = zext i8 %r2 to i32
+  ret i32 %ret2
+}
+
+@.site0 = private constant [63 x i8] c"concrete: trap: overflow at tests/slice0/sum.con:3:12 (site 0)\0A"
+@.bad = private constant [39 x i8] c"concrete: runtime: invalid result word\0A"
+declare i64 @write(i32, ptr, i64)
+declare void @_exit(i32)
+declare void @abort()
+
+define internal void @concrete_rt_write_all(ptr %p, i64 %n) {
+entry:
+  br label %loop
+loop:
+  %pp = phi ptr [ %p, %entry ], [ %np, %more ]
+  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]
+  %done = icmp eq i64 %nn, 0
+  br i1 %done, label %out, label %wr
+wr:
+  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)
+  %bad = icmp sle i64 %k, 0
+  br i1 %bad, label %out, label %more
+more:
+  %np = getelementptr i8, ptr %pp, i64 %k
+  %rest = sub i64 %nn, %k
+  br label %loop
+out:
+  ret void
+}
+
+define i32 @main() "no-jump-tables"="true" {
+entry:
+  %w = call i32 @concrete_body()
+  %ok = icmp ult i32 %w, 256
+  br i1 %ok, label %exit, label %trap
+exit:
+  ret i32 %w
+trap:
+  %i = sub i32 %w, 256
+  switch i32 %i, label %bad [ i32 0, label %t0 ]
+t0:
+  call void @concrete_rt_write_all(ptr @.site0, i64 63)
+  call void @_exit(i32 134)
+  unreachable
+bad:
+  call void @concrete_rt_write_all(ptr @.bad, i64 39)
+  call void @abort()
+  unreachable
+}
+; fixture boundary
+declare {i8, i1} @llvm.uadd.with.overflow.i8(i8, i8)
+
+define i32 @concrete_body() {
+b0:
+  %o0 = call {i8, i1} @llvm.uadd.with.overflow.i8(i8 200, i8 55)
+  %r0 = extractvalue {i8, i1} %o0, 0
+  %r1 = extractvalue {i8, i1} %o0, 1
+  br i1 %r1, label %b1, label %b2
+b1:
+  ret i32 256
+b2:
+  %r2 = phi i8 [ %r0, %b0 ]
+  %ret2 = zext i8 %r2 to i32
+  ret i32 %ret2
+}
+
+@.site0 = private constant [63 x i8] c"concrete: trap: overflow at tests/slice0/sum.con:3:12 (site 0)\0A"
+@.bad = private constant [39 x i8] c"concrete: runtime: invalid result word\0A"
+declare i64 @write(i32, ptr, i64)
+declare void @_exit(i32)
+declare void @abort()
+
+define internal void @concrete_rt_write_all(ptr %p, i64 %n) {
+entry:
+  br label %loop
+loop:
+  %pp = phi ptr [ %p, %entry ], [ %np, %more ]
+  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]
+  %done = icmp eq i64 %nn, 0
+  br i1 %done, label %out, label %wr
+wr:
+  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)
+  %bad = icmp sle i64 %k, 0
+  br i1 %bad, label %out, label %more
+more:
+  %np = getelementptr i8, ptr %pp, i64 %k
+  %rest = sub i64 %nn, %k
+  br label %loop
+out:
+  ret void
+}
+
+define i32 @main() "no-jump-tables"="true" {
+entry:
+  %w = call i32 @concrete_body()
+  %ok = icmp ult i32 %w, 256
+  br i1 %ok, label %exit, label %trap
+exit:
+  ret i32 %w
+trap:
+  %i = sub i32 %w, 256
+  switch i32 %i, label %bad [ i32 0, label %t0 ]
+t0:
+  call void @concrete_rt_write_all(ptr @.site0, i64 63)
+  call void @_exit(i32 134)
+  unreachable
+bad:
+  call void @concrete_rt_write_all(ptr @.bad, i64 39)
+  call void @abort()
+  unreachable
+}
+; fixture overflow
+declare {i8, i1} @llvm.uadd.with.overflow.i8(i8, i8)
+
+define i32 @concrete_body() {
+b0:
+  %o0 = call {i8, i1} @llvm.uadd.with.overflow.i8(i8 200, i8 56)
+  %r0 = extractvalue {i8, i1} %o0, 0
+  %r1 = extractvalue {i8, i1} %o0, 1
+  br i1 %r1, label %b1, label %b2
+b1:
+  ret i32 256
+b2:
+  %r2 = phi i8 [ %r0, %b0 ]
+  %ret2 = zext i8 %r2 to i32
+  ret i32 %ret2
+}
+
+@.site0 = private constant [63 x i8] c"concrete: trap: overflow at tests/slice0/sum.con:3:12 (site 0)\0A"
+@.bad = private constant [39 x i8] c"concrete: runtime: invalid result word\0A"
+declare i64 @write(i32, ptr, i64)
+declare void @_exit(i32)
+declare void @abort()
+
+define internal void @concrete_rt_write_all(ptr %p, i64 %n) {
+entry:
+  br label %loop
+loop:
+  %pp = phi ptr [ %p, %entry ], [ %np, %more ]
+  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]
+  %done = icmp eq i64 %nn, 0
+  br i1 %done, label %out, label %wr
+wr:
+  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)
+  %bad = icmp sle i64 %k, 0
+  br i1 %bad, label %out, label %more
+more:
+  %np = getelementptr i8, ptr %pp, i64 %k
+  %rest = sub i64 %nn, %k
+  br label %loop
+out:
+  ret void
+}
+
+define i32 @main() "no-jump-tables"="true" {
+entry:
+  %w = call i32 @concrete_body()
+  %ok = icmp ult i32 %w, 256
+  br i1 %ok, label %exit, label %trap
+exit:
+  ret i32 %w
+trap:
+  %i = sub i32 %w, 256
+  switch i32 %i, label %bad [ i32 0, label %t0 ]
+t0:
+  call void @concrete_rt_write_all(ptr @.site0, i64 63)
+  call void @_exit(i32 134)
+  unreachable
+bad:
+  call void @concrete_rt_write_all(ptr @.bad, i64 39)
+  call void @abort()
+  unreachable
+}
+; fixture answer_discharged
+
+define i32 @concrete_body() {
+b0:
+  %r0 = add i8 20, 22
+  %ret0 = zext i8 %r0 to i32
+  ret i32 %ret0
+}
+
+@.bad = private constant [39 x i8] c"concrete: runtime: invalid result word\0A"
+declare i64 @write(i32, ptr, i64)
+declare void @_exit(i32)
+declare void @abort()
+
+define internal void @concrete_rt_write_all(ptr %p, i64 %n) {
+entry:
+  br label %loop
+loop:
+  %pp = phi ptr [ %p, %entry ], [ %np, %more ]
+  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]
+  %done = icmp eq i64 %nn, 0
+  br i1 %done, label %out, label %wr
+wr:
+  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)
+  %bad = icmp sle i64 %k, 0
+  br i1 %bad, label %out, label %more
+more:
+  %np = getelementptr i8, ptr %pp, i64 %k
+  %rest = sub i64 %nn, %k
+  br label %loop
+out:
+  ret void
+}
+
+define i32 @main() "no-jump-tables"="true" {
+entry:
+  %w = call i32 @concrete_body()
+  %ok = icmp ult i32 %w, 256
+  br i1 %ok, label %exit, label %trap
+exit:
+  ret i32 %w
+trap:
+  %i = sub i32 %w, 256
+  switch i32 %i, label %bad [ ]
+bad:
+  call void @concrete_rt_write_all(ptr @.bad, i64 39)
+  call void @abort()
+  unreachable
+}
+; fixture return134
+
+define i32 @concrete_body() {
+b0:
+  %ret0 = zext i8 134 to i32
+  ret i32 %ret0
+}
+
+@.bad = private constant [39 x i8] c"concrete: runtime: invalid result word\0A"
+declare i64 @write(i32, ptr, i64)
+declare void @_exit(i32)
+declare void @abort()
+
+define internal void @concrete_rt_write_all(ptr %p, i64 %n) {
+entry:
+  br label %loop
+loop:
+  %pp = phi ptr [ %p, %entry ], [ %np, %more ]
+  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]
+  %done = icmp eq i64 %nn, 0
+  br i1 %done, label %out, label %wr
+wr:
+  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)
+  %bad = icmp sle i64 %k, 0
+  br i1 %bad, label %out, label %more
+more:
+  %np = getelementptr i8, ptr %pp, i64 %k
+  %rest = sub i64 %nn, %k
+  br label %loop
+out:
+  ret void
+}
+
+define i32 @main() "no-jump-tables"="true" {
+entry:
+  %w = call i32 @concrete_body()
+  %ok = icmp ult i32 %w, 256
+  br i1 %ok, label %exit, label %trap
+exit:
+  ret i32 %w
+trap:
+  %i = sub i32 %w, 256
+  switch i32 %i, label %bad [ ]
+bad:
+  call void @concrete_rt_write_all(ptr @.bad, i64 39)
+  call void @abort()
+  unreachable
+}
+; fixture i8_add_ok
+declare {i8, i1} @llvm.sadd.with.overflow.i8(i8, i8)
+
+define i32 @concrete_body() {
+b0:
+  %o0 = call {i8, i1} @llvm.sadd.with.overflow.i8(i8 156, i8 228)
+  %r0 = extractvalue {i8, i1} %o0, 0
+  %r1 = extractvalue {i8, i1} %o0, 1
+  br i1 %r1, label %b1, label %b2
+b1:
+  ret i32 256
+b2:
+  %ret2 = zext i8 0 to i32
+  ret i32 %ret2
+}
+
+@.site0 = private constant [63 x i8] c"concrete: trap: overflow at tests/slice0/sum.con:3:12 (site 0)\0A"
+@.bad = private constant [39 x i8] c"concrete: runtime: invalid result word\0A"
+declare i64 @write(i32, ptr, i64)
+declare void @_exit(i32)
+declare void @abort()
+
+define internal void @concrete_rt_write_all(ptr %p, i64 %n) {
+entry:
+  br label %loop
+loop:
+  %pp = phi ptr [ %p, %entry ], [ %np, %more ]
+  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]
+  %done = icmp eq i64 %nn, 0
+  br i1 %done, label %out, label %wr
+wr:
+  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)
+  %bad = icmp sle i64 %k, 0
+  br i1 %bad, label %out, label %more
+more:
+  %np = getelementptr i8, ptr %pp, i64 %k
+  %rest = sub i64 %nn, %k
+  br label %loop
+out:
+  ret void
+}
+
+define i32 @main() "no-jump-tables"="true" {
+entry:
+  %w = call i32 @concrete_body()
+  %ok = icmp ult i32 %w, 256
+  br i1 %ok, label %exit, label %trap
+exit:
+  ret i32 %w
+trap:
+  %i = sub i32 %w, 256
+  switch i32 %i, label %bad [ i32 0, label %t0 ]
+t0:
+  call void @concrete_rt_write_all(ptr @.site0, i64 63)
+  call void @_exit(i32 134)
+  unreachable
+bad:
+  call void @concrete_rt_write_all(ptr @.bad, i64 39)
+  call void @abort()
+  unreachable
+}
+; fixture i8_add_ovf
+declare {i8, i1} @llvm.sadd.with.overflow.i8(i8, i8)
+
+define i32 @concrete_body() {
+b0:
+  %o0 = call {i8, i1} @llvm.sadd.with.overflow.i8(i8 156, i8 227)
+  %r0 = extractvalue {i8, i1} %o0, 0
+  %r1 = extractvalue {i8, i1} %o0, 1
+  br i1 %r1, label %b1, label %b2
+b1:
+  ret i32 256
+b2:
+  %ret2 = zext i8 0 to i32
+  ret i32 %ret2
+}
+
+@.site0 = private constant [63 x i8] c"concrete: trap: overflow at tests/slice0/sum.con:3:12 (site 0)\0A"
+@.bad = private constant [39 x i8] c"concrete: runtime: invalid result word\0A"
+declare i64 @write(i32, ptr, i64)
+declare void @_exit(i32)
+declare void @abort()
+
+define internal void @concrete_rt_write_all(ptr %p, i64 %n) {
+entry:
+  br label %loop
+loop:
+  %pp = phi ptr [ %p, %entry ], [ %np, %more ]
+  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]
+  %done = icmp eq i64 %nn, 0
+  br i1 %done, label %out, label %wr
+wr:
+  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)
+  %bad = icmp sle i64 %k, 0
+  br i1 %bad, label %out, label %more
+more:
+  %np = getelementptr i8, ptr %pp, i64 %k
+  %rest = sub i64 %nn, %k
+  br label %loop
+out:
+  ret void
+}
+
+define i32 @main() "no-jump-tables"="true" {
+entry:
+  %w = call i32 @concrete_body()
+  %ok = icmp ult i32 %w, 256
+  br i1 %ok, label %exit, label %trap
+exit:
+  ret i32 %w
+trap:
+  %i = sub i32 %w, 256
+  switch i32 %i, label %bad [ i32 0, label %t0 ]
+t0:
+  call void @concrete_rt_write_all(ptr @.site0, i64 63)
+  call void @_exit(i32 134)
+  unreachable
+bad:
+  call void @concrete_rt_write_all(ptr @.bad, i64 39)
+  call void @abort()
+  unreachable
+}
+; fixture u16_mul_ok
+declare {i16, i1} @llvm.umul.with.overflow.i16(i16, i16)
+
+define i32 @concrete_body() {
+b0:
+  %o0 = call {i16, i1} @llvm.umul.with.overflow.i16(i16 300, i16 218)
+  %r0 = extractvalue {i16, i1} %o0, 0
+  %r1 = extractvalue {i16, i1} %o0, 1
+  br i1 %r1, label %b1, label %b2
+b1:
+  ret i32 256
+b2:
+  %ret2 = zext i8 0 to i32
+  ret i32 %ret2
+}
+
+@.site0 = private constant [63 x i8] c"concrete: trap: overflow at tests/slice0/sum.con:3:12 (site 0)\0A"
+@.bad = private constant [39 x i8] c"concrete: runtime: invalid result word\0A"
+declare i64 @write(i32, ptr, i64)
+declare void @_exit(i32)
+declare void @abort()
+
+define internal void @concrete_rt_write_all(ptr %p, i64 %n) {
+entry:
+  br label %loop
+loop:
+  %pp = phi ptr [ %p, %entry ], [ %np, %more ]
+  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]
+  %done = icmp eq i64 %nn, 0
+  br i1 %done, label %out, label %wr
+wr:
+  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)
+  %bad = icmp sle i64 %k, 0
+  br i1 %bad, label %out, label %more
+more:
+  %np = getelementptr i8, ptr %pp, i64 %k
+  %rest = sub i64 %nn, %k
+  br label %loop
+out:
+  ret void
+}
+
+define i32 @main() "no-jump-tables"="true" {
+entry:
+  %w = call i32 @concrete_body()
+  %ok = icmp ult i32 %w, 256
+  br i1 %ok, label %exit, label %trap
+exit:
+  ret i32 %w
+trap:
+  %i = sub i32 %w, 256
+  switch i32 %i, label %bad [ i32 0, label %t0 ]
+t0:
+  call void @concrete_rt_write_all(ptr @.site0, i64 63)
+  call void @_exit(i32 134)
+  unreachable
+bad:
+  call void @concrete_rt_write_all(ptr @.bad, i64 39)
+  call void @abort()
+  unreachable
+}
+; fixture u16_mul_ovf
+declare {i16, i1} @llvm.umul.with.overflow.i16(i16, i16)
+
+define i32 @concrete_body() {
+b0:
+  %o0 = call {i16, i1} @llvm.umul.with.overflow.i16(i16 300, i16 219)
+  %r0 = extractvalue {i16, i1} %o0, 0
+  %r1 = extractvalue {i16, i1} %o0, 1
+  br i1 %r1, label %b1, label %b2
+b1:
+  ret i32 256
+b2:
+  %ret2 = zext i8 0 to i32
+  ret i32 %ret2
+}
+
+@.site0 = private constant [63 x i8] c"concrete: trap: overflow at tests/slice0/sum.con:3:12 (site 0)\0A"
+@.bad = private constant [39 x i8] c"concrete: runtime: invalid result word\0A"
+declare i64 @write(i32, ptr, i64)
+declare void @_exit(i32)
+declare void @abort()
+
+define internal void @concrete_rt_write_all(ptr %p, i64 %n) {
+entry:
+  br label %loop
+loop:
+  %pp = phi ptr [ %p, %entry ], [ %np, %more ]
+  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]
+  %done = icmp eq i64 %nn, 0
+  br i1 %done, label %out, label %wr
+wr:
+  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)
+  %bad = icmp sle i64 %k, 0
+  br i1 %bad, label %out, label %more
+more:
+  %np = getelementptr i8, ptr %pp, i64 %k
+  %rest = sub i64 %nn, %k
+  br label %loop
+out:
+  ret void
+}
+
+define i32 @main() "no-jump-tables"="true" {
+entry:
+  %w = call i32 @concrete_body()
+  %ok = icmp ult i32 %w, 256
+  br i1 %ok, label %exit, label %trap
+exit:
+  ret i32 %w
+trap:
+  %i = sub i32 %w, 256
+  switch i32 %i, label %bad [ i32 0, label %t0 ]
+t0:
+  call void @concrete_rt_write_all(ptr @.site0, i64 63)
+  call void @_exit(i32 134)
+  unreachable
+bad:
+  call void @concrete_rt_write_all(ptr @.bad, i64 39)
+  call void @abort()
+  unreachable
+}
+; fixture i16_sub_ovf
+declare {i16, i1} @llvm.ssub.with.overflow.i16(i16, i16)
+
+define i32 @concrete_body() {
+b0:
+  %o0 = call {i16, i1} @llvm.ssub.with.overflow.i16(i16 32768, i16 1)
+  %r0 = extractvalue {i16, i1} %o0, 0
+  %r1 = extractvalue {i16, i1} %o0, 1
+  br i1 %r1, label %b1, label %b2
+b1:
+  ret i32 256
+b2:
+  %ret2 = zext i8 0 to i32
+  ret i32 %ret2
+}
+
+@.site0 = private constant [63 x i8] c"concrete: trap: overflow at tests/slice0/sum.con:3:12 (site 0)\0A"
+@.bad = private constant [39 x i8] c"concrete: runtime: invalid result word\0A"
+declare i64 @write(i32, ptr, i64)
+declare void @_exit(i32)
+declare void @abort()
+
+define internal void @concrete_rt_write_all(ptr %p, i64 %n) {
+entry:
+  br label %loop
+loop:
+  %pp = phi ptr [ %p, %entry ], [ %np, %more ]
+  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]
+  %done = icmp eq i64 %nn, 0
+  br i1 %done, label %out, label %wr
+wr:
+  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)
+  %bad = icmp sle i64 %k, 0
+  br i1 %bad, label %out, label %more
+more:
+  %np = getelementptr i8, ptr %pp, i64 %k
+  %rest = sub i64 %nn, %k
+  br label %loop
+out:
+  ret void
+}
+
+define i32 @main() "no-jump-tables"="true" {
+entry:
+  %w = call i32 @concrete_body()
+  %ok = icmp ult i32 %w, 256
+  br i1 %ok, label %exit, label %trap
+exit:
+  ret i32 %w
+trap:
+  %i = sub i32 %w, 256
+  switch i32 %i, label %bad [ i32 0, label %t0 ]
+t0:
+  call void @concrete_rt_write_all(ptr @.site0, i64 63)
+  call void @_exit(i32 134)
+  unreachable
+bad:
+  call void @concrete_rt_write_all(ptr @.bad, i64 39)
+  call void @abort()
+  unreachable
+}
+; fixture u8_sub_ovf
+declare {i8, i1} @llvm.usub.with.overflow.i8(i8, i8)
+
+define i32 @concrete_body() {
+b0:
+  %o0 = call {i8, i1} @llvm.usub.with.overflow.i8(i8 0, i8 1)
+  %r0 = extractvalue {i8, i1} %o0, 0
+  %r1 = extractvalue {i8, i1} %o0, 1
+  br i1 %r1, label %b1, label %b2
+b1:
+  ret i32 256
+b2:
+  %ret2 = zext i8 0 to i32
+  ret i32 %ret2
+}
+
+@.site0 = private constant [63 x i8] c"concrete: trap: overflow at tests/slice0/sum.con:3:12 (site 0)\0A"
+@.bad = private constant [39 x i8] c"concrete: runtime: invalid result word\0A"
+declare i64 @write(i32, ptr, i64)
+declare void @_exit(i32)
+declare void @abort()
+
+define internal void @concrete_rt_write_all(ptr %p, i64 %n) {
+entry:
+  br label %loop
+loop:
+  %pp = phi ptr [ %p, %entry ], [ %np, %more ]
+  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]
+  %done = icmp eq i64 %nn, 0
+  br i1 %done, label %out, label %wr
+wr:
+  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)
+  %bad = icmp sle i64 %k, 0
+  br i1 %bad, label %out, label %more
+more:
+  %np = getelementptr i8, ptr %pp, i64 %k
+  %rest = sub i64 %nn, %k
+  br label %loop
+out:
+  ret void
+}
+
+define i32 @main() "no-jump-tables"="true" {
+entry:
+  %w = call i32 @concrete_body()
+  %ok = icmp ult i32 %w, 256
+  br i1 %ok, label %exit, label %trap
+exit:
+  ret i32 %w
+trap:
+  %i = sub i32 %w, 256
+  switch i32 %i, label %bad [ i32 0, label %t0 ]
+t0:
+  call void @concrete_rt_write_all(ptr @.site0, i64 63)
+  call void @_exit(i32 134)
+  unreachable
+bad:
+  call void @concrete_rt_write_all(ptr @.bad, i64 39)
+  call void @abort()
+  unreachable
+}
+; fixture i8_mul_ok
+declare {i8, i1} @llvm.smul.with.overflow.i8(i8, i8)
+
+define i32 @concrete_body() {
+b0:
+  %o0 = call {i8, i1} @llvm.smul.with.overflow.i8(i8 240, i8 8)
+  %r0 = extractvalue {i8, i1} %o0, 0
+  %r1 = extractvalue {i8, i1} %o0, 1
+  br i1 %r1, label %b1, label %b2
+b1:
+  ret i32 256
+b2:
+  %ret2 = zext i8 0 to i32
+  ret i32 %ret2
+}
+
+@.site0 = private constant [63 x i8] c"concrete: trap: overflow at tests/slice0/sum.con:3:12 (site 0)\0A"
+@.bad = private constant [39 x i8] c"concrete: runtime: invalid result word\0A"
+declare i64 @write(i32, ptr, i64)
+declare void @_exit(i32)
+declare void @abort()
+
+define internal void @concrete_rt_write_all(ptr %p, i64 %n) {
+entry:
+  br label %loop
+loop:
+  %pp = phi ptr [ %p, %entry ], [ %np, %more ]
+  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]
+  %done = icmp eq i64 %nn, 0
+  br i1 %done, label %out, label %wr
+wr:
+  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)
+  %bad = icmp sle i64 %k, 0
+  br i1 %bad, label %out, label %more
+more:
+  %np = getelementptr i8, ptr %pp, i64 %k
+  %rest = sub i64 %nn, %k
+  br label %loop
+out:
+  ret void
+}
+
+define i32 @main() "no-jump-tables"="true" {
+entry:
+  %w = call i32 @concrete_body()
+  %ok = icmp ult i32 %w, 256
+  br i1 %ok, label %exit, label %trap
+exit:
+  ret i32 %w
+trap:
+  %i = sub i32 %w, 256
+  switch i32 %i, label %bad [ i32 0, label %t0 ]
+t0:
+  call void @concrete_rt_write_all(ptr @.site0, i64 63)
+  call void @_exit(i32 134)
+  unreachable
+bad:
+  call void @concrete_rt_write_all(ptr @.bad, i64 39)
+  call void @abort()
+  unreachable
+}
+; fixture i8_mul_ovf
+declare {i8, i1} @llvm.smul.with.overflow.i8(i8, i8)
+
+define i32 @concrete_body() {
+b0:
+  %o0 = call {i8, i1} @llvm.smul.with.overflow.i8(i8 240, i8 248)
+  %r0 = extractvalue {i8, i1} %o0, 0
+  %r1 = extractvalue {i8, i1} %o0, 1
+  br i1 %r1, label %b1, label %b2
+b1:
+  ret i32 256
+b2:
+  %ret2 = zext i8 0 to i32
+  ret i32 %ret2
+}
+
+@.site0 = private constant [63 x i8] c"concrete: trap: overflow at tests/slice0/sum.con:3:12 (site 0)\0A"
+@.bad = private constant [39 x i8] c"concrete: runtime: invalid result word\0A"
+declare i64 @write(i32, ptr, i64)
+declare void @_exit(i32)
+declare void @abort()
+
+define internal void @concrete_rt_write_all(ptr %p, i64 %n) {
+entry:
+  br label %loop
+loop:
+  %pp = phi ptr [ %p, %entry ], [ %np, %more ]
+  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]
+  %done = icmp eq i64 %nn, 0
+  br i1 %done, label %out, label %wr
+wr:
+  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)
+  %bad = icmp sle i64 %k, 0
+  br i1 %bad, label %out, label %more
+more:
+  %np = getelementptr i8, ptr %pp, i64 %k
+  %rest = sub i64 %nn, %k
+  br label %loop
+out:
+  ret void
+}
+
+define i32 @main() "no-jump-tables"="true" {
+entry:
+  %w = call i32 @concrete_body()
+  %ok = icmp ult i32 %w, 256
+  br i1 %ok, label %exit, label %trap
+exit:
+  ret i32 %w
+trap:
+  %i = sub i32 %w, 256
+  switch i32 %i, label %bad [ i32 0, label %t0 ]
+t0:
+  call void @concrete_rt_write_all(ptr @.site0, i64 63)
+  call void @_exit(i32 134)
+  unreachable
+bad:
+  call void @concrete_rt_write_all(ptr @.bad, i64 39)
+  call void @abort()
+  unreachable
+}
+; fixture w_i8_add
+declare {i8, i1} @llvm.sadd.with.overflow.i8(i8, i8)
+
+define i32 @concrete_body() {
+b0:
+  %o10 = call {i8, i1} @llvm.sadd.with.overflow.i8(i8 100, i8 100)
+  %r10 = extractvalue {i8, i1} %o10, 0
+  %r11 = extractvalue {i8, i1} %o10, 1
+  %r12 = add i8 %r10, 0
+  br i1 %r11, label %b1, label %b2
+b1:
+  %r13 = phi i8 [ %r12, %b0 ]
+  %r14 = add i8 %r13, 128
+  %ret1 = zext i8 %r14 to i32
+  ret i32 %ret1
+b2:
+  %r15 = phi i8 [ %r12, %b0 ]
+  %ret2 = zext i8 %r15 to i32
+  ret i32 %ret2
+}
+
+@.bad = private constant [39 x i8] c"concrete: runtime: invalid result word\0A"
+declare i64 @write(i32, ptr, i64)
+declare void @_exit(i32)
+declare void @abort()
+
+define internal void @concrete_rt_write_all(ptr %p, i64 %n) {
+entry:
+  br label %loop
+loop:
+  %pp = phi ptr [ %p, %entry ], [ %np, %more ]
+  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]
+  %done = icmp eq i64 %nn, 0
+  br i1 %done, label %out, label %wr
+wr:
+  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)
+  %bad = icmp sle i64 %k, 0
+  br i1 %bad, label %out, label %more
+more:
+  %np = getelementptr i8, ptr %pp, i64 %k
+  %rest = sub i64 %nn, %k
+  br label %loop
+out:
+  ret void
+}
+
+define i32 @main() "no-jump-tables"="true" {
+entry:
+  %w = call i32 @concrete_body()
+  %ok = icmp ult i32 %w, 256
+  br i1 %ok, label %exit, label %trap
+exit:
+  ret i32 %w
+trap:
+  %i = sub i32 %w, 256
+  switch i32 %i, label %bad [ ]
+bad:
+  call void @concrete_rt_write_all(ptr @.bad, i64 39)
+  call void @abort()
+  unreachable
+}
+; fixture w_i8_add_ok
+declare {i8, i1} @llvm.sadd.with.overflow.i8(i8, i8)
+
+define i32 @concrete_body() {
+b0:
+  %o10 = call {i8, i1} @llvm.sadd.with.overflow.i8(i8 156, i8 50)
+  %r10 = extractvalue {i8, i1} %o10, 0
+  %r11 = extractvalue {i8, i1} %o10, 1
+  %r12 = add i8 %r10, 0
+  br i1 %r11, label %b1, label %b2
+b1:
+  %r13 = phi i8 [ %r12, %b0 ]
+  %r14 = add i8 %r13, 128
+  %ret1 = zext i8 %r14 to i32
+  ret i32 %ret1
+b2:
+  %r15 = phi i8 [ %r12, %b0 ]
+  %ret2 = zext i8 %r15 to i32
+  ret i32 %ret2
+}
+
+@.bad = private constant [39 x i8] c"concrete: runtime: invalid result word\0A"
+declare i64 @write(i32, ptr, i64)
+declare void @_exit(i32)
+declare void @abort()
+
+define internal void @concrete_rt_write_all(ptr %p, i64 %n) {
+entry:
+  br label %loop
+loop:
+  %pp = phi ptr [ %p, %entry ], [ %np, %more ]
+  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]
+  %done = icmp eq i64 %nn, 0
+  br i1 %done, label %out, label %wr
+wr:
+  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)
+  %bad = icmp sle i64 %k, 0
+  br i1 %bad, label %out, label %more
+more:
+  %np = getelementptr i8, ptr %pp, i64 %k
+  %rest = sub i64 %nn, %k
+  br label %loop
+out:
+  ret void
+}
+
+define i32 @main() "no-jump-tables"="true" {
+entry:
+  %w = call i32 @concrete_body()
+  %ok = icmp ult i32 %w, 256
+  br i1 %ok, label %exit, label %trap
+exit:
+  ret i32 %w
+trap:
+  %i = sub i32 %w, 256
+  switch i32 %i, label %bad [ ]
+bad:
+  call void @concrete_rt_write_all(ptr @.bad, i64 39)
+  call void @abort()
+  unreachable
+}
+; fixture w_i8_sub
+declare {i8, i1} @llvm.ssub.with.overflow.i8(i8, i8)
+
+define i32 @concrete_body() {
+b0:
+  %o10 = call {i8, i1} @llvm.ssub.with.overflow.i8(i8 156, i8 100)
+  %r10 = extractvalue {i8, i1} %o10, 0
+  %r11 = extractvalue {i8, i1} %o10, 1
+  %r12 = add i8 %r10, 0
+  br i1 %r11, label %b1, label %b2
+b1:
+  %r13 = phi i8 [ %r12, %b0 ]
+  %r14 = add i8 %r13, 128
+  %ret1 = zext i8 %r14 to i32
+  ret i32 %ret1
+b2:
+  %r15 = phi i8 [ %r12, %b0 ]
+  %ret2 = zext i8 %r15 to i32
+  ret i32 %ret2
+}
+
+@.bad = private constant [39 x i8] c"concrete: runtime: invalid result word\0A"
+declare i64 @write(i32, ptr, i64)
+declare void @_exit(i32)
+declare void @abort()
+
+define internal void @concrete_rt_write_all(ptr %p, i64 %n) {
+entry:
+  br label %loop
+loop:
+  %pp = phi ptr [ %p, %entry ], [ %np, %more ]
+  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]
+  %done = icmp eq i64 %nn, 0
+  br i1 %done, label %out, label %wr
+wr:
+  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)
+  %bad = icmp sle i64 %k, 0
+  br i1 %bad, label %out, label %more
+more:
+  %np = getelementptr i8, ptr %pp, i64 %k
+  %rest = sub i64 %nn, %k
+  br label %loop
+out:
+  ret void
+}
+
+define i32 @main() "no-jump-tables"="true" {
+entry:
+  %w = call i32 @concrete_body()
+  %ok = icmp ult i32 %w, 256
+  br i1 %ok, label %exit, label %trap
+exit:
+  ret i32 %w
+trap:
+  %i = sub i32 %w, 256
+  switch i32 %i, label %bad [ ]
+bad:
+  call void @concrete_rt_write_all(ptr @.bad, i64 39)
+  call void @abort()
+  unreachable
+}
+; fixture w_i8_mul
+declare {i8, i1} @llvm.smul.with.overflow.i8(i8, i8)
+
+define i32 @concrete_body() {
+b0:
+  %o10 = call {i8, i1} @llvm.smul.with.overflow.i8(i8 240, i8 9)
+  %r10 = extractvalue {i8, i1} %o10, 0
+  %r11 = extractvalue {i8, i1} %o10, 1
+  %r12 = add i8 %r10, 0
+  br i1 %r11, label %b1, label %b2
+b1:
+  %r13 = phi i8 [ %r12, %b0 ]
+  %r14 = add i8 %r13, 128
+  %ret1 = zext i8 %r14 to i32
+  ret i32 %ret1
+b2:
+  %r15 = phi i8 [ %r12, %b0 ]
+  %ret2 = zext i8 %r15 to i32
+  ret i32 %ret2
+}
+
+@.bad = private constant [39 x i8] c"concrete: runtime: invalid result word\0A"
+declare i64 @write(i32, ptr, i64)
+declare void @_exit(i32)
+declare void @abort()
+
+define internal void @concrete_rt_write_all(ptr %p, i64 %n) {
+entry:
+  br label %loop
+loop:
+  %pp = phi ptr [ %p, %entry ], [ %np, %more ]
+  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]
+  %done = icmp eq i64 %nn, 0
+  br i1 %done, label %out, label %wr
+wr:
+  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)
+  %bad = icmp sle i64 %k, 0
+  br i1 %bad, label %out, label %more
+more:
+  %np = getelementptr i8, ptr %pp, i64 %k
+  %rest = sub i64 %nn, %k
+  br label %loop
+out:
+  ret void
+}
+
+define i32 @main() "no-jump-tables"="true" {
+entry:
+  %w = call i32 @concrete_body()
+  %ok = icmp ult i32 %w, 256
+  br i1 %ok, label %exit, label %trap
+exit:
+  ret i32 %w
+trap:
+  %i = sub i32 %w, 256
+  switch i32 %i, label %bad [ ]
+bad:
+  call void @concrete_rt_write_all(ptr @.bad, i64 39)
+  call void @abort()
+  unreachable
+}
+; fixture w_u8_add
+declare {i8, i1} @llvm.uadd.with.overflow.i8(i8, i8)
+
+define i32 @concrete_body() {
+b0:
+  %o10 = call {i8, i1} @llvm.uadd.with.overflow.i8(i8 200, i8 100)
+  %r10 = extractvalue {i8, i1} %o10, 0
+  %r11 = extractvalue {i8, i1} %o10, 1
+  %r12 = add i8 %r10, 0
+  br i1 %r11, label %b1, label %b2
+b1:
+  %r13 = phi i8 [ %r12, %b0 ]
+  %r14 = add i8 %r13, 128
+  %ret1 = zext i8 %r14 to i32
+  ret i32 %ret1
+b2:
+  %r15 = phi i8 [ %r12, %b0 ]
+  %ret2 = zext i8 %r15 to i32
+  ret i32 %ret2
+}
+
+@.bad = private constant [39 x i8] c"concrete: runtime: invalid result word\0A"
+declare i64 @write(i32, ptr, i64)
+declare void @_exit(i32)
+declare void @abort()
+
+define internal void @concrete_rt_write_all(ptr %p, i64 %n) {
+entry:
+  br label %loop
+loop:
+  %pp = phi ptr [ %p, %entry ], [ %np, %more ]
+  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]
+  %done = icmp eq i64 %nn, 0
+  br i1 %done, label %out, label %wr
+wr:
+  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)
+  %bad = icmp sle i64 %k, 0
+  br i1 %bad, label %out, label %more
+more:
+  %np = getelementptr i8, ptr %pp, i64 %k
+  %rest = sub i64 %nn, %k
+  br label %loop
+out:
+  ret void
+}
+
+define i32 @main() "no-jump-tables"="true" {
+entry:
+  %w = call i32 @concrete_body()
+  %ok = icmp ult i32 %w, 256
+  br i1 %ok, label %exit, label %trap
+exit:
+  ret i32 %w
+trap:
+  %i = sub i32 %w, 256
+  switch i32 %i, label %bad [ ]
+bad:
+  call void @concrete_rt_write_all(ptr @.bad, i64 39)
+  call void @abort()
+  unreachable
+}
+; fixture w_u8_sub
+declare {i8, i1} @llvm.usub.with.overflow.i8(i8, i8)
+
+define i32 @concrete_body() {
+b0:
+  %o10 = call {i8, i1} @llvm.usub.with.overflow.i8(i8 3, i8 5)
+  %r10 = extractvalue {i8, i1} %o10, 0
+  %r11 = extractvalue {i8, i1} %o10, 1
+  %r12 = add i8 %r10, 0
+  br i1 %r11, label %b1, label %b2
+b1:
+  %r13 = phi i8 [ %r12, %b0 ]
+  %r14 = add i8 %r13, 128
+  %ret1 = zext i8 %r14 to i32
+  ret i32 %ret1
+b2:
+  %r15 = phi i8 [ %r12, %b0 ]
+  %ret2 = zext i8 %r15 to i32
+  ret i32 %ret2
+}
+
+@.bad = private constant [39 x i8] c"concrete: runtime: invalid result word\0A"
+declare i64 @write(i32, ptr, i64)
+declare void @_exit(i32)
+declare void @abort()
+
+define internal void @concrete_rt_write_all(ptr %p, i64 %n) {
+entry:
+  br label %loop
+loop:
+  %pp = phi ptr [ %p, %entry ], [ %np, %more ]
+  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]
+  %done = icmp eq i64 %nn, 0
+  br i1 %done, label %out, label %wr
+wr:
+  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)
+  %bad = icmp sle i64 %k, 0
+  br i1 %bad, label %out, label %more
+more:
+  %np = getelementptr i8, ptr %pp, i64 %k
+  %rest = sub i64 %nn, %k
+  br label %loop
+out:
+  ret void
+}
+
+define i32 @main() "no-jump-tables"="true" {
+entry:
+  %w = call i32 @concrete_body()
+  %ok = icmp ult i32 %w, 256
+  br i1 %ok, label %exit, label %trap
+exit:
+  ret i32 %w
+trap:
+  %i = sub i32 %w, 256
+  switch i32 %i, label %bad [ ]
+bad:
+  call void @concrete_rt_write_all(ptr @.bad, i64 39)
+  call void @abort()
+  unreachable
+}
+; fixture w_u8_mul
+declare {i8, i1} @llvm.umul.with.overflow.i8(i8, i8)
+
+define i32 @concrete_body() {
+b0:
+  %o10 = call {i8, i1} @llvm.umul.with.overflow.i8(i8 20, i8 20)
+  %r10 = extractvalue {i8, i1} %o10, 0
+  %r11 = extractvalue {i8, i1} %o10, 1
+  %r12 = add i8 %r10, 0
+  br i1 %r11, label %b1, label %b2
+b1:
+  %r13 = phi i8 [ %r12, %b0 ]
+  %r14 = add i8 %r13, 128
+  %ret1 = zext i8 %r14 to i32
+  ret i32 %ret1
+b2:
+  %r15 = phi i8 [ %r12, %b0 ]
+  %ret2 = zext i8 %r15 to i32
+  ret i32 %ret2
+}
+
+@.bad = private constant [39 x i8] c"concrete: runtime: invalid result word\0A"
+declare i64 @write(i32, ptr, i64)
+declare void @_exit(i32)
+declare void @abort()
+
+define internal void @concrete_rt_write_all(ptr %p, i64 %n) {
+entry:
+  br label %loop
+loop:
+  %pp = phi ptr [ %p, %entry ], [ %np, %more ]
+  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]
+  %done = icmp eq i64 %nn, 0
+  br i1 %done, label %out, label %wr
+wr:
+  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)
+  %bad = icmp sle i64 %k, 0
+  br i1 %bad, label %out, label %more
+more:
+  %np = getelementptr i8, ptr %pp, i64 %k
+  %rest = sub i64 %nn, %k
+  br label %loop
+out:
+  ret void
+}
+
+define i32 @main() "no-jump-tables"="true" {
+entry:
+  %w = call i32 @concrete_body()
+  %ok = icmp ult i32 %w, 256
+  br i1 %ok, label %exit, label %trap
+exit:
+  ret i32 %w
+trap:
+  %i = sub i32 %w, 256
+  switch i32 %i, label %bad [ ]
+bad:
+  call void @concrete_rt_write_all(ptr @.bad, i64 39)
+  call void @abort()
+  unreachable
+}
+; fixture w_i16_add
+declare {i16, i1} @llvm.sadd.with.overflow.i16(i16, i16)
+
+define i32 @concrete_body() {
+b0:
+  %o10 = call {i16, i1} @llvm.sadd.with.overflow.i16(i16 32767, i16 1)
+  %r10 = extractvalue {i16, i1} %o10, 0
+  %r11 = extractvalue {i16, i1} %o10, 1
+  %r12 = trunc i16 %r10 to i8
+  br i1 %r11, label %b1, label %b2
+b1:
+  %r13 = phi i8 [ %r12, %b0 ]
+  %r14 = add i8 %r13, 128
+  %ret1 = zext i8 %r14 to i32
+  ret i32 %ret1
+b2:
+  %r15 = phi i8 [ %r12, %b0 ]
+  %ret2 = zext i8 %r15 to i32
+  ret i32 %ret2
+}
+
+@.bad = private constant [39 x i8] c"concrete: runtime: invalid result word\0A"
+declare i64 @write(i32, ptr, i64)
+declare void @_exit(i32)
+declare void @abort()
+
+define internal void @concrete_rt_write_all(ptr %p, i64 %n) {
+entry:
+  br label %loop
+loop:
+  %pp = phi ptr [ %p, %entry ], [ %np, %more ]
+  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]
+  %done = icmp eq i64 %nn, 0
+  br i1 %done, label %out, label %wr
+wr:
+  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)
+  %bad = icmp sle i64 %k, 0
+  br i1 %bad, label %out, label %more
+more:
+  %np = getelementptr i8, ptr %pp, i64 %k
+  %rest = sub i64 %nn, %k
+  br label %loop
+out:
+  ret void
+}
+
+define i32 @main() "no-jump-tables"="true" {
+entry:
+  %w = call i32 @concrete_body()
+  %ok = icmp ult i32 %w, 256
+  br i1 %ok, label %exit, label %trap
+exit:
+  ret i32 %w
+trap:
+  %i = sub i32 %w, 256
+  switch i32 %i, label %bad [ ]
+bad:
+  call void @concrete_rt_write_all(ptr @.bad, i64 39)
+  call void @abort()
+  unreachable
+}
+; fixture w_i16_sub
+declare {i16, i1} @llvm.ssub.with.overflow.i16(i16, i16)
+
+define i32 @concrete_body() {
+b0:
+  %o10 = call {i16, i1} @llvm.ssub.with.overflow.i16(i16 32768, i16 1)
+  %r10 = extractvalue {i16, i1} %o10, 0
+  %r11 = extractvalue {i16, i1} %o10, 1
+  %r12 = trunc i16 %r10 to i8
+  br i1 %r11, label %b1, label %b2
+b1:
+  %r13 = phi i8 [ %r12, %b0 ]
+  %r14 = add i8 %r13, 128
+  %ret1 = zext i8 %r14 to i32
+  ret i32 %ret1
+b2:
+  %r15 = phi i8 [ %r12, %b0 ]
+  %ret2 = zext i8 %r15 to i32
+  ret i32 %ret2
+}
+
+@.bad = private constant [39 x i8] c"concrete: runtime: invalid result word\0A"
+declare i64 @write(i32, ptr, i64)
+declare void @_exit(i32)
+declare void @abort()
+
+define internal void @concrete_rt_write_all(ptr %p, i64 %n) {
+entry:
+  br label %loop
+loop:
+  %pp = phi ptr [ %p, %entry ], [ %np, %more ]
+  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]
+  %done = icmp eq i64 %nn, 0
+  br i1 %done, label %out, label %wr
+wr:
+  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)
+  %bad = icmp sle i64 %k, 0
+  br i1 %bad, label %out, label %more
+more:
+  %np = getelementptr i8, ptr %pp, i64 %k
+  %rest = sub i64 %nn, %k
+  br label %loop
+out:
+  ret void
+}
+
+define i32 @main() "no-jump-tables"="true" {
+entry:
+  %w = call i32 @concrete_body()
+  %ok = icmp ult i32 %w, 256
+  br i1 %ok, label %exit, label %trap
+exit:
+  ret i32 %w
+trap:
+  %i = sub i32 %w, 256
+  switch i32 %i, label %bad [ ]
+bad:
+  call void @concrete_rt_write_all(ptr @.bad, i64 39)
+  call void @abort()
+  unreachable
+}
+; fixture w_i16_sub_ok
+declare {i16, i1} @llvm.ssub.with.overflow.i16(i16, i16)
+
+define i32 @concrete_body() {
+b0:
+  %o10 = call {i16, i1} @llvm.ssub.with.overflow.i16(i16 64536, i16 24000)
+  %r10 = extractvalue {i16, i1} %o10, 0
+  %r11 = extractvalue {i16, i1} %o10, 1
+  %r12 = trunc i16 %r10 to i8
+  br i1 %r11, label %b1, label %b2
+b1:
+  %r13 = phi i8 [ %r12, %b0 ]
+  %r14 = add i8 %r13, 128
+  %ret1 = zext i8 %r14 to i32
+  ret i32 %ret1
+b2:
+  %r15 = phi i8 [ %r12, %b0 ]
+  %ret2 = zext i8 %r15 to i32
+  ret i32 %ret2
+}
+
+@.bad = private constant [39 x i8] c"concrete: runtime: invalid result word\0A"
+declare i64 @write(i32, ptr, i64)
+declare void @_exit(i32)
+declare void @abort()
+
+define internal void @concrete_rt_write_all(ptr %p, i64 %n) {
+entry:
+  br label %loop
+loop:
+  %pp = phi ptr [ %p, %entry ], [ %np, %more ]
+  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]
+  %done = icmp eq i64 %nn, 0
+  br i1 %done, label %out, label %wr
+wr:
+  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)
+  %bad = icmp sle i64 %k, 0
+  br i1 %bad, label %out, label %more
+more:
+  %np = getelementptr i8, ptr %pp, i64 %k
+  %rest = sub i64 %nn, %k
+  br label %loop
+out:
+  ret void
+}
+
+define i32 @main() "no-jump-tables"="true" {
+entry:
+  %w = call i32 @concrete_body()
+  %ok = icmp ult i32 %w, 256
+  br i1 %ok, label %exit, label %trap
+exit:
+  ret i32 %w
+trap:
+  %i = sub i32 %w, 256
+  switch i32 %i, label %bad [ ]
+bad:
+  call void @concrete_rt_write_all(ptr @.bad, i64 39)
+  call void @abort()
+  unreachable
+}
+; fixture w_i16_mul
+declare {i16, i1} @llvm.smul.with.overflow.i16(i16, i16)
+
+define i32 @concrete_body() {
+b0:
+  %o10 = call {i16, i1} @llvm.smul.with.overflow.i16(i16 300, i16 301)
+  %r10 = extractvalue {i16, i1} %o10, 0
+  %r11 = extractvalue {i16, i1} %o10, 1
+  %r12 = trunc i16 %r10 to i8
+  br i1 %r11, label %b1, label %b2
+b1:
+  %r13 = phi i8 [ %r12, %b0 ]
+  %r14 = add i8 %r13, 128
+  %ret1 = zext i8 %r14 to i32
+  ret i32 %ret1
+b2:
+  %r15 = phi i8 [ %r12, %b0 ]
+  %ret2 = zext i8 %r15 to i32
+  ret i32 %ret2
+}
+
+@.bad = private constant [39 x i8] c"concrete: runtime: invalid result word\0A"
+declare i64 @write(i32, ptr, i64)
+declare void @_exit(i32)
+declare void @abort()
+
+define internal void @concrete_rt_write_all(ptr %p, i64 %n) {
+entry:
+  br label %loop
+loop:
+  %pp = phi ptr [ %p, %entry ], [ %np, %more ]
+  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]
+  %done = icmp eq i64 %nn, 0
+  br i1 %done, label %out, label %wr
+wr:
+  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)
+  %bad = icmp sle i64 %k, 0
+  br i1 %bad, label %out, label %more
+more:
+  %np = getelementptr i8, ptr %pp, i64 %k
+  %rest = sub i64 %nn, %k
+  br label %loop
+out:
+  ret void
+}
+
+define i32 @main() "no-jump-tables"="true" {
+entry:
+  %w = call i32 @concrete_body()
+  %ok = icmp ult i32 %w, 256
+  br i1 %ok, label %exit, label %trap
+exit:
+  ret i32 %w
+trap:
+  %i = sub i32 %w, 256
+  switch i32 %i, label %bad [ ]
+bad:
+  call void @concrete_rt_write_all(ptr @.bad, i64 39)
+  call void @abort()
+  unreachable
+}
+; fixture w_u16_sub
+declare {i16, i1} @llvm.usub.with.overflow.i16(i16, i16)
+
+define i32 @concrete_body() {
+b0:
+  %o10 = call {i16, i1} @llvm.usub.with.overflow.i16(i16 1, i16 3)
+  %r10 = extractvalue {i16, i1} %o10, 0
+  %r11 = extractvalue {i16, i1} %o10, 1
+  %r12 = trunc i16 %r10 to i8
+  br i1 %r11, label %b1, label %b2
+b1:
+  %r13 = phi i8 [ %r12, %b0 ]
+  %r14 = add i8 %r13, 128
+  %ret1 = zext i8 %r14 to i32
+  ret i32 %ret1
+b2:
+  %r15 = phi i8 [ %r12, %b0 ]
+  %ret2 = zext i8 %r15 to i32
+  ret i32 %ret2
+}
+
+@.bad = private constant [39 x i8] c"concrete: runtime: invalid result word\0A"
+declare i64 @write(i32, ptr, i64)
+declare void @_exit(i32)
+declare void @abort()
+
+define internal void @concrete_rt_write_all(ptr %p, i64 %n) {
+entry:
+  br label %loop
+loop:
+  %pp = phi ptr [ %p, %entry ], [ %np, %more ]
+  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]
+  %done = icmp eq i64 %nn, 0
+  br i1 %done, label %out, label %wr
+wr:
+  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)
+  %bad = icmp sle i64 %k, 0
+  br i1 %bad, label %out, label %more
+more:
+  %np = getelementptr i8, ptr %pp, i64 %k
+  %rest = sub i64 %nn, %k
+  br label %loop
+out:
+  ret void
+}
+
+define i32 @main() "no-jump-tables"="true" {
+entry:
+  %w = call i32 @concrete_body()
+  %ok = icmp ult i32 %w, 256
+  br i1 %ok, label %exit, label %trap
+exit:
+  ret i32 %w
+trap:
+  %i = sub i32 %w, 256
+  switch i32 %i, label %bad [ ]
+bad:
+  call void @concrete_rt_write_all(ptr @.bad, i64 39)
+  call void @abort()
+  unreachable
+}
+; fixture w_u16_mul
+declare {i16, i1} @llvm.umul.with.overflow.i16(i16, i16)
+
+define i32 @concrete_body() {
+b0:
+  %o10 = call {i16, i1} @llvm.umul.with.overflow.i16(i16 65535, i16 65535)
+  %r10 = extractvalue {i16, i1} %o10, 0
+  %r11 = extractvalue {i16, i1} %o10, 1
+  %r12 = trunc i16 %r10 to i8
+  br i1 %r11, label %b1, label %b2
+b1:
+  %r13 = phi i8 [ %r12, %b0 ]
+  %r14 = add i8 %r13, 128
+  %ret1 = zext i8 %r14 to i32
+  ret i32 %ret1
+b2:
+  %r15 = phi i8 [ %r12, %b0 ]
+  %ret2 = zext i8 %r15 to i32
+  ret i32 %ret2
+}
+
+@.bad = private constant [39 x i8] c"concrete: runtime: invalid result word\0A"
+declare i64 @write(i32, ptr, i64)
+declare void @_exit(i32)
+declare void @abort()
+
+define internal void @concrete_rt_write_all(ptr %p, i64 %n) {
+entry:
+  br label %loop
+loop:
+  %pp = phi ptr [ %p, %entry ], [ %np, %more ]
+  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]
+  %done = icmp eq i64 %nn, 0
+  br i1 %done, label %out, label %wr
+wr:
+  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)
+  %bad = icmp sle i64 %k, 0
+  br i1 %bad, label %out, label %more
+more:
+  %np = getelementptr i8, ptr %pp, i64 %k
+  %rest = sub i64 %nn, %k
+  br label %loop
+out:
+  ret void
+}
+
+define i32 @main() "no-jump-tables"="true" {
+entry:
+  %w = call i32 @concrete_body()
+  %ok = icmp ult i32 %w, 256
+  br i1 %ok, label %exit, label %trap
+exit:
+  ret i32 %w
+trap:
+  %i = sub i32 %w, 256
+  switch i32 %i, label %bad [ ]
+bad:
+  call void @concrete_rt_write_all(ptr @.bad, i64 39)
+  call void @abort()
+  unreachable
+}
+; fixture w_u16_mul_ok
+declare {i16, i1} @llvm.umul.with.overflow.i16(i16, i16)
+
+define i32 @concrete_body() {
+b0:
+  %o10 = call {i16, i1} @llvm.umul.with.overflow.i16(i16 255, i16 257)
+  %r10 = extractvalue {i16, i1} %o10, 0
+  %r11 = extractvalue {i16, i1} %o10, 1
+  %r12 = trunc i16 %r10 to i8
+  br i1 %r11, label %b1, label %b2
+b1:
+  %r13 = phi i8 [ %r12, %b0 ]
+  %r14 = add i8 %r13, 128
+  %ret1 = zext i8 %r14 to i32
+  ret i32 %ret1
+b2:
+  %r15 = phi i8 [ %r12, %b0 ]
+  %ret2 = zext i8 %r15 to i32
+  ret i32 %ret2
+}
+
+@.bad = private constant [39 x i8] c"concrete: runtime: invalid result word\0A"
+declare i64 @write(i32, ptr, i64)
+declare void @_exit(i32)
+declare void @abort()
+
+define internal void @concrete_rt_write_all(ptr %p, i64 %n) {
+entry:
+  br label %loop
+loop:
+  %pp = phi ptr [ %p, %entry ], [ %np, %more ]
+  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]
+  %done = icmp eq i64 %nn, 0
+  br i1 %done, label %out, label %wr
+wr:
+  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)
+  %bad = icmp sle i64 %k, 0
+  br i1 %bad, label %out, label %more
+more:
+  %np = getelementptr i8, ptr %pp, i64 %k
+  %rest = sub i64 %nn, %k
+  br label %loop
+out:
+  ret void
+}
+
+define i32 @main() "no-jump-tables"="true" {
+entry:
+  %w = call i32 @concrete_body()
+  %ok = icmp ult i32 %w, 256
+  br i1 %ok, label %exit, label %trap
+exit:
+  ret i32 %w
+trap:
+  %i = sub i32 %w, 256
+  switch i32 %i, label %bad [ ]
+bad:
+  call void @concrete_rt_write_all(ptr @.bad, i64 39)
+  call void @abort()
+  unreachable
+}
+; fixture widen_u
+declare {i16, i1} @llvm.sadd.with.overflow.i16(i16, i16)
+
+define i32 @concrete_body() {
+b0:
+  %r0 = zext i8 200 to i16
+  %o10 = call {i16, i1} @llvm.sadd.with.overflow.i16(i16 %r0, i16 32600)
+  %r10 = extractvalue {i16, i1} %o10, 0
+  %r11 = extractvalue {i16, i1} %o10, 1
+  %r12 = trunc i16 %r10 to i8
+  br i1 %r11, label %b1, label %b2
+b1:
+  %r13 = phi i8 [ %r12, %b0 ]
+  %r14 = add i8 %r13, 128
+  %ret1 = zext i8 %r14 to i32
+  ret i32 %ret1
+b2:
+  %r15 = phi i8 [ %r12, %b0 ]
+  %ret2 = zext i8 %r15 to i32
+  ret i32 %ret2
+}
+
+@.bad = private constant [39 x i8] c"concrete: runtime: invalid result word\0A"
+declare i64 @write(i32, ptr, i64)
+declare void @_exit(i32)
+declare void @abort()
+
+define internal void @concrete_rt_write_all(ptr %p, i64 %n) {
+entry:
+  br label %loop
+loop:
+  %pp = phi ptr [ %p, %entry ], [ %np, %more ]
+  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]
+  %done = icmp eq i64 %nn, 0
+  br i1 %done, label %out, label %wr
+wr:
+  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)
+  %bad = icmp sle i64 %k, 0
+  br i1 %bad, label %out, label %more
+more:
+  %np = getelementptr i8, ptr %pp, i64 %k
+  %rest = sub i64 %nn, %k
+  br label %loop
+out:
+  ret void
+}
+
+define i32 @main() "no-jump-tables"="true" {
+entry:
+  %w = call i32 @concrete_body()
+  %ok = icmp ult i32 %w, 256
+  br i1 %ok, label %exit, label %trap
+exit:
+  ret i32 %w
+trap:
+  %i = sub i32 %w, 256
+  switch i32 %i, label %bad [ ]
+bad:
+  call void @concrete_rt_write_all(ptr @.bad, i64 39)
+  call void @abort()
+  unreachable
+}
+; fixture widen_s
+declare {i16, i1} @llvm.sadd.with.overflow.i16(i16, i16)
+
+define i32 @concrete_body() {
+b0:
+  %r0 = sext i8 200 to i16
+  %o10 = call {i16, i1} @llvm.sadd.with.overflow.i16(i16 %r0, i16 32786)
+  %r10 = extractvalue {i16, i1} %o10, 0
+  %r11 = extractvalue {i16, i1} %o10, 1
+  %r12 = trunc i16 %r10 to i8
+  br i1 %r11, label %b1, label %b2
+b1:
+  %r13 = phi i8 [ %r12, %b0 ]
+  %r14 = add i8 %r13, 128
+  %ret1 = zext i8 %r14 to i32
+  ret i32 %ret1
+b2:
+  %r15 = phi i8 [ %r12, %b0 ]
+  %ret2 = zext i8 %r15 to i32
+  ret i32 %ret2
+}
+
+@.bad = private constant [39 x i8] c"concrete: runtime: invalid result word\0A"
+declare i64 @write(i32, ptr, i64)
+declare void @_exit(i32)
+declare void @abort()
+
+define internal void @concrete_rt_write_all(ptr %p, i64 %n) {
+entry:
+  br label %loop
+loop:
+  %pp = phi ptr [ %p, %entry ], [ %np, %more ]
+  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]
+  %done = icmp eq i64 %nn, 0
+  br i1 %done, label %out, label %wr
+wr:
+  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)
+  %bad = icmp sle i64 %k, 0
+  br i1 %bad, label %out, label %more
+more:
+  %np = getelementptr i8, ptr %pp, i64 %k
+  %rest = sub i64 %nn, %k
+  br label %loop
+out:
+  ret void
+}
+
+define i32 @main() "no-jump-tables"="true" {
+entry:
+  %w = call i32 @concrete_body()
+  %ok = icmp ult i32 %w, 256
+  br i1 %ok, label %exit, label %trap
+exit:
+  ret i32 %w
+trap:
+  %i = sub i32 %w, 256
+  switch i32 %i, label %bad [ ]
+bad:
+  call void @concrete_rt_write_all(ptr @.bad, i64 39)
+  call void @abort()
+  unreachable
+}
+; fixture site1
+declare {i8, i1} @llvm.uadd.with.overflow.i8(i8, i8)
+declare {i8, i1} @llvm.umul.with.overflow.i8(i8, i8)
+
+define i32 @concrete_body() {
+b0:
+  %o0 = call {i8, i1} @llvm.uadd.with.overflow.i8(i8 100, i8 100)
+  %r0 = extractvalue {i8, i1} %o0, 0
+  %r1 = extractvalue {i8, i1} %o0, 1
+  br i1 %r1, label %b1, label %b2
+b1:
+  ret i32 256
+b2:
+  %r4 = phi i8 [ %r0, %b0 ]
+  %o2 = call {i8, i1} @llvm.umul.with.overflow.i8(i8 %r4, i8 2)
+  %r2 = extractvalue {i8, i1} %o2, 0
+  %r3 = extractvalue {i8, i1} %o2, 1
+  br i1 %r3, label %b3, label %b4
+b3:
+  ret i32 257
+b4:
+  %r5 = phi i8 [ %r2, %b2 ]
+  %ret4 = zext i8 %r5 to i32
+  ret i32 %ret4
+}
+
+@.site0 = private constant [55 x i8] c"concrete: trap: overflow at src/main.con:1:11 (site 3)\0A"
+@.site1 = private constant [66 x i8] c"concrete: trap: overflow at src/\C3\B1and\C3\BA \22x\22/lib.con:17:5 (site 9)\0A"
+@.bad = private constant [39 x i8] c"concrete: runtime: invalid result word\0A"
+declare i64 @write(i32, ptr, i64)
+declare void @_exit(i32)
+declare void @abort()
+
+define internal void @concrete_rt_write_all(ptr %p, i64 %n) {
+entry:
+  br label %loop
+loop:
+  %pp = phi ptr [ %p, %entry ], [ %np, %more ]
+  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]
+  %done = icmp eq i64 %nn, 0
+  br i1 %done, label %out, label %wr
+wr:
+  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)
+  %bad = icmp sle i64 %k, 0
+  br i1 %bad, label %out, label %more
+more:
+  %np = getelementptr i8, ptr %pp, i64 %k
+  %rest = sub i64 %nn, %k
+  br label %loop
+out:
+  ret void
+}
+
+define i32 @main() "no-jump-tables"="true" {
+entry:
+  %w = call i32 @concrete_body()
+  %ok = icmp ult i32 %w, 256
+  br i1 %ok, label %exit, label %trap
+exit:
+  ret i32 %w
+trap:
+  %i = sub i32 %w, 256
+  switch i32 %i, label %bad [ i32 0, label %t0 i32 1, label %t1 ]
+t0:
+  call void @concrete_rt_write_all(ptr @.site0, i64 55)
+  call void @_exit(i32 134)
+  unreachable
+t1:
+  call void @concrete_rt_write_all(ptr @.site1, i64 66)
+  call void @_exit(i32 134)
+  unreachable
+bad:
+  call void @concrete_rt_write_all(ptr @.bad, i64 39)
+  call void @abort()
+  unreachable
+}
+; fixture site0
+declare {i8, i1} @llvm.uadd.with.overflow.i8(i8, i8)
+declare {i8, i1} @llvm.umul.with.overflow.i8(i8, i8)
+
+define i32 @concrete_body() {
+b0:
+  %o0 = call {i8, i1} @llvm.uadd.with.overflow.i8(i8 200, i8 100)
+  %r0 = extractvalue {i8, i1} %o0, 0
+  %r1 = extractvalue {i8, i1} %o0, 1
+  br i1 %r1, label %b1, label %b2
+b1:
+  ret i32 256
+b2:
+  %r4 = phi i8 [ %r0, %b0 ]
+  %o2 = call {i8, i1} @llvm.umul.with.overflow.i8(i8 %r4, i8 2)
+  %r2 = extractvalue {i8, i1} %o2, 0
+  %r3 = extractvalue {i8, i1} %o2, 1
+  br i1 %r3, label %b3, label %b4
+b3:
+  ret i32 257
+b4:
+  %r5 = phi i8 [ %r2, %b2 ]
+  %ret4 = zext i8 %r5 to i32
+  ret i32 %ret4
+}
+
+@.site0 = private constant [55 x i8] c"concrete: trap: overflow at src/main.con:1:11 (site 3)\0A"
+@.site1 = private constant [66 x i8] c"concrete: trap: overflow at src/\C3\B1and\C3\BA \22x\22/lib.con:17:5 (site 9)\0A"
+@.bad = private constant [39 x i8] c"concrete: runtime: invalid result word\0A"
+declare i64 @write(i32, ptr, i64)
+declare void @_exit(i32)
+declare void @abort()
+
+define internal void @concrete_rt_write_all(ptr %p, i64 %n) {
+entry:
+  br label %loop
+loop:
+  %pp = phi ptr [ %p, %entry ], [ %np, %more ]
+  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]
+  %done = icmp eq i64 %nn, 0
+  br i1 %done, label %out, label %wr
+wr:
+  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)
+  %bad = icmp sle i64 %k, 0
+  br i1 %bad, label %out, label %more
+more:
+  %np = getelementptr i8, ptr %pp, i64 %k
+  %rest = sub i64 %nn, %k
+  br label %loop
+out:
+  ret void
+}
+
+define i32 @main() "no-jump-tables"="true" {
+entry:
+  %w = call i32 @concrete_body()
+  %ok = icmp ult i32 %w, 256
+  br i1 %ok, label %exit, label %trap
+exit:
+  ret i32 %w
+trap:
+  %i = sub i32 %w, 256
+  switch i32 %i, label %bad [ i32 0, label %t0 i32 1, label %t1 ]
+t0:
+  call void @concrete_rt_write_all(ptr @.site0, i64 55)
+  call void @_exit(i32 134)
+  unreachable
+t1:
+  call void @concrete_rt_write_all(ptr @.site1, i64 66)
+  call void @_exit(i32 134)
+  unreachable
+bad:
+  call void @concrete_rt_write_all(ptr @.bad, i64 39)
+  call void @abort()
+  unreachable
+}
+; fixture two_sites_ok
+declare {i8, i1} @llvm.uadd.with.overflow.i8(i8, i8)
+declare {i8, i1} @llvm.umul.with.overflow.i8(i8, i8)
+
+define i32 @concrete_body() {
+b0:
+  %o0 = call {i8, i1} @llvm.uadd.with.overflow.i8(i8 20, i8 1)
+  %r0 = extractvalue {i8, i1} %o0, 0
+  %r1 = extractvalue {i8, i1} %o0, 1
+  br i1 %r1, label %b1, label %b2
+b1:
+  ret i32 256
+b2:
+  %r4 = phi i8 [ %r0, %b0 ]
+  %o2 = call {i8, i1} @llvm.umul.with.overflow.i8(i8 %r4, i8 2)
+  %r2 = extractvalue {i8, i1} %o2, 0
+  %r3 = extractvalue {i8, i1} %o2, 1
+  br i1 %r3, label %b3, label %b4
+b3:
+  ret i32 257
+b4:
+  %r5 = phi i8 [ %r2, %b2 ]
+  %ret4 = zext i8 %r5 to i32
+  ret i32 %ret4
+}
+
+@.site0 = private constant [55 x i8] c"concrete: trap: overflow at src/main.con:1:11 (site 3)\0A"
+@.site1 = private constant [66 x i8] c"concrete: trap: overflow at src/\C3\B1and\C3\BA \22x\22/lib.con:17:5 (site 9)\0A"
+@.bad = private constant [39 x i8] c"concrete: runtime: invalid result word\0A"
+declare i64 @write(i32, ptr, i64)
+declare void @_exit(i32)
+declare void @abort()
+
+define internal void @concrete_rt_write_all(ptr %p, i64 %n) {
+entry:
+  br label %loop
+loop:
+  %pp = phi ptr [ %p, %entry ], [ %np, %more ]
+  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]
+  %done = icmp eq i64 %nn, 0
+  br i1 %done, label %out, label %wr
+wr:
+  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)
+  %bad = icmp sle i64 %k, 0
+  br i1 %bad, label %out, label %more
+more:
+  %np = getelementptr i8, ptr %pp, i64 %k
+  %rest = sub i64 %nn, %k
+  br label %loop
+out:
+  ret void
+}
+
+define i32 @main() "no-jump-tables"="true" {
+entry:
+  %w = call i32 @concrete_body()
+  %ok = icmp ult i32 %w, 256
+  br i1 %ok, label %exit, label %trap
+exit:
+  ret i32 %w
+trap:
+  %i = sub i32 %w, 256
+  switch i32 %i, label %bad [ i32 0, label %t0 i32 1, label %t1 ]
+t0:
+  call void @concrete_rt_write_all(ptr @.site0, i64 55)
+  call void @_exit(i32 134)
+  unreachable
+t1:
+  call void @concrete_rt_write_all(ptr @.site1, i64 66)
+  call void @_exit(i32 134)
+  unreachable
+bad:
+  call void @concrete_rt_write_all(ptr @.bad, i64 39)
+  call void @abort()
+  unreachable
+}
+; fixture siblings
+
+define i32 @concrete_body() {
+b0:
+  %r0 = add i8 2, 56
+  %r1 = add i8 %r0, %r0
+  %ret0 = zext i8 %r1 to i32
+  ret i32 %ret0
+}
+
+@.bad = private constant [39 x i8] c"concrete: runtime: invalid result word\0A"
+declare i64 @write(i32, ptr, i64)
+declare void @_exit(i32)
+declare void @abort()
+
+define internal void @concrete_rt_write_all(ptr %p, i64 %n) {
+entry:
+  br label %loop
+loop:
+  %pp = phi ptr [ %p, %entry ], [ %np, %more ]
+  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]
+  %done = icmp eq i64 %nn, 0
+  br i1 %done, label %out, label %wr
+wr:
+  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)
+  %bad = icmp sle i64 %k, 0
+  br i1 %bad, label %out, label %more
+more:
+  %np = getelementptr i8, ptr %pp, i64 %k
+  %rest = sub i64 %nn, %k
+  br label %loop
+out:
+  ret void
+}
+
+define i32 @main() "no-jump-tables"="true" {
+entry:
+  %w = call i32 @concrete_body()
+  %ok = icmp ult i32 %w, 256
+  br i1 %ok, label %exit, label %trap
+exit:
+  ret i32 %w
+trap:
+  %i = sub i32 %w, 256
+  switch i32 %i, label %bad [ ]
+bad:
+  call void @concrete_rt_write_all(ptr @.bad, i64 39)
+  call void @abort()
+  unreachable
+}
+; fixture two_sites
+
+define i32 @concrete_body() {
+b0:
+  ret i32 257
+}
+
+@.site0 = private constant [61 x i8] c"concrete: trap: overflow at src/\C3\B1and\C3\BA \22x\22.con:1:1 (site 0)\0A"
+@.site1 = private constant [47 x i8] c"concrete: trap: overflow at b.con:1:2 (site 1)\0A"
+@.bad = private constant [39 x i8] c"concrete: runtime: invalid result word\0A"
+declare i64 @write(i32, ptr, i64)
+declare void @_exit(i32)
+declare void @abort()
+
+define internal void @concrete_rt_write_all(ptr %p, i64 %n) {
+entry:
+  br label %loop
+loop:
+  %pp = phi ptr [ %p, %entry ], [ %np, %more ]
+  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]
+  %done = icmp eq i64 %nn, 0
+  br i1 %done, label %out, label %wr
+wr:
+  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)
+  %bad = icmp sle i64 %k, 0
+  br i1 %bad, label %out, label %more
+more:
+  %np = getelementptr i8, ptr %pp, i64 %k
+  %rest = sub i64 %nn, %k
+  br label %loop
+out:
+  ret void
+}
+
+define i32 @main() "no-jump-tables"="true" {
+entry:
+  %w = call i32 @concrete_body()
+  %ok = icmp ult i32 %w, 256
+  br i1 %ok, label %exit, label %trap
+exit:
+  ret i32 %w
+trap:
+  %i = sub i32 %w, 256
+  switch i32 %i, label %bad [ i32 0, label %t0 i32 1, label %t1 ]
+t0:
+  call void @concrete_rt_write_all(ptr @.site0, i64 61)
+  call void @_exit(i32 134)
+  unreachable
+t1:
+  call void @concrete_rt_write_all(ptr @.site1, i64 47)
+  call void @_exit(i32 134)
+  unreachable
+bad:
+  call void @concrete_rt_write_all(ptr @.bad, i64 39)
+  call void @abort()
+  unreachable
+}
+; fixture raw_widths
+declare {i8, i1} @llvm.uadd.with.overflow.i8(i8, i8)
+
+define i32 @concrete_body() {
+b0:
+  %r0 = add i8 0, 1
+  %r1 = add i8 %r0, 0
+  %o2 = call {i8, i1} @llvm.uadd.with.overflow.i8(i8 17, i8 %r1)
+  %r2 = extractvalue {i8, i1} %o2, 0
+  %r3 = extractvalue {i8, i1} %o2, 1
+  ret i32 0
+}
+
+@.bad = private constant [39 x i8] c"concrete: runtime: invalid result word\0A"
+declare i64 @write(i32, ptr, i64)
+declare void @_exit(i32)
+declare void @abort()
+
+define internal void @concrete_rt_write_all(ptr %p, i64 %n) {
+entry:
+  br label %loop
+loop:
+  %pp = phi ptr [ %p, %entry ], [ %np, %more ]
+  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]
+  %done = icmp eq i64 %nn, 0
+  br i1 %done, label %out, label %wr
+wr:
+  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)
+  %bad = icmp sle i64 %k, 0
+  br i1 %bad, label %out, label %more
+more:
+  %np = getelementptr i8, ptr %pp, i64 %k
+  %rest = sub i64 %nn, %k
+  br label %loop
+out:
+  ret void
+}
+
+define i32 @main() "no-jump-tables"="true" {
+entry:
+  %w = call i32 @concrete_body()
+  %ok = icmp ult i32 %w, 256
+  br i1 %ok, label %exit, label %trap
+exit:
+  ret i32 %w
+trap:
+  %i = sub i32 %w, 256
+  switch i32 %i, label %bad [ ]
+bad:
+  call void @concrete_rt_write_all(ptr @.bad, i64 39)
+  call void @abort()
+  unreachable
+}
+; fixture oracle
+
+define i32 @concrete_body() {
+b0:
+  %ret0 = zext i8 17 to i32
+  ret i32 %ret0
+}
+
+@.bad = private constant [39 x i8] c"concrete: runtime: invalid result word\0A"
+declare i64 @write(i32, ptr, i64)
+declare void @_exit(i32)
+declare void @abort()
+
+define internal void @concrete_rt_write_all(ptr %p, i64 %n) {
+entry:
+  br label %loop
+loop:
+  %pp = phi ptr [ %p, %entry ], [ %np, %more ]
+  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]
+  %done = icmp eq i64 %nn, 0
+  br i1 %done, label %out, label %wr
+wr:
+  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)
+  %bad = icmp sle i64 %k, 0
+  br i1 %bad, label %out, label %more
+more:
+  %np = getelementptr i8, ptr %pp, i64 %k
+  %rest = sub i64 %nn, %k
+  br label %loop
+out:
+  ret void
+}
+
+define i32 @main() "no-jump-tables"="true" {
+entry:
+  %w = call i32 @concrete_body()
+  %ok = icmp ult i32 %w, 256
+  br i1 %ok, label %exit, label %trap
+exit:
+  ret i32 %w
+trap:
+  %i = sub i32 %w, 256
+  switch i32 %i, label %bad [ ]
+bad:
+  call void @concrete_rt_write_all(ptr @.bad, i64 39)
+  call void @abort()
+  unreachable
+}
+; fixture widths_and_phis
+declare {i8, i1} @llvm.sadd.with.overflow.i8(i8, i8)
+
+define i32 @concrete_body() {
+b0:
+  %r0 = trunc i64 4294967297 to i32
+  %r1 = trunc i64 18446744069414584321 to i32
+  %r2 = sub i32 %r0, 1
+  %r3 = mul i32 %r1, 4294967294
+  %r4 = trunc i32 %r3 to i16
+  %r5 = sext i16 %r4 to i64
+  %r6 = trunc i32 %r2 to i16
+  %r7 = zext i16 %r6 to i64
+  %r8 = trunc i64 %r5 to i8
+  %o9 = call {i8, i1} @llvm.sadd.with.overflow.i8(i8 %r8, i8 1)
+  %r9 = extractvalue {i8, i1} %o9, 0
+  %r10 = extractvalue {i8, i1} %o9, 1
+  br i1 %r10, label %b1, label %b2
+b1:
+  %r11 = phi i1 [ %r10, %b0 ]
+  br label %b2
+b2:
+  %r12 = phi i8 [ 42, %b0 ], [ 17, %b1 ]
+  %r13 = phi i1 [ %r10, %b0 ], [ %r11, %b1 ]
+  %ret2 = zext i8 %r12 to i32
+  ret i32 %ret2
+}
+
+@.bad = private constant [39 x i8] c"concrete: runtime: invalid result word\0A"
+declare i64 @write(i32, ptr, i64)
+declare void @_exit(i32)
+declare void @abort()
+
+define internal void @concrete_rt_write_all(ptr %p, i64 %n) {
+entry:
+  br label %loop
+loop:
+  %pp = phi ptr [ %p, %entry ], [ %np, %more ]
+  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]
+  %done = icmp eq i64 %nn, 0
+  br i1 %done, label %out, label %wr
+wr:
+  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)
+  %bad = icmp sle i64 %k, 0
+  br i1 %bad, label %out, label %more
+more:
+  %np = getelementptr i8, ptr %pp, i64 %k
+  %rest = sub i64 %nn, %k
+  br label %loop
+out:
+  ret void
+}
+
+define i32 @main() "no-jump-tables"="true" {
+entry:
+  %w = call i32 @concrete_body()
+  %ok = icmp ult i32 %w, 256
+  br i1 %ok, label %exit, label %trap
+exit:
+  ret i32 %w
+trap:
+  %i = sub i32 %w, 256
+  switch i32 %i, label %bad [ ]
+bad:
+  call void @concrete_rt_write_all(ptr @.bad, i64 39)
+  call void @abort()
+  unreachable
+}
+; return literal
+  ret i32 273
+; byte constants
+@.bad = private constant [6 x i8] c"a\22\5C\0A02"
+@.bad = private constant [0 x i8] c""
+@.site17 = private constant [256 x i8] c"\00\01\02\03\04\05\06\07\08\09\0A\0B\0C\0D\0E\0F\10\11\12\13\14\15\16\17\18\19\1A\1B\1C\1D\1E\1F !\22#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\5C]^_`abcdefghijklmnopqrstuvwxyz{|}~\7F\80\81\82\83\84\85\86\87\88\89\8A\8B\8C\8D\8E\8F\90\91\92\93\94\95\96\97\98\99\9A\9B\9C\9D\9E\9F\A0\A1\A2\A3\A4\A5\A6\A7\A8\A9\AA\AB\AC\AD\AE\AF\B0\B1\B2\B3\B4\B5\B6\B7\B8\B9\BA\BB\BC\BD\BE\BF\C0\C1\C2\C3\C4\C5\C6\C7\C8\C9\CA\CB\CC\CD\CE\CF\D0\D1\D2\D3\D4\D5\D6\D7\D8\D9\DA\DB\DC\DD\DE\DF\E0\E1\E2\E3\E4\E5\E6\E7\E8\E9\EA\EB\EC\ED\EE\EF\F0\F1\F2\F3\F4\F5\F6\F7\F8\F9\FA\FB\FC\FD\FE\FF"

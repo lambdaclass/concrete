@@ -32,7 +32,8 @@
 #
 #   P  the three tools are the revisions pinned in scripts/proofs/external.pins, and every con-leche
 #      call goes through one function that passes --verified --jobs=1;
-#   I  population: every theorem scripts/proofs/theorems.lean lists, all of them on the standard
+#   I  population: the combined selection matches the union of the two library inventories by
+#      declaration identity, and every selected theorem is on the standard
 #      axioms (a theorem on any other is refused here, not left out of the export);
 #   A  the export is from this toolchain, holds every theorem of the population, and declares only
 #      the three standard axioms;
@@ -91,7 +92,13 @@ CONLECHE="$CHECK_DIR/.lake/build/bin/con-leche"
 CONLECHE_FLAGS=(--verified --jobs=1)
 conleche() { "$CONLECHE" "${CONLECHE_FLAGS[@]}" "$1"; }
 # Every con-leche run goes through conleche(): a direct call would run at the default worker count.
-DIRECT=$(grep -nE '^[^#]*"\$CONLECHE"' "$SELF_DIR/external.sh" | grep -v 'CONLECHE_FLAGS\[@\]')
+scan_rc=0
+CALLS=$(grep -nE '^[^#]*"\$CONLECHE"' "$SELF_DIR/external.sh") || scan_rc=$?
+if [ "$scan_rc" -gt 1 ]; then
+  no "could not scan con-leche call sites in $SELF_DIR/external.sh"
+  finish
+fi
+DIRECT=$(printf '%s\n' "$CALLS" | grep -v 'CONLECHE_FLAGS\[@\]')
 [ "${CONLECHE_FLAGS[*]}" = "--verified --jobs=1" ] && [ -z "$DIRECT" ] \
   && ok "con-leche runs as --verified --jobs=1 at every call site" \
   || no "con-leche flags are [${CONLECHE_FLAGS[*]}]; direct calls: $(echo $DIRECT | cut -c1-200)"
@@ -135,7 +142,24 @@ NONSTD=$(awk -F'\t' -v std=" $STANDARD_AXIOMS " '{ n = split($2, a, " ")
 # the injective encoding both theorems.lean and export_inventory.py produce (PROOF_MODE=encoded).
 population encoded > "$TMP/encoded.tsv" 2>> "$TMP/inv.err" || { no "PROOF_MODE=encoded failed"; finish; }
 cut -f1 "$TMP/encoded.tsv" > "$TMP/population.txt"
-cut -f2 "$TMP/encoded.tsv" | sort -u > "$TMP/population-enc.txt"
+cut -f2 "$TMP/encoded.tsv" | sort -u > "$TMP/population-enc.txt" \
+  || { no "could not sort the export selection"; finish; }
+# Query each library's theorem inventory separately so a defect in the combined selector
+# cannot shrink both the replay request and the set used to check its completeness.
+for pkg in ConcreteSpec ConcreteSpecEvidence; do
+  PROOF_PKG="$pkg" population encoded > "$TMP/$pkg-encoded.tsv" 2>> "$TMP/inv.err" \
+    || { no "$pkg theorem inventory failed: $(head -3 "$TMP/inv.err" | tr '\n' ' ')"; finish; }
+done
+cut -f2 "$TMP/ConcreteSpec-encoded.tsv" "$TMP/ConcreteSpecEvidence-encoded.tsv" |
+  sort -u > "$TMP/expected-enc.txt" || { no "could not merge the library theorem inventories"; finish; }
+MISSING=$(comm -23 "$TMP/expected-enc.txt" "$TMP/population-enc.txt") \
+  || { no "could not compare the export selection to the theorem inventories"; finish; }
+[ -z "$MISSING" ] \
+  || { no "theorems missing from the export selection: $(head -c 300 <<< "$MISSING")"; finish; }
+EXTRA=$(comm -13 "$TMP/expected-enc.txt" "$TMP/population-enc.txt") \
+  || { no "could not compare the export selection to the theorem inventories"; finish; }
+[ -z "$EXTRA" ] \
+  || { no "theorems outside the library inventories: $(head -c 300 <<< "$EXTRA")"; finish; }
 [ "$NALL" -ge 100 ] && [ -z "$NONSTD" ] && ok "$NALL theorems, all on the standard axioms" \
   || no "population: $NALL theorems; on a non-standard axiom: $(echo $NONSTD | cut -c1-300)"
 
@@ -153,7 +177,10 @@ read -r EXP_LEAN EXP_TOOL EXP_FORMAT < <($INV meta "$EXPORT")
   || no "export metadata: Lean $EXP_LEAN format $EXP_FORMAT, expected $TOOLCHAIN format $EXPECT_FORMAT"
 $INV theorems "$EXPORT" > "$TMP/exported.txt" \
   || { no "the stream's theorems could not be listed"; finish; }
-MISSING=$(comm -23 "$TMP/population-enc.txt" <(sort -u "$TMP/exported.txt"))
+sort -u "$TMP/exported.txt" > "$TMP/exported-enc.txt" \
+  || { no "could not sort the exported theorems"; finish; }
+MISSING=$(comm -23 "$TMP/expected-enc.txt" "$TMP/exported-enc.txt") \
+  || { no "could not compare the export stream to the theorem inventories"; finish; }
 [ "$(grep -c . "$TMP/population-enc.txt")" = "$NALL" ] && [ -z "$MISSING" ] && ok "every theorem of the population is in the export ($(grep -c . "$TMP/exported.txt") theorems with dependencies)" \
   || no "theorems missing from the export: $(echo $MISSING | cut -c1-300)"
 $INV axioms "$EXPORT" > "$TMP/axioms.txt" \
