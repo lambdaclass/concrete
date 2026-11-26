@@ -91,7 +91,8 @@ def registeredRules : List RuleId :=
    ⟨``Leak.FiniteActionPermitted, 1⟩, ⟨``Leak.FiniteSequencePermitted, 1⟩] ++ SourcePath.Reason.inOrder.map SourcePath.Reason.ruleId ++
   [SourcePath.Project.Reason.caseCollision, .fileDirectoryConflict, .duplicate].map
     SourcePath.Project.Reason.ruleId ++
-  [⟨``SourcePathSpan.FilePresent, 2⟩, ⟨``SourcePathSpan.OrderedOffsets, 2⟩,
+  [⟨``SourcePathSpan.FilePresent, 2⟩, ⟨``SourcePathSpan.SlotResolves, 1⟩,
+   ⟨``SourcePathSpan.OrderedOffsets, 2⟩,
    ⟨``SourcePathSpan.EndInSource, 2⟩, ⟨``SourcePathSpan.LineMatches, 2⟩,
    ⟨``SourcePathSpan.ColumnMatches, 2⟩, Project.languagePinRule, Project.clauseRule,
    Project.tableVersionRule, Project.Manifest.sizeRule, Project.Manifest.encodingRule,

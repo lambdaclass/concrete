@@ -2123,6 +2123,16 @@ Concrete.Native.World.mk.injEq	propext
 Concrete.Native.World.mk.sizeOf_spec	
 Concrete.Native.lcb_emit_correct	Classical.choice Quot.sound propext
 Concrete.Native.observed_behaviour	Classical.choice Quot.sound propext
+Concrete.Origins.appendTrap.eq_1	
+Concrete.Origins.appendTrap_binds	Quot.sound propext
+Concrete.Origins.appendTrap_preserves_lookup	Classical.choice Quot.sound propext
+Concrete.Origins.appendTrap_resolves	propext
+Concrete.Origins.binds_of_preservesOrigins	Quot.sound propext
+Concrete.Origins.coreOrigins_bind	Quot.sound propext
+Concrete.Origins.emittedTrap_binds	Quot.sound propext
+Concrete.Origins.validateLocation._proof_1	Quot.sound propext
+Concrete.Origins.validateLocation_complete	Quot.sound propext
+Concrete.Origins.validateLocation_refusal_sound	Quot.sound propext
 Concrete.Parse.CheckedTable.entries_eq	propext
 Concrete.Parse.CheckedTable.mk.inj	propext
 Concrete.Parse.CheckedTable.mk.injEq	propext
@@ -2242,6 +2252,8 @@ Concrete.instDecidableEqRefusal.decEq._proof_6
 Concrete.instDecidableEqRefusal.decEq._proof_7	
 Concrete.instDecidableEqRefusal.decEq._proof_8	
 Concrete.instDecidableEqRefusal.decEq._proof_9	
+ConcreteSpec.Core.SourcePathSpan.Project.fileAt.eq_1	Quot.sound propext
+ConcreteSpec.Core.SourcePathSpan.SlotResolves.eq_1	Quot.sound propext
 ConcreteSpec.Core.inRangeOr.eq_1	propext
 ConcreteSpec.Surface0.ByteEscape.eq_1	
 ConcreteSpec.Surface0.DigitsAccepted.eq_1	propext
@@ -2948,6 +2960,8 @@ _private.Concrete.MIR.0.List.filter.match_1.eq_2
 _private.Concrete.MIR.0.List.lookup.match_1.eq_1	
 _private.Concrete.MIR.0.List.lookup.match_1.eq_2	
 _private.Concrete.Memory.0.Concrete.Memory.toMIR.eq_1	
+_private.Concrete.Origins.0.Concrete.Origins.validateLocation.match_1.eq_1	Quot.sound propext
+_private.Concrete.Origins.0.Concrete.Origins.validateLocation.match_1.eq_2	Quot.sound propext
 _private.Concrete.Parse.0.Concrete.Parse.Task.read.inj	
 _private.Concrete.Parse.0.Concrete.Parse.Task.read.injEq	propext
 _private.Concrete.Parse.0.Concrete.Parse.Task.read.sizeOf_spec	

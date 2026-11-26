@@ -613,6 +613,20 @@ theorem filePresentRefused : RuleRefused FilePresent
   unfold RuleRefused FilePresent
   decide
 
+/-- Instance: Slot zero resolves to the file in the singleton project. -/
+theorem slotResolvesAccepted : RuleAccepted SlotResolves
+    (tabProject, ⟨0⟩) := by
+  intro missing
+  change tabProject.fileAt ⟨0⟩ = none at missing
+  have found : tabProject.fileAt ⟨0⟩ = some (File.load mainSourcePath tabSource) := rfl
+  exact Option.some_ne_none _ (found.symm.trans missing)
+
+/-- Instance: Slot one is absent from the singleton project. -/
+theorem slotResolvesRefused : RuleRefused SlotResolves
+    (tabProject, ⟨1⟩) := by
+  intro resolves
+  exact resolves rfl
+
 /-- Instance: Offsets in ascending order describe a half-open range. -/
 theorem offsetsAccepted : RuleAccepted OrderedOffsets
     (2, 3) := by
@@ -879,6 +893,8 @@ def registeredRuleExamples : List RuleExample :=
    ⟨``SourcePath.Project.NoDuplicate, ``SourcePath.Project.Registry.duplicateRefused⟩,
    ⟨``SourcePathSpan.FilePresent, ``SourcePathSpan.Registry.filePresentAccepted⟩,
    ⟨``SourcePathSpan.FilePresent, ``SourcePathSpan.Registry.filePresentRefused⟩,
+   ⟨``SourcePathSpan.SlotResolves, ``SourcePathSpan.Registry.slotResolvesAccepted⟩,
+   ⟨``SourcePathSpan.SlotResolves, ``SourcePathSpan.Registry.slotResolvesRefused⟩,
    ⟨``SourcePathSpan.OrderedOffsets, ``SourcePathSpan.Registry.offsetsAccepted⟩,
    ⟨``SourcePathSpan.OrderedOffsets, ``SourcePathSpan.Registry.offsetsRefused⟩,
    ⟨``SourcePathSpan.EndInSource, ``SourcePathSpan.Registry.endAccepted⟩,
