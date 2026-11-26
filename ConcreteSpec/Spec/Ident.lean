@@ -1406,12 +1406,16 @@ private theorem File.offset_lt_size (file : File) (offset : Nat) (bounded : offs
   simp [List.length_scanl]
   simpa [File.length_eq, SourceText.length, Nat.lt_succ_iff] using bounded
 
+/-- Return the position and the number of coordinate table reads. -/
+@[inline] def File.positionAtWithWork (file : File) (offset : Nat) (bounded : offset ≤ file.length) : Position × Nat :=
+  (file.positions[offset]'(file.offset_lt_size offset bounded), 1)
+
 def File.positionAt (file : File) (offset : Nat) (bounded : offset ≤ file.length) : Position :=
-  file.positions[offset]'(file.offset_lt_size offset bounded)
+  (file.positionAtWithWork offset bounded).1
 
 theorem File.positionAt_eq (file : File) (offset : Nat) (bounded : offset ≤ file.length) :
     file.positionAt offset bounded = file.source.positionAt offset := by
-  simp [File.positionAt, file.positions_eq, List.getElem_scanl, SourceText.positionAt]
+  simp [File.positionAt, File.positionAtWithWork, file.positions_eq, List.getElem_scanl, SourceText.positionAt]
 
 private theorem Position.step_positive (pos : Position) (value width : Nat)
     (line : 0 < pos.line) (col : 0 < pos.column) :
@@ -1442,10 +1446,40 @@ private inductive PathIndex where
 
 private def PathIndex.empty : PathIndex := .node none []
 
-private def PathIndex.lookup : List Nat → PathIndex → Option Nat
-  | [], .node slot _ => slot
-  | b :: rest, .node _ children =>
-    (children.lookup b).bind (lookup rest)
+-- Each visited node searches at most one edge per byte of the alphabet.
+private def PathIndex.lookupWithWork : List Nat → PathIndex → Nat → Option Nat × Nat
+  | [], .node slot _, work => (slot, work + 1)
+  | b :: rest, .node _ children, work =>
+    match children.lookup b with
+    | none => (none, work + 1)
+    | some child => lookupWithWork rest child (work + 1)
+
+private def PathIndex.lookup (key : List Nat) (index : PathIndex) : Option Nat :=
+  (index.lookupWithWork key 0).1
+
+private theorem PathIndex.lookupWithWork_slot (key : List Nat) (index : PathIndex)
+    (a b : Nat) : (index.lookupWithWork key a).1 = (index.lookupWithWork key b).1 := by
+  induction key generalizing index a b with
+  | nil => cases index; rfl
+  | cons byte rest ih =>
+    cases index with
+    | node slot children =>
+      simp only [lookupWithWork]
+      split
+      · rfl
+      · apply ih
+
+private theorem PathIndex.lookup_nil (slot : Option Nat) (children : List (Nat × PathIndex)) :
+    lookup [] (.node slot children) = slot := rfl
+
+private theorem PathIndex.lookup_cons (b : Nat) (rest : List Nat) (slot : Option Nat)
+    (children : List (Nat × PathIndex)) :
+    lookup (b :: rest) (.node slot children) = (children.lookup b).bind (lookup rest) := by
+  unfold lookup
+  rw [lookupWithWork]
+  cases children.lookup b with
+  | none => rfl
+  | some child => exact lookupWithWork_slot rest child 1 0
 
 private def PathIndex.insert : List Nat → Nat → PathIndex → PathIndex
   | [], slot, .node _ children => .node (some slot) children
@@ -1475,7 +1509,7 @@ private theorem PathIndex.lookup_insert (key query : List Nat) (slot : Nat)
   induction key generalizing query index with
   | nil =>
     cases query <;> cases index <;>
-      simp only [insert, lookup, ite_true, List.cons_ne_nil, ite_false]
+      simp only [insert, lookup_nil, lookup_cons, ite_true, List.cons_ne_nil, ite_false]
   | cons b rest ih =>
     cases index with
     | node current children =>
@@ -1485,13 +1519,13 @@ private theorem PathIndex.lookup_insert (key query : List Nat) (slot : Nat)
         by_cases same : q = b
         · subst q
           have selfMatch : (b == b) = true := beq_iff_eq.mpr rfl
-          simp only [insert, lookup, List.lookup_cons, selfMatch, Option.bind_some, ih,
+          simp only [insert, lookup_cons, List.lookup_cons, selfMatch, Option.bind_some, ih,
             List.cons.injEq, true_and]
           cases children.lookup b with
           | none => simp only [Option.getD_none, lookup_empty, Option.bind_none]
           | some child => rfl
         · have noMatch : q :: tail ≠ b :: rest := fun eq => same (List.cons.inj eq).1
-          simp only [insert, lookup, List.lookup_cons, beq_eq_false_iff_ne.mpr same,
+          simp only [insert, lookup_cons, List.lookup_cons, beq_eq_false_iff_ne.mpr same,
             lookup_filter_other _ _ _ same, ite_eq_right noMatch]
 
 
@@ -1565,50 +1599,76 @@ Half-open span offsets are ordered. Equal offsets describe an empty span. -/
 def OrderedOffsets (input : Nat × Nat) : Prop :=
   input.1 ≤ input.2
 
+/-- Resolve an exact path and count the trie nodes visited. -/
+def Project.findIdWithWork (project : Project) (path : SourcePath) : Option FileId × Nat :=
+  let result := project.index.lookupWithWork path.raw.bytes 0
+  (result.1.map FileId.mk, result.2)
+
 /-- Resolve an exact path in time proportional to its byte length. -/
 def Project.findId (project : Project) (path : SourcePath) : Option FileId :=
-  (project.index.lookup path.raw.bytes).map FileId.mk
+  (project.findIdWithWork path).1
 
 theorem Project.findId_eq (project : Project) (path : SourcePath) :
     project.findId path = (project.files.findIdx? (fun file => decide (file.path = path))).map FileId.mk := by
-  simp [findId, project.index_eq, PathIndex.lookup_ofFiles, files]
+  change (project.index.lookup path.raw.bytes).map FileId.mk = _
+  simp [project.index_eq, PathIndex.lookup_ofFiles, files]
 
 /-- Look up the exact path among admitted files, preserving the supplied bytes. -/
 def Project.findFile (project : Project) (path : SourcePath) : Option File :=
   (project.findId path).bind project.fileAt
 
 /-- Project an ordered, in-bounds byte range through the file's coordinate index. -/
-def fileSpan (id : FileId) (file : File) (start stop : Nat)
-    (ordered : start ≤ stop) (bounded : start ≤ file.length) : Span :=
-  let pos := file.positionAt start bounded
+@[inline] def fileSpanWithWork (id : FileId) (file : File) (start stop : Nat)
+    (ordered : start ≤ stop) (bounded : start ≤ file.length) : Span × Nat :=
+  let result := file.positionAtWithWork start bounded
+  let pos := result.1
   have positive : 0 < pos.line ∧ 0 < pos.column := by
-    dsimp [pos]
+    change 0 < (file.positionAt start bounded).line ∧ 0 < (file.positionAt start bounded).column
     rw [file.positionAt_eq start bounded]
     exact SourceText.positionAt_positive _ _
-  ⟨id, start, stop, ordered, pos.line, pos.column, positive.1, positive.2⟩
+  (⟨id, start, stop, ordered, pos.line, pos.column, positive.1, positive.2⟩, result.2)
+
+def fileSpan (id : FileId) (file : File) (start stop : Nat)
+    (ordered : start ≤ stop) (bounded : start ≤ file.length) : Span :=
+  (fileSpanWithWork id file start stop ordered bounded).1
 
 theorem fileSpan_location (id : FileId) (file : File) (start stop : Nat)
     (ordered : start ≤ stop) (within : stop ≤ file.length) :
     (fileSpan id file start stop ordered (Nat.le_trans ordered within)).LocationOk file.source := by
-  simp [Span.LocationOk, EndInSource, LineMatches, ColumnMatches, fileSpan,
-    file.positionAt_eq start (Nat.le_trans ordered within), SourceText.lineAt,
-    SourceText.columnAt, ← File.length_eq, within]
+  have position := file.positionAt_eq start (Nat.le_trans ordered within)
+  change (file.positionAtWithWork start _).1 = file.source.positionAt start at position
+  simp [Span.LocationOk, EndInSource, LineMatches, ColumnMatches, fileSpan, fileSpanWithWork,
+    position, SourceText.lineAt, SourceText.columnAt, ← File.length_eq, within]
 
-/-- Issue a span using a resolved file ID, with constant-time file and coordinate access. -/
-def projectSpanAt (project : Project) (id : FileId) (start stop : Nat) : Option (ScopedSpan project) :=
+/-- Issue a span and count the file and coordinate table reads. -/
+@[inline] def projectSpanAtWithWork (project : Project) (id : FileId) (start stop : Nat) :
+    Option (ScopedSpan project) × Nat :=
   if slot : id.index < project.entries.size then
     let file := project.entries[id.index]
     if ordered : start ≤ stop then
       if within : stop ≤ file.length then
-        some ⟨fileSpan id file start stop ordered (Nat.le_trans ordered within),
-          ⟨file, fileSpan_location id file start stop ordered within, Array.getElem?_eq_getElem slot⟩⟩
-      else none
-    else none
-  else none
+        let result := fileSpanWithWork id file start stop ordered (Nat.le_trans ordered within)
+        (some ⟨result.1,
+          ⟨file, fileSpan_location id file start stop ordered within, Array.getElem?_eq_getElem slot⟩⟩,
+          1 + result.2)
+      else (none, 1)
+    else (none, 1)
+  else (none, 0)
 
-def projectSpan (project : Project) (path : SourcePath) (start stop : Nat) : Option (ScopedSpan project) := do
-  let id ← project.findId path
-  projectSpanAt project id start stop
+/-- Issue a span using a resolved file ID, with constant-time file and coordinate access. -/
+def projectSpanAt (project : Project) (id : FileId) (start stop : Nat) : Option (ScopedSpan project) :=
+  (projectSpanAtWithWork project id start stop).1
+
+@[inline] def projectSpanWithWork (project : Project) (path : SourcePath) (start stop : Nat) :
+    Option (ScopedSpan project) × Nat :=
+  match project.findIdWithWork path with
+  | (none, work) => (none, work)
+  | (some id, work) =>
+    let (span, spanWork) := projectSpanAtWithWork project id start stop
+    (span, work + spanWork)
+
+def projectSpan (project : Project) (path : SourcePath) (start stop : Nat) : Option (ScopedSpan project) :=
+  (projectSpanWithWork project path start stop).1
 
 /-- Check a stored location using the loaded file's coordinate index. -/
 def File.matchesLocation (file : File) (span : Span) : Bool :=
