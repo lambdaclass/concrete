@@ -358,6 +358,7 @@ def plantedState (n : Nat) : Nat := runST fun σ => do
 
 def plantedPlatform (_ : Unit) : Bool := System.Platform.isLinux
 def plantedHostWidth (_ : Unit) : Nat := System.Platform.numBits
+def plantedWidthConversion (n : Nat) : Nat := (USize.ofNat n).toNat
 def plantedConcurrency (_ : Unit) : UInt32 := System.Platform.Internal.getHardwareConcurrency ()
 def plantedPanic (n : Nat) : Nat := if n == 0 then panic! "not pure" else n
 def plantedUnchecked (xs : List Nat) : Nat := xs[0]!
@@ -397,6 +398,8 @@ partial def driverLoop (n : Nat) : Nat := driverLoop (n + shadowValue)
 EOF
 cat > "$TMP/totality/Driver.lean" <<'EOF'
 import DriverDependency
+import Stage
+def forwardWidth (n : Nat) : Nat := plantedWidthConversion n
 def driverEntry (n : Nat) : Nat := driverLoop n
 
 def driverWhile (n : Nat) : Nat := Id.run do
@@ -433,6 +436,7 @@ if (
     'reaches stage effect (runST|ST.mkRef)' \
     'reaches stage effect System.Platform.isLinux' \
     'plantedHostWidth reaches stage effect System.Platform.numBits' \
+    'plantedWidthConversion reaches host-word-sized declaration USize[.]ofNat' \
     'plantedConcurrency reaches stage effect System.Platform.Internal.getHardwareConcurrency' \
     'reaches stage effect panicCore' \
     'reaches stage effect GetElem[?][.]getElem!' \

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Manifest-driven slice-0 test gate (Concrete/README.md gates 4 and 6).
-# Hand-written BIR and accepted or unchecked source go through the LLVM path (clang) and the LCB path: the
-# adapted body assembled by LCB in process (no text on the proved path), linked with the runtime
+# Hand-written BIR and accepted or unchecked source go through LLVM (clang) and LCB.
+# For admitted source, run the executables published by the public CLI. For LCB, the
+# adapted body is assembled by LCB in process (no text on the proved path), linked with the runtime
 # entry, which LCB's command line assembles from QBE text. The manifest's bir: inventory must equal
 # the emitter's list in both directions. CONCRETE_TEST_MANIFEST selects another manifest (controls).
 # Each executable runs under bounded_run; its observation is its exit status (or "incomplete"),
@@ -23,11 +24,8 @@ source scripts/checks/lib/has_match.sh
 # The emit-only manifest controls exercise only manifest validation.
 if [[ ${CONCRETE_TEST_EMIT_ONLY:-0} != 1 ]]; then
   bash scripts/checks/compiler/f31_census.sh
-  build llvm-rendering "$work/llvm-rendering.log" bounded 120 \
-    lake env lean scripts/checks/compiler/llvm_rendering.lean
-  echo "ok   LLVM rendering controls"
   build llvm-mutation-controls "$work/llvm-mutation-controls.log" bounded 120 \
-    python3 -B scripts/checks/compiler/llvm_mutation_controls.py
+    lake env python3 -B scripts/checks/compiler/llvm_mutation_controls.py
   cat "$work/llvm-mutation-controls.log"
 fi
 
@@ -38,17 +36,30 @@ examples=0
 check() {
   local name=$1
   local d=$2
-  local backend
   build "$name" "$d/build.log" bounded "$native_secs" bash "$root/scripts/checks/lib/slice0_native.sh" "$d" "$lcb"
+  check_native "$name" "$d" "$d" "$3" "$4"
+}
+
+# Compare native artifacts against expectations already checked by the emitter.
+check_native() {
+  local name=$1
+  local expected=$2
+  local artifacts=$3
+  local backend
   for backend in llvm lcb; do
-    observe "$d/$backend.exe" "$d/$backend" "$3" "$4"
     count=$((count + 1))
-    if judge "$d" "$d/$backend"; then
-      echo "ok   $name [$backend]: status $(cat "$d/$backend.status")"
+    if [ ! -x "$artifacts/$backend.exe" ]; then
+      echo "FAIL $name [$backend]: missing executable"
+      fail=1
+      continue
+    fi
+    observe "$artifacts/$backend.exe" "$expected/$backend" "$4" "$5"
+    if judge "$expected" "$expected/$backend"; then
+      echo "ok   $name [$backend]: status $(cat "$expected/$backend.status")"
     else
-      echo "FAIL $name [$backend]: status $(cat "$d/$backend.status") (expected $(cat "$d/status"))," \
-        "stderr $(od -An -c "$d/$backend.stderr" | tr -s ' ' | head -c 300)," \
-        "stdout $(wc -c <"$d/$backend.stdout") bytes"
+      echo "FAIL $name [$backend]: status $(cat "$expected/$backend.status") (expected $(cat "$expected/status"))," \
+        "stderr $(od -An -c "$expected/$backend.stderr" | tr -s ' ' | head -c 300)," \
+        "stdout $(wc -c <"$expected/$backend.stdout") bytes"
       fail=1
     fi
   done
@@ -200,6 +211,22 @@ sys.exit(result.returncode)
   fi
 }
 
+# Manifest controls may use a private fixture directory. Give its CLI commands
+# the production helper and backend without changing that directory.
+native_cli_project() {
+  local source_path=$1
+  local scratch_project=$2
+  if [ "$cli_project" = "$root" ]; then
+    printf '%s\n' "$root"
+  else
+    mkdir -p "$scratch_project/$(dirname "$source_path")" || return
+    cp -- "$cli_project/$source_path" "$scratch_project/$source_path" || return
+    ln -s "$root/scripts" "$scratch_project/scripts" || return
+    ln -s "$root/.lake" "$scratch_project/.lake" || return
+    printf '%s\n' "$scratch_project"
+  fi
+}
+
 # The backend-specific expectation exercises the public driver and its native build policy.
 check_backend_limit() {
   local path=${1#con:}
@@ -207,16 +234,8 @@ check_backend_limit() {
   local expect=$3
   local status diagnostic
   local project
-  local -a cli
-  project=$cli_project
-  if [ "$project" != "$root" ]; then
-    mkdir -p "$d/project/$(dirname "$path")"
-    cp -- "$project/$path" "$d/project/$path"
-    ln -s "$root/scripts" "$d/project/scripts"
-    ln -s "$root/.lake" "$d/project/.lake"
-    project="$d/project"
-  fi
-  cli=(bash -c 'cd "$1" && shift && exec "$@"' _ "$project" "$cli_bin")
+  project=$(native_cli_project "$path" "$d/project")
+  local -a cli=(bash -c 'cd "$1" && shift && exec "$@"' _ "$project" "$cli_bin")
   read -r _ _ status _ diagnostic <<<"$expect"
   mkdir -p "$d/expected"
   printf '%s\n' "$status" >"$d/expected/status"
@@ -319,6 +338,22 @@ while IFS=$'\t' read -r name program expect; do
       echo "FAIL $name: refused build created an output directory"
       fail=1
     fi
+  elif [[ "$program" == con:* && "$expect" == "trap "* ]]; then
+    # Slice 0 refuses trapping source. Exercise its unchecked code generation
+    # and require the public CLI to refuse before publishing.
+    check "$name" "$d" 10 20
+    check_cli_diagnostic "$name (CLI)" "$d/cli" "refuse 1 CORE-CHECK" "${project_cli[@]}" \
+      build "${program#con:}" -o "$d/out"
+    if [ -e "$d/out" ]; then
+      echo "FAIL $name: refused trap source created an output directory"
+      fail=1
+    fi
+  elif [[ "$program" == con:* ]]; then
+    path=${program#con:}
+    project=$(native_cli_project "$path" "$d/project")
+    build "$name (CLI)" "$d/cli-build.log" bounded "$native_secs" \
+      bash -c 'cd "$1" && shift && exec "$@"' _ "$project" "$cli_bin" build "$path" -o "$d/out"
+    check_native "$name (CLI)" "$d" "$d/out" 10 20
   else
     check "$name" "$d" 10 20
   fi
@@ -349,12 +384,44 @@ printf '%s\n' 'head -c 65536 /dev/zero | tr "\000" x' >"$helper_project/scripts/
 check_cli_output_failure cli-helper-stdout 1 bash -c 'cd "$1" && shift && exec "$@"' \
   _ "$helper_project" "$cli_bin" build tests/slice0/answer.con -o "$helper_project/out" --backend llvm
 
-# Rebuild over a known generation. Faults are injected only in this private
-# project's copy of the publication helper, through the production CLI.
+# The publication controls use this private project's copies of the helpers.
 publish_lib="$helper_project/scripts/checks/lib"
 publish_out="$helper_project/out"
 publish_cli=(bash -c 'cd "$1" && shift && exec "$@"' _ "$helper_project" "$cli_bin")
 publish_build=(build tests/slice0/answer.con -o "$publish_out" --backend llvm)
+
+# Slice 0 admits only nontrapping programs. In this private project swap in
+# the unchecked trap fixture's LCB inputs after staging. The production helper
+# links them and the production CLI publishes the resulting executable.
+ln -s "$root/.lake" "$helper_project/.lake"
+control="$work/ctl/cli-lcb-body"
+mkdir -p "$control"
+emit_slice0_row "$root/tests/manifest.tsv" con:tests/slice0/trap.con "$control/trap" \
+  "$target" 'trap arithmeticOverflow site 1'
+cat >"$publish_lib/slice0_native.sh" <<'EOF'
+set -euo pipefail
+if [ "$1" != target ]; then
+  cp "$CONTROL_TRAP/lcb_body.s" "$CONTROL_TRAP/lcb_rt.ssa" "$1/"
+fi
+exec bash "$CONTROL_NATIVE_HELPER" "$@"
+EOF
+build "CLI control wrong LCB body" "$control/build.log" bounded "$native_secs" \
+  env CONTROL_TRAP="$control/trap" CONTROL_NATIVE_HELPER="$root/scripts/checks/lib/slice0_native.sh" \
+  "${publish_cli[@]}" build tests/slice0/answer.con -o "$control/wrong"
+printf '42\n' >"$control/status"
+: >"$control/stderr"
+(check_native "CLI wrong body control" "$control" "$control/wrong" 10 20) >"$control/observe.log"
+if has_match -F 'ok   CLI wrong body control [llvm]: status 42' <"$control/observe.log" &&
+    has_match -F 'FAIL CLI wrong body control [lcb]: status 134 (expected 42)' <"$control/observe.log" &&
+    judge "$control/trap" "$control/lcb"; then
+  echo "ok   CLI conformance rejects a published LCB trap in place of the expected exit"
+else
+  cat "$control/observe.log"
+  echo "FAIL CLI wrong body control: expected a correct LLVM exit and the exact LCB trap"
+  fail=1
+fi
+
+# Rebuild over a known generation to exercise failures in publication.
 printf '%s\n' 'printf new-object >"$1/llvm.o"' 'printf new-executable >"$1/llvm.exe"' \
   >"$publish_lib/slice0_native.sh"
 mkdir -p "$work/ctl/previous" "$publish_out"

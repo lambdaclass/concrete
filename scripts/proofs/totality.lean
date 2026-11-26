@@ -100,10 +100,38 @@ def auditedRuntimeEdge (caller dep : Name) : Bool :=
   (caller == `Array.instGetElem?NatLtSize && dep == `Array.get!Internal) ||
   (caller == `ByteArray.toList.loop._unary && dep == `ByteArray.get!) ||
   (caller == `List.instGetElem?NatLtLength && dep == `List.get!Internal) ||
-  (caller == `Std.HashMap.instGetElem?Mem && dep == `Std.HashMap.get!) ||
-  -- USize's representation uses the pinned runtime word width. Direct
-  -- platform queries are still rejected.
-  ((`USize).isPrefixOf caller && dep == `System.Platform.numBits)
+  (caller == `Std.HashMap.instGetElem?Mem && dep == `Std.HashMap.get!)
+
+def wordSized (env : Environment) (n : Name) : Bool :=
+  [`USize, `ISize].any (·.isPrefixOf n) ||
+    (env.find? n).any fun ci =>
+      let constants := ci.type.getUsedConstants
+      constants.contains `USize || constants.contains `ISize
+
+-- Only these pinned implementations can enter the word-sized operations.
+-- Array traversal uses in-bounds indices, hash-table operations use bucket
+-- indices internally, and decimal rendering falls back to Nat for wide input.
+def auditedWordSizeCaller (n : Name) : Bool :=
+  namedRuntimeDependency n #[
+    "Array.anyMUnsafe", "Array.foldlMUnsafe", "Array.foldrMUnsafe", "Array.forIn'Unsafe",
+    "Array.mapFinIdxMUnsafe", "Array.mapMUnsafe",
+    "_private.Init.Data.Array.Basic.0.Array.anyMUnsafe.any",
+    "_private.Init.Data.Array.Basic.0.Array.foldlMUnsafe.fold",
+    "_private.Init.Data.Array.Basic.0.Array.foldrMUnsafe.fold",
+    "_private.Init.Data.Array.Basic.0.Array.forIn'Unsafe.loop",
+    "_private.Init.Data.Array.Basic.0.Array.mapFinIdxMUnsafe.map",
+    "_private.Init.Data.Array.Basic.0.Array.mapMUnsafe.map",
+    "Nat.reprFast", "_private.Init.Data.Repr.0.Nat.reprArray",
+    "Std.DHashMap.Internal.Raw₀.Const.get", "Std.DHashMap.Internal.Raw₀.Const.get?",
+    "Std.DHashMap.Internal.Raw₀.contains", "Std.DHashMap.Internal.Raw₀.insert",
+    "Std.DHashMap.Internal.Raw₀.insertIfNew", "Std.DHashMap.Internal.Raw₀.reinsertAux"]
+
+-- These primitives account for the audited internal uses of the width value.
+-- Any other path to a platform query is checked by the ordinary effect audit.
+def wordSizeRepresentationEdge (caller dep : Name) : Bool :=
+  dep == `System.Platform.numBits && namedRuntimeDependency caller #[
+    "USize.add", "USize.decEq", "USize.decLt", "USize.land", "USize.ofBitVec", "USize.ofNat",
+    "USize.ofNatLT", "USize.size", "USize.sub", "USize.toBitVec", "USize.toNat"]
 
 def panicEntry (n : Name) : Bool :=
   #[`panicCore, `GetElem?.getElem!, `GetElem?.casesOn, `GetElem?.rec, `Array.get!Internal, `Array.get!InternalBorrowed,
@@ -217,14 +245,20 @@ def inspect (env : Environment) (rewrites : Rewrites) (native : NativeDecls)
             -- The driver's file-path routines advance string positions under a bounds check.
             (!pureStage && boundedIterator && n == `panicCore && reason == "extern")) do
         failures := failures.push s!"{caller} reaches {reason} declaration {n}"
-    for dep in ci.getUsedConstantsAsSet do
-      unless auditedRuntimeEdge n dep && runtimeModule (moduleOf env n) do
-        pending := pending.push (dep, n, fromBackend, boundedIterator)
-    match ci with
-    | .recInfo r =>
+    let mut kernelDeps := ci.getUsedConstantsAsSet
+    if let .recInfo r := ci then
       for rule in r.rules do
-        for dep in rule.rhs.getUsedConstants do pending := pending.push (dep, n, fromBackend, boundedIterator)
-    | _ => pure ()
+        for dep in rule.rhs.getUsedConstants do kernelDeps := kernelDeps.insert dep
+    -- Check each logical edge, even when another caller already reached the
+    -- target. IR specializations of pinned container code can also contain
+    -- machine-word calls, so their logical implementation is checked here.
+    let pinnedCaller := runtimeModule module
+    let allowsWordSize := pinnedCaller && (wordSized env n || auditedWordSizeCaller n)
+    for dep in kernelDeps do
+      if pureStage && !allowsWordSize && runtimeModule (moduleOf env dep) && wordSized env dep then
+        failures := failures.push s!"{n} reaches host-word-sized declaration {dep}"
+      unless pinnedCaller && (auditedRuntimeEdge n dep || wordSizeRepresentationEdge n dep) do
+        pending := pending.push (dep, n, fromBackend, boundedIterator)
   return failures
 
 def moduleClosure (env : Environment) (root : Name) : IO (Std.HashSet Name) := do
