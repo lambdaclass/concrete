@@ -7,7 +7,7 @@ defaultTargets = ["ConcreteSpec"]
 [[require]]
 name = "lean-compiler-backend"
 git = "https://github.com/unbalancedparentheses/lean-compiler-backend"
-rev = "4bea4b3ffd8a43a73a0016012d865044067b3275"
+rev = "4623fba6fec8439974b7e4ceb9a577b3e6918a22"
 
 [leanOptions]
 warningAsError = true
