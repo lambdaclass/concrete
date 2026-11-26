@@ -1,3 +1,4 @@
+import ConcreteSpec.Admission.Types
 import ConcreteSpec.Spec.Ident
 import ConcreteSpec.Proofs.Basics
 import ConcreteSpec.Spec.Basics
@@ -130,7 +131,7 @@ theorem tyOf_iff {Δ : Decls} {Γ : TyCtx} {e : Expr} {ty : Ty} :
       | mk hd hf => simp [tyOf, hd, fieldsOkB_iff.mpr hf]
 
 theorem useAtom_iff {Δ : Decls} {Γ Γ' : Ctx} {a : Atom} :
-    useAtom Δ Γ a = some Γ' ↔ UseAtom Δ Γ a Γ' := by
+    useAtom Δ Γ a = .ok Γ' ↔ UseAtom Δ Γ a Γ' := by
   constructor
   · intro h
     cases a with
@@ -141,7 +142,10 @@ theorem useAtom_iff {Δ : Decls} {Γ Γ' : Ctx} {a : Atom} :
       split at h
       · rename_i e he
         split at h
-        · rename_i hc; cases h; exact .copy he hc.1 hc.2
+        · rename_i live
+          split at h
+          · cases h; exact .copy he live (by assumption)
+          · cases h
         · cases h
       · cases h
     | move x =>
@@ -149,7 +153,11 @@ theorem useAtom_iff {Δ : Decls} {Γ Γ' : Ctx} {a : Atom} :
       split at h
       · rename_i e he
         split at h
-        · rename_i hc; cases h; exact .move he hc.1 hc.2
+        · rename_i live
+          split at h
+          · cases h
+          · cases h
+            exact .move he live (Bool.eq_false_iff.mpr (by assumption))
         · cases h
       · cases h
   · intro h
@@ -159,46 +167,40 @@ theorem useAtom_iff {Δ : Decls} {Γ Γ' : Ctx} {a : Atom} :
     | copy hf hl hcp => simp [useAtom, hf, hl, hcp]
     | move hf hl hcp => simp [useAtom, hf, hl, hcp]
 
-theorem useAtoms_iff {Δ : Decls} :
-    ∀ {Γ Γ' : Ctx} {as : List Atom}, useAtoms Δ Γ as = some Γ' ↔ UseAtoms Δ Γ as Γ'
+theorem readAtoms_iff {Δ : Decls} :
+    ∀ {Γ Γ' : Ctx} {as : List Atom}, readAtoms Δ Γ as = .ok Γ' ↔ UseAtoms Δ Γ as Γ'
   | Γ, Γ', [] => by
-    simp only [useAtoms, Option.some.injEq]
+    simp only [readAtoms, Except.ok.injEq]
     constructor
-    · intro h; subst h; exact .nil
+    · rintro rfl; exact .nil
     · intro h; cases h; rfl
   | Γ, Γ', a :: as => by
-    simp only [useAtoms]
     constructor
     · intro h
+      simp only [readAtoms] at h
       split at h
-      · rename_i Γ₁ h₁; exact .cons (useAtom_iff.mp h₁) (useAtoms_iff.mp h)
+      · exact .cons (useAtom_iff.mp (by assumption)) (readAtoms_iff.mp h)
       · cases h
     · intro h
       cases h with
-      | cons h₁ h₂ => rw [useAtom_iff.mpr h₁]; exact useAtoms_iff.mpr h₂
+      | cons h₁ h₂ => simpa [readAtoms, useAtom_iff.mpr h₁] using readAtoms_iff.mpr h₂
 
-theorem uses_iff {Δ : Decls} {Γ Γ' : Ctx} {e : Expr} : uses Δ Γ e = some Γ' ↔ Uses Δ Γ e Γ' := by
-  cases e with
-  | atom a =>
-    simp only [uses]
-    constructor
-    · intro h; exact .atom (useAtom_iff.mp h)
-    · intro h; cases h with | atom h => exact useAtom_iff.mpr h
-  | add l r =>
-    simp only [uses]
-    constructor
-    · intro h
-      split at h
-      · rename_i Γ₁ h₁; exact .add (useAtom_iff.mp h₁) (useAtom_iff.mp h)
-      · cases h
-    · intro h
+theorem reads_iff {Δ : Decls} {Γ Γ' : Ctx} {e : Expr} :
+    readAtoms Δ Γ e.atoms = .ok Γ' ↔ Uses Δ Γ e Γ' := by
+  rw [readAtoms_iff]
+  constructor
+  · intro h
+    cases e with
+    | atom a => cases h with | cons ha hs => cases hs; exact .atom ha
+    | add l r =>
       cases h with
-      | add h₁ h₂ => rw [useAtom_iff.mpr h₁]; exact useAtom_iff.mpr h₂
-  | mk s fs =>
-    simp only [uses]
-    constructor
-    · intro h; exact .mk (useAtoms_iff.mp h)
-    · intro h; cases h with | mk h => exact useAtoms_iff.mpr h
+      | cons hl hs => cases hs with | cons hr ht => cases ht; exact .add hl hr
+    | mk s fs => exact .mk h
+  · intro h
+    cases h with
+    | atom ha => exact .cons ha .nil
+    | add hl hr => exact .cons hl (.cons hr .nil)
+    | mk hf => exact hf
 
 theorem patOkB_iff {d : StructDecl} {pat : List (Name × Binder)} : patOkB d pat = true ↔ PatOk d pat := by
   simp only [patOkB, Bool.and_eq_true, decide_eq_true_eq]
@@ -214,44 +216,56 @@ theorem patOkB_iff {d : StructDecl} {pat : List (Name × Binder)} : patOkB d pat
     obtain ⟨st, hst⟩ := hd p hp
     simp [hst]
 
-theorem stmtOut_iff {Δ : Decls} {Γ Γ' : Ctx} {s : Stmt} :
-    stmtOut Δ Γ s = some Γ' ↔ StmtOk Δ Γ s Γ' := by
+theorem checkStmt_iff {Δ : Decls} {Γ Γ' : Ctx} {s : Stmt} :
+    checkStmt Δ Γ s = .ok Γ' ↔ StmtOk Δ Γ s Γ' := by
   constructor
   · intro h
     cases s with
     | let_ b t e =>
       cases b with
       | wild =>
-        simp only [stmtOut] at h
+        simp only [checkStmt] at h
         split at h
-        · rename_i hc
-          exact .letWild (tyOf_iff.mp hc.1) hc.2.1 hc.2.2 (uses_iff.mp h)
+        · rename_i ht
+          split at h
+          · rename_i ha
+            split at h
+            · exact .letWild (tyOf_iff.mp ht) ha (by assumption) (reads_iff.mp h)
+            · cases h
+          · cases h
         · cases h
       | name x =>
-          simp only [stmtOut] at h
+        simp only [checkStmt] at h
+        split at h
+        · rename_i ht
           split at h
-          · rename_i ht
+          · rename_i ha
             split at h
             · rename_i Γ₁ hu
               split at h
-              · cases h; exact .let_ (tyOf_iff.mp ht.1) ht.2 (uses_iff.mp hu) (by assumption)
+              · cases h
+                exact .let_ (tyOf_iff.mp ht) ha (reads_iff.mp hu) (by assumption)
               · cases h
             · cases h
           · cases h
+        · cases h
     | letStruct s pat e =>
-      simp only [stmtOut] at h
+      simp only [checkStmt] at h
       split at h
       · rename_i ht
         split at h
-        · rename_i d hd
+        · rename_i ha
           split at h
-          · rename_i hp
+          · rename_i d hd
             split at h
-            · rename_i Γ₁ hu
+            · rename_i hp
               split at h
-              · cases h
-                exact .letStruct (tyOf_iff.mp ht.1) ht.2 hd (patOkB_iff.mp hp) (uses_iff.mp hu)
-                  (by assumption)
+              · rename_i Γ₁ hu
+                split at h
+                · cases h
+                  exact .letStruct (tyOf_iff.mp ht) ha hd (patOkB_iff.mp hp) (reads_iff.mp hu)
+                    (by assumption)
+                · cases h
               · cases h
             · cases h
           · cases h
@@ -259,40 +273,108 @@ theorem stmtOut_iff {Δ : Decls} {Γ Γ' : Ctx} {s : Stmt} :
       · cases h
   · intro h
     cases h with
-    | let_ ht hk hu hf => simp [stmtOut, tyOf_iff.mpr ht, hk, uses_iff.mpr hu, hf]
-    | letWild ht hk hcopy hu => simp [stmtOut, tyOf_iff.mpr ht, hk, hcopy, uses_iff.mpr hu]
+    | let_ ht hk hu hf => simp [checkStmt, tyOf_iff.mpr ht, hk, reads_iff.mpr hu, hf]
+    | letWild ht hk hcopy hu => simp [checkStmt, tyOf_iff.mpr ht, hk, hcopy, reads_iff.mpr hu]
     | letStruct ht hk hd hp hu hf =>
-      simp [stmtOut, tyOf_iff.mpr ht, hk, hd, patOkB_iff.mpr hp, uses_iff.mpr hu, hf]
+      simp [checkStmt, tyOf_iff.mpr ht, hk, hd, patOkB_iff.mpr hp, reads_iff.mpr hu, hf]
 
-theorem bodyOkB_iff {Δ : Decls} :
-    ∀ {Γ : Ctx} {ss : List Stmt} {r : Terminator}, bodyOkB Δ Γ ss r = true ↔ BodyOk Δ Γ ss r
-  | Γ, [], .abort site => by
-    simp only [bodyOkB, List.all_eq_true]
-    exact ⟨BodyOk.abort, fun h => by cases h with | abort h => exact h⟩
-  | Γ, [], .ret r => by
-    simp only [bodyOkB, Bool.and_eq_true, beq_iff_eq]
+theorem finishChecks_iff (Δ : Decls) (atReturn : Bool) (Γ : Ctx) :
+    finishChecks Δ atReturn Γ = .ok () ↔
+      (if atReturn then Discharged Δ Γ else AbortReady Γ) := by
+  induction Γ with
+  | nil => cases atReturn <;> simp [finishChecks, Discharged, AbortReady]
+  | cons entry rest ih =>
+    obtain ⟨x, e⟩ := entry
+    cases atReturn <;> cases hu : e.used <;> cases hl : e.live <;> cases h : e.ty.isCopy Δ <;>
+      simp_all [finishChecks, Discharged, AbortReady]
+
+theorem checkEnd_iff {Δ : Decls} {Γ : Ctx} {r : Terminator} :
+    checkEnd Δ Γ r = .ok () ↔ BodyOk Δ Γ [] r := by
+  cases r with
+  | abort site =>
+    rw [checkEnd, finishChecks_iff]
+    exact ⟨BodyOk.abort, fun h => by cases h; assumption⟩
+  | ret r =>
     constructor
-    · rintro ⟨ht, hu⟩
-      split at hu
-      · rename_i Γ₁ hu'
-        exact .ret (tyOf_iff.mp ht) (uses_iff.mp hu') (by simpa using hu)
-      · cases hu
     · intro h
-      cases h with
-      | ret ht hu hd => simp [tyOf_iff.mpr ht, uses_iff.mpr hu, hd]
-  | Γ, s :: ss, r => by
-    simp only [bodyOkB]
-    constructor
-    · intro h
+      simp only [checkEnd] at h
       split at h
-      · rename_i Γ₁ hs; exact .cons (stmtOut_iff.mp hs) (bodyOkB_iff.mp h)
+      · rename_i ht
+        split at h
+        · rename_i Γ₁ hu
+          exact .ret (tyOf_iff.mp ht) (.atom (useAtom_iff.mp hu)) (by rwa [finishChecks_iff] at h)
+        · cases h
       · cases h
     · intro h
       cases h with
-      | cons hs hb => rw [stmtOut_iff.mpr hs]; exact bodyOkB_iff.mpr hb
+      | ret ht hu hd =>
+        cases hu with
+        | atom hu => simp [checkEnd, tyOf_iff.mpr ht, useAtom_iff.mpr hu, finishChecks_iff, hd]
+
+theorem checkBody_iff {Δ : Decls} {Γ : Ctx} {ss : List Stmt} {r : Terminator} (position : Nat) :
+    (∃ ds, checkCoreBody Δ Γ position ss r = .ok ds) ↔ BodyOk Δ Γ ss r := by
+  induction ss generalizing Γ position with
+  | nil =>
+    constructor
+    · rintro ⟨ds, h⟩
+      simp only [checkCoreBody] at h
+      split at h
+      · exact checkEnd_iff.mp (by assumption)
+      · cases h
+    · intro h
+      exact ⟨[], by simp [checkCoreBody, checkEnd_iff.mpr h]⟩
+  | cons s ss ih =>
+    constructor
+    · rintro ⟨ds, h⟩
+      simp only [checkCoreBody] at h
+      split at h
+      · cases h
+      · rename_i Γ₁ hs
+        split at h
+        · cases h
+        · exact .cons (checkStmt_iff.mp hs) ((ih _).mp ⟨_, by assumption⟩)
+    · intro h
+      cases h with
+      | cons hs hb =>
+        obtain ⟨ds, hds⟩ := (ih (position + 1)).mpr hb
+        exact ⟨(stmtDischarge position Γ s).toList ++ ds, by simp [checkCoreBody, checkStmt_iff.mpr hs, hds]⟩
+
+private theorem checkDeclFields_iff (Δ : Decls) :
+    checkDeclFields Δ = .ok () ↔
+      (∀ d ∈ Δ, d.name ≠ ⟨"main"⟩ ∧ (d.fields.map Prod.fst).Nodup) := by
+  induction Δ with
+  | nil => simp [checkDeclFields]
+  | cons d rest ih =>
+    by_cases hn : d.name = ⟨"main"⟩ <;> by_cases hf : (d.fields.map Prod.fst).Nodup <;>
+      simp [checkDeclFields, hn, hf, ih]
+
+theorem checkDecls_iff (Δ : Decls) : checkDecls Δ = .ok () ↔ DeclsOk Δ := by
+  by_cases h : (Δ.map StructDecl.name).Nodup <;>
+    simp [checkDecls, DeclsOk, h, checkDeclFields_iff]
+
+theorem checkProgram_iff (p : Program) :
+    (∃ ds, checkProgram p = .ok ds) ↔ Checked p := by
+  unfold checkProgram
+  split
+  · rename_i hd
+    simp [Checked, (checkDecls_iff p.decls).mp hd, checkBody_iff]
+  · rename_i failure hd
+    have h : ¬ DeclsOk p.decls := by
+      intro h
+      rw [(checkDecls_iff p.decls).mpr h] at hd
+      cases hd
+    simp [Checked, h]
+
+theorem except_isOk_iff {ε α : Type} (r : Except ε α) :
+    r.isOk = true ↔ ∃ a, r = .ok a := by
+  cases r <;> simp [Except.isOk, Except.toBool]
+
+theorem bodyOkB_iff {Δ : Decls} {Γ : Ctx} {ss : List Stmt} {r : Terminator} :
+    bodyOkB Δ Γ ss r = true ↔ BodyOk Δ Γ ss r := by
+  rw [bodyOkB, except_isOk_iff, checkBody_iff]
 
 /-- **Checker correspondence.** The checker accepts a program exactly when the judgments do. -/
 theorem check_iff (p : Program) : check p = true ↔ Checked p := by
-  simp only [check, Bool.and_eq_true, decide_eq_true_eq, bodyOkB_iff, Checked]
+  rw [check, except_isOk_iff, checkProgram_iff]
 
 end ConcreteSpec
