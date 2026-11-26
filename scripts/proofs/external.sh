@@ -91,7 +91,13 @@ CONLECHE="$CHECK_DIR/.lake/build/bin/con-leche"
 CONLECHE_FLAGS=(--verified --jobs=1)
 conleche() { "$CONLECHE" "${CONLECHE_FLAGS[@]}" "$1"; }
 # Every con-leche run goes through conleche(): a direct call would run at the default worker count.
-DIRECT=$(grep -nE '^[^#]*"\$CONLECHE"' "$SELF_DIR/external.sh" | grep -v 'CONLECHE_FLAGS\[@\]')
+scan_rc=0
+CALLS=$(grep -nE '^[^#]*"\$CONLECHE"' "$SELF_DIR/external.sh") || scan_rc=$?
+if [ "$scan_rc" -gt 1 ]; then
+  no "could not scan con-leche call sites in $SELF_DIR/external.sh"
+  finish
+fi
+DIRECT=$(printf '%s\n' "$CALLS" | grep -v 'CONLECHE_FLAGS\[@\]')
 [ "${CONLECHE_FLAGS[*]}" = "--verified --jobs=1" ] && [ -z "$DIRECT" ] \
   && ok "con-leche runs as --verified --jobs=1 at every call site" \
   || no "con-leche flags are [${CONLECHE_FLAGS[*]}]; direct calls: $(echo $DIRECT | cut -c1-200)"

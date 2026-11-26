@@ -294,7 +294,7 @@ run_driver() {
   local diagnostic=$1
   local expected_rc=${2:-1}
   local rc=0
-  bounded_run 30 -- bash "$TMP/project/scripts/proofs/external.sh" > "$TMP/out" 2>&1 || rc=$?
+  (cd "$TMP/project/scripts" && bounded_run 30 -- bash proofs/external.sh) > "$TMP/out" 2>&1 || rc=$?
   if bounded_is_incomplete "$rc"; then bounded_gate_status; exit 1; fi
   if [ "$rc" != "$expected_rc" ] || ! grep -qF "$diagnostic" "$TMP/out"; then
     cat "$TMP/out"; echo "FAIL: expected refusal at $diagnostic, rc=$rc"; exit 1
@@ -332,7 +332,8 @@ rm -rf "$CONCRETE_EXT_TOOLS"
 : > "$PHASE_LOG"
 # Cold relative cache: every derived path must survive recipe directory changes,
 # and Cargo must see a registry symlink that resolves to an existing directory.
-CONCRETE_EXT_TOOLS=../tools CONCRETE_EXT_ELAN=../bin/elan run_driver 'PROOF-EXTERNAL:' 0
+CONCRETE_EXT_TOOLS=../tools CONCRETE_EXT_ELAN=../bin/elan \
+  run_driver 'con-leche runs as --verified --jobs=1 at every call site' 0
 # Check obligations by phase, without relying on the placement of source lines.
 for phase in project population-theorems population-encoded exporter population-decls population-heads conleche-spec.ndjson nanoda-spec.ndjson population-compiler-closure compiler-exporter conleche-compiler.ndjson nanoda-compiler.ndjson conleche-compiler-forged.ndjson nanoda-compiler-forged.ndjson; do
   grep -qxF "$phase" "$PHASE_LOG"
@@ -344,6 +345,11 @@ mv "$TMP/source" "$TMP/source-offline"
 run_driver 'PROOF-EXTERNAL:' 0
 mv "$TMP/source-offline" "$TMP/source"
 cmp "$TMP/expected" "$DISPATCH_LOG"
+
+# A path relative to the starting directory is unreadable after the driver changes directory.
+sed 's|grep -nE \(.*\) "$SELF_DIR/external.sh"|grep -nE \1 "$0"|' "$TMP/driver" > "$TMP/project/scripts/proofs/external.sh"
+run_driver 'could not scan con-leche call sites'
+cp "$TMP/driver" "$TMP/project/scripts/proofs/external.sh"
 # A different resolved elan path must produce distinct homes and Lake tool trees.
 cp "$TMP/bin/elan" "$TMP/bin/elan-other"
 CONCRETE_EXT_ELAN="$TMP/bin/elan-other" run_driver 'PROOF-EXTERNAL:' 0

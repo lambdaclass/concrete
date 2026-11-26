@@ -1,4 +1,5 @@
 import ConcreteSpec.Spec.Borrow
+import ConcreteSpec.Spec.Ident
 import ConcreteSpec.Spec.Slice1Syntax
 import ConcreteSpec.Spec.Surface0
 import Concrete.Refusal
@@ -1845,25 +1846,25 @@ private def nextToken (input : List Nat) (pos : Position) :
       else throw (.syntaxError s!"unexpected character at byte {pos.byte}")
 
 -- The budget is one step per input scalar. Every successful step consumes at least one.
-private def tokens : Nat → List Nat → Position → Bool → List Token → Except Refusal (List Token)
+private def tokens (fileId : ConcreteSpec.Core.FileId) : Nat → List Nat → Position → Bool → List Token → Except Refusal (List Token)
   | _, [], _, _, acc => .ok acc.reverse
   | 0, _, _, _, _ => .error (.internal "lexer exhausted its progress bound")
   | fuel + 1, input@(c :: cs), pos, comment, acc => do
     if comment && c != 10 && c != 13 then
-      if decide (CommentRaw c) then tokens fuel cs (pos.advance c) true acc
+      if decide (CommentRaw c) then tokens fileId fuel cs (pos.advance c) true acc
       else throw (.syntaxError s!"forbidden comment character at byte {pos.byte}")
-    else if whitespace? c then tokens fuel cs (pos.advance c) false acc
+    else if whitespace? c then tokens fileId fuel cs (pos.advance c) false acc
     else if let 47 :: 47 :: rest := input then
-      tokens fuel rest ((pos.advance 47).advance 47) true acc
+      tokens fileId fuel rest ((pos.advance 47).advance 47) true acc
     else
       let (value, lexeme, rest) ← nextToken input pos
       let stop := lexeme.foldl Position.advance pos
-      tokens fuel rest stop false (⟨value, pos.span stop⟩ :: acc)
+      tokens fileId fuel rest stop false (⟨value, pos.span stop fileId⟩ :: acc)
 
-def lex (src : ByteArray) : Except Refusal (List Token) := do
+def lex (src : ByteArray) (fileId : ConcreteSpec.Core.FileId := ⟨0⟩) : Except Refusal (List Token) := do
   match checkSource src.data.toList with
   | .error e => throw (.syntaxError s!"invalid source at byte {e.offset}: {repr e.reason}")
-  | .ok cs => tokens cs.length cs {} false []
+  | .ok cs => tokens fileId cs.length cs {} false []
 
 private theorem punct_sound {input lexeme rest : List Nat} {value : TokenValue}
     (h : punct input = some (value, lexeme, rest)) :
@@ -1950,10 +1951,10 @@ private theorem nextToken_sound {input lexeme rest : List Nat} {pos : Position}
               simp at hb
             · contradiction
 
-private theorem prependTrivia {pos : Position} {taken input : List Nat} {out : List Token}
+private theorem prependTrivia {fileId : ConcreteSpec.Core.FileId} {pos : Position} {taken input : List Nat} {out : List Token}
     (prepend : ∀ {rest}, Trivia input rest → Trivia (taken ++ input) rest)
-    (h : TokenStream (taken.foldl Position.advance pos) input out) :
-    TokenStream pos (taken ++ input) out := by
+    (h : TokenStream fileId (taken.foldl Position.advance pos) input out) :
+    TokenStream fileId pos (taken ++ input) out := by
   cases h with
   | eof h => exact .eof (prepend h)
   | @cons _ trivia remaining lexeme rest value out ht htkn hs =>
@@ -1967,18 +1968,18 @@ private theorem prependTrivia {pos : Position} {taken input : List Nat} {out : L
 
 -- Inside a comment, expose the consumed body separately so its opener can turn it
 -- into trivia. The position of the remaining stream includes every consumed scalar.
-private theorem tokens_sound (fuel : Nat) (input : List Nat) (pos : Position)
-    (comment : Bool) (acc out : List Token) (h : tokens fuel input pos comment acc = .ok out) :
+private theorem tokens_sound (fileId : ConcreteSpec.Core.FileId) (fuel : Nat) (input : List Nat) (pos : Position)
+    (comment : Bool) (acc out : List Token) (h : tokens fileId fuel input pos comment acc = .ok out) :
     ∃ suffix, out = acc.reverse ++ suffix ∧
       if comment then ∃ body rest, input = body ++ rest ∧ CommentBody input rest ∧
-        TokenStream (body.foldl Position.advance pos) rest suffix
-      else TokenStream pos input suffix := by
+        TokenStream fileId (body.foldl Position.advance pos) rest suffix
+      else TokenStream fileId pos input suffix := by
   induction fuel generalizing input pos comment acc out with
   | zero =>
     cases input with
     | nil =>
       cases Except.ok.inj h
-      have eof : TokenStream pos [] [] := .eof (.stop [] (by simp) (by simp))
+      have eof : TokenStream fileId pos [] [] := .eof (.stop [] (by simp) (by simp))
       refine ⟨[], by simp, ?_⟩
       cases comment
       · exact eof
@@ -1988,7 +1989,7 @@ private theorem tokens_sound (fuel : Nat) (input : List Nat) (pos : Position)
     cases input with
     | nil =>
       cases Except.ok.inj h
-      have eof : TokenStream pos [] [] := .eof (.stop [] (by simp) (by simp))
+      have eof : TokenStream fileId pos [] [] := .eof (.stop [] (by simp) (by simp))
       refine ⟨[], by simp, ?_⟩
       cases comment
       · exact eof
@@ -2007,7 +2008,7 @@ private theorem tokens_sound (fuel : Nat) (input : List Nat) (pos : Position)
             cases heq
             obtain ⟨suffix, he, body, rest, hb, hc, hs⟩ :=
               ih tail ((pos.advance 47).advance 47) true acc out h
-            have hs' : TokenStream pos ((47 :: 47 :: body) ++ rest) suffix :=
+            have hs' : TokenStream fileId pos ((47 :: 47 :: body) ++ rest) suffix :=
               prependTrivia (fun ht => by
                 simp only [List.cons_append, ← hb]
                 exact .comment (.intro hc) ht) hs
@@ -2018,7 +2019,7 @@ private theorem tokens_sound (fuel : Nat) (input : List Nat) (pos : Position)
             | ok triple =>
               obtain ⟨value, lexeme, tail⟩ := triple
               let stop := lexeme.foldl Position.advance pos
-              let tok : Token := ⟨value, pos.span stop⟩
+              let tok : Token := ⟨value, pos.span stop fileId⟩
               simp only [ht, bind, Except.bind] at h
               obtain ⟨suffix, he, hs⟩ := ih tail stop false (tok :: acc) out h
               refine ⟨tok :: suffix, by simpa [List.reverse_cons, List.append_assoc] using he, ?_⟩
@@ -2049,13 +2050,13 @@ private theorem tokens_sound (fuel : Nat) (input : List Nat) (pos : Position)
           · exact .cr cs
 
 /-- Every successful compiler lexing result satisfies the surface lexical relation. -/
-theorem lex_correct {src : ByteArray} {toks : List Token} (h : lex src = .ok toks) :
-    Lexes src toks := by
+theorem lex_correct {src : ByteArray} {toks : List Token} {fileId : ConcreteSpec.Core.FileId}
+    (h : lex src fileId = .ok toks) : Lexes src toks fileId := by
   cases hs : checkSource src.data.toList with
   | error e => simp [lex, hs] at h
   | ok cs =>
-    have ht : tokens cs.length cs {} false [] = .ok toks := by simpa [lex, hs] using h
-    obtain ⟨_, rfl, stream⟩ := tokens_sound cs.length cs {} false [] toks ht
+    have ht : tokens fileId cs.length cs {} false [] = .ok toks := by simpa [lex, hs] using h
+    obtain ⟨_, rfl, stream⟩ := tokens_sound fileId cs.length cs {} false [] toks ht
     obtain ⟨decodes, allowed, _⟩ := checkSource_sound hs
     exact ⟨cs, decodes, allowed, stream⟩
 

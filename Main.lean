@@ -78,7 +78,8 @@ private def build (source dir : System.FilePath) (backend : Option String) :
   unless path == root / source do
     throw (.usageError "source path must be canonical and project-relative")
   let bytes ← toolIO "read source" (IO.FS.readBinFile path)
-  let out ← liftExcept (Stages.compile ⟨source.toString, bytes⟩)
+  let input ← liftExcept (Stages.Input.load source.toString bytes)
+  let out ← liftExcept (Stages.compile input)
   let helper := "scripts/checks/lib/slice0_native.sh"
   let (lcb, asm) ← if backend == some "llvm" then pure ("-", none) else do
     let f ← liftExcept (Stages.prepareLCB out.bir)

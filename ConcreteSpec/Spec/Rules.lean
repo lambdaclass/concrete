@@ -32,9 +32,9 @@ def registeredRules : List RuleId :=
    ⟨``Leak.FiniteActionPermitted, 1⟩, ⟨``Leak.FiniteSequencePermitted, 1⟩] ++ SourcePath.Reason.inOrder.map SourcePath.Reason.ruleId ++
   [SourcePath.Project.Reason.caseCollision, .fileDirectoryConflict, .duplicate].map
     SourcePath.Project.Reason.ruleId ++
-  [⟨``SourcePathSpan.FilePresent, 1⟩, ⟨``SourcePathSpan.OrderedOffsets, 1⟩,
-   ⟨``SourcePathSpan.EndInSource, 1⟩, ⟨``SourcePathSpan.LineMatches, 1⟩,
-   ⟨``SourcePathSpan.ColumnMatches, 1⟩]
+  [⟨``SourcePathSpan.FilePresent, 2⟩, ⟨``SourcePathSpan.OrderedOffsets, 2⟩,
+   ⟨``SourcePathSpan.EndInSource, 2⟩, ⟨``SourcePathSpan.LineMatches, 2⟩,
+   ⟨``SourcePathSpan.ColumnMatches, 2⟩]
 
 /-- Acceptance evidence applies the owning rule's judgment to a concrete input.
 The exporter recognizes this proposition's elaborated type, without unfolding the wrapper. -/
