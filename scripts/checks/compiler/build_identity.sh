@@ -29,18 +29,28 @@ printf 'lean_pin=%s\n' "$(cat lean-toolchain)"
 printf 'lean_version=%s\n' "$(lean --version)"
 printf 'clang_version=%s\n' "$("$CONCRETE_SLICE0_CLANG" --version | head -1)"
 python3 - <<'PY'
-import hashlib,json,subprocess,sys
+import hashlib,json,re,subprocess,sys,tomllib
 from pathlib import Path
 lock=json.loads(Path('flake.lock').read_text())
 print('nixpkgs_rev='+lock['nodes']['nixpkgs']['locked']['rev'])
 for name in ('flake.nix','flake.lock','lake-manifest.json'):
     print(name+'_sha256='+hashlib.sha256(Path(name).read_bytes()).hexdigest())
-for p in json.loads(Path('lake-manifest.json').read_text())['packages']:
-    name=p['name'].removeprefix('«').removesuffix('»')  # Lake writes escaped names, «a-b»
+requirements=tomllib.loads(Path('lakefile.toml').read_text())['require']
+declared=[r['rev'] for r in requirements if r['name']=='lean-compiler-backend']
+lean_pin=re.findall(r'^def pinnedLCBRevision : Option String :=\n  some "([0-9a-f]{40})"$',
+                    Path('Concrete/Theorem.lean').read_text(), re.M)
+if len(lean_pin) != 1 or declared != lean_pin:
+    sys.exit("build_identity: the theorem's LCB revision differs from Lake's declared pin")
+# Lake writes escaped names, «a-b».
+packages=[(p['name'].removeprefix('«').removesuffix('»'),p['rev'])
+          for p in json.loads(Path('lake-manifest.json').read_text())['packages']]
+if [rev for name,rev in packages if name=='lean-compiler-backend'] != lean_pin:
+    sys.exit("build_identity: the resolved LCB revision differs from the theorem's pin")
+for name,rev in packages:
     d=Path('.lake/packages')/name
     git=lambda *a: subprocess.run(['git','-C',str(d),*a],check=True,capture_output=True,text=True).stdout
     head=git('rev-parse','HEAD').strip()
-    if head != p['rev'] or git('status','--porcelain','--untracked-files=all').strip():
-        sys.exit(f"build_identity: {name}: checkout {head} is not the clean pinned {p['rev']}")
-    print(name+'_rev='+p['rev'])
+    if head != rev or git('status','--porcelain','--untracked-files=all').strip():
+        sys.exit(f"build_identity: {name}: checkout {head} is not the clean pinned {rev}")
+    print(name+'_rev='+rev)
 PY

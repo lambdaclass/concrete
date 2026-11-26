@@ -104,14 +104,11 @@ inductive Derives : List Token → SourceProgram → Prop
         fixed .rparen rp, fixed .arrow arrow, fixed .u8 ty, fixed .lbrace lb] ++
         body ++ [fixed .rbrace rb]) ⟨decls, name, statements⟩
 
-/-- Already decided builtin type spellings, reserved under OD43. The complete later-slice
-reservation catalog belongs to the shared lexical audit. -/
-def builtinTypeNames : List String :=
-  ["i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "bool", "f32", "f64",
-   "char", "String", "Unit", "Option", "Result", "Heap", "HeapArray", "Vec"]
+/-- The builtin type spellings reserved by the shared lexical specification. -/
+abbrev builtinTypeNames : List String := Surface0.builtinTypeNames
 
 private def userName (name : String) : Bool :=
-  name != "_" && name != "main" && !intrinsicNames.contains name && !builtinTypeNames.contains name
+  decide (Surface0.BinderLegal [] name)
 
 private abbrev Scope := List (String × (Var × Ty))
 

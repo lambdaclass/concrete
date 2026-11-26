@@ -2,8 +2,8 @@
 """Reject isolated ownership mutants at the specific conformance observations.
 
 Only private temporary source files are compiled. Six additional per-operation
-permission omissions are checked against populated refused operands in Own.lean.
-Run in the Spec shell after lake build ConcreteSpec.
+permission omissions are checked against populated refused operands in the evidence library.
+Run in the Spec shell after lake build ConcreteSpecEvidence.
 """
 import json
 from pathlib import Path
@@ -12,6 +12,12 @@ import subprocess
 import tempfile
 
 source = Path("ConcreteSpec/Spec/Own.lean").read_text()
+evidence = Path("ConcreteSpecEvidence/OwnExamples.lean").read_text()
+# Check the observations against the modified definition in one environment. Keep the
+# removed import lines as blanks so the evidence module's range offsets still apply.
+evidence = re.sub(r"^import [^\n]+", "", evidence, flags=re.M)
+line_offset = source.count("\n")
+source += evidence
 ranges = json.loads(subprocess.check_output(
     ["lake", "env", "lean", "scripts/spec/own_control_ranges.lean"], text=True))
 namespace = "ConcreteSpec.Core.Own.Examples"
@@ -61,6 +67,6 @@ with tempfile.TemporaryDirectory(prefix="own-mutants-") as temporary:
             if declaration not in ranges:
                 raise RuntimeError(f"{name}: missing observation {declaration}")
             first, last = ranges[declaration]
-            if not errors.intersection(range(first, last + 1)):
+            if not errors.intersection(range(first + line_offset, last + line_offset + 1)):
                 raise RuntimeError(f"{name}: {declaration} did not fail\n{diagnostics}")
         print(f"{name}: rejected at every required conformance observation", flush=True)
