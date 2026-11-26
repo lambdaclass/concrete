@@ -174,12 +174,22 @@ private def checkSpan {project : Project} (id : FileId) (offset : Nat)
     throw (IO.userError s!"incorrect span at file {id.index}, byte {offset}")
   return span
 
--- Keep the fixture tied to the production entry points if either wrapper changes.
+private instance : MonadTick (StateM Nat) where
+  tick := modify (· + 1)
+
+-- The counting and production instantiations use the same definitions.
+example (file : File) (offset : Nat) (bounded : offset ≤ file.length) :
+    file.positionAt offset bounded =
+      (File.indexedCoordinate (m := Id) file offset bounded).val := rfl
+
+example (project : Project) (path : SourcePath) :
+    project.findId path = project.findIdM (m := Id) path := rfl
+
 example (project : Project) (id : FileId) (start stop : Nat) :
-    projectSpanAt project id start stop = (projectSpanAtWithWork project id start stop).1 := rfl
+    projectSpanAt project id start stop = projectSpanAtM (m := Id) project id start stop := rfl
 
 example (project : Project) (path : SourcePath) (start stop : Nat) :
-    projectSpan project path start stop = (projectSpanWithWork project path start stop).1 := rfl
+    projectSpan project path start stop = projectSpanM (m := Id) project path start stop := rfl
 
 -- Both indexed and planted runs use the same per-span budget predicate.
 private def checkWork {project : Project} (id : FileId) (offset budget : Nat)
@@ -192,10 +202,15 @@ private def spanWork (project : Project) (size : Nat) (planted : Bool) : IO Unit
   let mut rejected := 0
   for offset in [:size] do
     -- Substitute the counted reference fold at the production issuer’s coordinate access.
-    let result := if planted then
-      projectSpanAtWithWork project ⟨0⟩ offset (offset + 1) File.prefixCoordinate
+    let issue : StateM Nat (Option (ScopedSpan project)) := if planted then
+      projectSpanAtM project ⟨0⟩ offset (offset + 1) File.prefixCoordinate
     else
-      projectSpanAtWithWork project ⟨0⟩ offset (offset + 1)
+      projectSpanAtM project ⟨0⟩ offset (offset + 1)
+    let result := issue.run 0
+    if planted then
+      let expected := offset + 1
+      unless result.2 == expected do
+        throw (IO.userError s!"prefix scan charged {result.2} reads at {offset}, expected {expected}")
     unless ← checkWork ⟨0⟩ offset 2 result do
       rejected := rejected + 1
     total := total + result.2
@@ -206,23 +221,27 @@ private def spanWork (project : Project) (size : Nat) (planted : Bool) : IO Unit
     throw (IO.userError s!"indexed span issuance charged {total} reads, expected {2 * size}")
   IO.println s!"span work (planted={planted}, {size} spans): {total} operations, {rejected} over budget"
 
--- Replay the former first-match lookup, counting each examined file.
-private def scanProject (project : Project) (path : SourcePath) :
-    Option (ScopedSpan project) × Nat := Id.run do
-  let mut examined := 0
-  for file in project.entries do
-    examined := examined + 1
-    if file.path = path then
-      let (span, work) := projectSpanAtWithWork project ⟨examined - 1⟩ 0 1
-      return (span, work + examined)
-  return (none, examined)
+-- Replay the former first-match lookup through the same indexed read primitive.
+private def scanProject {m : Type → Type} [Monad m] [MonadTick m]
+    (project : Project) (path : SourcePath) (index : Nat) : Nat → m (Option FileId)
+  | 0 => pure none
+  | fuel + 1 => do
+    if bounded : index < project.entries.size then
+      let entry ← readArray project.entries index bounded
+      if entry.val.path = path then return some ⟨index⟩
+      scanProject project path (index + 1) fuel
+    else return none
 
 private def projectWork (project : Project) (paths : Array SourcePath) (planted : Bool) : IO Unit := do
   let mut total := 0
   let mut rejected := 0
   for index in [:paths.size] do
     let some path := paths[index]? | throw (IO.userError "missing fixture path")
-    let result := if planted then scanProject project path else projectSpanWithWork project path 0 1
+    let issue : StateM Nat (Option (ScopedSpan project)) := if planted then
+      projectSpanM project path 0 1 (fun query => scanProject project query 0 project.entries.size)
+    else
+      projectSpanM project path 0 1
+    let result := issue.run 0
     -- For file<n>.con, the seven letters each have one edge, with a possible
     -- second root edge. Each remaining byte has at most ten digits and a dot
     -- to compare. Also charge nodes, including the terminal, and both table reads.
@@ -237,12 +256,12 @@ private def projectWork (project : Project) (paths : Array SourcePath) (planted 
   IO.println s!"path work (planted={planted}, {paths.size} spans): {total} operations, {rejected} over budget"
 
 private def checkDistinctPrefix (project : Project) (id : FileId) (last missing : SourcePath) : IO Unit := do
-  let result := projectSpanWithWork project last 0 1
+  let result := (projectSpanM (m := StateM Nat) project last 0 1).run 0
   -- Two root edges and one edge for each remaining byte.
   let budget := 2 * last.raw.bytes.length + 4
   unless ← checkWork id 0 budget result do
     throw (IO.userError s!"distinct-prefix lookup charged {result.2}, budget {budget}")
-  let (absent, work) := project.findIdWithWork missing
+  let (absent, work) := (project.findIdM (m := StateM Nat) missing).run 0
   unless absent.isNone && work == 3 do
     throw (IO.userError s!"absent-prefix lookup charged {work}, expected a root visit and two comparisons")
   IO.println s!"distinct/absent prefix: {result.2}/{work} operations with {project.entries.size} files"
@@ -250,7 +269,7 @@ private def checkDistinctPrefix (project : Project) (id : FileId) (last missing 
 -- Plant the root list produced when insertion keeps replaced edges.
 private def checkDuplicateEdges (count : Nat) : IO Unit := do
   let edges := List.replicate count ('f'.toNat, 0) ++ [('z'.toNat, count)]
-  let (slot, work) := lookupEdgeWithWork 'z'.toNat edges 0
+  let (slot, work) := (lookupEdgeM (m := StateM Nat) 'z'.toNat edges).run 0
   unless slot == some count && work == count + 1 && work > 2 do
     throw (IO.userError s!"duplicate-prefix edge scan charged {work}, expected {count + 1}")
 

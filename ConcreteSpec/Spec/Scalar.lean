@@ -96,6 +96,9 @@ def bits : IntTy → Nat
   | .i32 | .u32 => 32
   | .i64 | .u64 => 64
 
+/-- The stored width of an integer type, in bytes. -/
+def byteSize (t : IntTy) : Nat := t.bits / 8
+
 /-- Whether the type is signed. -/
 def signed : IntTy → Bool
   | .i8 | .i16 | .i32 | .i64 => true

@@ -274,13 +274,14 @@ def checkBodyRefusal (input : Concrete.Stages.Input) (expected : RefusalExpectat
   let .ok tokens := Concrete.Lex.lex input.source input.fileId | return 13
   let .ok ast := Concrete.Parse.parse tokens | return 13
   let .error (.unreachable span) := ConcreteSpec.Surface0.checkBody ast.body | return 13
+  let some diagnostic := actual.diagnostic ``ConcreteSpec.Core.Slice0Rules.ReachableBody
+    | return 13
   if expected.kind != "unreachable_statement" || expected.rule != "STMT-14" ||
-      expected.revision != 1 then return 13
+      expected.revision != diagnostic.rule.val.rev then return 13
   if expected.primary != span || !expected.related.isEmpty then
     IO.eprintln s!"{input.path}: origin mismatch; spec reports {repr span} with no related origins"
     return 14
-  -- 4(c) replaces this exact legacy rendering check with a comparison against the
-  -- compiler's typed rule revision and primary/related origins.
+  -- Keep checking exact production rendering until the compiler transports structured origins.
   let detail := s!"unreachable code ({expected.rule}) at {span.line}:{span.column}, bytes {span.start}..{span.stop}"
   if actual != .checker detail then
     IO.eprintln s!"{input.path}: production diagnostic mismatch: {actual.message}"

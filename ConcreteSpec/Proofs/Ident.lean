@@ -2526,10 +2526,10 @@ theorem Project.findFile_succeeds_iff (project : Project) (path : SourcePath) :
 private theorem projectSpan_eq (project : Project) (path : SourcePath) (start stop : Nat) :
     projectSpan project path start stop =
       (project.findId path).bind (fun id => projectSpanAt project id start stop) := by
-  unfold projectSpan projectSpanWithWork Project.findId
-  cases project.findIdWithWork path with
-  | mk result work =>
-    cases result <;> rfl
+  change (match project.findId path with
+    | none => none
+    | some id => projectSpanAt project id start stop) = _
+  cases project.findId path <;> rfl
 
 /-- Helper: projection and rebinding refuse an absent path. -/
 theorem missingFile_refuses (origin target : Project) (span : ScopedSpan origin) (file : File)
@@ -2588,8 +2588,16 @@ private theorem fileSpan_of_location (file : File) (raw : Span)
     (column : raw.col = file.source.columnAt raw.startOffset) :
     fileSpan raw.fileId file raw.startOffset raw.endOffset raw.range_ok bounded = raw := by
   have pos := file.positionAt_eq raw.startOffset bounded
-  cases raw
-  simp_all [fileSpan, fileSpanWithWork, File.positionAt, SourceText.lineAt, SourceText.columnAt]
+  cases raw with
+  | mk id start stop ordered rawLine rawCol linePos colPos =>
+    change start ≤ file.length at bounded
+    have lineEq : rawLine = (file.positionAt start bounded).line := by
+      simpa only [pos, SourceText.lineAt] using line
+    have colEq : rawCol = (file.positionAt start bounded).column := by
+      simpa only [pos, SourceText.columnAt] using column
+    clear line column pos
+    subst rawLine rawCol
+    rfl
 
 /-- Law (subject `ConcreteSpec.Core.SourcePathSpan.projectSpan`).
 Safety preserves the exact path and range and validates the projected coordinates.
@@ -2603,8 +2611,7 @@ theorem projectSpan_correct : ProjectionCorrect projectSpan := by
     | some id =>
       obtain ⟨file, lookup, exactPath⟩ := (findId_iff project path id).mp found
       obtain ⟨slot, eq⟩ := Array.getElem?_eq_some_iff.mp lookup
-      simp only [projectSpan_eq, found, Option.bind, projectSpanAt, projectSpanAtWithWork,
-        readArrayWithWork, dite_eq_left slot, eq] at result
+      simp only [projectSpan_eq, found, Option.bind, projectSpanAt_eq, dite_eq_left slot, eq] at result
       split at result
       · rename_i ordered
         split at result
@@ -2623,8 +2630,7 @@ theorem projectSpan_correct : ProjectionCorrect projectSpan := by
     have orderedGuard : span.startOffset ≤ span.endOffset := ordered
     have found := (findId_iff project file.path span.fileId).mpr ⟨file, lookup, rfl⟩
     obtain ⟨slot, eq⟩ := Array.getElem?_eq_some_iff.mp lookup
-    simp only [projectSpan_eq, found, Option.bind, projectSpanAt, projectSpanAtWithWork,
-      readArrayWithWork, dite_eq_left slot, eq, dite_eq_left orderedGuard, dite_eq_left inBounds, Option.some.injEq]
+    simp only [projectSpan_eq, found, Option.bind, projectSpanAt_eq, dite_eq_left slot, eq, dite_eq_left orderedGuard, dite_eq_left inBounds, Option.some.injEq]
     apply ScopedSpan.ext
     exact fileSpan_of_location file span.toSpan _ line col
 
@@ -2673,8 +2679,7 @@ theorem projectSpan_progress (project : Project) (path : SourcePath) (start stop
   have found := (findId_iff project path id).mpr ⟨file, atId, exactPath⟩
   obtain ⟨slot, eq⟩ := Array.getElem?_eq_some_iff.mp atId
   obtain ⟨span, result⟩ : ∃ span, projectSpan project path start stop = some span := by
-    simp [projectSpan_eq, found, Option.bind, projectSpanAt, projectSpanAtWithWork,
-      readArrayWithWork, slot, eq, ordered, inBounds]
+    simp [projectSpan_eq, found, Option.bind, projectSpanAt_eq, slot, eq, ordered, inBounds]
   exact ⟨span, result, projectSpan_safety _ _ _ _ _ result⟩
 
 /-- Helper: corollary of `bindSource_correct`. -/

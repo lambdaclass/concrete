@@ -40,7 +40,7 @@ Authority (all in `docs/decisions.md` on main):
 - `decided-project-diagnostics-2026-11-06`, `decided-project-runtime-2026-11-06`:
   rule revisions, spec versions and source positions; `foundation-q10`: byte columns,
   with a tab counting one byte. Byte arithmetic is not a lexer or source-admission policy.
-- `decided-project-vertical-slices-2026-11-06`: slice identities 0–28.
+- `decided-project-vertical-slices-2026-11-06`: slice identities 0–21.
 
 All identity text uses Basics.Name, preserving exact text equality while
 keeping nominal identity distinct from local diagnostic spellings. Numeric routes
@@ -1409,52 +1409,65 @@ private theorem File.offset_lt_size (file : File) (offset : Nat) (bounded : offs
   simp [List.length_scanl]
   simpa [File.length_eq, SourceText.length, Nat.lt_succ_iff] using bounded
 
-/-- Read one array element and charge the access. -/
-@[inline] def readArrayWithWork {α : Type} (array : Array α) (index : Nat)
-    (bounded : index < array.size) : α × Nat :=
-  (array[index], 1)
+/-- Observe each data access used by span issuance and path resolution. -/
+class MonadTick (m : Type → Type) where
+  tick : m Unit
 
-private def scanPositionWithWork : List Nat → Nat → Position × Nat → Position × Nat
-  | byte :: rest, offset + 1, (position, work) =>
-    scanPositionWithWork rest offset (position.advanceByte byte, work + 1)
-  | _, _, result => result
+instance : MonadTick Id where
+  tick := pure ()
 
-private theorem scanPositionWithWork_position (bytes : List Nat) (offset : Nat)
-    (result : Position × Nat) :
-    (scanPositionWithWork bytes offset result).1 =
-      (bytes.take offset).foldl Position.advanceByte result.1 := by
-  induction bytes generalizing offset result with
-  | nil => cases offset <;> rfl
-  | cons byte rest ih =>
-    cases offset with
-    | zero => rfl
-    | succ offset =>
-      rcases result with ⟨position, work⟩
-      exact ih offset (position.advanceByte byte, work + 1)
+section
+variable {m : Type → Type} {α : Type}
+variable [Monad m] [MonadTick m]
 
-/-- A coordinate access that counts its work and returns the reference position. -/
-def File.CoordinateLookup :=
+/-- Read one indexed element and retain its identity for issuance proofs. -/
+@[inline] def readArray (array : Array α) (index : Nat)
+    (bounded : index < array.size) : m {value : α // value = array[index]} := do
+  MonadTick.tick
+  let value := array[index]
+  return ⟨value, rfl⟩
+
+@[inline] private def readByte (byte : Nat) : m {value : Nat // value = byte} := do
+  MonadTick.tick
+  return ⟨byte, rfl⟩
+end
+
+variable {m : Type → Type} {α : Type}
+
+/-- A coordinate lookup supplies the reference position and can observe data accesses. -/
+def File.CoordinateLookup (m : Type → Type) :=
   (file : File) → (offset : Nat) → offset ≤ file.length →
-    { result : Position × Nat // result.1 = file.source.positionAt offset }
+    m {pos : Position // pos = file.source.positionAt offset}
 
-/-- Read one indexed coordinate. -/
-@[inline] def File.indexedCoordinate : File.CoordinateLookup :=
-  fun file offset bounded =>
-    ⟨readArrayWithWork file.positions offset (file.offset_lt_size offset bounded), by
-      simp [readArrayWithWork, file.positions_eq, List.getElem_scanl, SourceText.positionAt]⟩
+@[inline] def File.indexedCoordinate [Monad m] [MonadTick m] : File.CoordinateLookup m :=
+  fun file offset bounded => do
+    let entry ← readArray file.positions offset (file.offset_lt_size offset bounded)
+    return ⟨entry.val, by
+      rw [entry.property]
+      simp [file.positions_eq, List.getElem_scanl, SourceText.positionAt]⟩
 
-/-- Compute the reference prefix fold, charging each byte as it is visited. -/
-def File.prefixCoordinate : File.CoordinateLookup :=
-  fun file offset _ =>
-    ⟨scanPositionWithWork file.source.bytes offset ({}, 0),
-      scanPositionWithWork_position _ _ _⟩
+-- Certify the scanned value by induction, using the reference fold in the proof only.
+@[specialize]
+private def scanCoordinate [Monad m] [MonadTick m] (bytes : List Nat) (offset : Nat)
+    (pos : Position) : m {p : Position // p = (bytes.take offset).foldl Position.advanceByte pos} :=
+  match bytes, offset with
+  | byte :: rest, n + 1 => do
+    let value ← readByte byte
+    let result ← scanCoordinate rest n (pos.advanceByte value.val)
+    return ⟨result.val, by simpa only [value.property, List.take_succ_cons, List.foldl_cons] using result.property⟩
+  | [], n => pure ⟨pos, by cases n <;> rfl⟩
+  | _ :: _, 0 => pure ⟨pos, rfl⟩
+
+/-- The former prefix traversal, for the scaling control. -/
+def File.prefixCoordinate [Monad m] [MonadTick m] : File.CoordinateLookup m :=
+  fun file offset _ => scanCoordinate file.source.bytes offset {}
 
 def File.positionAt (file : File) (offset : Nat) (bounded : offset ≤ file.length) : Position :=
-  (File.indexedCoordinate file offset bounded).val.1
+  (File.indexedCoordinate (m := Id) file offset bounded).val
 
 theorem File.positionAt_eq (file : File) (offset : Nat) (bounded : offset ≤ file.length) :
     file.positionAt offset bounded = file.source.positionAt offset :=
-  (File.indexedCoordinate file offset bounded).property
+  (File.indexedCoordinate (m := Id) file offset bounded).property
 
 private theorem Position.step_positive (pos : Position) (value width : Nat)
     (line : 0 < pos.line) (col : 0 < pos.column) :
@@ -1485,44 +1498,47 @@ private inductive PathIndex where
 
 private def PathIndex.empty : PathIndex := .node none []
 
-/-- Look up the first matching edge, charging each key comparison. -/
-def lookupEdgeWithWork {α : Type} (key : Nat) : List (Nat × α) → Nat → Option α × Nat
-  | [], work => (none, work)
-  | (byte, child) :: rest, work =>
-    if key == byte then (some child, work + 1)
-    else lookupEdgeWithWork key rest (work + 1)
+@[inline] private def compareEdge [Monad m] [MonadTick m] (key byte : Nat) : m Bool := do
+  MonadTick.tick
+  return key == byte
 
-private theorem lookupEdgeWithWork_value {α : Type} (key : Nat) (edges : List (Nat × α))
-    (work : Nat) : (lookupEdgeWithWork key edges work).1 = edges.lookup key := by
-  induction edges generalizing work with
+/-- Look up the first matching edge, observing each comparison. -/
+@[specialize]
+def lookupEdgeM [Monad m] [MonadTick m] (key : Nat) : List (Nat × α) → m (Option α)
+  | [] => pure none
+  | (byte, child) :: rest => do
+    if ← compareEdge key byte then return some child
+    lookupEdgeM key rest
+
+private theorem lookupEdgeM_eq (key : Nat) (edges : List (Nat × α)) :
+    lookupEdgeM (m := Id) key edges = edges.lookup key := by
+  induction edges with
   | nil => rfl
   | cons edge rest ih =>
     rcases edge with ⟨byte, child⟩
-    simp only [lookupEdgeWithWork, List.lookup_cons]
-    cases key == byte <;> simp [ih]
+    change (if key == byte then some child else lookupEdgeM (m := Id) key rest) = _
+    rw [ih, List.lookup_cons]
+    cases key == byte <;> rfl
 
-private def PathIndex.lookupWithWork : List Nat → PathIndex → Nat → Option Nat × Nat
-  | [], .node slot _, work => (slot, work + 1)
-  | byte :: rest, .node _ children, work =>
-    let edge := lookupEdgeWithWork byte children (work + 1)
-    match edge.1 with
-    | none => (none, edge.2)
-    | some child => lookupWithWork rest child edge.2
+@[inline] private def PathIndex.readNode [Monad m] [MonadTick m] (index : PathIndex) :
+    m (Option Nat × List (Nat × PathIndex)) := do
+  MonadTick.tick
+  match index with
+  | .node slot children => return (slot, children)
+
+@[specialize]
+private def PathIndex.lookupM [Monad m] [MonadTick m] : List Nat → PathIndex → m (Option Nat)
+  | [], index => do
+    let (slot, _) ← index.readNode
+    return slot
+  | byte :: rest, index => do
+    let (_, children) ← index.readNode
+    match ← lookupEdgeM byte children with
+    | none => return none
+    | some child => lookupM rest child
 
 private def PathIndex.lookup (key : List Nat) (index : PathIndex) : Option Nat :=
-  (index.lookupWithWork key 0).1
-
-private theorem PathIndex.lookupWithWork_slot (key : List Nat) (index : PathIndex)
-    (a b : Nat) : (index.lookupWithWork key a).1 = (index.lookupWithWork key b).1 := by
-  induction key generalizing index a b with
-  | nil => cases index; rfl
-  | cons byte rest ih =>
-    cases index with
-    | node slot children =>
-      simp only [lookupWithWork, lookupEdgeWithWork_value]
-      split
-      · rfl
-      · apply ih
+  index.lookupM (m := Id) key
 
 private theorem PathIndex.lookup_nil (slot : Option Nat) (children : List (Nat × PathIndex)) :
     lookup [] (.node slot children) = slot := rfl
@@ -1530,11 +1546,11 @@ private theorem PathIndex.lookup_nil (slot : Option Nat) (children : List (Nat �
 private theorem PathIndex.lookup_cons (byte : Nat) (rest : List Nat) (slot : Option Nat)
     (children : List (Nat × PathIndex)) :
     lookup (byte :: rest) (.node slot children) = (children.lookup byte).bind (lookup rest) := by
-  unfold lookup
-  rw [lookupWithWork, lookupEdgeWithWork_value]
-  cases children.lookup byte with
-  | none => rfl
-  | some child => apply lookupWithWork_slot
+  change (match lookupEdgeM (m := Id) byte children with
+    | none => none
+    | some child => lookup rest child) = _
+  rw [lookupEdgeM_eq]
+  cases children.lookup byte <;> rfl
 
 private def PathIndex.insert : List Nat → Nat → PathIndex → PathIndex
   | [], slot, .node _ children => .node (some slot) children
@@ -1654,14 +1670,15 @@ Half-open span offsets are ordered. Equal offsets describe an empty span. -/
 def OrderedOffsets (input : Nat × Nat) : Prop :=
   input.1 ≤ input.2
 
-/-- Resolve an exact path and count node visits and edge comparisons. -/
-@[inline] def Project.findIdWithWork (project : Project) (path : SourcePath) : Option FileId × Nat :=
-  let result := project.index.lookupWithWork path.raw.bytes 0
-  (result.1.map FileId.mk, result.2)
+/-- Resolve an exact path through the byte trie. -/
+@[inline] def Project.findIdM [Monad m] [MonadTick m] (project : Project)
+    (path : SourcePath) : m (Option FileId) := do
+  let slot ← project.index.lookupM path.raw.bytes
+  return slot.map FileId.mk
 
 /-- Resolve an exact path in time proportional to its byte length. -/
 def Project.findId (project : Project) (path : SourcePath) : Option FileId :=
-  (project.findIdWithWork path).1
+  project.findIdM (m := Id) path
 
 theorem Project.findId_eq (project : Project) (path : SourcePath) :
     project.findId path = (project.files.findIdx? (fun file => decide (file.path = path))).map FileId.mk := by
@@ -1672,64 +1689,71 @@ theorem Project.findId_eq (project : Project) (path : SourcePath) :
 def Project.findFile (project : Project) (path : SourcePath) : Option File :=
   (project.findId path).bind project.fileAt
 
-/-- Project an ordered, in-bounds byte range with a certified coordinate lookup. -/
-@[inline] def fileSpanWithWork (id : FileId) (file : File) (start stop : Nat)
-    (ordered : start ≤ stop) (bounded : start ≤ file.length)
-    (lookup : File.CoordinateLookup := File.indexedCoordinate) : Span × Nat :=
-  let result := lookup file start bounded
-  let pos := result.val.1
-  have positive : 0 < pos.line ∧ 0 < pos.column := by
-    simp only [pos, result.property]
+private def spanFromPosition (id : FileId) (file : File) (start stop : Nat)
+    (ordered : start ≤ stop) (pos : {p : Position // p = file.source.positionAt start}) : Span :=
+  have positive : 0 < pos.val.line ∧ 0 < pos.val.column := by
+    rw [pos.property]
     exact SourceText.positionAt_positive _ _
-  (⟨id, start, stop, ordered, pos.line, pos.column, positive.1, positive.2⟩, result.val.2)
+  ⟨id, start, stop, ordered, pos.val.line, pos.val.column, positive.1, positive.2⟩
+
+private theorem spanFromPosition_location (id : FileId) (file : File) (start stop : Nat)
+    (ordered : start ≤ stop) (within : stop ≤ file.length)
+    (pos : {p : Position // p = file.source.positionAt start}) :
+    (spanFromPosition id file start stop ordered pos).LocationOk file.source := by
+  simp [Span.LocationOk, EndInSource, LineMatches, ColumnMatches, spanFromPosition,
+    pos.property, SourceText.lineAt, SourceText.columnAt, ← File.length_eq, within]
 
 def fileSpan (id : FileId) (file : File) (start stop : Nat)
     (ordered : start ≤ stop) (bounded : start ≤ file.length) : Span :=
-  (fileSpanWithWork id file start stop ordered bounded).1
-
-private theorem fileSpanWithWork_location (id : FileId) (file : File) (start stop : Nat)
-    (ordered : start ≤ stop) (within : stop ≤ file.length) (lookup : File.CoordinateLookup) :
-    (fileSpanWithWork id file start stop ordered (Nat.le_trans ordered within) lookup).1.LocationOk
-      file.source := by
-  have position := (lookup file start (Nat.le_trans ordered within)).property
-  simp [Span.LocationOk, EndInSource, LineMatches, ColumnMatches, fileSpanWithWork,
-    position, SourceText.lineAt, SourceText.columnAt, ← File.length_eq, within]
+  spanFromPosition id file start stop ordered (file.indexedCoordinate (m := Id) start bounded)
 
 theorem fileSpan_location (id : FileId) (file : File) (start stop : Nat)
     (ordered : start ≤ stop) (within : stop ≤ file.length) :
     (fileSpan id file start stop ordered (Nat.le_trans ordered within)).LocationOk file.source :=
-  fileSpanWithWork_location id file start stop ordered within File.indexedCoordinate
+  spanFromPosition_location id file start stop ordered within _
 
-/-- Issue a span and count the file read and coordinate lookup work. -/
-@[inline] def projectSpanAtWithWork (project : Project) (id : FileId) (start stop : Nat)
-    (lookup : File.CoordinateLookup := File.indexedCoordinate) : Option (ScopedSpan project) × Nat :=
+/-- Issue a span through the indexed data accessors. The scaling control can substitute
+a certified prefix traversal at the same coordinate access site. -/
+@[inline] def projectSpanAtM [Monad m] [MonadTick m] (project : Project)
+    (id : FileId) (start stop : Nat)
+    (lookup : File.CoordinateLookup m := File.indexedCoordinate) : m (Option (ScopedSpan project)) := do
   if slot : id.index < project.entries.size then
-    let entry := readArrayWithWork project.entries id.index slot
-    let file := entry.1
+    let entry ← readArray project.entries id.index slot
+    let file := entry.val
     if ordered : start ≤ stop then
       if within : stop ≤ file.length then
-        let result := fileSpanWithWork id file start stop ordered (Nat.le_trans ordered within) lookup
-        (some ⟨result.1,
-          ⟨file, fileSpanWithWork_location id file start stop ordered within lookup,
-            Array.getElem?_eq_getElem slot⟩⟩, entry.2 + result.2)
-      else (none, entry.2)
-    else (none, entry.2)
-  else (none, 0)
+        let pos ← lookup file start (Nat.le_trans ordered within)
+        return some ⟨spanFromPosition id file start stop ordered pos,
+          ⟨file, spanFromPosition_location id file start stop ordered within pos,
+            (Array.getElem?_eq_getElem slot).trans (congrArg some entry.property.symm)⟩⟩
+  return none
 
 /-- Issue a span using a resolved file ID, with constant-time file and coordinate access. -/
 def projectSpanAt (project : Project) (id : FileId) (start stop : Nat) : Option (ScopedSpan project) :=
-  (projectSpanAtWithWork project id start stop).1
+  projectSpanAtM (m := Id) project id start stop
 
-@[inline] def projectSpanWithWork (project : Project) (path : SourcePath) (start stop : Nat) :
-    Option (ScopedSpan project) × Nat :=
-  match project.findIdWithWork path with
-  | (none, work) => (none, work)
-  | (some id, work) =>
-    let (span, spanWork) := projectSpanAtWithWork project id start stop
-    (span, work + spanWork)
+theorem projectSpanAt_eq (project : Project) (id : FileId) (start stop : Nat) :
+    projectSpanAt project id start stop =
+      if slot : id.index < project.entries.size then
+        let file := project.entries[id.index]
+        if ordered : start ≤ stop then
+          if within : stop ≤ file.length then
+            some ⟨fileSpan id file start stop ordered (Nat.le_trans ordered within),
+              ⟨file, fileSpan_location id file start stop ordered within,
+                Array.getElem?_eq_getElem slot⟩⟩
+          else none
+        else none
+      else none := rfl
+
+@[inline] def projectSpanM [Monad m] [MonadTick m] (project : Project) (path : SourcePath)
+    (start stop : Nat)
+    (resolve : SourcePath → m (Option FileId) := project.findIdM) : m (Option (ScopedSpan project)) := do
+  match ← resolve path with
+  | none => return none
+  | some id => projectSpanAtM project id start stop
 
 def projectSpan (project : Project) (path : SourcePath) (start stop : Nat) : Option (ScopedSpan project) :=
-  (projectSpanWithWork project path start stop).1
+  projectSpanM (m := Id) project path start stop
 
 /-- Check a stored location using the loaded file's coordinate index. -/
 def File.matchesLocation (file : File) (span : Span) : Bool :=
@@ -1772,9 +1796,9 @@ def Projects (project : Project) (path : SourcePath) (start stop : Nat) (span : 
 end Reference
 end SourcePathSpan
 
-/-- A slice of the language, in the agreed slice order: 0 to 28, concurrency last (2026-11-07). -/
+/-- A slice of the language, in the agreed slice order: 0 to 21 (early-work checklist A3(a4)). -/
 structure SliceId where
-  n : Fin 29
+  n : Fin 22
   deriving DecidableEq, Repr
 
 /-- A rule's identity: the Lean name of the declaration that states it and that rule's own
@@ -1973,7 +1997,7 @@ theorem example_FieldId_mk_variant_ModuleId_mk : FieldId.mk (.variant ⟨⟨Modu
     FieldId.mk (.variant ⟨⟨ModuleId.mk ⟨⟨"p"⟩, ⟨⟨"1"⟩⟩⟩ [⟨"m"⟩] (by decide), ⟨"E"⟩⟩, ⟨"B"⟩⟩) ⟨"value"⟩ := by decide
 
 /-- The first and the last slice. -/
-theorem example_first_and_last_slice : (SliceId.mk 0).n.val = 0 ∧ (SliceId.mk 28).n.val = 28 := ⟨rfl, rfl⟩
+theorem example_first_and_last_slice : (SliceId.mk 0).n.val = 0 ∧ (SliceId.mk 21).n.val = 21 := ⟨rfl, rfl⟩
 
 /-- Bytes for `a`, a tab, and `b`. After the tab, the range starts at line 1, byte column 3. -/
 def tabSource : SourceText := SourceText.ofBytes [97, 9, 98]
