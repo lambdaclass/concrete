@@ -30,7 +30,7 @@ def extend (prior delta : List Rule) : List Rule :=
   prior.filter (fun (lhs, _) => !delta.any (fun rule => rule.1 == lhs)) ++ delta
 
 def headLadder : List String :=
-  ["Expr", "LogicOr", "LogicOrTail", "LogicAnd", "LogicAndTail", "Compare", "CompareTail",
+  ["Expr", "LogicOr", "LogicOrTail", "LogicAnd", "LogicAndTail", "Equality", "EqualityTail", "Compare", "CompareTail",
    "CompareOp", "BitOr", "OrBits", "BitXor", "XorBits", "BitAnd", "AndBits", "Shift",
    "ShiftTail", "Sum", "SumTail", "Product", "ProductTail", "Unary"]
 
@@ -43,44 +43,29 @@ def withExpressionLadder (namePrefix : String) (rules : List Rule) : List Rule :
   rules ++ rules.filterMap fun (lhs, rhs) =>
     if headLadder.contains lhs then some (namePrefix ++ lhs, rhs.map renameSymbol) else none
 
--- Walk the left edge of the precedence ladder. Only the first operand of
--- a body expression needs a different atom (or a different leading unary).
-def bodyLadder (namePrefix : String) (excludeUnary : List String) (rules : List Rule) : List Rule :=
-  let spine := ["Expr", "LogicOr", "LogicAnd", "Compare", "BitOr", "BitXor", "BitAnd",
-    "Shift", "Sum", "Product", "Unary", "Atom"]
-  rules.filterMap fun (lhs, rhs) => do
-    if !spine.contains lhs || rhs == ["@BlockExpr"] ||
-        (lhs == "Unary" && excludeUnary.contains (rhs.headD "")) then none
-    else
-      let rhs := match rhs with
-        | sym :: tail =>
-          if spine.any (fun name => sym == "@" ++ name) then
-            ("@" ++ namePrefix ++ (sym.drop 1).toString) :: tail
-          else rhs
-        | [] => []
-      some (namePrefix ++ lhs, rhs)
+-- Rename only the left edge. Operands reached after a prefix or binary
+-- operator still use the full value-expression grammar.
+def withLeadingOperand (namePrefix : String) (rules : List Rule) : List Rule :=
+  let spine := ["Expr", "LogicOr", "LogicAnd", "Equality", "Compare", "BitOr", "BitXor",
+    "BitAnd", "Shift", "Sum", "Product", "Unary", "Atom"]
+  rules.filterMap fun (lhs, rhs) =>
+    match rhs with
+    | sym :: tail =>
+      if !spine.contains lhs || lhs == "Atom" then none
+      else
+        let leading := if spine.any (fun name => sym == "@" ++ name) then
+          "@" ++ namePrefix ++ (sym.drop 1).toString else sym
+        some (namePrefix ++ lhs, leading :: tail)
+    | [] => none
 
 def addExpressionLadders (slice : Nat) (rules : List Rule) : List Rule := Id.run do
   if slice < 3 then return rules
   let tails := ["ProductTail", "SumTail", "ShiftTail", "AndBits", "XorBits", "OrBits",
-    "CompareTail", "LogicAndTail", "LogicOrTail"]
-  -- A block-leading expression can continue with an operator, from the
-  -- tightest precedence outwards. Otherwise the following token starts a body.
-  let continuations := tails.zipIdx.flatMap fun (name, i) =>
-    rules.filterMap fun (lhs, rhs) =>
-      if lhs == name && !rhs.isEmpty then
-        some ("BlockEnd", rhs ++ ((tails.drop (i + 1)).map ("@" ++ ·)))
-      else none
-  let afterBlock := rules.filterMap fun (lhs, rhs) =>
-    if lhs == "Body" && rhs != ["@BlockExpr", "@BlockEnd"] then
-      some ("AfterBlock", if rhs == ["@BodyExpr", "@ExprEnd"] then
-        ["@AfterBlockExpr", "@ExprEnd"] else rhs)
-    else none
-  let body := bodyLadder "Body" [] rules
-  let continuedBy := continuations.map fun (_, rhs) => rhs.headD ""
-  let after := bodyLadder "AfterBlock" continuedBy rules
-  let expanded := withExpressionLadder "Head" rules ++ body ++ after ++ afterBlock ++ continuations ++
-    [("BlockEnd", ["@AfterBlock"]), ("BlockEnd", ["@BlockExpr", "@BlockEnd"])]
+    "CompareTail", "EqualityTail", "LogicAndTail", "LogicOrTail"]
+  let continuation := ("ExprContinuation", tails.map ("@" ++ ·))
+  let bodyRules := rules.filter fun (lhs, rhs) => lhs != "Unary" || rhs.headD "" != "*"
+  let body := withLeadingOperand "Body" bodyRules ++ [("BodyAtom", ["@CommonAtom"])]
+  let expanded := withExpressionLadder "Head" rules ++ body ++ [continuation]
   if slice < 8 then return expanded
   let scalarRules := rules.filter fun (lhs, rhs) =>
     lhs != "Unary" || ["-", "!", "BIT_NOT", "@Atom"].contains (rhs.headD "")
@@ -97,10 +82,54 @@ structure Options where
   binderMark : String
   importWord : String
   prefixBorrowBinder : Bool
+  builtinTargetType : Bool
   deriving Inhabited, Repr
 
 def representative : Options :=
-  ⟨"~", true, true, false, ",", "borrow", ("from", "until"), "->", "import", false⟩
+  ⟨"~", true, true, false, ",", "borrow", ("from", "until"), "->", "import", false, false⟩
+
+-- The draft's refined terminal is an identifier spelling class. Outside
+-- unqualified callee dispatch it follows the same rules as other identifiers.
+def withBuiltinTargetType (rules : List Rule) : List Rule :=
+  let calleeSites := ["Atom", "HeadAtom", "NamedBody", "ConstAtom"]
+  let callTails := ["NumericNameTail", "HeadNameTail", "BodyNameTail", "ConstNameTail"]
+  let renamed := rules.map fun (lhs, rhs) =>
+    if calleeSites.contains lhs && rhs.headD "" == "IDENT" then (lhs, rhs)
+    else (lhs, rhs.map fun sym => if sym == "IDENT" then "@Identifier" else sym)
+  let builtinSites := renamed.flatMap fun (lhs, rhs) =>
+    match rhs with
+    | ["IDENT", "@PathTail", tail] =>
+      if calleeSites.contains lhs then
+        [(lhs, ["TARGET_BUILTIN", "@Builtin" ++ (tail.drop 1).toString])]
+      else []
+    | ["IDENT", tail] =>
+      if calleeSites.contains lhs then [(lhs, ["TARGET_BUILTIN", "@Builtin" ++ (tail.drop 1).toString])]
+      else []
+    | _ => []
+  let builtinTails := renamed.filterMap fun (lhs, rhs) =>
+    if !callTails.contains lhs then none
+    else if lhs == "ConstNameTail" && rhs.headD "" == "(" then
+      some ("BuiltinConstNameTail", ["(", "@BuiltinConstArgs", ")"])
+    else
+      some ("Builtin" ++ lhs, rhs.map fun sym =>
+        if sym == "@NameCall" then "@BuiltinNameCall" else sym)
+  let normalArgs := if renamed.contains ("NameCall", ["(", "@EarlyArgs", ")"]) then
+    "@EarlyArgs" else "@Args"
+  let builtinCalls := renamed.filterMap fun (lhs, rhs) =>
+    if lhs == "NameCall" then
+      some ("BuiltinNameCall", rhs.map fun sym =>
+        if sym == normalArgs then "@BuiltinArgs" else sym)
+    else none
+  let qualified := if renamed.any (fun (lhs, _) => lhs == "QualifiedTail") then [
+    ("BuiltinNumericNameTail", ["::", "@QualifiedTail", "@NumericNameTail"]),
+    ("BuiltinHeadNameTail", ["::", "@QualifiedTail", "@HeadNameTail"])]
+    else []
+  renamed ++ builtinSites ++ builtinTails ++ builtinCalls ++ qualified ++ [
+    ("Identifier", ["IDENT"]), ("Identifier", ["TARGET_BUILTIN"]),
+    ("BuiltinArgs", [normalArgs]),
+    ("BuiltinArgs", ["type", ":", "@Type", ",", "@Expr", "@SecondArg"]),
+    ("BuiltinConstArgs", ["@ConstExpr", "@ConstSecondArg"]),
+    ("BuiltinConstArgs", ["type", ":", "@Type", ",", "@ConstExpr", "@ConstSecondArg"])]
 
 def instantiate (options : Options) (rules : List Rule) : DraftGrammar :=
   let replace (sym : String) :=
@@ -118,12 +147,12 @@ def instantiate (options : Options) (rules : List Rule) : DraftGrammar :=
     (options.primitiveKeyword || rhs.head? != some "PRIMITIVE") &&
     !(options.bitNot == "!" && rhs.head? == some "BIT_NOT" &&
       rules.contains (lhs, "!" :: rhs.drop 1))
-  let attributes := if options.alternateAttribute then
-      rules.filterMap fun (lhs, rhs) => match lhs, rhs with
-        | "Attrs", "#[" :: tail => some (lhs, "@[" :: tail)
-        | _, _ => none
-    else []
-  let rules := ((rules.filter allows) ++ attributes).map fun (lhs, rhs) =>
+  let generalAttributes := if options.alternateAttribute then [
+      ("Attrs", ["@[", "IDENT", "@AttrArgs", "]", "@Attrs"])]
+    else [("ListedEnvelope", ["IDENT", "@AttrArgs"])]
+  let rules := rules.filter allows ++ generalAttributes
+  let rules := if options.builtinTargetType then withBuiltinTargetType rules else rules
+  let rules := rules.map fun (lhs, rhs) =>
     let replaceForm (sym : String) :=
       if sym == "@BorrowForm" then
         if options.prefixBorrowBinder then "@PrefixBorrow" else "@SuffixBorrow"
@@ -190,6 +219,7 @@ def fnBody (body : String) : String :=
   "fn IDENT ( ) -> u8 { " ++ body ++ " }"
 
 def examples (slice : Nat) (options : Options) : List Example :=
+  let targetBuiltin := if options.builtinTargetType then "TARGET_BUILTIN" else "IDENT"
   let wildcard := if options.wildcardToken then "_" else "RESERVED_UNDERSCORE"
   let attr := if options.alternateAttribute then "@[" else "#["
   let sep := options.armSeparator
@@ -203,26 +233,62 @@ def examples (slice : Nat) (options : Options) : List Example :=
       "struct IDENT { } " ++ fnBody "let IDENT : IDENT = IDENT { } ; let IDENT { } = move IDENT ; return INTEGER ;", true⟩,
     ⟨"incomplete let", fnBody "let IDENT = INTEGER ;", false⟩]
   | 2 => [
+    ⟨"builtin-only target-type candidate",
+      fnBody s!"return {targetBuiltin} ( type : u8 , INTEGER ) ;", options.builtinTargetType⟩,
+    ⟨"ordinary call to an eligible builtin",
+      fnBody s!"return {targetBuiltin} ( INTEGER ) ;", true⟩,
+    ⟨"ordinary call cannot take a target type",
+      fnBody "return IDENT ( type : u8 , INTEGER ) ;", false⟩,
     ⟨"bitwise NOT in a return at first use", fnBody s!"return {options.bitNot} INTEGER ;", true⟩,
     ⟨"primitive keyword classification",
       "struct IDENT { } fn IDENT ( ) -> u8 { let IDENT : PRIMITIVE = INTEGER ; }", options.primitiveKeyword⟩,
     ⟨"primitive identifier classification", fnBody "let IDENT : IDENT = INTEGER ;", true⟩]
   | 3 => [
     ⟨"semicolon-free if statement", fnBody "if true { return INTEGER ; } return INTEGER ;", true⟩,
-    ⟨"block expression with an operator continuation", fnBody "if true { INTEGER } else { INTEGER } + INTEGER", true⟩,
+    ⟨"value if with an operator continuation",
+      fnBody "return if true { INTEGER } else { INTEGER } + INTEGER ;", true⟩,
+    ⟨"statement if followed by a trailing unary minus",
+      fnBody "if true { IDENT ( ) ; } - INTEGER", true⟩,
+    ⟨"statement if followed by a unary-minus statement",
+      fnBody "if true { IDENT ( ) ; } - INTEGER ; return INTEGER ;", true⟩,
+    ⟨"statement if followed by a trailing bitwise not",
+      fnBody s!"if true \{ IDENT ( ) ; } {options.bitNot} INTEGER", true⟩,
+    ⟨"else-less if has no value",
+      fnBody "let IDENT : u8 = if true { INTEGER } ; INTEGER", false⟩,
+    ⟨"statement if does not continue with binary plus",
+      fnBody "if true { INTEGER } else { INTEGER } + INTEGER", false⟩,
+    ⟨"ordering binds more tightly than equality",
+      fnBody "if IDENT < IDENT == true { INTEGER } else { INTEGER }", true⟩,
+    ⟨"assignment to local", fnBody "IDENT = INTEGER ;", true⟩,
+    ⟨"assignment to arithmetic result", fnBody "INTEGER + INTEGER = INTEGER ;", false⟩,
+    ⟨"assignment to call result", fnBody "IDENT ( ) = INTEGER ;", false⟩,
     ⟨"expression statements and a final expression", fnBody "IDENT ( ) ; IDENT = INTEGER ; IDENT", true⟩,
     ⟨"final expression requires closing brace", fnBody "IDENT return INTEGER ;", false⟩]
   | 4 => [
     ⟨"listed and general attributes at first use",
-      fnBody s!"#[ IDENT ] {attr} IDENT ( STRING ) ] for {wildcard} from INTEGER until INTEGER \{ } INTEGER", true⟩,
+      fnBody s!"#[ invariant ( true ) ] {attr} IDENT ( STRING ) ] for {wildcard} from INTEGER until INTEGER \{ } INTEGER", true⟩,
+    ⟨"listed attribute uses the listed envelope",
+      fnBody "@[ invariant ( true ) ] while true { }", false⟩,
+    ⟨"general attribute uses its selected envelope",
+      fnBody "#[ IDENT ] while true { }", !options.alternateAttribute⟩,
     ⟨"labelled loop and labelled transfer",
       fnBody "LABEL : while true { break LABEL ; } INTEGER", true⟩,
     ⟨"colonless loop label", fnBody "LABEL while true { }", false⟩,
     ⟨"wildcard let", fnBody s!"let {wildcard} : u8 = INTEGER ; INTEGER", true⟩]
   | 5 => [
+    ⟨"optional trailing commas in parameters and calls",
+      "fn IDENT ( IDENT : u8 , ) -> u8 { IDENT ( INTEGER , ) }", true⟩,
     ⟨"function attribute and wildcard parameter",
       s!"{attr} IDENT ( STRING ) ] fn IDENT ( {wildcard} : u8 ) -> u8 \{ INTEGER }", true⟩]
   | 6 => [
+    ⟨"nonempty enum", "enum IDENT { IDENT , } " ++ fnBody "INTEGER", true⟩,
+    ⟨"empty enum", "enum IDENT { } " ++ fnBody "INTEGER", false⟩,
+    ⟨"negative integer pattern",
+      fnBody s!"match IDENT \{ {arm "- INTEGER" "INTEGER"} }", true⟩,
+    ⟨"alternative patterns",
+      fnBody s!"match IDENT \{ {arm "INTEGER | INTEGER" "INTEGER"} }", true⟩,
+    ⟨"assignment to named field", fnBody "IDENT . IDENT = INTEGER ;", true⟩,
+    ⟨"assignment to field of call result", fnBody "IDENT ( ) . IDENT = INTEGER ;", false⟩,
     ⟨"head brace opens the block", fnBody "if IDENT { INTEGER } else { INTEGER }", true⟩,
     ⟨"grouped struct literal in a head", fnBody "if ( IDENT { } ) { INTEGER }", true⟩,
     ⟨"call argument shields struct literal", fnBody "if IDENT ( IDENT { } ) { INTEGER }", true⟩,
@@ -230,9 +296,9 @@ def examples (slice : Nat) (options : Options) : List Example :=
     ⟨"named variant declaration and pattern",
       "enum IDENT { IDENT { IDENT : u8 , IDENT : u8 } } " ++
         fnBody ("match IDENT { " ++ arm s!"IDENT :: IDENT \{ IDENT : IDENT , IDENT : {wildcard} }" "INTEGER" ++ " }"), true⟩,
-    ⟨"tuple variant and pattern",
-      "enum IDENT { IDENT ( u8 ) } " ++
-        fnBody ("match IDENT { " ++ arm s!"IDENT :: IDENT ( {wildcard} )" "INTEGER" ++ " }"), true⟩,
+    ⟨"tuple variant is excluded", "enum IDENT { IDENT ( u8 ) }", false⟩,
+    ⟨"tuple pattern is excluded",
+      fnBody ("match IDENT { " ++ arm s!"IDENT :: IDENT ( {wildcard} )" "INTEGER" ++ " }"), false⟩,
     ⟨"ignored payload", fnBody ("match IDENT { " ++ arm "IDENT :: IDENT { .. }" "INTEGER" ++ " }"), true⟩,
     ⟨"braced match arm",
       fnBody ("match IDENT { " ++ arm wildcard "{ return INTEGER ; }" ++ " }"), true⟩,
@@ -247,7 +313,13 @@ def examples (slice : Nat) (options : Options) : List Example :=
       fnBody s!"let IDENT \{ IDENT : IDENT , IDENT : {wildcard} } = IDENT ; INTEGER", true⟩,
     ⟨"struct let rejects field shorthand", fnBody "let IDENT { IDENT } = IDENT ; INTEGER", false⟩,
     ⟨"qualified destructuring let", fnBody s!"let IDENT :: IDENT \{ IDENT : IDENT , IDENT : {wildcard} } = IDENT ; INTEGER", true⟩]
-  | 7 => [
+  | 7 => (
+    ["if true { IDENT ( ) ; }", "if true { IDENT ( ) ; } else { IDENT ( ) ; }",
+     s!"match IDENT \{ {arm wildcard "{ IDENT ( ) ; }"} }", s!"{binding} \{ IDENT ( ) ; }"].flatMap fun block => [
+      ⟨"dereference assignment after block", fnBody (block ++ " * IDENT = INTEGER ;"), true⟩,
+      ⟨"trailing unary minus after block", fnBody (block ++ " - INTEGER"), true⟩]) ++ [
+    ⟨"assignment through indexed dereference", fnBody "* IDENT [ INTEGER ] . IDENT = INTEGER ;", true⟩,
+    ⟨"assignment to index of grouped value", fnBody "( IDENT ) [ INTEGER ] = INTEGER ;", false⟩,
     ⟨"index brackets shield struct literal", fnBody "if IDENT [ IDENT { } ] { INTEGER }", true⟩,
     ⟨"scoped borrow and block else", fnBody s!"{binding} \{ IDENT } else \{ INTEGER }", true⟩,
     ⟨"semicolon-free borrow statement", fnBody s!"{binding} \{ IDENT } return INTEGER ;", true⟩,
@@ -258,6 +330,15 @@ def examples (slice : Nat) (options : Options) : List Example :=
       ⟨"borrow range and binder",
         fnBody s!"{borrow} mut IDENT {options.range.1} INTEGER {options.range.2} INTEGER {options.binderMark} IDENT \{ IDENT }", true⟩])
   | 8 => [
+    ⟨"import requires an item list", s!"{options.importWord} IDENT ;", false⟩,
+    ⟨"qualified import requires an item list", s!"{options.importWord} IDENT :: IDENT ;", false⟩,
+    ⟨"empty import list", s!"{options.importWord} IDENT :: IDENT :: \{ } ;", false⟩,
+    ⟨"qualified function call in constant initializer",
+      "const IDENT : u8 = IDENT :: IDENT ( INTEGER ) ;", false⟩,
+    ⟨"nonempty import with trailing comma",
+      s!"{options.importWord} IDENT :: \{ IDENT , } ;", true⟩,
+    ⟨"constant builtin target-type candidate",
+      s!"const IDENT : u8 = {targetBuiltin} ( type : u8 , INTEGER ) ;", options.builtinTargetType⟩,
     ⟨"public struct field", "struct IDENT { pub IDENT : u8 }", true⟩,
     ⟨"import at first use", s!"{options.importWord} IDENT :: IDENT :: \{ IDENT , IDENT } ;", true⟩,
     ⟨"constant arithmetic and reference", "const IDENT : u8 = IDENT :: IDENT + INTEGER ;", true⟩,
@@ -268,6 +349,12 @@ def examples (slice : Nat) (options : Options) : List Example :=
     ⟨"constant initializer excludes exclusive borrow", "const IDENT : u8 = & mut INTEGER ;", false⟩,
     ⟨"constant initializer excludes dereference", "const IDENT : u8 = * INTEGER ;", false⟩]
   | 9 => [
+    ⟨"inherent impl with capability after type parameter",
+      "impl < IDENT , cap IDENT > IDENT { }", true⟩,
+    ⟨"trait impl with only type parameters", "impl < IDENT > IDENT for IDENT { }", true⟩,
+    ⟨"trait impl with capability parameter", "impl < cap IDENT > IDENT for IDENT { }", false⟩,
+    ⟨"trait impl with capability after type parameter",
+      "impl < IDENT , cap IDENT > IDENT for IDENT { }", false⟩,
     ⟨"qualified generic call, field selection and comparison",
       fnBody "IDENT :: IDENT :: < IDENT < u8 > , Fs + Console , { } > ( INTEGER ) . IDENT < INTEGER", true⟩,
     ⟨"generic type with capability arguments",
@@ -286,15 +373,27 @@ def examples (slice : Nat) (options : Options) : List Example :=
     ⟨"type argument after a capability argument", "type IDENT = IDENT < Fs , u8 > ;", false⟩,
     ⟨"generic trait declaration", "trait IDENT < IDENT > { }", false⟩,
     ⟨"generic trait method", "trait IDENT { fn IDENT < IDENT > ( ) -> u8 ; }", false⟩,
+    ⟨"trailing comma in generic parameter and type arguments",
+      "fn IDENT < IDENT , cap IDENT , > ( IDENT : IDENT < u8 , > ) -> u8 { INTEGER }", true⟩,
     ⟨"impl functions", "impl IDENT { " ++ fnBody "INTEGER" ++ " }", true⟩,
     ⟨"impl rejects module declaration", "impl IDENT { mod IDENT ; }", false⟩,
     ⟨"duplicate generic type argument lists", "type IDENT = IDENT :: < u8 > < u8 > ;", false⟩]
   | 10 => [
+    ⟨"parenthesized assertion and unparenthesized assumption",
+      fnBody "assert ( IDENT == INTEGER ) ; assume IDENT == INTEGER ; INTEGER", true⟩,
+    ⟨"assertion requires parentheses",
+      fnBody "assert IDENT == INTEGER ; INTEGER", false⟩,
+    ⟨"theorem-backed assertion",
+      fnBody "assert ( IDENT == INTEGER ) by IDENT :: IDENT ( IDENT ) ; INTEGER", true⟩,
+    ⟨"unparenthesized theorem-backed assertion",
+      fnBody "assert IDENT == INTEGER by IDENT ( IDENT ) ; INTEGER", false⟩,
     ⟨"expression-bodied specification function", "spec fn IDENT ( ) -> u8 = INTEGER ;", true⟩,
     ⟨"specification function rejects a block body", "spec " ++ fnBody "INTEGER", false⟩]
   | 11 => [
     ⟨"module, import and grant clause",
       s!"mod IDENT ; {options.importWord} IDENT :: IDENT :: \{ IDENT , IDENT } ; pub fn IDENT ( ) with ( Fs , Console ) -> u8 \{ INTEGER }", true⟩,
+    ⟨"optional trailing grant comma",
+      "fn IDENT ( ) with ( Fs , ) -> u8 { INTEGER }", true⟩,
     ⟨"attribute string as an expression at slice 11",
       s!"{attr} IDENT ( STRING ) ] " ++ fnBody "INTEGER", true⟩]
   | _ => []
@@ -303,6 +402,7 @@ def examples (slice : Nat) (options : Options) : List Example :=
 -- rename fresh tokens bijectively. Exercise the joint rename on an alternate
 -- grammar shape in each slice where it applies.
 def optionsAt (slice : Nat) : List Options := Id.run do
+  let builtinTargets := if slice >= 2 then [false, true] else [false]
   let bitNots := if slice >= 2 then ["~", "!"] else ["~"]
   let primitives := if slice >= 2 then [true, false] else [true]
   let attributes := if slice >= 4 then [false, true] else [false]
@@ -318,12 +418,14 @@ def optionsAt (slice : Nat) : List Options := Id.run do
       for alternateAttribute in attributes do
         for armSeparator in separators do
           for (prefixBorrowBinder, range, binderMark) in borrowBindings do
-            cases := { representative with
-              bitNot, primitiveKeyword, alternateAttribute, armSeparator,
-              prefixBorrowBinder, range, binderMark } :: cases
+            for builtinTargetType in builtinTargets do
+              cases := { representative with
+                bitNot, primitiveKeyword, alternateAttribute, armSeparator,
+                prefixBorrowBinder, range, binderMark, builtinTargetType } :: cases
   cases := cases.reverse
   if slice < 4 then return cases
   return cases ++ [{ representative with
+    builtinTargetType := true
     bitNot := "!"
     primitiveKeyword := false
     alternateAttribute := true
@@ -371,6 +473,19 @@ def main : IO Unit := do
           ll1 (project alternate rules) do
         throw (IO.userError "missing slice 4 alternate attribute conflict")
       IO.println "pass: planted slice 4 alternate attribute conflict"
+    if slice == 7 then
+      -- Reintroducing binary continuations at the block boundary collides
+      -- with the same spellings at the beginning of the next body item.
+      let planted := rules.map fun rule =>
+        if rule == ("Body", ["@BlockStmt", "@Body"]) then
+          ("Body", ["@BlockStmt", "@BlockBoundary"])
+        else rule
+      let planted := planted ++ [
+        ("BlockBoundary", ["@Body"]),
+        ("BlockBoundary", ["-", "@Product", "@ExprContinuation"]),
+        ("BlockBoundary", ["*", "@Unary", "@ExprContinuation"]),
+        ("BlockBoundary", ["&", "@Shift", "@ExprContinuation"])]
+      requireConflict "operator continuation at block statement boundary" (project representative planted)
     if slice == 9 then
       let g := project representative rules
       requireConflict "unmarked generics" { g with prods := g.prods ++ [("PathTail", [.n "TypeArgs"])] }

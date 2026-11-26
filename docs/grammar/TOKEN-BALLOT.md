@@ -19,6 +19,7 @@ reservations. [Removed words](../decisions.md#decided-2026-11-08-removed-words) 
 | 0 function, let, return, type | `fn`, `let`, `return`, `u8` | Reserved on main. |
 | 1 empty linear struct and named move | `struct`, `move` | Already tokenized on main. Q8.2 and the November 25 delegation cover the slice 1 forms. |
 | 2 integer types | `i8`, `i16`, `i32`, `i64`, `u16`, `u32`, `u64` | Q1 below. |
+| 2 builtin target-type candidate | `type` | Already reserved on main. E4 option B would first use it here. |
 | 3 conditionals, mutable lets, boolean literals and types | `if`, `else`, `mut`, `true`, `false`, `bool`, `Unit` | Constructs scheduled. Reservation of the first five is proposed. Types are Q1. |
 | 4 loops, bounds and transfers | `while`, `from`, `until`, `for`, `break`, `continue` | First three reserved on main. Last three decided by OD47–49. |
 | 6 types, patterns and matches | `Copy`, `type`, `enum`, `match` | First two reserved on main. Enum and match constructs are decided. Proposed reservation of the last two requires the slice delta. |
@@ -82,9 +83,16 @@ before its slice. Rows marked later have no consumer in this draft.
   `string_length`.
 - Slice 2 lossless conversion ballot: add `widen` as a reserved builtin
   identifier, or choose another builtin name under E4. No new reservation is
-  assumed. E4 separately asks how to supply the target type. This draft
-  exercises ordinary calls and leaves alternate conversion-only call shapes
-  open until the owner settles that question.
+  assumed. E4 separately asks how to supply the target type.
+  A. Use the expected type and refuse a call without one.
+  B. Add a type argument at a builtin-only position. For compatibility testing
+  the draft uses `widen(type: u32, x)` and
+  `wrapping_add(type: u32, x, y)` as concrete candidate shapes.
+  The refinement applies to the eligible unqualified lossless-conversion and
+  OD99 builtin spellings. The type marker, colon and comma use existing tokens.
+  C. Use per-target builtin identifiers such as `to_u32(x)`, which have the
+  ordinary call shape. The exact builtin catalog and the form in B are open.
+  The draft checks B as a separate option alongside ordinary calls from slice 2.
 
 Illustrative OD43(c) type and trait list. An exhaustive type and resource
 reservation catalog needs a separate disposition before the relevant
@@ -113,10 +121,11 @@ The current [`builtinTypeNames`](../../ConcreteSpec/Surface1.lean) also reserves
 | 2 | `,`, `&`, `\|`, `^`, `<<`, `>>` | Comma first separates the two arguments of numeric builtins. Remaining tokens are bitwise/shift operators. |
 | 2 | `~` or `!` for bitwise NOT | A. `~x` (recommended, keeps `!` boolean-only). B. `!x` distinguished by the operand type from slice 3. This is one prefix grammar alternative under B. |
 | 3 | `==`, `!=`, `<`, `<=`, `>`, `>=`, `&&`, `\|\|`, `!` | Decided comparisons and boolean operators (OD42, Q6.5). Trailing expressions have no semicolon. |
+| 3, 6–7 | Block statement boundary | SYN-8 gives a statement-position `match` its own boundary. The draft applies this boundary to body-leading `if` and scoped borrow for slice approval. The shared unary/binary tokens `-`, `*` and `&` can then begin the next item. An operator can continue a block form in an explicit value context. |
 | 4 | `LABEL :` and `break LABEL;` / `continue LABEL;` | The loop declaration uses a colon. The transfer uses the label alone. |
-| 4–5 | `#[name]`, `#[name(args)]` | Listed forms for `invariant`, `variant`, `may_not_terminate`, `requires`, `ensures` are decided. General attribute syntax is open. A. Keep the same `#[...]` envelope. B. Use `@[...]` for general attributes, preserving the listed `#[...]` forms. Attribute names stay identifiers. |
+| 4–5 | `#[name]`, `#[name(args)]` | Listed forms for `invariant`, `variant`, `may_not_terminate`, `requires`, `ensures` are decided. General attribute syntax is open. A. Keep the same `#[...]` envelope. B. Use `@[...]` for general attributes, preserving the listed `#[...]` forms. Attribute names stay identifiers. The draft checks the identifier spelling directly after the opener and restricts each listed name to its recorded argument form. |
 | 4–6 | `_` | OD62 spelling decided. A. Punctuation token. B. A reserved identifier token distinct from ordinary identifiers. The current slice 1 resolver recognizes a typed wildcard let through the identifier token. The draft first tests the two distinct token classifications at slice 4, then reuses them for parameters and patterns. |
-| 6 | `.`, `::`, `=>` | Field selection, qualified paths and pattern/body arrow. OD128 decides `=>`. |
+| 6 | `.`, `::`, `=>`, `\|` | Field selection, qualified paths, pattern/body arrow, and pattern alternatives. OD128 decides `=>`; PAT-7 supplies `\|` in match patterns. |
 | 6 | `..` in `Variant { .. }` | Explicit ignored payload under [OD25](../decisions.md#od25). |
 | 6 | Match arm terminator | A. `,`, as recorded in [recovered item 48](../decisions.md#recovered-59-48). B. `;`, the isolated alternative requested by E1. Each arm includes its terminator. |
 | 7 | Prefix `&`, `&mut`, `*`, `[`, `]` | Shared/exclusive borrows and dereference, array types/literals and postfix indexing. `&mut` is two tokens. |
@@ -125,7 +134,7 @@ The current [`builtinTypeNames`](../../ConcreteSpec/Surface1.lean) also reserves
 | 8 | Import list | A. `import a::b::{x, y};`, as recorded in [recovered item 44](../decisions.md#recovered-59-44). B. `use a::b::{x, y};`. Both use `b::x` at the use site. The later imported-use decision leaves the exact import spelling open. |
 | 9 | `<`, `>`, explicit expression `::<...>` | Declaration and type arguments use angle delimiters. The expression turbofish has a recorded precedent (OD87). A bare expression `<...>` conflicts with comparison, as the planted control shows. [Recovered item 34](../decisions.md#recovered-59-34) specifies longest match with `>>` split only where it closes generics. The draft tests the resulting token stream, including the unsplit shift. The exact lexer/parser interface for contextual splitting needs the slice 9 approval. |
 | 9 | `cap C`, `+`, `{}` | Type parameters and arguments precede capability parameters and arguments. `cap` marks declarations, and sets use unions of names or the empty set. [OD88](../decisions.md#od88) · [recovered item 46](../decisions.md#recovered-59-46) |
-| 10 | Existing `(`, `)`, `;`, `#[`, `]` | Expression-bodied `spec fn … = e;`, assertions, assumptions, proof paths, `#[proof(path)]` and `#[test]`. |
+| 10 | Existing `(`, `)`, `;`, `#[`, `]` | Expression-bodied `spec fn … = e;`, `assert(e);`, `assert(e) by lemma(args);`, `assume e;`, proof paths, `#[proof(path)]` and `#[test]`. |
 | 11 | Existing `(`, `)`, `,` | `with(...)` before the return arrow and ordinary call syntax for resource operations. |
 | — | Compound assignment | Outside the proposal. |
 
