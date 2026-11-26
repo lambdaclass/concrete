@@ -771,6 +771,18 @@ private theorem fixtureElaboratorValidated : (registry (returnPasses fixtureElab
       change (Except.error (.slice0 reason) : Except ElabRefusal (Payload earlyFixtureLanguage)) = .error failure
       rw [same]
 
+set_option maxRecDepth 4096 in
+private theorem wrongLiteralElaboratorInvalid (passes : Passes slice0 testProfile)
+    (wrong : passes.elaborate parsedReturn = .ok (elaboratedReturn 43)) :
+    ¬ (registry passes).elaborator.Validated := by
+  intro validated
+  have matching := (validated.1 parsedReturn _ parsedReturnDomain wrong).2.2.2.2
+  change SliceElaboration slice0 (.inl (returnSyntax 42)) (.ok (returnPayload 43)) at matching
+  obtain ⟨program, decoded, matching⟩ := matching
+  obtain rfl := Option.some.inj (show some returnProgram = some program from decoded)
+  have ops := congrArg (fun result => result.toOption.map Payload.operations) matching
+  cases ops
+
 -- Read the literal and locations from the grammar's token leaves. The registered
 -- elaborator consumes the AST returned by the same checked parser.
 set_option maxRecDepth 4096 in
@@ -788,13 +800,7 @@ example :
     ⟨rfl, rfl, returnedCoreWF 42, returnProgram, rfl, rfl⟩, ?_, ?_⟩
   · refine ⟨rfl, by with_unfolding_all rfl, _, rfl, elaborationSourceText.toUTF8, ?_, rfl, _, rfl, ?_⟩
     all_goals with_unfolding_all rfl
-  · intro validated
-    have matching := (validated.1 parsedReturn _ parsedReturnDomain rfl).2.2.2.2
-    change SliceElaboration slice0 (.inl (returnSyntax 42)) (.ok (returnPayload 43)) at matching
-    obtain ⟨program, decoded, matching⟩ := matching
-    obtain rfl := Option.some.inj (show some returnProgram = some program from decoded)
-    have ops := congrArg (fun result => result.toOption.map Payload.operations) matching
-    cases ops
+  · exact wrongLiteralElaboratorInvalid _ rfl
   · intro validated
     have matching := validated.2 parsedReturn _ parsedReturnDomain rfl
     change SliceElaboration slice0 (.inl (returnSyntax 42)) (.error (.diagnostic rule span [])) at matching
@@ -1727,6 +1733,171 @@ private def lcbReturnJob (status : BitVec 32) : LCBInput testProfile :=
   let body : LeanCompilerBackend.Verified.Source.Function :=
     ⟨.word, #[], #[], #[⟨#[], #[], .ret (.literal (.word status))⟩]⟩
   ⟨body, [], #[], (Backend.Runtime.qbe []).toUTF8⟩
+
+private abbrev returnLowering := sliceLoweringLanguage slice0
+
+private def returnType : earlyFixtureLanguage.operands.Ty := .inl (.scalar (.int .u8))
+
+private def singleBlockGraph {P I T : Type} (ending : T) (origins : List Origin) : CFG P I T :=
+  ⟨⟨0⟩, #[⟨⟨0⟩, [], [], ending, origins⟩]⟩
+
+private def lowerLiteralReturn (core : CoreInput earlyFixtureLanguage) :
+    Except StageFailure (MIR returnLowering testProfile) :=
+  match core.payload.operations with
+  | [(site, .expression (.inl (.read (.literal (.int .u8 value)))))] =>
+    match AList.lookup core.payload.origins site with
+    | some origin =>
+      let graph : MIRGraph returnLowering :=
+        singleBlockGraph (.ret (some ⟨returnType, .literal ⟨[UInt8.ofNat value.toNat]⟩⟩)) [origin]
+      .ok ⟨core.project, core.payload.entry, [(core.payload.entry, ⟨[], some returnType⟩)],
+        [(core.payload.entry, [], graph)]⟩
+    | none => .error (.invalidInput rule)
+  | _ => .error (.invalidInput rule)
+
+private def memoryLiteral (memory : Memory returnLowering testProfile) :
+    Except StageFailure (List UInt8 × List Origin) :=
+  match AList.lookup memory.functions memory.entry with
+  | some (_, ⟨_, #[block]⟩) =>
+    match block.ending with
+    | .ret (some ⟨_, .literal value⟩) => .ok (value.encoding, block.boundaryOrigins)
+    | _ => .error (.invalidInput rule)
+  | _ => .error (.invalidInput rule)
+
+private def ssaLiteral (ssa : SSA returnLowering testProfile) :
+    Except StageFailure (List UInt8 × List Origin) :=
+  memoryLiteral (ssa.memoryView (language := earlyFixtureLanguage))
+
+private def literalReturnPasses : Passes slice0 testProfile :=
+  { returnPasses fixtureElaborate with
+    checkCore := fun _ => .ok []
+    lowerCore := fun input => lowerLiteralReturn input.core
+    lowerUnchecked := lowerLiteralReturn
+    lowerMemory := fun mir => .ok (mir.logicalView (language := earlyFixtureLanguage))
+    buildSSA := fun memory => do
+      let (bytes, origins) ← memoryLiteral memory
+      let graph : SSAGraph returnLowering :=
+        singleBlockGraph (.ret (some ⟨returnType, .literal ⟨bytes⟩⟩)) origins
+      return ⟨memory.project, memory.entry, memory.signatures, [(memory.entry, [], graph)], memory.layouts⟩
+    buildBIR := fun ssa => do
+      let (bytes, origins) ← ssaLiteral ssa
+      let graph : BIRGraph returnLowering :=
+        singleBlockGraph (.ret (some ⟨returnType, .literal ⟨bytes⟩⟩)) origins
+      return ⟨ssa.project, ssa.entry, ssa.signatures, [(ssa.entry, [], graph)], ssa.layouts, #[]⟩
+    emitLCB := fun bir => do
+      let (bytes, _) ← memoryLiteral (bir.memoryView (language := earlyFixtureLanguage))
+      match bytes with
+      | [status] => return lcbReturnJob (BitVec.ofNat 32 status.toNat)
+      | _ => throw (.invalidInput rule) }
+
+-- Compose both registered routes through LCB job validation, then observe the exact
+-- emitted body with the fixed LCB semantics. This control exercises a single source.
+set_option maxRecDepth 4096 in
+example (unchecked : Bool) :
+    (Registry.pipeline literalReturnPasses unchecked).run elaborationSource = .ok (lcbReturnJob 42) ∧
+    ((registry literalReturnPasses).lcbPipeline unchecked).run elaborationSource =
+      .ok (lcbReturnJob 42) ∧
+    (LCBInput.Execution Empty elaborationSource.project).observes
+      (lcbReturnJob 42) (.returned 42 ByteArray.empty) := by
+  have ran : ((registry literalReturnPasses).lcbPipeline unchecked).run elaborationSource =
+      .ok (lcbReturnJob 42) := by cases unchecked <;> with_unfolding_all rfl
+  refine ⟨ran, ran, ?_⟩
+  · with_unfolding_all exact ⟨_, ⟨_, rfl, .nil _⟩, rfl⟩
+
+set_option maxRecDepth 4096 in
+example (unchecked : Bool) :
+    let mutant := { literalReturnPasses with
+      lowerCore := fun _ => .error (.invalidInput rule)
+      lowerUnchecked := fun _ => .error (.invalidInput rule) }
+    ¬ ∃ output, (Registry.pipeline mutant unchecked).run elaborationSource = .ok output := by
+  intro mutant
+  have refused : (Registry.pipeline mutant unchecked).run elaborationSource =
+      .error ⟨StageFailure, .invalidInput rule⟩ := by
+    cases unchecked <;> with_unfolding_all rfl
+  rintro ⟨_, ran⟩
+  rw [refused] at ran
+  cases ran
+
+set_option maxRecDepth 4096 in
+example (unchecked : Bool) :
+    let mutant : Passes slice0 testProfile :=
+      { literalReturnPasses with elaborate := fun _ => .ok (elaboratedReturn 43) }
+    (Registry.pipeline mutant unchecked).run elaborationSource = .ok (lcbReturnJob 43) ∧
+    ¬ (registry mutant).elaborator.Validated := by
+  refine ⟨?_, wrongLiteralElaboratorInvalid _ rfl⟩
+  cases unchecked <;> with_unfolding_all rfl
+
+private def loopingSSA : SSA returnLowering testProfile :=
+  let graph : SSAGraph returnLowering :=
+    singleBlockGraph (.jump ⟨⟨0⟩, []⟩) []
+  ⟨elaborationSource.project, earlyEntry, [(earlyEntry, ⟨[], some returnType⟩)],
+    [(earlyEntry, [], graph)], []⟩
+
+private theorem loopingSSAWF : loopingSSA.WF (language := earlyFixtureLanguage) := by
+  change Memory.HandoffWF (loopingSSA.memoryView (language := earlyFixtureLanguage))
+  refine ⟨⟨?_, ?_, ?_, ?_, ?_, ?_, ?_⟩, ?_, ?_⟩
+  · change [earlyEntry].Nodup
+    simp
+  · change [earlyEntry].Nodup
+    simp
+  · change [earlyEntry].Nodup
+    simp
+  · exact List.nodup_nil
+  · intro fn classes member
+    change (fn, classes) ∈ [(earlyEntry, [])] at member
+    have eq := List.mem_singleton.mp member
+    rw [show classes = [] from congrArg Prod.snd eq]
+    exact List.nodup_nil
+  · intro fn layouts member
+    cases member
+  · intro fn locals graph member
+    with_unfolding_all change (fn, locals, graph) ∈ [(earlyEntry, [], singleBlockGraph (.jump ⟨⟨0⟩, []⟩) [])] at member
+    have eq := List.mem_singleton.mp member
+    obtain rfl := congrArg Prod.fst eq
+    obtain rfl := congrArg (Prod.fst ∘ Prod.snd) eq
+    obtain rfl := congrArg (Prod.snd ∘ Prod.snd) eq
+    refine ⟨List.nodup_nil, ⟨?_, ?_, ?_⟩, ?_⟩
+    · change [BlockId.mk 0].Nodup
+      simp
+    · exact ⟨_, List.mem_cons_self .., rfl⟩
+    · intro block h edge e
+      rcases List.mem_singleton.mp h with rfl
+      rcases List.mem_singleton.mp e with rfl
+      exact ⟨_, List.mem_cons_self .., rfl, rfl⟩
+    · refine ⟨⟨[], some returnType⟩, ?_, ⟨_, List.mem_cons_self .., rfl, rfl⟩, ?_⟩
+      · with_unfolding_all rfl
+      · intro block member
+        rcases List.mem_singleton.mp member with rfl
+        exact ⟨trivial, fun _ absent => nomatch absent⟩
+  · exact List.mem_cons_self ..
+  · intro origin member
+    with_unfolding_all change origin ∈ ([] : List Origin) at member
+    cases member
+
+-- The handoff contract admits a non-literal graph with no allocated registers.
+-- BIR formation may not refuse it, even though the fixture pass only handles returns.
+example : ¬ (registry literalReturnPasses).buildBIR.Validated := by
+  intro validated
+  have impossible := validated.2 loopingSSA (.invalidInput rule) loopingSSAWF (by with_unfolding_all rfl)
+  exact impossible
+
+-- Validation forces every bundle to translate this self-loop and retain its
+-- entry graph. A literal return cannot serve as a fallback result.
+example (passes : Passes slice0 testProfile)
+    (validated : (registry passes).buildBIR.Validated) :
+    ∃ bir, (registry passes).buildBIR.run loopingSSA = .ok bir ∧
+      BIR.EntryMatches (language := earlyFixtureLanguage) loopingSSA bir := by
+  cases ran : (registry passes).buildBIR.run loopingSSA with
+  | ok bir =>
+    exact ⟨bir, rfl, (validated.1 loopingSSA bir loopingSSAWF ran).2.2.2.2.2.2.1⟩
+  | error reason =>
+    have refused := validated.2 loopingSSA reason loopingSSAWF ran
+    cases reason with
+    | resource bound =>
+      have measured : bound.measured = 0 := refused.2.2.1
+      have exceeds : bound.limit < bound.measured := refused.2.2.2
+      rw [measured] at exceeds
+      exact (Nat.not_lt_zero _ exceeds).elim
+    | _ => exact refused.elim
 
 -- Structural job validation accepts both functions. Imported execution
 -- observes their different returns from the supplied body and runtime input.

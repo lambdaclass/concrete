@@ -181,6 +181,18 @@ Fix (a)'s production cutover owns the update to the provisional trusted-base
 registry and the removal of test-local model scaffolding after its remaining
 controls exercise the registered contracts directly.
 
+The cutover exit criterion is that the production pass bundle replaces the
+Slice 0 reference bundle in the same registered end-to-end theorem. The
+reference bundle may remain as a test oracle or be deleted. The driver uses
+the production bundle as its sole path.
+
+The compiler gate runs the literal-return control through both registered LCB
+routes and checks the emitted job's exit observation. Universal reference
+validation remains open. For example, the gate proves that the frozen SSA
+handoff admits a one-block self-loop with zero frame slots. Every validated
+BIR builder must translate that input and preserve its entry graph. A builder
+that handles only literal returns fails this obligation.
+
 When an atomic retirement spans owners, each writer prepares the replacement for its own files. The integration writer applies the coordinated deletion and updates the trusted-base inventories and cross-stage fixtures with the cutover. Frozen paths and the digest manifest belong to the interface round. Fixes (e) and (f) provide production definitions in their owned modules before the integration writer replaces the bootstrap instance bodies at cutover.
 
 ISS-XXXX (coordinator assignment pending) tracks D5 controls on the fixed slice
