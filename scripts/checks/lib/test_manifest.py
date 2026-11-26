@@ -20,12 +20,46 @@ HEADER = ["id", "program", "expect", "slice"]
 ID_RE = re.compile(r"[a-z0-9_]+")
 SLICE_RE = re.compile(r"[a-z0-9_]+")
 RULE_RE = re.compile(r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*@[1-9][0-9]*")
-TRAP_KINDS = frozenset(("overflow", "division_by_zero", "invalid_shift",
+TRAP_KINDS = frozenset(("arithmeticOverflow", "division_by_zero", "invalid_shift",
                         "out_of_bounds", "invalid_range", "abort"))
 ORIGIN_RE = re.compile(r"([0-9]+):([0-9]+):([1-9][0-9]*):([1-9][0-9]*)")
 LABEL_RE = re.compile(r"[a-z][a-z0-9_]*")
 REFUSAL_KINDS = frozenset(("unreachable_statement",))
 PENDING_REFUSALS = frozenset(("syntax", "unsupported_form", "checker"))
+# Shrink this inventory as 4(c)/4(d)/4(f) expose typed refusals. New paths require typed fields.
+PENDING_SOURCES = frozenset(
+    "con:tests/slice0/" + name for name in (
+        "overflow.con",
+        "syntax_error.con",
+        "unsupported.con",
+        "unannotated.con",
+        "suffix.con",
+        "reserved.con",
+        "reserved_move.con",
+        "reserved_struct.con",
+        "intrinsic_shadow.con",
+        "radix_missing_semi.con",
+        "malformed_if.con",
+        "multiply.con",
+        "conditional.con",
+        "mutable.con",
+        "contextual_multiply.con",
+        "shadow_destroy.con",
+        "shadow_discard.con",
+        "shadow_alloc.con",
+        "shadow_sizeof.con",
+        "shadow_alignof.con",
+        "shadow_read_owned.con",
+        "shadow_get_args.con",
+        "shadow_byte_at.con",
+        "empty_body.con",
+        "fallthrough.con",
+        "shadow_wrapping_add.con",
+        "shadow_saturating_add.con",
+        "shadow_checked_add.con",
+        "shadow_try_convert.con",
+    )
+)
 
 
 class Row(NamedTuple):
@@ -169,6 +203,8 @@ def parse(path, text):
         validate_expect(path, line_number, expect)
         if program.startswith("bir:") and expect.startswith(("refuse ", "pending-refusal ")):
             fail(path, line_number, f"bir: row {ident!r} cannot use refuse; expected exit or trap")
+        if expect.startswith("pending-refusal ") and program not in PENDING_SOURCES:
+            fail(path, line_number, "pending-refusal is restricted to existing untyped source fixtures")
         if program.startswith("bir:") and expect.startswith("llvm "):
             fail(path, line_number, "backend-specific CLI expectations require a con: source")
         if not SLICE_RE.fullmatch(slice_name):
@@ -203,12 +239,24 @@ def self_test():
                  "a\tbir:answer\texit 42 -\tslice0\n"
                  "b\tcon:tests/slice0/ok.con\trefuse unreachable_statement STMT-14@1 0:1:1:1 anchor=2:3:1:3\tslice0\n")
         assert len(parse(tests / "manifest.tsv", valid)) == 2
+        refusal = "refuse unreachable_statement STMT-14@1 0:1:1:1 anchor=2:3:1:3"
+        llvm = valid.replace(refusal, "llvm exit 42 lcb resource values 488")
+        assert len(parse(tests / "manifest.tsv", llvm)) == 2
         bad = [
+            llvm.replace("exit 42 lcb", "exit 256 lcb"),
+            llvm.replace("values 488", "values 0"),
+            valid.replace(refusal, "pending-refusal checker"),
+            valid.replace("exit 42 -", "pending-refusal checker"),
+            valid.replace("exit 42 -", "trap arithmeticOverflow 0 -"),
+            valid.replace("exit 42 -", "exit 42 0A"),
+            valid.replace("STMT-14@1", "STMT-14@0"),
+            valid.replace("0:1:1:1", "0:1:0:1"),
+            valid.replace("0:1:1:1", "0:1:1:0"),
             valid.replace("STMT-14@1", "STMT-14"),
             valid.replace("0:1:1:1", "1:0:1:1"),
             valid.replace("anchor=2:3:1:3", "anchor=2:3:1:3,anchor=0:1:1:1"),
             valid.replace("exit 42 -", "exit 42 0"),
-            valid.replace("exit 42 -", "trap arithmeticOverflow 0 0a"),
+            valid.replace("exit 42 -", "trap overflow 0 0a"),
             valid.replace("exit 42 -", "llvm exit 42 lcb resource values 488"),
             valid + "c\tcon:tests/slice0/link.con\texit 0 -\tslice0\n",
             valid + "c\tcon:tests/slice0/dangling.con\texit 0 -\tslice0\n",

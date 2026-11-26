@@ -50,6 +50,14 @@ check() {
   done
 }
 
+# Compare the public driver's complete refusal against the typed oracle's rendering.
+cli_resource_refused() {
+  local dir=$1
+  [ "$2" = 1 ] && [ ! -s "$dir/lcb.stdout" ] &&
+    [ ! -e "$dir/lcb" ] && [ ! -L "$dir/lcb" ] &&
+    cmp -s "$3" "$dir/lcb.stderr"
+}
+
 # The backend-specific expectation exercises the public driver and its native build policy.
 check_backend_limit() {
   local path=${1#con:}
@@ -86,35 +94,46 @@ check_backend_limit() {
   bounded "$native_secs" "${cli[@]}" \
     build "$path" -o "$d/lcb" --backend lcb \
     >"$d/lcb.stdout" 2>"$d/lcb.stderr" || rc=$?
-  if [ "$rc" = 1 ] && [ ! -s "$d/lcb.stdout" ] && [ ! -e "$d/lcb" ]; then
+  if cli_resource_refused "$d" "$rc" "$d/lcb-expected.stderr"; then
     echo "ok   $path [lcb]: $(cat "$d/lcb.stderr")"
   else
     echo "FAIL $path [lcb]: expected LCB CLI refusal without published output, got status $rc"
     cat "$d/lcb.stderr"
     fail=1
   fi
+  if [ "${CONCRETE_TEST_MANIFEST_SKIP_CONTROLS:-0}" != 1 ]; then
+    local control="$d/cli-wrong-refusal"
+    mkdir -p "$control"
+    rc=0
+    bounded "$native_secs" "${cli[@]}" build "./$path" -o "$control/lcb" --backend lcb \
+      >"$control/lcb.stdout" 2>"$control/lcb.stderr" || rc=$?
+    if [ "$rc" = 1 ] && [ ! -s "$control/lcb.stdout" ] && [ ! -e "$control/lcb" ] &&
+        [ -s "$control/lcb.stderr" ] &&
+        ! cli_resource_refused "$control" "$rc" "$d/lcb-expected.stderr"; then
+      echo "ok   CLI control: unrelated refusal rejected"
+    else
+      echo "FAIL CLI control: expected rejection of an unrelated exit-1 refusal"
+      fail=1
+    fi
+  fi
 }
 
 rows=$(manifest_rows)
 
-mutate_expectation() {
-  awk -F '\t' -v OFS='\t' -v id="$2" -v replacement="$3" '
-    $1 == id {$3 = replacement} {print}
+mutate_field() {
+  awk -F '\t' -v OFS='\t' -v id="$2" -v index_to_change="$3" -v value="$4" '
+    $1 == id {
+      n = split($3, fields, " ")
+      fields[index_to_change] = value
+      $3 = fields[1]
+      for (i = 2; i <= n; i++) $3 = $3 " " fields[i]
+    }
+    {print}
   ' "$1" >"$1.new"
   mv "$1.new" "$1"
 }
-wrong_expectation() { mutate_expectation "$1" answer 'exit 41 -'; }
-wrong_trap_site() { mutate_expectation "$1" overflow 'trap overflow 1 0a'; }
-wrong_trap_kind() { mutate_expectation "$1" overflow 'trap division_by_zero 0 0a'; }
-wrong_trap_stderr() { mutate_expectation "$1" overflow 'trap overflow 0 0a'; }
 missing_row() { awk -F '\t' '$1 != "answer"' "$1" >"$1.new"; mv "$1.new" "$1"; }
 nonexistent_program() { printf 'no_such_program\tbir:no_such_program\texit 0 -\tslice0\n' >>"$1"; }
-wrong_source_refusal() { mutate_expectation "$1" source_answer 'pending-refusal checker'; }
-wrong_origin() { mutate_expectation "$1" source_after_return 'refuse unreachable_statement STMT-14@1 18:27:1:19 -'; }
-wrong_related_origin() {
-  mutate_expectation "$1" source_after_return 'refuse unreachable_statement STMT-14@1 28:37:1:29 anchor=18:27:1:19'
-}
-wrong_resource_limit() { mutate_expectation "$1" source_lcb_value_limit 'llvm exit 42 lcb resource values 489'; }
 
 manifest_control() {
   local label=$1
@@ -122,14 +141,15 @@ manifest_control() {
   local mutation=$3
   local row_id=$4
   local inventory_message=${5:-}
+  shift 5
   local selected program expect
-  local dir="$work/ctl/$1"
+  local dir="$work/ctl/$label"
   local copy
   local rc=0
   mkdir -p "$dir"
   cp -R "$(dirname "$test_manifest")" "$dir/tests"
   copy="$dir/tests/$(basename "$test_manifest")"
-  "$mutation" "$copy"
+  "$mutation" "$copy" "$row_id" "$@"
   if cmp -s "$test_manifest" "$copy"; then
     echo "FAIL manifest control $label: mutation changed nothing" >&2; fail=1; return
   fi
@@ -158,16 +178,51 @@ manifest_control() {
 }
 mkdir -p "$work/ctl"
 if [ "${CONCRETE_TEST_MANIFEST_SKIP_CONTROLS:-0}" != 1 ]; then
-  manifest_control wrong-expectation 10 wrong_expectation answer
-  manifest_control wrong-trap-site 11 wrong_trap_site overflow
-  manifest_control wrong-trap-kind 12 wrong_trap_kind overflow
-  manifest_control wrong-trap-stderr 16 wrong_trap_stderr overflow
+  manifest_control wrong-expectation 10 mutate_field answer "" 2 41
+  manifest_control wrong-bir-exit-stderr 16 mutate_field answer "" 3 0a
+  manifest_control wrong-source-exit-stderr 16 mutate_field source_answer "" 3 0a
+  manifest_control wrong-source-exit-status 10 mutate_field source_answer "" 2 41
+  for id in overflow source_trap; do
+    manifest_control "$id-wrong-trap-site" 11 mutate_field "$id" "" 3 2
+    manifest_control "$id-wrong-trap-kind" 12 mutate_field "$id" "" 2 division_by_zero
+    manifest_control "$id-wrong-trap-stderr" 16 mutate_field "$id" "" 4 0a
+  done
   manifest_control missing-row 1 missing_row "" "slice0: program without a manifest row: answer"
   manifest_control nonexistent-program 1 nonexistent_program "" "slice0: manifest row names no program: no_such_program"
-  manifest_control wrong-source-refusal 13 wrong_source_refusal source_answer
-  manifest_control wrong-primary-origin 14 wrong_origin source_after_return
-  manifest_control wrong-related-origin 14 wrong_related_origin source_after_return
-  manifest_control wrong-resource-limit 15 wrong_resource_limit source_lcb_value_limit
+  manifest_control wrong-source-refusal 13 mutate_field source_syntax "" 2 checker
+  manifest_control wrong-rule-id 13 mutate_field source_after_return "" 3 STMT-15@1
+  manifest_control wrong-rule-revision 13 mutate_field source_after_return "" 3 STMT-14@2
+  manifest_control wrong-primary-origin 14 mutate_field source_after_return "" 4 18:27:1:19
+  manifest_control wrong-related-origin 14 mutate_field source_after_return "" 5 anchor=18:27:1:19
+  manifest_control wrong-resource-name 15 mutate_field source_lcb_value_limit "" 6 blocks
+  manifest_control wrong-resource-limit 15 mutate_field source_lcb_value_limit "" 7 489
+
+  rc=0
+  fixture_dir=$(dirname "$test_manifest")
+  "${emitter[@]}" control-wrong-compiler-origin tests/slice0/after_return.con \
+    "$fixture_dir/slice0/after_return.con" || rc=$?
+  if [ "$rc" = 18 ]; then
+    echo "ok   compiler control: wrong production origin rejected"
+  else
+    echo "FAIL compiler control: expected wrong production origin status 18, got $rc"
+    fail=1
+  fi
+  rc=0
+  "${emitter[@]}" control-unsupported-lcb-profile || rc=$?
+  if [ "$rc" = 17 ]; then
+    echo "ok   unsupported LCB profile is distinct from a resource mismatch"
+  else
+    echo "FAIL unsupported LCB profile: expected status 17, got $rc"
+    fail=1
+  fi
+  rc=0
+  "${emitter[@]}" emit answer "$work/ctl/unsupported" unavailable-target exit 42 - || rc=$?
+  if [ "$rc" = 17 ]; then
+    echo "ok   unsupported target is distinct from schema errors and observation mismatches"
+  else
+    echo "FAIL unsupported target: expected status 17, got $rc"
+    fail=1
+  fi
 fi
 
 if [[ "$rows" == *$'\t'"llvm exit "* ]] && [ "${CONCRETE_TEST_EMIT_ONLY:-0}" != 1 ]; then
@@ -211,6 +266,27 @@ for c in "no-newline|134|concrete: trap: x|" "extra-newline|134|concrete: trap: 
     echo "FAIL judge accepts a forged observation: $n"; fail=1
   else
     echo "ok   judge rejects $n"
+  fi
+done
+
+# Isolate the intentional watchdog failure from the gate's own bounded log.
+(
+  BOUNDED_LOG="$work/ctl/failed-watchdog.log"
+  BOUNDED_EXEC="$work/ctl/nonexistent-watchdog.py"
+  observe "$work/ctl/invalid/llvm.exe" "$work/ctl/failed-watchdog" 1 1
+  [ "$(cat "$work/ctl/failed-watchdog.status")" = runner-failed ] &&
+    ! judge "$work/ctl/loop" "$work/ctl/failed-watchdog"
+) && echo "ok   observe distinguishes a failed watchdog from timeout" ||
+  { echo "FAIL observe: watchdog failure was not classified separately"; fail=1; }
+
+for unavailable in runner-failed unsupported-profile; do
+  echo "$unavailable" >"$e/status"
+  : >"$e/stderr"
+  if judge "$e" "$(forge "$unavailable" "$unavailable" '' '')"; then
+    echo "FAIL judge accepts $unavailable as an observation"
+    fail=1
+  else
+    echo "ok   judge rejects $unavailable even when the expected status matches"
   fi
 done
 
