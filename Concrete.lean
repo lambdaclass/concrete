@@ -20,6 +20,7 @@ import Concrete.Memory.Lowering
 import Concrete.Memory.Lifetimes
 import Concrete.Memory.Refinement
 import Concrete.Memory.Controls
+import Concrete.Memory.ExhaustionControl
 import Concrete.SSA
 import Concrete.Stages
 import Concrete.Theorem

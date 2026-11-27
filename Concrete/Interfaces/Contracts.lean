@@ -14,9 +14,11 @@ inductive Observation where
   | returned (status : UInt8) (stderr : ByteArray)
   | trapped (status : UInt8) (kind : TrapKind) (site : FileSpan) (stderr : ByteArray)
   | startupRefused (status : UInt8) (stderr : ByteArray)
+  | resourceExhausted
 
 def Observation.stderr : Observation → ByteArray
   | .returned _ bytes | .trapped _ _ _ bytes | .startupRefused _ bytes => bytes
+  | .resourceExhausted => ByteArray.empty
 
 open Concrete.Contracts (Steps)
 
@@ -699,6 +701,15 @@ def Begins (memory : Memory lang profile) (state : MemoryRegisters language prof
       next = {live with bytes := bytes, materialized :=
         (place, ⟨⟨space, base, some block⟩, layout.size, layout.align⟩) :: state.materialized})))
 
+/-- A rejected address is only one allocator choice. Exhaustion requires a fresh,
+nonempty materialized root with a known layout and no successful placement anywhere. -/
+structure BeginExhausted (memory : Memory lang profile) (state : MemoryRegisters language profile)
+    (place : PlaceId) : Prop where
+  fresh : place ∉ state.live
+  materialized : memory.classAt state.frame place = some .materialized
+  nonemptyLayout : ∃ layout, memory.layoutAt state.frame place = some layout ∧ 0 < layout.size
+  unavailable : ¬ ∃ next, memory.Begins state place next
+
 def endOwnerView (memory : Memory lang profile) (state : MemoryRegisters language profile)
     (place : PlaceId) : Option (Own.State × Hybrid.Place) :=
   (memory.rootType state.frame place).map fun ty =>
@@ -756,16 +767,21 @@ def readOperands (memory : Memory lang profile) :
     let (values, next) ← memory.readOperands rest afterRead
     return (value :: values, next)
 
+/-- A parameter list finishes normally or reaches its first unavailable reservation
+after a sequence of authorized writes. Only normal completion can commit the list. -/
 inductive WriteParams (memory : Memory lang profile) :
     List (Sigma (MemoryPlace language.operands.Ty)) → List language.operands.Val →
-      MemoryRegisters language profile → MemoryRegisters language profile → Prop
-  | nil (state) : WriteParams memory [] [] state state
-  | cons {ty} {place : MemoryPlace _ ty} {params value values state started stored next} :
+      MemoryRegisters language profile → MemoryRegisters language profile → (exhausting : optParam Bool false) → Prop
+  | nil (state) : WriteParams memory [] [] state state false
+  | cons {ty} {place : MemoryPlace _ ty} {params value values state started stored next exhausting} :
       (if state.live.contains place.logical.root then started = state
         else memory.Begins state place.logical.root started) →
       memory.Writes started place value stored →
-      WriteParams memory params values stored next →
-      WriteParams memory (⟨ty, place⟩ :: params) (value :: values) state next
+      WriteParams memory params values stored next exhausting →
+      WriteParams memory (⟨ty, place⟩ :: params) (value :: values) state next exhausting
+  | exhausted {ty} {place : MemoryPlace _ ty} {params value values state} :
+      memory.BeginExhausted state place.logical.root →
+      WriteParams memory (⟨ty, place⟩ :: params) (value :: values) state state true
 
 inductive EndLocals (memory : Memory lang profile) :
     List PlaceId → MemoryRegisters language profile → MemoryRegisters language profile → Prop
@@ -777,7 +793,7 @@ inductive EndLocals (memory : Memory lang profile) :
 def Call (memory : Memory lang profile) (callee : FnId)
     (dst : Option (Sigma (MemoryPlace language.operands.Ty)))
     (args : List (Sigma (MemoryRead _ lang.literal)))
-    (state next : MemoryRegisters language profile) : Prop :=
+    (state next : MemoryRegisters language profile) (exhausting : Bool := false) : Prop :=
   ∃ values afterRead graph entry,
     memory.readOperands args state = some (values, afterRead) ∧
     memory.graphAt callee = some graph ∧ graph.blocks.find? (·.id == graph.entry) = some entry ∧
@@ -788,25 +804,25 @@ def Call (memory : Memory lang profile) (callee : FnId)
         ownership := afterRead.ownership
         nextAddressId := afterRead.nextAddressId
         effects := afterRead.effects
-        callers := ⟨afterRead.advance.toMemoryFrame, dst⟩ :: afterRead.callers } next
+        callers := ⟨afterRead.advance.toMemoryFrame, dst⟩ :: afterRead.callers } next exhausting
 
 def Return (memory : Memory lang profile) (operand : Option (Sigma (MemoryRead _ lang.literal)))
-    (state next : MemoryRegisters language profile) : Prop :=
+    (state next : MemoryRegisters language profile) (exhausting : Bool := false) : Prop :=
   ∃ caller rest values afterRead ended,
     state.callers = caller :: rest ∧
     memory.readOperands operand.toList state = some (values, afterRead) ∧
     memory.EndLocals afterRead.live afterRead ended ∧
     operand.toList.map Sigma.fst = caller.destination.toList.map Sigma.fst ∧
     memory.WriteParams caller.destination.toList values
-      { toMemoryFrame := caller.caller, bytes := ended.bytes, callers := rest, effects := ended.effects, ownership := ended.ownership, nextAddressId := ended.nextAddressId } next
+      { toMemoryFrame := caller.caller, bytes := ended.bytes, callers := rest, effects := ended.effects, ownership := ended.ownership, nextAddressId := ended.nextAddressId } next exhausting
 
 def Transfer (memory : Memory lang profile) (edge : CFGEdge (Sigma (MemoryRead _ lang.literal)))
-    (state next : MemoryRegisters language profile) : Prop :=
+    (state next : MemoryRegisters language profile) (exhausting : Bool := false) : Prop :=
   ∃ values afterRead block,
     memory.readOperands edge.arguments state = some (values, afterRead) ∧
     memory.blockAt {state with block := edge.target} = some block ∧
     edge.arguments.map Sigma.fst = block.params.map Sigma.fst ∧
-    memory.WriteParams block.params values {afterRead with block := edge.target, instruction := 0} next
+    memory.WriteParams block.params values {afterRead with block := edge.target, instruction := 0} next exhausting
 
 /-- Splitting a value transfers each bound field once. An omitted active field
 must be Copy, and every destination has the declared type of its field. -/
@@ -905,12 +921,13 @@ def applyOperation (state : MemoryRegisters language profile) (logical : Bool)
     ownership := store.ownership}
 
 def InstructionStepWith (memory : Memory lang profile)
-    (state next : MemoryRegisters language profile) (logical startDefinitions : Bool) : MemoryInst lang → Prop
+    (state next : MemoryRegisters language profile) (logical startDefinitions : Bool) (instruction : MemoryInst lang)
+    (exhausting : Bool := false) : Prop := match instruction with
   | .bind dst src =>
     ∃ value afterRead stored, memory.readValue state src = some (value, afterRead) ∧
-      (if logical || startDefinitions then memory.WriteParams [⟨_, dst⟩] [value] afterRead stored
-        else memory.Writes afterRead dst value stored) ∧ next = stored.advance
-  | .assign dst src =>
+      (if logical || startDefinitions then memory.WriteParams [⟨_, dst⟩] [value] afterRead stored exhausting
+        else if exhausting then False else memory.Writes afterRead dst value stored) ∧ next = stored.advance
+  | .assign dst src => if exhausting then False else
     ∃ value afterRead stored, memory.readValue state src = some (value, afterRead) ∧
       memory.Writes afterRead dst value stored ∧ next = stored.advance
   | @MemoryInst.op _ _ opcode types ty dst _ args checks addresses =>
@@ -922,43 +939,56 @@ def InstructionStepWith (memory : Memory lang profile)
       language.operation opcode types ty values profile.memoryTarget operands before result effects changed ∧
       List.map Prod.fst changed.addressedValues = List.map Prod.fst before.addressedValues ∧
       let afterOperation := applyOperation ready logical changed
-      (if logical || startDefinitions then memory.WriteParams [⟨_, dst⟩] [result] afterOperation stored
-        else memory.Writes afterOperation dst result stored) ∧
+      (if logical || startDefinitions then memory.WriteParams [⟨_, dst⟩] [result] afterOperation stored exhausting
+        else if exhausting then False else memory.Writes afterOperation dst result stored) ∧
       next = {stored.advance with effects := stored.effects ++ effects}
-  | .beginLifetime place => ∃ started, memory.Begins state place started ∧ next = started.advance
-  | .endLifetime place => ∃ ended, memory.Ends state place ended ∧ next = ended.advance
+  | .beginLifetime place => if exhausting then memory.BeginExhausted state place else
+    ∃ started, memory.Begins state place started ∧ next = started.advance
+  | .endLifetime place => if exhausting then False else
+    ∃ ended, memory.Ends state place ended ∧ next = ended.advance
   | @MemoryInst.destructure _ _ ty src bindings =>
     ∃ value afterRead fields stored,
       memory.readValue state (if language.operands.isCopy ty then .copy src else .move src) =
         some (value, afterRead) ∧
       DestructureFields language ty value (bindings.map fun (field, dst) => (field, dst.1)) ∧
       bindings.mapM (fun binding => language.field value [binding.1]) = some fields ∧
-      memory.WriteParams (bindings.map Prod.snd) fields afterRead stored ∧ next = stored.advance
+      memory.WriteParams (bindings.map Prod.snd) fields afterRead stored exhausting ∧ next = stored.advance
   | .call callee dst args checks =>
     memory.instructionTrap state (.call callee dst args checks) = none ∧
-      memory.Call callee dst args state next
+      memory.Call callee dst args state next exhausting
 
 def InstructionStep (memory : Memory lang profile)
-    (state next : MemoryRegisters language profile) (logical : Bool := false) : MemoryInst lang → Prop :=
-  memory.InstructionStepWith state next logical false
+    (state next : MemoryRegisters language profile) (logical : Bool := false) (op : MemoryInst lang)
+    (exhausting : Bool := false) : Prop :=
+  memory.InstructionStepWith state next logical false op exhausting
 
 def ControlStep (memory : Memory lang profile)
-    (state next : MemoryRegisters language profile) :
-    Terminator (Sigma (MemoryRead _ lang.literal)) (MemoryRead _ lang.literal lang.bool) → Prop
-  | .jump edge => memory.Transfer edge state next
+    (state next : MemoryRegisters language profile)
+    (ending : MemoryTerm lang) (exhausting : Bool := false) : Prop := match ending with
+  | .jump edge => memory.Transfer edge state next exhausting
   | .branch test yes no =>
     ∃ value afterRead flag, memory.readValue state test = some (value, afterRead) ∧
       language.operands.test value = some flag ∧
-      memory.Transfer (if flag then yes else no) afterRead next
-  | .ret value => memory.Return value state next
+      memory.Transfer (if flag then yes else no) afterRead next exhausting
+  | .ret value => memory.Return value state next exhausting
   | .trap .. | .invalid => False
 
-def Step (memory : Memory lang profile)
-    (state next : MemoryRegisters language profile) : Prop :=
+/-- Both outcomes share instruction fetch and all guards preceding a reservation.
+Only a normal outcome supplies the successor registers to commit. -/
+def StepOutcome (memory : Memory lang profile)
+    (state next : MemoryRegisters language profile) (exhausting : Bool) : Prop :=
   ∃ block, memory.blockAt state = some block ∧
     match block.body[state.instruction]? with
-    | some op => memory.InstructionStep state next false op.instruction
-    | none => state.instruction = block.body.length ∧ memory.ControlStep state next block.ending
+    | some op => memory.InstructionStep state next false op.instruction exhausting
+    | none => state.instruction = block.body.length ∧ memory.ControlStep state next block.ending exhausting
+
+/-- An instruction commits its ordinary successor or aborts at its original PC.
+A failed reservation inside a compound transfer commits no partial writes or effects. -/
+def Step (memory : Memory lang profile) (state next : MemoryRegisters language profile) : Prop :=
+  if state.resourceExhausted then False else if next.resourceExhausted then
+    next = {state with resourceExhausted := true} ∧
+      ∃ partialState, memory.StepOutcome state partialState true
+  else memory.StepOutcome state next false
 
 def Initial (memory : Memory lang profile) (state : MemoryRegisters language profile) : Prop :=
   state.frame = memory.entry ∧ state.callers = [] ∧
@@ -967,7 +997,7 @@ def Initial (memory : Memory lang profile) (state : MemoryRegisters language pro
   state.instruction = 0 ∧ state.virtualValues = [] ∧
   state.materialized = [] ∧ state.live = [] ∧ state.initialized = [] ∧ state.zeroValues = [] ∧
   state.bytes = Mem.Memory.empty ∧ state.effects = [] ∧ state.ownership = {} ∧
-  state.addressIds = [] ∧ state.nextAddressId = 0 ∧ state.movedFields = []
+  state.addressIds = [] ∧ state.nextAddressId = 0 ∧ state.movedFields = [] ∧ state.resourceExhausted = false
 
 end Memory
 
@@ -993,6 +1023,7 @@ instead steps back to its caller. -/
 def Memory.terminalObservation {language : CoreLanguage} {lang : LoweringLanguage language.operands.Ty}
     {profile : Profile} (memory : Memory lang profile)
     (state : MemoryRegisters language profile) : Option Observation := do
+  if state.resourceExhausted then return .resourceExhausted
   let block ← memory.blockAt state
   if let some op := block.body[state.instruction]? then
     let kind ← memory.instructionTrap state op.instruction
@@ -1106,7 +1137,7 @@ private def entryStateFor (memory : Memory lang profile) (arity : Nat := 0) :
   let block := graph.bind (·.blocks.find? (·.id == id))
   let pc := (block.map fun block =>
     if block.params.length = arity then 0 else block.body.length + 1).getD 0
-  ⟨⟨memory.entry, id, pc, [], [], [], [], [], [], []⟩, Mem.Memory.empty, [], [], {}, 0⟩
+  ⟨⟨memory.entry, id, pc, [], [], [], [], [], [], []⟩, Mem.Memory.empty, [], [], {}, 0, false⟩
 
 private def hostedResultFor (memory : Memory lang profile) (state : MemoryRegisters language profile) :
     Option Concrete.Contracts.Observation := do
@@ -1122,6 +1153,7 @@ private def hostedResultFor (memory : Memory lang profile) (state : MemoryRegist
     let file ← memory.project.files[span.file.index]?
     return .trapped status kind ⟨⟨origin.operation.id⟩, ⟨file.path.render.text, span.line, span.col⟩⟩ bytes
   | .startupRefused status bytes => return .startupRefused status bytes
+  | .resourceExhausted => return .resourceExhausted
 
 private def traceFor {A S E : Type}
     (effects : S → List E)
@@ -1214,6 +1246,28 @@ def MIR.Execution : Semantics (MIR lang profile) language.operands.Event :=
 def Memory.Execution : Semantics (Memory lang profile) language.operands.Event :=
   graphExecution Memory.Step (fun memory => entryStateFor memory) hostedResultFor
 
+/-- Ordinary hosted results carry the MIR matching obligation. A failed physical
+reservation has its own typed observation in Execution. -/
+def Memory.MatchingResult (memory : Memory lang profile) (q : MemoryRegisters language profile)
+    (o : Concrete.Contracts.Observation) : Prop :=
+  if q.resourceExhausted then False else Memory.Execution.result memory q o
+
+theorem Memory.silent_step {memory : Memory lang profile} {q next : MemoryRegisters language profile}
+    (ready : memory.terminalObservation q = none) (tick : memory.Step q next)
+    (effects : next.effects = q.effects) : Memory.Execution.step memory q next := by
+  have absent : hostedResultFor memory q = none := by simp [hostedResultFor, ready]
+  refine ⟨absent, tick, ?_⟩
+  change Concrete.Contracts.TracePrefix (traceFor _ _ memory q) (traceFor _ _ memory next)
+  unfold traceFor
+  rw [absent]
+  simp only [Option.map_none, Option.getD_none, List.append_nil]
+  exact ⟨_, by rw [effects]⟩
+
+theorem Memory.exhausted_result (memory : Memory lang profile) {q : MemoryRegisters language profile}
+    (h : q.resourceExhausted = true) : Memory.Execution.result memory q .resourceExhausted := by
+  change hostedResultFor memory q = _
+  simp [hostedResultFor, Memory.terminalObservation, h]
+
 private def bindsOwner {O : Exec.Operands} (owner : ConcreteSpec.Var) : Exec.Stmt O → Bool
   | .bind var .. => var == owner
   | .call dst .. | .prim dst .. => dst == some owner
@@ -1261,7 +1315,7 @@ def Memory.RepresentsActivation (memory : Memory lang profile)
     (logical physical : MemoryFrame language.operands.Val) (bytes : Mem.Memory)
     (ranges : AList Hybrid.Place (Option Hybrid.Range) := []) : Prop :=
   memory.Represents ⟨logical.frame, logical.live, logical.virtualValues, logical.movedFields⟩
-    ⟨physical, bytes, [], [], {}, 0⟩ ranges
+    ⟨physical, bytes, [], [], {}, 0, false⟩ ranges
 
 def MemoryFrame.backingRanges (frame : MemoryFrame language.operands.Val) :
     AList Hybrid.Place (Option Hybrid.Range) :=
@@ -1295,11 +1349,11 @@ def LowersMemory (mir : MIR lang profile) (memory : Memory lang profile) : Prop 
   memory.TablesWF ∧ mir.logicalView.TablesWF ∧
   let source := MIR.Execution (language := language)
   let target := Memory.Execution (language := language)
-  BehaviorRefinement source target source.result target.result mir memory ∧
+  BehaviorRefinement source target source.result (Memory.MatchingResult (language := language)) mir memory ∧
   (ProgramSafe source mir →
-    ∃ sim : CheckpointSimulation source target source.result target.result mir memory,
+    ∃ sim : CheckpointSimulation source target source.result (Memory.MatchingResult (language := language)) mir memory,
       ∀ p q, source.finite mir p → target.finite memory q → sim.related p q →
-        memory.RepresentsCheckpoint p q)
+        memory.RepresentsCheckpoint p q ∧ p.effects = q.effects)
 
 def BIR.TrapsMatch {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
     (ssa : SSA lang profile) (bir : BIR lang profile) : Prop :=

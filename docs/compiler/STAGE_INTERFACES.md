@@ -53,6 +53,15 @@ allocation decisions already made by the target. A target step that makes no
 source progress decreases a natural-valued rank. Complete behavior refinement
 independently requires a matching source execution for any target divergence.
 
+A fresh nonempty materialized lifetime can end execution with the typed
+`resourceExhausted` observation when no target space and base can hold its layout.
+This rule covers explicit begins and the parameter writes inside calls, returns,
+edge transfers and destructuring. The failed instruction retains its original PC,
+effects and ownership checkpoint. `LowersMemory` matches ordinary terminal results
+and their traces, reflects divergence, and requires progress on a safe MIR input.
+The separate `Concrete.toml` memory-bound proof must exclude reachable exhaustion
+to recover strict matching of every terminal result.
+
 Address operands name typed places explicitly. Physical execution resolves a live,
 initialized materialized place through its recorded range and passes that range, byte
 memory and ownership state to the spec operation transition. Both executions assign the

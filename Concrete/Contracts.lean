@@ -16,6 +16,8 @@ inductive Observation where
   | trapped (status : UInt8) (kind : ConcreteSpec.Core.TrapKind) (site : DiagnosticSite)
       (stderr : ByteArray)
   | startupRefused (status : UInt8) (stderr : ByteArray)
+  /-- A physical lifetime could not reserve backing in any target address space. -/
+  | resourceExhausted
 
 /-- Stderr is observable on every profile. The extension carries additional
 events, including the grant and operation information used by its authority judgment. -/
@@ -27,6 +29,7 @@ abbrev Event := ProcessEvent Empty
 
 def Observation.stderr : Observation → ByteArray
   | .returned _ bytes | .trapped _ _ _ bytes | .startupRefused _ bytes => bytes
+  | .resourceExhausted => ByteArray.empty
 
 def stderrBytes {E : Type} (events : List (ProcessEvent E)) : List UInt8 :=
   events.filterMap fun

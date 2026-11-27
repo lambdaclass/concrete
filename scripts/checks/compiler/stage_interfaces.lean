@@ -1,4 +1,5 @@
 import Concrete.Interfaces.Pipeline
+import Concrete.Memory.Execution
 import Concrete.Lex
 import Concrete.Parse
 import ConcreteSpec.Proofs.Checker
@@ -25,6 +26,7 @@ def Observation.SameRuntimeResult (observed : Observation)
   | .trapped a k span bytes, .trapped b j site other =>
     a = b ∧ k = j ∧ span.line = site.location.line ∧ span.col = site.location.col ∧ bytes = other
   | .startupRefused a bytes, .startupRefused b other => a = b ∧ bytes = other
+  | .resourceExhausted, .resourceExhausted => True
   | _, _ => False
 
 /-- A precise terminal projection over the same transition system used by the composed theorem.
@@ -1216,7 +1218,7 @@ private def storingMemory (project : Project) : Memory testLowering testProfile 
     [(Exec.Demo.mainF, [storeRoot])]⟩
 
 private def storeInitial : MemoryRegisters testLanguage testProfile :=
-  ⟨⟨Exec.Demo.mainF, ⟨0⟩, 0, [], [], [], [], [], [], []⟩, Mem.Memory.empty, [], [], {}, 0⟩
+  ⟨⟨Exec.Demo.mainF, ⟨0⟩, 0, [], [], [], [], [], [], []⟩, Mem.Memory.empty, [], [], {}, 0, false⟩
 
 private def storeBlock : Mem.Block :=
   ⟨⟨0⟩, 1, 1, 1, true, false, [.uninit]⟩
@@ -2173,7 +2175,7 @@ private theorem erasureBindingUnique (project : Project)
   have readExact : some (CoreValue.other (), storeInitial) = some (value, afterRead) := read
   cases readExact
   have params : @Memory.WriteParams erasureLanguage testLowering testProfile (@MIR.logicalView erasureLanguage testLowering testProfile (erasureSource project))
-      [⟨(), ⟨⟨storeRoot, []⟩, .virtual⟩⟩] [CoreValue.other ()] storeInitial stored := by
+      [⟨(), ⟨⟨storeRoot, []⟩, .virtual⟩⟩] [CoreValue.other ()] storeInitial stored false := by
     simp only [Bool.true_or, ite_true] at writes
     with_unfolding_all exact writes
   cases params with
@@ -2247,14 +2249,18 @@ private def residualModels (m : LoweringModels residualLanguage testLowering tes
 
 private theorem residualStops (project : Project) (next : MemoryRegisters residualLanguage testProfile) :
     ¬ (residualMemory project [runtimeCheck]).Step (language := residualLanguage) storeInitial next := by
-  rintro ⟨block, fetched, step⟩
-  have equality : some _ = some block := fetched
-  cases equality
-  obtain ⟨values, state, _, _, _, _, _, read, checked, _⟩ := step
-  have readExact : some ([.scalar (.int .u8 0)], storeInitial) = some (values, state) := read
-  cases readExact
-  have impossible : some TrapKind.divisionByZero = none := checked
-  contradiction
+  intro tick
+  have noOutcome (s : MemoryRegisters residualLanguage testProfile) (mode : Bool)
+      (raw : (residualMemory project [runtimeCheck]).StepOutcome (language := residualLanguage) storeInitial s mode) : False := by
+    obtain ⟨block, fetched, step⟩ := raw
+    have equality : some _ = some block := fetched
+    cases equality
+    obtain ⟨values, state, _, _, _, _, _, read, checked, _⟩ := step
+    have readExact : some ([.scalar (.int .u8 0)], storeInitial) = some (values, state) := read
+    cases readExact
+    have impossible : some TrapKind.divisionByZero = none := by with_unfolding_all exact checked
+    contradiction
+  exact noOutcome _ false (tick.normal (language := residualLanguage) fun s => noOutcome s true)
 
 private theorem residualLogicalStops (project : Project)
     (next : MemoryRegisters residualLanguage testProfile) :
@@ -2331,14 +2337,14 @@ example (project : Project) (m : LoweringModels residualLanguage testLowering te
           List.mem_singleton_self _, List.mem_singleton_self _, rfl, noEscape⟩
     · refine ⟨⟨fun _ _ => ?_, fun _ _ => ?_⟩,
         fun _ _ _ h => h.elim, fun _ next _ step => (residualStops project next step).elim, ?_⟩
-      · exact ⟨rfl, rfl, ⟨_, rfl, rfl⟩, ⟨_, rfl, rfl⟩, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+      · exact ⟨rfl, rfl, ⟨_, rfl, rfl⟩, ⟨_, rfl, rfl⟩, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
       · with_unfolding_all rfl
       · intro _ _ _
         with_unfolding_all exact ⟨fun h => congrArg some h.symm, fun h => (Option.some.inj h).symm⟩
     · refine ⟨⟨fun _ _ => ?_, fun _ _ => ?_⟩,
         fun _ _ _ h => h.elim, fun _ next _ step => (residualLogicalStops project next step).elim, ?_⟩
       · with_unfolding_all
-          exact ⟨rfl, rfl, ⟨_, rfl, rfl⟩, ⟨_, rfl, rfl⟩, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+          exact ⟨rfl, rfl, ⟨_, rfl, rfl⟩, ⟨_, rfl, rfl⟩, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
       · with_unfolding_all rfl
       · intro _ _ _
         with_unfolding_all exact ⟨fun h => congrArg some h.symm, fun h => (Option.some.inj h).symm⟩
@@ -2607,7 +2613,7 @@ example (project : Project) :
     obtain ⟨_, rfl, rfl, meaning⟩ := observed
     rcases meaning with ⟨_, _, rfl⟩ | ⟨_, _, impossible, _⟩
     · have params : @Memory.WriteParams addressLanguage testLowering testProfile (@MIR.logicalView addressLanguage testLowering testProfile (logicalAddressProgram project))
-          [⟨(), addressResultPlace⟩] [storeValue] (Memory.applyOperation suspendedAddress true indirectWriteStore) stored := by
+          [⟨(), addressResultPlace⟩] [storeValue] (Memory.applyOperation suspendedAddress true indirectWriteStore) stored false := by
         simp only [Bool.true_or, ite_true] at writes
         with_unfolding_all exact writes
       cases params with
@@ -2821,11 +2827,11 @@ private theorem stationarySafe {A E : Type} (s : Concrete.Contracts.Semantics A 
 
 private theorem stationaryRejects {A B E : Type} {a : A} {b : B}
     (s : Concrete.Contracts.Semantics A E) (t : Concrete.Contracts.Semantics B E)
-    (p : s.State) (q : t.State) (expected actual : Concrete.Contracts.Observation)
+    (tr : B → t.State → Concrete.Contracts.Observation → Prop) (p : s.State) (q : t.State) (expected actual : Concrete.Contracts.Observation)
     (initial : ∀ x, s.initial a x → x = p) (sResult : s.result a p expected)
-    (tInitial : t.initial b q) (tResult : t.result b q actual)
+    (tInitial : t.initial b q) (tResult : tr b q actual)
     (wrong : ¬ s.result a p actual) :
-    ¬ BehaviorRefinement s t s.result t.result a b := by
+    ¬ BehaviorRefinement s t s.result tr a b := by
   intro preserves
   obtain ⟨state, finite, observation, _⟩ :=
     (preserves (stationarySafe s a p expected initial sResult)).1 q actual
@@ -2853,6 +2859,16 @@ private theorem refinesToTerminal {A B E : Type} {a : A} {b : B}
   · intro x stuck
     obtain rfl := onlyT x stuck.1
     exact stuck.2.2 result tResult
+
+private theorem matchingRefinement {language : CoreLanguage} {lang : LoweringLanguage language.operands.Ty}
+    {profile : Profile} {sourceProgram : MIR lang profile} {output : Memory lang profile}
+    (strict : BehaviorRefinement (MIR.Execution (language := language)) Memory.Execution
+      MIR.Execution.result Memory.Execution.result sourceProgram output) :
+    BehaviorRefinement (MIR.Execution (language := language)) Memory.Execution
+      MIR.Execution.result Memory.MatchingResult sourceProgram output := by
+  intro safe
+  obtain ⟨finish, infinite, progress⟩ := strict safe
+  exact ⟨fun q o hp h => finish q o hp (Memory.matchingResult_result h), infinite, progress⟩
 
 private abbrev literalCore := elaboratedReturn 42
 private abbrev literalCoreExecution := CoreInput.Execution (language := earlyFixtureLanguage)
@@ -3003,8 +3019,8 @@ private theorem literalMemoryContract : LowersMemory (language := earlyFixtureLa
         cases List.mem_singleton.mp present
         cases member
     refine ⟨rfl, rfl, ⟨fun _ h => h, fun _ h => h⟩, layout, rfl, promotes, literalTables, literalTables,
-      refinesToTerminal literalMIRExecution literalMemoryExecution literalRegisters literalRegisters literalResult
-        ⟨_, rfl, .nil _⟩ sourceFinal targetFinal (fun _ h => h) (fun _ h => (Option.some.inj h).symm) rfl, ?_⟩
+      matchingRefinement (language := earlyFixtureLanguage) (refinesToTerminal literalMIRExecution literalMemoryExecution literalRegisters literalRegisters literalResult
+        ⟨literalRegisters, by with_unfolding_all rfl, .nil _⟩ sourceFinal targetFinal (fun _ h => h) (fun _ h => (Option.some.inj h).symm) rfl), ?_⟩
     intro _
     refine ⟨⟨fun p q => p = q, fun _ _ => 0, ?_, ?_, ?_⟩, ?_⟩
     · intro q atEntry
@@ -3025,7 +3041,7 @@ private theorem literalMemoryContract : LowersMemory (language := earlyFixtureLa
           literalRegisters.toMemoryFrame literalRegisters.toMemoryFrame literalRegisters.bytes := by
         exact ⟨⟨⟨Mem.empty_wellFormed _, .nil, .nil, nofun⟩, rfl⟩, rfl, nofun, .nil, .nil, .nil, .nil, nofun,
           fun _ => ⟨nofun, nofun⟩, nofun, nofun, nofun, nofun⟩
-      exact ⟨frame, rfl, nofun, ⟨rfl, nofun⟩, .nil, rfl, rfl⟩
+      exact ⟨⟨frame, rfl, nofun, ⟨rfl, nofun⟩, .nil, rfl, rfl⟩, rfl⟩
 
 set_option maxRecDepth 4096 in
 private theorem literalSSAContract : BuildsSSA (language := earlyFixtureLanguage) literalMemory literalSSA := by
@@ -3222,7 +3238,7 @@ example :
       ¬ EmitsLCB testLanguage trapBIR output := by
   refine ⟨by with_unfolding_all rfl, ?_⟩
   intro emitted
-  apply stationaryRejects birExecution (LCBInput.Execution Nat tabProject)
+  apply stationaryRejects birExecution (LCBInput.Execution Nat tabProject) (LCBInput.Execution Nat tabProject).result
     (BIR.entryState (language := testLanguage) trapBIR) (some ⟨0, 0, #[]⟩)
     trapResult (.returned 134 ByteArray.empty) (fun _ h => h) ?_ ?_ ?_ ?_ emitted.2.2.2.2.2.2.1
   · with_unfolding_all rfl
@@ -3722,7 +3738,7 @@ example :
   refine ⟨?_, ?_, rfl, rfl, ?_, ?_⟩
   · with_unfolding_all
       exact ⟨rfl, rfl, ⟨_, rfl, rfl⟩, ⟨_, rfl, rfl⟩,
-        rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+        rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
   · refine .cons (b := erasureBound) ?_ (.cons (b := firstMoved) ?_ (.cons ?_ (.nil _)))
     · with_unfolding_all
         refine ⟨rfl, .other (), storeInitial, {erasureBound with instruction := 0}, rfl, ?_, rfl⟩
@@ -4349,7 +4365,7 @@ private theorem fullSplitReturns (project : Project) :
     let result : MemoryRegisters twoFieldLanguage testProfile := {finished with instruction := 6}
     have starts : memory.Initial start := by
       with_unfolding_all
-        exact ⟨rfl, rfl, ⟨_, rfl, rfl⟩, ⟨_, rfl, rfl⟩, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+        exact ⟨rfl, rfl, ⟨_, rfl, rfl⟩, ⟨_, rfl, rfl⟩, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
     have memoryAllocate : memory.Step start allocated := by
       obtain ⟨_, ⟨block, found, tick⟩, _⟩ := allocate
       have found' : some (((bir.memoryView (language := twoFieldLanguage)).blockAt start).getD splitBlock) =
@@ -4499,16 +4515,16 @@ private theorem callAtEntry (kind : TrapKind) :
   with_unfolding_all
     exact ⟨rfl, ⟨_, rfl, rfl, [], _, _, _, rfl, rfl, rfl, rfl, .nil _⟩, _, rfl⟩
 
-private theorem callAtEntryUnique (kind : TrapKind) (q : memoryExecution.State)
-    (tick : memoryExecution.step ((callingSSA kind).memoryView (language := testLanguage)) storeInitial q) :
-    q = helperState := by
-  obtain ⟨_, ⟨block, found, call⟩, _⟩ := tick
+private theorem callOutcomeUnique (kind : TrapKind) (q : memoryExecution.State) (mode : Bool)
+    (raw : ((callingSSA kind).memoryView (language := testLanguage)).StepOutcome storeInitial q mode) :
+    q = helperState ∧ mode = false := by
+  obtain ⟨block, found, call⟩ := raw
   let entry : MemoryBlock testLowering := ⟨⟨0⟩, [], [⟨testOrigin, .call callee none []⟩],
     .ret (some ⟨(), .literal ⟨[0]⟩⟩), []⟩
   have fetched : some entry = some block := by with_unfolding_all exact found
   have sameBlock := Option.some.inj fetched
   subst block
-  change _ ∧ ((callingSSA kind).memoryView (language := testLanguage)).Call callee none [] storeInitial q at call
+  change _ ∧ ((callingSSA kind).memoryView (language := testLanguage)).Call callee none [] storeInitial q mode at call
   obtain ⟨values, afterRead, graph, calleeEntry, read, graphFound, blockFound, _, params⟩ := call.2
   have read' : some ([], storeInitial) = some (values, afterRead) := read
   obtain ⟨rfl, rfl⟩ := Prod.mk.inj (Option.some.inj read')
@@ -4520,7 +4536,12 @@ private theorem callAtEntryUnique (kind : TrapKind) (q : memoryExecution.State)
   have sameEntry := Option.some.inj found'
   subst calleeEntry
   cases params
-  rfl
+  exact ⟨rfl, rfl⟩
+
+private theorem callAtEntryUnique (kind : TrapKind) (q : memoryExecution.State)
+    (tick : memoryExecution.step ((callingSSA kind).memoryView (language := testLanguage)) storeInitial q) :
+    q = helperState := by
+  exact (callOutcomeUnique kind _ _ (Memory.Step.normal tick.2.1 fun _ h => Bool.noConfusion (callOutcomeUnique kind _ _ h).2)).1
 
 -- The mutation changes only the reached helper's trap. All metadata is retained.
 set_option maxRecDepth 4096 in
@@ -4854,12 +4875,14 @@ private theorem storedBytesWF (space : AddrSpace) (base : Nat) (fits : backingFi
   · intro b x c y first second distinct _ _
     exact (distinct ((lookup b x first).1.trans (lookup c y second).1.symm)).elim
 
-private def materializedBinding (project : Project) : Memory testLowering testProfile :=
-  let block : MemoryBlock testLowering := ⟨⟨0⟩, [],
+private def materializedBindingBlock : MemoryBlock testLowering :=
+  ⟨⟨0⟩, [],
     [⟨testOrigin, .beginLifetime storeRoot⟩, ⟨testOrigin, .bind storePlace (.literal ⟨[]⟩)⟩],
     .ret (some ⟨(), .literal ⟨[0]⟩⟩), []⟩
+
+private def materializedBinding (project : Project) : Memory testLowering testProfile :=
   {(immediateReturn project) with
-    functions := [(Exec.Demo.mainF, [(storeRoot, ())], ⟨⟨0⟩, #[block]⟩)]}
+    functions := [(Exec.Demo.mainF, [(storeRoot, ())], ⟨⟨0⟩, #[materializedBindingBlock]⟩)]}
 
 private theorem backingAccess (space : AddrSpace) (base : Nat) :
     (backingBefore space base).bytes.access testProfile.memoryTarget (backingRange space base).ptr 1 1 =
@@ -4956,8 +4979,8 @@ private inductive Materialization.Tick : Materialization → Materialization →
 private def materializedSourceState (done : Bool) : MemoryRegisters erasureLanguage testProfile :=
   if done then erasureBound else storeInitial
 
-private theorem materializationExact (project : Project) (p : Materialization) (next : MemoryRegisters erasureLanguage testProfile) :
-    (materializedBinding project).Step (language := erasureLanguage) p.state next ↔
+private theorem materializationNormal (project : Project) (p : Materialization) (next : MemoryRegisters erasureLanguage testProfile) :
+    (materializedBinding project).StepOutcome (language := erasureLanguage) p.state next false ↔
       ∃ q, p.Tick q ∧ q.state = next := by
   constructor
   · intro step
@@ -5024,6 +5047,34 @@ private theorem materializationExact (project : Project) (p : Materialization) (
     | bind space base fits =>
       exact ⟨_, rfl, .other (), backingBefore space base, {backingAfter space base with instruction := 1},
         rfl, aggregateWrite project space base, rfl⟩
+
+private theorem materializationExact (project : Project) (p : Materialization) (next : MemoryRegisters erasureLanguage testProfile) :
+    (materializedBinding project).Step (language := erasureLanguage) p.state next ↔
+      ∃ q, p.Tick q ∧ q.state = next := by
+  constructor
+  · intro tick
+    apply (materializationNormal project p next).mp
+    apply tick.normal (language := erasureLanguage)
+    intro partialState failed
+    have block : (materializedBinding project).blockAt p.state = some materializedBindingBlock := by cases p <;> with_unfolding_all rfl
+    cases p with
+    | initial =>
+      have ok := (materializationNormal project .initial (.allocated ⟨0⟩ 1 (by unfold backingFits; decide) : Materialization).state).mpr
+        ⟨_, .allocate ⟨0⟩ 1 _, rfl⟩
+      have exhausted : (materializedBinding project).BeginExhausted (language := erasureLanguage) storeInitial storeRoot :=
+        failed.instructionAt (op := ⟨testOrigin, .beginLifetime storeRoot⟩) block (by with_unfolding_all rfl)
+      obtain ⟨started, begins, _⟩ := ok.instructionAt (op := ⟨testOrigin, .beginLifetime storeRoot⟩) block (by with_unfolding_all rfl)
+      exact exhausted.unavailable ⟨started, begins⟩
+    | allocated space base fits =>
+      exact Memory.bind_cannot_exhaust (language := erasureLanguage)
+        (failed.instructionAt (op := ⟨testOrigin, .bind storePlace (.literal ⟨[]⟩)⟩) block (by with_unfolding_all rfl))
+    | bound space base fits =>
+      obtain ⟨caller, rest, _, _, _, callers, _⟩ := failed.terminatorAt block (by with_unfolding_all rfl)
+      change [] = caller :: rest at callers
+      cases callers
+  · rintro ⟨q, tick, rfl⟩
+    have normal := (materializationNormal project p q.state).mpr ⟨q, tick, rfl⟩
+    cases tick <;> exact normal
 
 private def logicalBindingBlock : MemoryBlock testLowering :=
   ⟨⟨0⟩, [], [⟨testOrigin, .bind (ty := ()) ⟨⟨storeRoot, []⟩, .virtual⟩ (.literal ⟨[]⟩)⟩],
@@ -5488,7 +5539,7 @@ private theorem logicalWritesUnique (memory : Memory testLowering testProfile)
     (unique : ∀ other, (if before.live.contains place.logical.root then other = before
       else memory.Begins (language := addressLanguage) before place.logical.root other) → other = started)
     (writes : @Memory.WriteParams addressLanguage testLowering testProfile memory [⟨(), place⟩]
-      [value] before stored)
+      [value] before stored false)
     (writing : memory.writeValue (language := addressLanguage) started place value = some expected) :
     stored = expected := by
   cases writes with
@@ -5521,7 +5572,7 @@ private theorem logicalAddressExact (project : Project) (phase : AddressSourcePh
       have actual : some (storeValue, storeInitial) = some (value, state) := read
       cases actual
       have params : @Memory.WriteParams addressLanguage testLowering testProfile (logicalAddressView project)
-          [⟨(), ⟨⟨storeRoot, []⟩, .virtual⟩⟩] [storeValue] storeInitial stored := by
+          [⟨(), ⟨⟨storeRoot, []⟩, .virtual⟩⟩] [storeValue] storeInitial stored false := by
         simp only [Bool.true_or, ite_true] at write
         with_unfolding_all exact write
       have unique : ∀ state, (logicalAddressView project).Begins
@@ -5556,7 +5607,7 @@ private theorem logicalAddressExact (project : Project) (phase : AddressSourcePh
           addressIds := [(storeRoot, ⟨0⟩)]
           nextAddressId := 1}
         have params : @Memory.WriteParams addressLanguage testLowering testProfile (logicalAddressView project)
-            [⟨(), addressResultPlace⟩] [CoreValue.other ()] ready stored := by
+            [⟨(), addressResultPlace⟩] [CoreValue.other ()] ready stored false := by
           simp only [Bool.true_or, ite_true] at write
           with_unfolding_all exact write
         have unique : ∀ state, (logicalAddressView project).Begins
@@ -5595,7 +5646,7 @@ private theorem logicalAddressExact (project : Project) (phase : AddressSourcePh
       rcases meaning with ⟨_, _, rfl⟩ | ⟨_, _, impossible, _⟩
       · let ready := Memory.applyOperation (language := addressLanguage) logicalAddressAfter true modified
         have params : @Memory.WriteParams addressLanguage testLowering testProfile (logicalAddressView project)
-            [⟨(), addressResultPlace⟩] [storeValue] ready stored := by
+            [⟨(), addressResultPlace⟩] [storeValue] ready stored false := by
           simp only [Bool.true_or, ite_true] at write
           with_unfolding_all exact write
         have eq := logicalWritesUnique (logicalAddressView project) addressResultPlace
@@ -5711,9 +5762,9 @@ private theorem physicalIndirectExact (project : Project) (a : AddressAllocation
     · exact a.storeBound
     · exact ⟨⟨rfl, fun _ => rfl⟩, nofun, rfl, rfl, nofun⟩
 
-private theorem addressTargetExact (project : Project) (phase : AddressTargetPhase)
+private theorem addressTargetNormal (project : Project) (phase : AddressTargetPhase)
     (next : MemoryRegisters addressLanguage testProfile) :
-    (addressMemory project).Step (language := addressLanguage) phase.state next ↔
+    (addressMemory project).StepOutcome (language := addressLanguage) phase.state next false ↔
       ∃ q, phase.Tick q ∧ q.state = next := by
   have block : (addressMemory project).blockAt phase.state = some addressBlock := by
     cases phase <;> rfl
@@ -5790,6 +5841,46 @@ private theorem addressTargetExact (project : Project) (phase : AddressTargetPha
     | takeAddress a => exact (physicalAddressExact project a _).2 rfl
     | indirect a => exact (physicalIndirectExact project a _).2 rfl
 
+
+private theorem addressTargetExact (project : Project) (phase : AddressTargetPhase)
+    (next : MemoryRegisters addressLanguage testProfile) :
+    (addressMemory project).Step (language := addressLanguage) phase.state next ↔
+      ∃ q, phase.Tick q ∧ q.state = next := by
+  constructor
+  · intro tick
+    apply (addressTargetNormal project phase next).mp
+    apply tick.normal (language := addressLanguage)
+    intro partialState failed
+    have block : (addressMemory project).blockAt phase.state = some addressBlock := by cases phase <;> with_unfolding_all rfl
+    cases phase with
+    | start =>
+      have ok := (addressTargetNormal project .start (.allocated ⟨⟨0⟩, 1, by unfold backingFits; decide⟩ : AddressTargetPhase).state).mpr
+        ⟨_, .allocate _, rfl⟩
+      have exhausted : (addressMemory project).BeginExhausted (language := addressLanguage) storeInitial storeRoot :=
+        failed.instructionAt (op := ⟨testOrigin, .beginLifetime storeRoot⟩) block (by with_unfolding_all rfl)
+      obtain ⟨started, begins, _⟩ := ok.instructionAt (op := ⟨testOrigin, .beginLifetime storeRoot⟩) block (by with_unfolding_all rfl)
+      exact exhausted.unavailable ⟨started, begins⟩
+    | allocated a =>
+      exact Memory.bind_cannot_exhaust (language := addressLanguage)
+        (failed.instructionAt (op := ⟨testOrigin, .bind storePlace (.literal ⟨[42]⟩)⟩) block (by with_unfolding_all rfl))
+    | bound a =>
+      have bad : (addressMemory project).BeginExhausted (language := addressLanguage) a.bound shadowRoot :=
+        failed.instructionAt (op := ⟨testOrigin, .beginLifetime shadowRoot⟩) block (by with_unfolding_all rfl)
+      have no : some StorageClass.virtual = some .materialized := by with_unfolding_all exact bad.materialized
+      contradiction
+    | ready a =>
+      exact Memory.op_cannot_exhaust (language := addressLanguage)
+        (failed.instructionAt (op := ⟨testOrigin, addressInstruction⟩) block (by with_unfolding_all rfl))
+    | reference a =>
+      exact Memory.op_cannot_exhaust (language := addressLanguage)
+        (failed.instructionAt (op := ⟨testOrigin, indirectInstruction⟩) block (by with_unfolding_all rfl))
+    | done a =>
+      obtain ⟨caller, rest, _, _, _, callers, _⟩ := failed.terminatorAt block (by with_unfolding_all rfl)
+      change [] = caller :: rest at callers
+      cases callers
+  · rintro ⟨q, tick, rfl⟩
+    have normal := (addressTargetNormal project phase q.state).mpr ⟨q, tick, rfl⟩
+    cases tick <;> exact normal
 
 private theorem addressStatic (project : Project) :
     PreservesOrigins (logicalAddressProgram project).origins (addressMemory project).origins ∧
@@ -6124,7 +6215,8 @@ example (project : Project) :
   have static := materializationStatic project
   refine ⟨rfl, rfl, static.1, static.2.1, rfl, static.2.2,
     (materializedTables project).1, (materializedTables project).2, ?_, ?_⟩
-  · refine finiteProgressRefines bindingMIR bindingMemory _ _ bindingResult erasureBound
+  · apply matchingRefinement (language := erasureLanguage)
+    refine finiteProgressRefines bindingMIR bindingMemory _ _ bindingResult erasureBound
       ⟨storeInitial, by with_unfolding_all rfl, .cons (bindingMIRTick project) (.nil _)⟩
       (by with_unfolding_all rfl) ?_ ?_ (fun state => 2 - state.instruction) ?_
     · intro q finite
@@ -6177,7 +6269,7 @@ example (project : Project) :
            obtain rfl := Option.some.inj same
            exact ⟨_, .nil _, by with_unfolding_all rfl, by with_unfolding_all rfl⟩)
     · rintro _ _ _ _ ⟨phase, rfl, rfl⟩
-      refine ⟨materializationRepresents project phase, ?_, ?_, ?_, ?_, ?_, ?_⟩
+      refine ⟨⟨materializationRepresents project phase, ?_, ?_, ?_, ?_, ?_, ?_⟩, ?_⟩
       all_goals cases phase <;> first | rfl | exact ⟨rfl, nofun⟩ | exact List.nodup_nil | exact nofun
 
 -- This mutant returns the right value and retains the declaration and layout.
@@ -6216,7 +6308,7 @@ example (project : Project) :
   | @cons _ next _ tick _ =>
     have bound := erasureBindingUnique project next tick.1.2.1
     have physical := (represents next storeInitial ⟨_, starts, .cons tick.1 (.nil _)⟩
-      targetReach tick.2).1
+      targetReach tick.2).1.1
     rw [bound] at physical
     exact List.not_mem_nil (physical.2.2.1 storeRoot (List.mem_cons_self ..))
 
@@ -6255,7 +6347,8 @@ example (project : Project) :
     LowersMemory (language := addressLanguage) (logicalAddressProgram project) (addressMemory project) := by
   have static := addressStatic project
   refine ⟨rfl, rfl, static.1, static.2.1, rfl, static.2.2.1, static.2.2.2.1, static.2.2.2.2, ?_, ?_⟩
-  · refine finiteProgressRefines addressMIRExecution addressMemoryExecution _ _ addressResult
+  · apply matchingRefinement (language := addressLanguage)
+    refine finiteProgressRefines addressMIRExecution addressMemoryExecution _ _ addressResult
       AddressSourcePhase.done.state
       ⟨AddressSourcePhase.start.state, by with_unfolding_all rfl, .cons (addressMIRTick project (p := .start) (q := .bound) rfl)
         (.cons (addressMIRTick project (p := .bound) (q := .reference) rfl)
@@ -6316,7 +6409,7 @@ example (project : Project) :
            obtain rfl := Option.some.inj same
            exact ⟨_, .nil _, by with_unfolding_all rfl, by with_unfolding_all rfl⟩)
     · rintro _ _ _ _ ⟨q, rfl, rfl⟩
-      exact addressCheckpoint project q
+      exact ⟨addressCheckpoint project q, by cases q <;> rfl⟩
 
 
 private def addressWrongReturn (project : Project) : Memory testLowering testProfile :=
@@ -6385,13 +6478,12 @@ example :
     with_unfolding_all exact ⟨rfl, ⟨_, rfl, rfl, [], _, _, _, rfl, rfl, rfl, rfl, .nil _⟩, _, rfl⟩
   have targetOnly (q : ssaExecution.State) (tick : ssaExecution.step ssa storeInitial q) :
       q = helperState := by
-    apply callAtEntryUnique .divisionByZero
-    obtain ⟨observed, ⟨block, found, executes⟩, trace⟩ := tick
+    obtain ⟨_, ⟨block, found, executes⟩, _⟩ := tick
     let entry : MemoryBlock testLowering := ⟨⟨0⟩, [], [⟨testOrigin, .call callee none []⟩],
       .ret (some ⟨(), .literal ⟨[0]⟩⟩), []⟩
     have fetched : some entry = some block := by with_unfolding_all exact found
     obtain rfl := (Option.some.inj fetched).symm
-    exact ⟨observed, ⟨entry, found, executes⟩, trace⟩
+    exact (callOutcomeUnique .divisionByZero q false ⟨entry, by with_unfolding_all rfl, executes⟩).1
   have terminal : ssaExecution.result ssa helperState outcome := by with_unfolding_all rfl
   have reachable (q : ssaExecution.State) (finite : ssaExecution.finite ssa q) :
       q = storeInitial ∨ q = helperState := by
@@ -6534,9 +6626,10 @@ example :
         have equal := Option.some.inj (target.symm.trans observes)
         exact ⟨_, .nil _, equal ▸ source, by with_unfolding_all rfl⟩
       · rintro _ _ _ _ ⟨rfl, rfl⟩
-        exact abortMemoryCheckpoint
+        exact ⟨abortMemoryCheckpoint, rfl⟩
   · intro lowered
-    apply stationaryRejects mirExecution memoryExecution storeInitial storeInitial
+    apply stationaryRejects (b := abortMemory .divisionByZero) mirExecution memoryExecution
+      (Memory.MatchingResult (language := testLanguage)) storeInitial storeInitial
       (helperTrap .abort) (helperTrap .divisionByZero) atSource source
       (by with_unfolding_all rfl) (by with_unfolding_all rfl) ?_
       lowered.2.2.2.2.2.2.2.2.1
@@ -6561,7 +6654,7 @@ example :
       | (intro o; with_unfolding_all exact ⟨fun h => (Option.some.inj h).symm, fun h => congrArg some h.symm⟩)
       | with_unfolding_all rfl
   · intro formed
-    apply stationaryRejects memoryExecution ssaExecution storeInitial storeInitial
+    apply stationaryRejects memoryExecution ssaExecution ssaExecution.result storeInitial storeInitial
       (helperTrap .abort) (helperTrap .divisionByZero) (fun _ h => by with_unfolding_all exact h)
       (by with_unfolding_all rfl) (by with_unfolding_all rfl) (by with_unfolding_all rfl) ?_
       formed.2.2.2.2.2
@@ -6625,7 +6718,7 @@ example :
       cases BIRTerm.trap.inj trapped
       exact ⟨⟨.abort, testOrigin⟩, rfl⟩
   · intro emitted
-    apply stationaryRejects birExecution (LCBInput.Execution Nat tabProject)
+    apply stationaryRejects birExecution (LCBInput.Execution Nat tabProject) (LCBInput.Execution Nat tabProject).result
       (BIR.entryState (language := testLanguage) (abortBIR .abort)) (some ⟨0, 0, #[]⟩)
       (helperTrap .abort) (.returned 0 ByteArray.empty) (fun _ h => h)
       (by with_unfolding_all rfl) (by with_unfolding_all rfl) (by with_unfolding_all rfl) ?_
