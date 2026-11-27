@@ -30,64 +30,6 @@ def readSections (source : String) : IO (Array (List Rule)) := do
 def extend (prior delta : List Rule) : List Rule :=
   prior.filter (fun (lhs, _) => !delta.any (fun rule => rule.1 == lhs)) ++ delta
 
-def headLadder : List String :=
-  ["Expr", "LogicOr", "LogicOrTail", "LogicAnd", "LogicAndTail", "Equality", "EqualityTail", "Compare", "CompareTail",
-   "CompareOp", "BitOr", "OrBits", "BitXor", "XorBits", "BitAnd", "AndBits", "Shift",
-   "ShiftTail", "Sum", "SumTail", "Product", "ProductTail", "Unary"]
-
-def withExpressionLadder (namePrefix : String) (rules : List Rule) : List Rule :=
-  let renameSymbol (sym : String) :=
-    if sym == "@Atom" then "@" ++ namePrefix ++ "Atom"
-    else if headLadder.any (fun name => sym == "@" ++ name) then
-      "@" ++ namePrefix ++ (sym.drop 1).toString
-    else sym
-  rules ++ rules.filterMap fun (lhs, rhs) =>
-    if headLadder.contains lhs then some (namePrefix ++ lhs, rhs.map renameSymbol) else none
-
--- Rename only the left edge. Operands reached after a prefix or binary
--- operator still use the full value-expression grammar.
-def withLeadingOperand (namePrefix : String) (rules : List Rule) : List Rule :=
-  let spine := ["Expr", "LogicOr", "LogicAnd", "Equality", "Compare", "BitOr", "BitXor",
-    "BitAnd", "Shift", "Sum", "Product", "Unary", "Atom"]
-  rules.filterMap fun (lhs, rhs) =>
-    match rhs with
-    | sym :: tail =>
-      if !spine.contains lhs || lhs == "Atom" then none
-      else
-        let leading := if spine.any (fun name => sym == "@" ++ name) then
-          "@" ++ namePrefix ++ (sym.drop 1).toString else sym
-        some (namePrefix ++ lhs, leading :: tail)
-    | [] => none
-
-def addExpressionLadders (slice : Nat) (rules : List Rule) : List Rule := Id.run do
-  if slice < 3 then return rules
-  let tails := ["ProductTail", "SumTail", "ShiftTail", "AndBits", "XorBits", "OrBits",
-    "CompareTail", "EqualityTail", "LogicAndTail", "LogicOrTail"]
-  let continuation := ("ExprContinuation", tails.map ("@" ++ ·))
-  let bodyRules := rules.filter fun (lhs, rhs) =>
-    (lhs != "Unary" || !["*", "@AttributePrefix"].contains (rhs.headD "")) &&
-    (slice < 7 || (lhs, rhs) != ("CommonAtom", ["@GroupAtom"]))
-  -- A match can continue as a trailing value on a binary-only token. A
-  -- token that also begins a body item takes the statement boundary.
-  let itemStarters := if slice >= 7 then ["-", "*", "&"] else ["-"]
-  let matchContinuations := tails.zipIdx.flatMap fun (tail, i) =>
-    rules.filterMap fun (lhs, rhs) => do
-      let token ← rhs.head?
-      if lhs == tail && !itemStarters.contains token then
-        some ("MatchEnd", rhs ++ ((tails.drop (i + 1)).map ("@" ++ ·)))
-      else none
-  let bodyAtoms := if slice >= 7 then
-      bodyRules.filterMap fun (lhs, rhs) => if lhs == "CommonAtom" then some ("BodyAtom", rhs) else none
-    else [("BodyAtom", ["@CommonAtom"])]
-  let body := withLeadingOperand "Body" bodyRules ++ bodyAtoms
-  let body := if slice >= 7 then body ++ [("Body", ["@GroupedBody"])] else body
-  let expanded := withExpressionLadder "Head" rules ++ body ++ [continuation] ++
-    (if slice >= 6 then matchContinuations else [])
-  if slice < 8 then return expanded
-  let scalarRules := rules.filter fun (lhs, rhs) =>
-    lhs != "Unary" || ["-", "!", "~", "@Atom"].contains (rhs.headD "")
-  return expanded ++ ((withExpressionLadder "Const" scalarRules).drop scalarRules.length)
-
 def grammar (rules : List Rule) : DraftGrammar :=
   ⟨"Program", rules.map fun (lhs, rhs) => (lhs, rhs.map fun sym =>
     if sym.startsWith "@" then .n (sym.drop 1).toString else .t sym)⟩
@@ -130,16 +72,28 @@ def requireLL1 (label : String) (g : DraftGrammar) : IO PredictionTable := do
 structure Token where
   kind : String
   spelling : String
+  primitiveSlice : Option Nat := none
   deriving Inhabited
 
--- The word lexer and its fixed terminal identities come from the specification.
--- The draft groups the later primitive keywords where they share a production.
-def wordKind (name : String) : String :=
-  match ConcreteSpec.Surface0.word name with
-  | .ident => "IDENT"
-  | .wildcard => "RESERVED_UNDERSCORE"
-  | .u8 => "u8"
-  | terminal => if terminal.primitiveSlice.isSome then "PRIMITIVE" else name
+private def Token.invalid (lexeme : String := "") : Token :=
+  { kind := "INVALID", spelling := lexeme }
+
+open ConcreteSpec.Surface0 (Terminal wordTokens wordValue punctuation)
+
+-- Prediction uses the emitted terminal. The lexeme is retained for payload checks.
+private def Token.ofTerminal (terminal : Terminal) (lexeme : String) : Token :=
+  let kind := match terminal with
+    | .ident => "IDENT"
+    | .integer => "INTEGER"
+    | .byteLiteral => "BYTE"
+    | .stringLiteral => "STRING"
+    | .label => "LABEL"
+    | .wildcard => "WILDCARD"
+    | .u8 => "u8"
+    | _ =>
+      if terminal.primitiveSlice.isSome then "PRIMITIVE"
+      else (((punctuation ++ wordTokens).find? (fun entry => entry.2 == terminal)).map Prod.fst).getD "INVALID"
+  { kind, spelling := lexeme, primitiveSlice := terminal.primitiveSlice }
 
 def hexDigit (c : Char) : Option Nat :=
   if c.isDigit then some (c.toNat - '0'.toNat)
@@ -203,51 +157,56 @@ partial def quotedBody (slice : Nat) (input acc : List Char) :
 
 def draftTokens (slice : Nat) (source : String) : List Token := Id.run do
   let wordChar (c : Char) := decide (ConcreteSpec.Surface0.IdentContinue c.toNat)
-  let punct := [">>", "<<", "::", "=>", "->", "<=", ">=", "==", "!=", "&&", "||",
-    "..", "#["]
+  let compound := [">>", "<<", "::", "=>", "<=", ">=", "==", "!=", "&&", "||", "..", "#["] ++
+    ((punctuation.map Prod.fst).filter (·.length > 1))
   let mut remaining := source.toList
   -- Lean Strings already contain valid Unicode scalars. Refuse the remaining
   -- SourceOk violations before tokenizing, including inside any literal.
   if remaining.any (fun c => c.toNat == 0 || c.toNat == 0xFEFF) then
-    return [⟨"INVALID", ""⟩]
+    return [Token.invalid]
   let mut output := []
   for _ in [:remaining.length] do
     match remaining with
     | [] => break
     | c :: tail =>
       if ConcreteSpec.Surface0.Whitespace c.toNat then remaining := tail; continue
-      let (spelling, kind, rest) :=
+      let (token, rest) : Token × List Char :=
         if wordChar c then
           let word := remaining.takeWhile wordChar
           let w := String.ofList word
-          let k := if c.isDigit then
-              if (integerSuffix slice word).isSome then "INTEGER" else "INVALID"
-            else wordKind w
-          (w, k, remaining.drop word.length)
+          let token := if c.isDigit then
+              if (integerSuffix slice word).isSome then Token.ofTerminal .integer w else Token.invalid w
+            else Token.ofTerminal (wordValue w).kind w
+          (token, remaining.drop word.length)
         else if c == '\'' || c == '"' then
           if c == '"' then
             match quotedBody slice tail [] with
-            | some (content, rest) => (String.ofList content, "STRING", rest)
-            | none => ("", "INVALID", [])
+            | some (content, rest) => (Token.ofTerminal .stringLiteral (String.ofList content), rest)
+            | none => (Token.invalid, [])
           else
             match tail with
             | '\\' :: escaped =>
               match escapeTail slice c escaped with
               | some ('\'' :: rest) =>
-                (String.ofList (tail.take (tail.length - rest.length - 1)), "BYTE", rest)
-              | _ => ("", "INVALID", [])
+                (Token.ofTerminal .byteLiteral (String.ofList (tail.take (tail.length - rest.length - 1))), rest)
+              | _ => (Token.invalid, [])
             | value :: '\'' :: rest =>
-              (String.singleton value, if ConcreteSpec.Surface0.ByteRaw value.toNat then "BYTE" else "INVALID", rest)
+              let token := if ConcreteSpec.Surface0.ByteRaw value.toNat then
+                  Token.ofTerminal .byteLiteral (String.singleton value) else Token.invalid (String.singleton value)
+              (token, rest)
             | first :: _ =>
               if ConcreteSpec.Surface0.IdentStart first.toNat then
                 let label := tail.takeWhile wordChar
-                (String.ofList label, "LABEL", tail.drop label.length)
-              else ("", "INVALID", tail)
-            | [] => ("", "INVALID", [])
+                (Token.ofTerminal .label (String.ofList label), tail.drop label.length)
+              else (Token.invalid, tail)
+            | [] => (Token.invalid, [])
         else
-          let w := (punct.find? (fun w => w.toList.isPrefixOf remaining)).getD (String.singleton c)
-          (w, w, remaining.drop w.length)
-      output := ⟨kind, spelling⟩ :: output
+          let w := (compound.find? (fun w => w.toList.isPrefixOf remaining)).getD (String.singleton c)
+          let token := match punctuation.lookup w with
+            | some terminal => Token.ofTerminal terminal w
+            | none => ⟨w, w, none⟩
+          (token, remaining.drop w.length)
+      output := token :: output
       remaining := rest
   return output.reverse
 
@@ -268,7 +227,7 @@ partial def parseSymbols (table : PredictionTable) (splitClosers genericRhs : Bo
       let token :: tail := input | none
       let tail ← if token.kind == kind then some tail
         else if splitClosers && genericRhs && kind == ">" && token.kind == ">>" then
-          some (⟨">", ">"⟩ :: tail)
+          some (⟨">", ">", none⟩ :: tail)
         else none
       let (children, remaining) ← parseSymbols table splitClosers genericRhs (fuel - 1) rest tail
       some (.leaf { token with kind } :: children, remaining)
@@ -409,7 +368,7 @@ mutual
       Tree → Bool
     | .leaf token =>
       token.kind != "PRIMITIVE" ||
-        ((ConcreteSpec.Surface0.word token.spelling).primitiveSlice.any (· ≤ slice))
+        (token.primitiveSlice.any (· ≤ slice))
     | .node "GroupAtom" [_, group, _, suffixTree] =>
       (!suffixTree.hasTokens || traceableGroupBase group) &&
         draftRestrictions slice inContract group &&
@@ -449,7 +408,7 @@ partial def extraArguments : Tree → Nat
 
 def targetArity (args : Tree) : Option Nat :=
   match args with
-  | .node _ [target, _, tail] =>
+  | .node _ [target, _, _, tail] =>
     if target.isNode "TargetArgument" then some (1 + extraArguments tail) else none
   | _ => none
 
@@ -503,24 +462,54 @@ def parseSource (slice : Nat) (g : DraftGrammar) (table : PredictionTable)
     | none
   return tree
 
--- Return types, binding annotations and const declarations supply explicit
--- expectations. A nested call has its own argument types, resolved separately.
+-- An annotation belongs to the binding itself. Colons nested in a destructuring
+-- pattern introduce field binders and supply no expected type for its initializer.
+private def bindingAnnotation : Tree → Bool
+  | .node "LetHead" parts => parts.any fun
+    | .node "LetTail" tail => tail.any (Tree.isNode "Type")
+    | child => child.isNode "Type"
+  | .leaf token => token.kind == ":"
+  | _ => false
+
+-- A semicolon or a following statement consumes the preceding expression as a
+-- statement. These are the factored endings of the corresponding body productions.
+private def suppliesBlockValue : Tree → Bool
+  | .node "ExprEnd" parts | .node "Body" parts => parts.isEmpty
+  | .node "PlaceTail" [ops, .node "ExprEnd" parts] => ops.isNode "ExprContinuation" && parts.isEmpty
+  | .node "MatchEnd" [.node "Body" parts] => parts.isEmpty
+  | .node "MatchEnd" _ => true
+  | _ => false
+
+-- Follow result positions in the parse tree. A declared type starts a new
+-- expectation even inside an untyped context. Calls resolve their own arguments.
 partial def literalSuffixesValid (slice : Nat) (expected : Bool) : Tree → Bool
   | .leaf token => !expected || token.kind != "INTEGER" ||
       (integerSuffix slice token.spelling.toList).any List.isEmpty
   | .node name children =>
-    let first := match children with | .leaf token :: _ => some token.kind | _ => none
-    let typedRhs := first == some "return" || first == some "const" ||
-      (first == some "let" && (children.takeWhile (fun child =>
-        (child.tokens.head?.map (·.kind)) != some "=")).any (fun child =>
-          child.tokens.any (·.kind == ":")))
-    children.all fun child =>
-      let inherits := match name with
-        | "Body" | "Decl" | "ArmBody" =>
-          typedRhs && ["Expr", "ReturnValue", "ConstExpr"].any child.isNode
-        | "NameCall" | "ConstNameTail" | "NameLiteral" | "Projection" | "Head" => false
-        | _ => expected
-      literalSuffixesValid slice inherits child
+    let visit := literalSuffixesValid slice
+    match name, children with
+    | "Program", _ | "Functions", _ | "Function", _ | "Decl", _ =>
+      children.all fun child =>
+        visit (["Block", "ConstExpr", "ProofExpr"].any child.isNode) child
+    | "Body", .leaf first :: _ =>
+      let annotated := children.any bindingAnnotation
+      children.all fun child =>
+        let rhs := ["Expr", "ReturnValue"].any child.isNode
+        visit ((rhs && (annotated || first.kind == "return")) || (expected && child.isNode "Body")) child
+    | "ArmBody", .leaf first :: _ =>
+      children.all (visit (first.kind == "return"))
+    | "Arms", _ =>
+      children.all fun child => visit (expected && (child.isNode "ArmBody" || child.isNode "Arms")) child
+    | "NameCall", _ | "ConstNameTail", _ | "NameLiteral", _ | "Projection", _ | "Head", _
+    | "Loop", _ | "BorrowPlace", _ | "BorrowRange", _ | "AttributePrefix", _ | "Type", _ =>
+      children.all (visit false)
+    | _, _ =>
+      match children.getLast? with
+      | some ending =>
+        let hasBoundary := ["Body", "ExprEnd", "PlaceTail", "MatchEnd"].any ending.isNode
+        (children.dropLast.all (visit (expected && (!hasBoundary || suppliesBlockValue ending)))) &&
+          visit expected ending
+      | none => true
 
 def parseDraft (slice : Nat) (g : DraftGrammar) (table : PredictionTable)
     (source : String) : Option Tree := do
@@ -544,6 +533,8 @@ partial def permissionOperands : Tree → List (List String)
   | _ => []
 
 partial def matchEnds : Tree → List String
+  | .node "MatchEnd" [.node "MatchContinuation" (first :: _)] =>
+    (first.tokens.head?.map (·.kind)).toList
   | .node "MatchEnd" (.leaf token :: _) => [token.kind]
   | .node "MatchEnd" (.node "Body" (body :: _) :: _) =>
     [(body.tokens.head?).map (·.kind) |>.getD "" |>.append " body"]
@@ -559,7 +550,6 @@ def fnBody (body : String) : String :=
   "fn x ( ) -> u8 { " ++ body ++ " }"
 
 def examples (slice currentSlice : Nat) : List Example :=
-  let wildcard := "_"
   let arm (pattern body : String) := s!"{pattern} => {body} ,"
   let binding := "borrow view = x"
   match slice with
@@ -611,6 +601,12 @@ def examples (slice currentSlice : Nat) : List Example :=
         ⟨s!"missing target of {name}", fnBody s!"return {name}({args});", false⟩]
   | 3 => [
     ⟨"semicolon-free if statement", fnBody "if true { return 1 ; } return 1 ;", true⟩,
+    ⟨"result type reaches the then branch", fnBody "return if true { 255u8 } else { 1 };", false⟩,
+    ⟨"unsuffixed result in the then branch", fnBody "return if true { 255 } else { 1 };", true⟩,
+    ⟨"result type reaches the else branch after a statement",
+      fnBody "let x: u8 = if true { 0 } else { f(); 255u8 };", false⟩,
+    ⟨"branch result type does not reach an earlier statement",
+      fnBody "return if true { f(255u8); 1 } else { 0 };", true⟩,
     ⟨"value if with an operator continuation",
       fnBody "return if true { 1 } else { 1 } + 1 ;", true⟩,
     ⟨"statement if followed by a trailing unary minus",
@@ -642,15 +638,19 @@ def examples (slice currentSlice : Nat) : List Example :=
       fnBody "return #[ may_not_terminate ( \"reason\" ) ] - 1 ;", false⟩,
     ⟨"termination permission needs an operand after the prefix",
       fnBody "#[ may_not_terminate ( \"reason\" ) ] + x ( ) ;", false⟩,
-    ⟨"shielded exact arithmetic in a condition head",
+    ⟨"parenthesized exact arithmetic in a condition head",
       fnBody "#[invariant(if (exact { x + 1 } > x) { true } else { false })] while true { }", true⟩,
     ⟨"unshielded exact arithmetic in a condition head",
       fnBody "#[invariant(if exact { x + 1 } > x { true } else { false })] while true { }",
-      false⟩,
+      true⟩,
+    ⟨"exact arithmetic starts a proof branch",
+      fnBody "#[invariant(if true { exact { 1 + 2 } > 0 } else { false })] while true {}", true⟩,
     ⟨"exact arithmetic with a literal-leading operand",
       fnBody "#[invariant(exact { 1 + x } > x)] while true { }", true⟩,
     ⟨"other identifiers cannot introduce exact arithmetic",
       fnBody "#[invariant(other { x + 1 } > x)] while true { }", false⟩,
+    ⟨"unshielded exact head outside a proof context",
+      fnBody "if exact { 1 + 2 } > 0 { return 1; }", false⟩,
     ⟨"exact arithmetic outside a proof context",
       fnBody "return exact { x + 1 };", false⟩,
     ⟨"loop invariant refuses a call attachment",
@@ -667,7 +667,7 @@ def examples (slice currentSlice : Nat) : List Example :=
     ⟨"string refuses a surrogate", fnBody "#[note(\"\\u{d800}\")] while true {}", false⟩,
     ⟨"scalar escape in UTF-8 text", fnBody "#[note(\"\\u{10ffff}\")] while true {}", true⟩,
     ⟨"listed and general attributes at first use",
-      fnBody s!"#[ invariant ( true ) ] #[ x ( \"reason\" ) ] for {wildcard} from 1 until 1 \{ } 1", true⟩,
+      fnBody s!"#[ invariant ( true ) ] #[ x ( \"reason\" ) ] for _ from 1 until 1 \{ } 1", true⟩,
     ⟨"listed attribute uses the listed envelope",
       fnBody "@[ invariant ( true ) ] while true { }", false⟩,
     ⟨"general attribute uses its selected envelope",
@@ -675,7 +675,7 @@ def examples (slice currentSlice : Nat) : List Example :=
     ⟨"labelled loop and labelled transfer",
       fnBody "'outer: while true { break 'outer; } 1", true⟩,
     ⟨"colonless loop label", fnBody "'outer while true { }", false⟩,
-    ⟨"wildcard let", fnBody s!"let {wildcard} : u8 = 1 ; 1", true⟩]
+    ⟨"wildcard let", fnBody "let _ : u8 = 1 ; 1", true⟩]
   | 5 => [
     ⟨"exact arithmetic in a function contract",
       "#[ensures(exact { result + 1 } > result)] fn f() -> u8 { 1 }", true⟩,
@@ -686,20 +686,20 @@ def examples (slice currentSlice : Nat) : List Example :=
     ⟨"requires refuses a loop attachment",
       fnBody "#[requires(true)] while true { }", false⟩,
     ⟨"function attribute and wildcard parameter",
-      s!"#[ x ( \"reason\" ) ] fn x ( {wildcard} : u8 ) -> u8 \{ 1 }", true⟩]
+      s!"#[ x ( \"reason\" ) ] fn x ( _ : u8 ) -> u8 \{ 1 }", true⟩]
   | 6 => [
     ⟨"grouped named place projection", fnBody "return (x).field;", true⟩,
     ⟨"grouped conditional projection", fnBody "return (if true { a } else { b }).field;", false⟩,
     ⟨"grouped match projection",
-      fnBody s!"return (match x \{ {arm wildcard "a"} }).field;", false⟩,
+      fnBody s!"return (match x \{ {arm "_" "a"} }).field;", false⟩,
     ⟨"binary multiply after body-leading match",
-      fnBody s!"match x \{ {arm wildcard "1"} } * 2", currentSlice == 6⟩,
+      fnBody s!"match x \{ {arm "_" "1"} } * 2", currentSlice == 6⟩,
     ⟨"match followed by a unary borrow statement",
-      fnBody s!"match x \{ {arm wildcard "1"} } & x;", currentSlice >= 7⟩,
+      fnBody s!"match x \{ {arm "_" "1"} } & x;", currentSlice >= 7⟩,
     ⟨"match followed by a unary dereference statement",
-      fnBody s!"match x \{ {arm wildcard "1"} } * x;", currentSlice >= 7⟩,
+      fnBody s!"match x \{ {arm "_" "1"} } * x;", currentSlice >= 7⟩,
     ⟨"grouped match permits both binary operators",
-      fnBody s!"(match x \{ {arm wildcard "1"} }) * 2 & 3", true⟩,
+      fnBody s!"(match x \{ {arm "_" "1"} }) * 2 & 3", true⟩,
     ⟨"bare return in an unbraced arm", "fn f() -> Unit { match x { _ => return, } }", true⟩,
     ⟨"bare return in a braced arm", "fn f() -> Unit { match x { _ => { return; }, } }", true⟩,
     ⟨"explicit Unit return in a body", "fn f() -> Unit { return (); }", true⟩,
@@ -724,35 +724,39 @@ def examples (slice currentSlice : Nat) : List Example :=
     ⟨"unshielded struct literal in a head", fnBody "if x { } { 1 }", false⟩,
     ⟨"named variant declaration and pattern",
       "enum x { x { x : u8 , x : u8 } } " ++
-        fnBody ("match x { " ++ arm s!"x :: x \{ x : x , x : {wildcard} }" "1" ++ " }"), true⟩,
+        fnBody ("match x { " ++ arm s!"x :: x \{ x : x , x : _ }" "1" ++ " }"), true⟩,
     ⟨"tuple variant is excluded", "enum x { x ( u8 ) }", false⟩,
     ⟨"tuple pattern is excluded",
-      fnBody ("match x { " ++ arm s!"x :: x ( {wildcard} )" "1" ++ " }"), false⟩,
+      fnBody ("match x { " ++ arm s!"x :: x ( _ )" "1" ++ " }"), false⟩,
     ⟨"ignored payload", fnBody ("match x { " ++ arm "x :: x { .. }" "1" ++ " }"), true⟩,
+    ⟨"match result reaches a braced arm",
+      fnBody "return match x { 0 => { f(); (255u8) }, _ => 1, };", false⟩,
+    ⟨"match result reaches an unbraced arm",
+      fnBody "return match x { 0 => 1, _ => 255u8, };", false⟩,
     ⟨"braced match arm",
-      fnBody ("match x { " ++ arm wildcard "{ return 1 ; }" ++ " }"), true⟩,
+      fnBody ("match x { " ++ arm "_" "{ return 1 ; }" ++ " }"), true⟩,
     ⟨"unbraced return arm",
-      fnBody ("match x { " ++ arm wildcard "return 1" ++ " }"), true⟩,
+      fnBody ("match x { " ++ arm "_" "return 1" ++ " }"), true⟩,
     ⟨"match with addition as a trailing value",
-      fnBody s!"match x \{ {arm wildcard "1"} } + 1", true⟩,
+      fnBody s!"match x \{ {arm "_" "1"} } + 1", true⟩,
     ⟨"match with addition cannot become an expression statement",
-      fnBody s!"match x \{ {arm wildcard "1"} } + 1 ;", false⟩,
+      fnBody s!"match x \{ {arm "_" "1"} } + 1 ;", false⟩,
     ⟨"unary minus can start the next statement after a match",
-      fnBody s!"match x \{ {arm wildcard "1"} } - 1 ;", true⟩,
+      fnBody s!"match x \{ {arm "_" "1"} } - 1 ;", true⟩,
     ⟨"bare match statement refuses a semicolon",
-      fnBody s!"match x \{ {arm wildcard "1"} } ;", false⟩,
+      fnBody s!"match x \{ {arm "_" "1"} } ;", false⟩,
     ⟨"semicolon-free match statement",
-      fnBody ("match x { " ++ arm wildcard "1" ++ " } return 1 ;"), true⟩,
+      fnBody ("match x { " ++ arm "_" "1" ++ " } return 1 ;"), true⟩,
     ⟨"bare struct match pattern", fnBody ("match x { " ++ arm "x { x }" "1" ++ " }"), false⟩,
     ⟨"qualified field shorthand", fnBody ("match x { " ++ arm "x :: x { x }" "1" ++ " }"), false⟩,
     ⟨"reserved kept refused as a match pattern", fnBody ("match x { " ++ arm "kept x" "1" ++ " }"), false⟩,
     ⟨"explicit struct field binding",
-      fnBody s!"let x \{ x : x , x : {wildcard} } = x ; 1", true⟩,
+      fnBody s!"let x \{ x : x , x : _ } = x ; 1", true⟩,
     ⟨"struct let rejects field shorthand", fnBody "let x { x } = x ; 1", false⟩,
-    ⟨"qualified destructuring let", fnBody s!"let x :: x \{ x : x , x : {wildcard} } = x ; 1", true⟩]
+    ⟨"qualified destructuring let", fnBody s!"let x :: x \{ x : x , x : _ } = x ; 1", true⟩]
   | 7 => (
     ["if true { x ( ) ; }", "if true { x ( ) ; } else { x ( ) ; }",
-     s!"match x \{ {arm wildcard "{ x ( ) ; }"} }", s!"{binding} \{ x ( ) ; }"].flatMap fun block => [
+     s!"match x \{ {arm "_" "{ x ( ) ; }"} }", s!"{binding} \{ x ( ) ; }"].flatMap fun block => [
       ⟨"dereference assignment after block", fnBody (block ++ " * x = 1 ;"), true⟩,
       ⟨"trailing unary minus after block", fnBody (block ++ " - 1"), true⟩]) ++ [
     ⟨"grouped projection can root in a named dereference",
@@ -849,12 +853,18 @@ def examples (slice currentSlice : Nat) : List Example :=
     ⟨"parenthesized assertion and unparenthesized assumption",
       fnBody "assert ( x == 1 ) ; assume x == 1 ; 1", true⟩,
     ⟨"exact arithmetic in specification function", "spec fn f() -> u8 = exact { 1 + 2 };", true⟩,
+    ⟨"exact arithmetic starts a spec function branch",
+      "spec fn f(x: u8) -> u8 = if x > 0 { exact { x + 1 } } else { 0 };", true⟩,
+    ⟨"exact arithmetic starts a braced match arm",
+      "spec fn f(x: u8) -> u8 = match x { 0 => { exact { x + 1 } }, _ => 0, };", true⟩,
     ⟨"exact arithmetic in assertions and assumptions",
       fnBody "assert(exact { x + 1 } > x); assume exact { x + 1 } > x; return 1;", true⟩,
     ⟨"exact arithmetic in theorem argument",
       fnBody "assert(true) by lemma(exact { x + 1 }); return 1;", true⟩,
     ⟨"proof context does not extend to the following runtime statement",
       fnBody "assert(true); return exact { 1 + 2 };", false⟩,
+    ⟨"typed ghost binding refuses a redundant suffix", fnBody "ghost let x: u8 = 255u8;", false⟩,
+    ⟨"typed ghost binding supplies a literal type", fnBody "ghost let x: u8 = 255;", true⟩,
     ⟨"typed ghost binding", fnBody "ghost let x: u8 = 1; return 1;", true⟩,
     ⟨"ghost destructuring is refused", fnBody "ghost let S { a: x } = s; return 1;", false⟩,
     ⟨"assertion requires parentheses",
@@ -894,8 +904,49 @@ partial def hasOrderingBeforeEquality : Tree → Bool
 def reversedComparisonPrecedence (rules : List Rule) : List Rule :=
   rules.map fun
     | ("EqualityTail", ["==", "@Compare"]) => ("EqualityTail", ["<", "@Compare"])
+    | ("HeadEqualityTail", ["==", "@HeadCompare"]) => ("HeadEqualityTail", ["<", "@HeadCompare"])
     | ("CompareOp", ["<"]) => ("CompareOp", ["=="])
     | rule => rule
+
+-- Slice 8 call-resolution controls use the declarations and calls in the parsed module.
+-- Each entry maps a visible path to the full path of the function it denotes.
+private partial def Tree.collectNodes {α : Type}
+    (select : String → List Tree → List α) : Tree → List α
+  | .leaf _ => []
+  | .node name parts => select name parts ++ parts.flatMap (Tree.collectNodes select)
+
+private def identifierNames (tokens : List Token) : List String :=
+  (tokens.filter (·.kind == "IDENT")).map (·.spelling)
+
+private def functionBindings (name : String) (parts : List Tree) :
+    List (List String × List String) :=
+  match name, parts with
+  | "Import", [_, .leaf root, _, path, _] =>
+    let (modules, items) := path.tokens.span (·.kind != "{")
+    let segments := identifierNames modules
+    let qualifier := segments.getLastD root.spelling
+    (identifierNames items).map fun item =>
+      ([qualifier, item], root.spelling :: segments ++ [item])
+  | "Decl", .leaf keyword :: .leaf binder :: _
+  | "Decl", [.node "Function" (.leaf keyword :: .leaf binder :: _)] =>
+    if keyword.kind == "fn" then [([binder.spelling], [binder.spelling])] else []
+  | _, _ => []
+
+private def valueCallees (name : String) (parts : List Tree) : List (List String) :=
+  match name, parts with
+  | "Atom", [.leaf root, path, .node "NameTail" [.node "NameCall" _]] =>
+    [root.spelling :: identifierNames path.tokens]
+  | _, _ => []
+
+private def checkImportedCalls (parse : String → Option Tree) : IO Unit := do
+  for (decls, callee, target) in [
+      ("", "x", none), ("", "b::x", some ["a", "b", "x"]), ("", "b::y", none),
+      ("fn x() -> u8 { return 0; }", "x", some ["x"])] do
+    let source := "import a::b::{x}; " ++ decls ++ " fn f() -> u8 { return " ++ callee ++ "(); }"
+    let some tree := parse source | throw (IO.userError s!"import control did not parse: {source}")
+    let [path] := tree.collectNodes valueCallees | throw (IO.userError s!"expected one call: {source}")
+    let scope := tree.collectNodes functionBindings
+    unless scope.lookup path == target do throw (IO.userError s!"incorrect resolution for {source}")
 
 def checkDraftBoundaries (slice : Nat) (g : DraftGrammar)
     (table : PredictionTable) (label : String) : IO Unit := do
@@ -903,6 +954,9 @@ def checkDraftBoundaries (slice : Nat) (g : DraftGrammar)
   let raw := parseSource slice g table
   let require (name : String) (ok : Bool) : IO Unit :=
     unless ok do throw (IO.userError s!"{label}: {name}")
+  require "break and continue emit distinct loop-transfer terminals"
+    ((draftTokens slice "break continue").map (·.kind) == ["break", "continue"] &&
+      (Token.ofTerminal .continue_ "break").kind == "continue")
   require "uniform reservation of pub, const and mod"
     ((draftTokens slice "pub const mod").map (·.kind) == ["pub", "const", "mod"])
   if slice >= 3 then
@@ -950,6 +1004,7 @@ def checkDraftBoundaries (slice : Nat) (g : DraftGrammar)
         ((raw misplaced).any (fun tree => !draftRestrictions slice false tree) &&
           (parse misplaced).isNone)
   if slice >= 8 then
+    checkImportedCalls parse
     for formula in ["try_convert(type: u8, 1)", "checked_add(type: u8, 1, 2)",
         "truncate(type: u8, 1)", "reinterpret(type: u8, 1)", "ordinary(type: u8, 1)",
         "wrapping_add(type: u8, 1)", "widen(type: u8, 1, 2)",
@@ -1032,15 +1087,16 @@ def checkLiterals : IO Unit := do
   IO.println s!"pass: {cases.length} literal examples, slice boundary, raw scalars and expected-type suffix controls"
 
 def main : IO Unit := do
+  unless (wordTokens.map Prod.fst).Nodup && (wordTokens.map Prod.snd).Nodup do
+    throw (IO.userError "word catalog requires one spelling per fixed terminal")
   checkLiterals
   let sections ← readSections (← IO.FS.readFile "docs/grammar/slices-0-11.grammar")
-  let mut cumulative := []
+  let mut rules := []
   for (delta, slice) in sections.toList.zipIdx do
-    cumulative := extend cumulative delta
-    let rules := addExpressionLadders slice cumulative
+    rules := extend rules delta
     checkProjection slice rules
     if slice == 3 then
-      let reversed := project (addExpressionLadders slice (reversedComparisonPrecedence cumulative))
+      let reversed := project (reversedComparisonPrecedence rules)
       let table ← requireLL1 "reversed comparison precedence" reversed
       unless (parseDraft slice reversed table precedenceSource).any
           (fun tree => !hasOrderingBeforeEquality tree) do
@@ -1063,8 +1119,7 @@ def main : IO Unit := do
         ("BlockBoundary", ["&", "@Shift", "@ExprContinuation"])]
       requireConflict "operator continuation at block statement boundary" (project planted)
       requireConflict "shared minus at the match boundary" (project (rules ++ [
-        ("MatchEnd", ["-", "@Product", "@SumTail", "@ShiftTail", "@AndBits", "@XorBits",
-          "@OrBits", "@CompareTail", "@EqualityTail", "@LogicAndTail", "@LogicOrTail"])]))
+        ("MatchEnd", ["-", "@Product", "@AfterProduct"])]))
     if slice == 9 then
       let g := project rules
       requireConflict "unmarked generics" { g with prods := g.prods ++ [("PathTail", [.n "TypeArgs"])] }

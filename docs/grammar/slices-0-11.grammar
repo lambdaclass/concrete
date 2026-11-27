@@ -1,6 +1,5 @@
 # @ marks a nonterminal. An empty right-hand side means epsilon.
-# Each slice replaces only the named productions. The checker derives the Head, Body
-# and Const expression ladders and the operator continuations from the precedence rules.
+# Each slice replaces the complete alternatives for every left-hand side it mentions.
 # See README.md for production provenance and the checker command.
 
 [0]
@@ -25,9 +24,10 @@ Body = return @Expr ; @Body
 Body = IDENT ( ) ; @Body
 Body =
 LetHead = IDENT @LetTail
-LetHead = RESERVED_UNDERSCORE : @Type
+LetHead = WILDCARD : @Type
 LetTail = : @Type
 LetTail = { }
+# u8 has its own terminal from slice 0.
 Type = u8
 Type = IDENT
 Atom = INTEGER
@@ -66,6 +66,7 @@ Unary = ~ @Unary
 Unary = @Atom
 Type = u8
 Type = IDENT
+# PRIMITIVE groups the other primitive keywords as they enter the type grammar.
 Type = PRIMITIVE
 Atom = INTEGER
 Atom = BYTE
@@ -78,8 +79,8 @@ NameTail =
 NameCall = ( @CallArgs )
 NameLiteral = { }
 # Intrinsics lex as names. The checker validates the marker and arity against the parsed callee.
-TargetArgument = type : @Type ,
-CallArgs = @TargetArgument @Expr @SecondArg
+TargetArgument = type : @Type
+CallArgs = @TargetArgument , @Expr @SecondArg
 CallArgs = @Expr @SecondArg
 CallArgs =
 SecondArg = , @Expr
@@ -94,7 +95,7 @@ Body = @BlockItem
 Body =
 LetHead = IDENT @LetTail
 LetHead = mut IDENT : @Type
-LetHead = RESERVED_UNDERSCORE : @Type
+LetHead = WILDCARD : @Type
 ExprEnd = ; @Body
 ExprEnd =
 Expr = @LogicOr
@@ -129,7 +130,6 @@ CommonAtom = false
 CommonAtom = move IDENT
 CommonAtom = @GroupAtom
 GroupAtom = ( @Group )
-Postfix =
 NamedBody = IDENT @BodyNameTail
 BodyNameTail = @NameCall @ExprContinuation @ExprEnd
 BodyNameTail = @NameLiteral @ExprContinuation @ExprEnd
@@ -154,13 +154,84 @@ HeadAtom = @BlockExpr
 HeadAtom = IDENT @HeadNameTail
 HeadNameTail = @NameCall
 HeadNameTail =
+# Every ungrouped operand in a head keeps the following block opener available.
+HeadExpr = @HeadLogicOr
+HeadLogicOr = @HeadLogicAnd @HeadLogicOrTail
+HeadLogicOrTail = || @HeadLogicAnd @HeadLogicOrTail
+HeadLogicOrTail =
+HeadLogicAnd = @HeadEquality @HeadLogicAndTail
+HeadLogicAndTail = && @HeadEquality @HeadLogicAndTail
+HeadLogicAndTail =
+HeadEquality = @HeadCompare @HeadEqualityTail
+HeadEqualityTail = == @HeadCompare
+HeadEqualityTail = != @HeadCompare
+HeadEqualityTail =
+HeadCompare = @HeadBitOr @HeadCompareTail
+HeadCompareTail = @CompareOp @HeadBitOr
+HeadCompareTail =
+HeadBitOr = @HeadBitXor @HeadOrBits
+HeadOrBits = | @HeadBitXor @HeadOrBits
+HeadOrBits =
+HeadBitXor = @HeadBitAnd @HeadXorBits
+HeadXorBits = ^ @HeadBitAnd @HeadXorBits
+HeadXorBits =
+HeadBitAnd = @HeadShift @HeadAndBits
+HeadAndBits = & @HeadShift @HeadAndBits
+HeadAndBits =
+HeadShift = @HeadSum @HeadShiftTail
+HeadShiftTail = << @HeadSum @HeadShiftTail
+HeadShiftTail = >> @HeadSum @HeadShiftTail
+HeadShiftTail =
+HeadSum = @HeadProduct @HeadSumTail
+HeadSumTail = + @HeadProduct @HeadSumTail
+HeadSumTail = - @HeadProduct @HeadSumTail
+HeadSumTail =
+HeadProduct = @HeadUnary @HeadProductTail
+HeadProductTail = * @HeadUnary @HeadProductTail
+HeadProductTail = / @HeadUnary @HeadProductTail
+HeadProductTail = % @HeadUnary @HeadProductTail
+HeadProductTail =
+HeadUnary = - @HeadUnary
+HeadUnary = ! @HeadUnary
+HeadUnary = ~ @HeadUnary
+HeadUnary = @HeadAtom
+# Only the first operand of a body item needs special dispatch. Operators re-enter Expr.
+BodyExpr = @BodyLogicOr
+BodyLogicOr = @BodyLogicAnd @LogicOrTail
+BodyLogicAnd = @BodyEquality @LogicAndTail
+BodyEquality = @BodyCompare @EqualityTail
+BodyCompare = @BodyBitOr @CompareTail
+BodyBitOr = @BodyBitXor @OrBits
+BodyBitXor = @BodyBitAnd @XorBits
+BodyBitAnd = @BodyShift @AndBits
+BodyShift = @BodySum @ShiftTail
+BodySum = @BodyProduct @SumTail
+BodyProduct = @BodyUnary @ProductTail
+BodyUnary = - @Unary
+BodyUnary = ! @Unary
+BodyUnary = ~ @Unary
+BodyUnary = @BodyAtom
+BodyAtom = @CommonAtom
+# Each continuation resumes the precedence ladder after the operand already consumed.
+ExprContinuation = @ProductTail @AfterProduct
+AfterProduct = @SumTail @AfterSum
+AfterSum = @ShiftTail @AfterShift
+AfterShift = @AndBits @AfterBitAnd
+AfterBitAnd = @XorBits @AfterBitXor
+AfterBitXor = @OrBits @AfterBitOr
+AfterBitOr = @CompareTail @AfterCompare
+AfterCompare = @EqualityTail @AfterEquality
+AfterEquality = @LogicAndTail @LogicOrTail
 
 [4]
-Atom = @CommonAtom
-Atom = @BlockExpr
-Atom = IDENT @NameTail
-Atom = @ExactArithmetic
-# Exact arithmetic in a condition head requires shielding.
+CommonAtom = INTEGER
+CommonAtom = BYTE
+CommonAtom = true
+CommonAtom = false
+CommonAtom = move IDENT
+CommonAtom = @GroupAtom
+CommonAtom = @ExactArithmetic
+# The exact keyword requires its own opening brace, including in a condition head.
 ExactArithmetic = exact { @Expr }
 Body = let @LetHead = @Expr ; @Body
 Body = return @Expr ; @Body
@@ -182,7 +253,7 @@ LoopForm = for @Binder from @Expr until @Head @Block
 LabelOpt = LABEL
 LabelOpt =
 Binder = IDENT
-Binder = RESERVED_UNDERSCORE
+Binder = WILDCARD
 Attrs = @AttributePrefix
 Attrs =
 AttributePrefix = @Attribute @Attrs
@@ -192,8 +263,15 @@ Unary = ! @Unary
 Unary = ~ @Unary
 Unary = @AttributePrefix @Atom
 Unary = @Atom
+# Body dispatches a leading AttributePrefix through AttributedBody. HeadUnary accepts it directly.
+HeadUnary = - @HeadUnary
+HeadUnary = ! @HeadUnary
+HeadUnary = ~ @HeadUnary
+HeadUnary = @AttributePrefix @HeadAtom
+HeadUnary = @HeadAtom
 AttrArgs = ( @AttributeArgs )
 AttrArgs =
+# Attribute strings have their own alternative until STRING joins CommonAtom in slice 11.
 AttributeArgs = STRING
 AttributeArgs = @Args
 Args = @Expr @ArgTail
@@ -210,7 +288,7 @@ Params = @Binder : @Type @ParamTail
 Params =
 ParamTail = , @Params
 ParamTail =
-CallArgs = @TargetArgument @Expr @ArgTail
+CallArgs = @TargetArgument , @Expr @ArgTail
 CallArgs = @Args
 
 [6]
@@ -264,7 +342,6 @@ Atom = @CommonAtom
 Atom = @BlockExpr
 Atom = IDENT @PathTail @NameTail
 Atom = @PrimitivePath @NameCall
-Atom = @ExactArithmetic
 HeadAtom = @CommonAtom
 HeadAtom = @BlockExpr
 HeadAtom = IDENT @PathTail @HeadNameTail
@@ -292,7 +369,7 @@ InitializerTail = , @Initializers
 InitializerTail =
 LetHead = IDENT @LetTail
 LetHead = mut IDENT @LetTail
-LetHead = RESERVED_UNDERSCORE : @Type
+LetHead = WILDCARD : @Type
 LetTail = : @Type
 LetTail = { @PatternFields }
 LetTail = :: IDENT @DestructurePath
@@ -306,8 +383,23 @@ BlockExpr = if @Head @Block else @ValueElse
 BlockExpr = @Match
 BlockItem = @BlockStmt @Body
 BlockItem = @Match @MatchEnd
-# The checker derives the binary continuations of a trailing match from the expression ladder.
+# A trailing match can continue on binary-only tokens. Minus starts the next body item.
 MatchEnd = @Body
+MatchEnd = * @Unary @ExprContinuation
+MatchEnd = & @Shift @AfterShift
+MatchEnd = @MatchContinuation
+MatchContinuation = / @Unary @ExprContinuation
+MatchContinuation = % @Unary @ExprContinuation
+MatchContinuation = + @Product @AfterProduct
+MatchContinuation = << @Sum @AfterSum
+MatchContinuation = >> @Sum @AfterSum
+MatchContinuation = ^ @BitAnd @AfterBitAnd
+MatchContinuation = | @BitXor @AfterBitXor
+MatchContinuation = @CompareOp @BitOr @AfterCompare
+MatchContinuation = == @Compare @AfterEquality
+MatchContinuation = != @Compare @AfterEquality
+MatchContinuation = && @Equality @AfterEquality
+MatchContinuation = || @LogicAnd @LogicOrTail
 Match = match @Head { @Arms }
 Arms = @Pattern @PatternAlternatives => @ArmBody , @Arms
 Arms =
@@ -319,7 +411,7 @@ ArmBody = return @ReturnValue
 ReturnValue = @Expr
 ReturnValue =
 Pattern = IDENT @VariantPattern
-Pattern = RESERVED_UNDERSCORE
+Pattern = WILDCARD
 Pattern = INTEGER
 Pattern = - INTEGER
 Pattern = BYTE
@@ -348,18 +440,41 @@ Unary = * IDENT
 Unary = & @MutOpt @Unary
 Unary = @AttributePrefix @Atom
 Unary = @Atom
+# NamedBody also dispatches a named dereference or a primitive-qualified call.
 NamedBody = IDENT @BodyNameTail
 NamedBody = * IDENT @DerefTail
 NamedBody = @PrimitivePath @NameCall @ExprContinuation @ExprEnd
 DerefTail = = @Expr ; @Body
 DerefTail = @ExprContinuation @ExprEnd
+Atom = @CommonAtom
+Atom = @BlockExpr
+Atom = IDENT @PathTail @NameTail
+Atom = @PrimitivePath @NameCall
+Atom = @GroupAtom
+HeadAtom = @CommonAtom
+HeadAtom = @BlockExpr
+HeadAtom = IDENT @PathTail @HeadNameTail
+HeadAtom = @PrimitivePath @NameCall
+HeadAtom = @GroupAtom
+# Body excludes GroupAtom so ( dispatches uniquely through GroupedBody.
+Body = let @LetHead = @Expr ; @Body
+Body = return @ReturnValue ; @Body
+Body = @BodyExpr @ExprEnd
+Body = @NamedBody
+Body = @GroupedBody
+Body = @BlockItem
+Body = @Loop @Body
+Body = @AttributePrefix @AttributedBody
+Body = break @LabelOpt ; @Body
+Body = continue @LabelOpt ; @Body
+Body =
 GroupedBody = ( @Group ) @PlaceTail
 CommonAtom = INTEGER
 CommonAtom = BYTE
 CommonAtom = true
 CommonAtom = false
 CommonAtom = move IDENT
-CommonAtom = @GroupAtom
+CommonAtom = @ExactArithmetic
 CommonAtom = [ @Expr @ArrayTail ]
 BlockExpr = if @Head @Block else @ValueElse
 BlockExpr = @Match
@@ -367,6 +482,7 @@ BlockExpr = @Borrow
 BlockStmt = if @Head @Block @StmtElse
 BlockStmt = @Borrow
 Borrow = borrow @MutOpt IDENT = @BorrowPlace @BorrowRange @Block @BorrowElse
+# OD121 requires (*p).f for a projected dereference. The bare * IDENT has no Postfix.
 BorrowPlace = IDENT @Postfix
 BorrowPlace = * IDENT
 BorrowPlace = ( @BorrowPlace ) @Postfix
@@ -378,6 +494,22 @@ BorrowRange = from @Expr until @Head
 BorrowRange =
 Projection = . IDENT
 Projection = [ @Expr ]
+HeadUnary = - @HeadUnary
+HeadUnary = ! @HeadUnary
+HeadUnary = ~ @HeadUnary
+HeadUnary = * IDENT
+HeadUnary = & @MutOpt @HeadUnary
+HeadUnary = @AttributePrefix @HeadAtom
+HeadUnary = @HeadAtom
+# Body dispatches * through NamedBody and AttributePrefix through AttributedBody.
+BodyUnary = - @Unary
+BodyUnary = ! @Unary
+BodyUnary = ~ @Unary
+BodyUnary = & @MutOpt @Unary
+BodyUnary = @BodyAtom
+# Minus, dereference and borrow can now start the next body item after a match.
+MatchEnd = @Body
+MatchEnd = @MatchContinuation
 
 [8]
 Item = @Attrs @Visibility @Decl
@@ -411,9 +543,50 @@ ConstNameTail = ( @ConstArgs )
 ConstNameTail =
 ConstPathTail = :: IDENT @ConstPathTail
 ConstPathTail =
-ConstArgs = @TargetArgument @ConstExpr @ConstSecondArg
+ConstArgs = @TargetArgument , @ConstExpr @ConstSecondArg
 ConstSecondArg = , @ConstExpr
 ConstSecondArg =
+# Constants use scalar operators. Calls admit widen, wrapping_* and saturating_* at their fixed arities.
+ConstExpr = @ConstLogicOr
+ConstLogicOr = @ConstLogicAnd @ConstLogicOrTail
+ConstLogicOrTail = || @ConstLogicAnd @ConstLogicOrTail
+ConstLogicOrTail =
+ConstLogicAnd = @ConstEquality @ConstLogicAndTail
+ConstLogicAndTail = && @ConstEquality @ConstLogicAndTail
+ConstLogicAndTail =
+ConstEquality = @ConstCompare @ConstEqualityTail
+ConstEqualityTail = == @ConstCompare
+ConstEqualityTail = != @ConstCompare
+ConstEqualityTail =
+ConstCompare = @ConstBitOr @ConstCompareTail
+ConstCompareTail = @CompareOp @ConstBitOr
+ConstCompareTail =
+ConstBitOr = @ConstBitXor @ConstOrBits
+ConstOrBits = | @ConstBitXor @ConstOrBits
+ConstOrBits =
+ConstBitXor = @ConstBitAnd @ConstXorBits
+ConstXorBits = ^ @ConstBitAnd @ConstXorBits
+ConstXorBits =
+ConstBitAnd = @ConstShift @ConstAndBits
+ConstAndBits = & @ConstShift @ConstAndBits
+ConstAndBits =
+ConstShift = @ConstSum @ConstShiftTail
+ConstShiftTail = << @ConstSum @ConstShiftTail
+ConstShiftTail = >> @ConstSum @ConstShiftTail
+ConstShiftTail =
+ConstSum = @ConstProduct @ConstSumTail
+ConstSumTail = + @ConstProduct @ConstSumTail
+ConstSumTail = - @ConstProduct @ConstSumTail
+ConstSumTail =
+ConstProduct = @ConstUnary @ConstProductTail
+ConstProductTail = * @ConstUnary @ConstProductTail
+ConstProductTail = / @ConstUnary @ConstProductTail
+ConstProductTail = % @ConstUnary @ConstProductTail
+ConstProductTail =
+ConstUnary = - @ConstUnary
+ConstUnary = ! @ConstUnary
+ConstUnary = ~ @ConstUnary
+ConstUnary = @ConstAtom
 
 [9]
 Decl = @Function
@@ -430,6 +603,7 @@ TraitMembers = @Attrs fn IDENT ( @Params ) -> @Type ; @TraitMembers
 TraitMembers =
 ImplMembers = @Attrs @Visibility @Function @ImplMembers
 ImplMembers =
+# OD89 permits for Type only when the impl has no capability parameters.
 ImplHeader = @Type @ImplTarget
 ImplHeader = < @ImplParams
 ImplParams = IDENT @Bound @ImplTypeParamTail
@@ -472,6 +646,7 @@ TypeNameTail = @TypeArgsOpt
 TypeArgsOpt = @TypeArgs
 TypeArgsOpt =
 TypeArgs = < @TypeArg >
+# TypeArg expands Type inline to share IDENT between a type argument and a capability union C + D.
 TypeArg = IDENT @NamedArg
 TypeArg = u8 @MoreTypeArgs
 TypeArg = PRIMITIVE @MoreTypeArgs
@@ -495,10 +670,6 @@ CapArg = @Capability @CapUnion @MoreCapArgs
 CapArg = { } @MoreCapArgs
 CapUnion = + @Capability @CapUnion
 CapUnion =
-GrantArgs = @Capability @GrantTail
-GrantArgs =
-GrantTail = , @GrantArgs
-GrantTail =
 Capability = @FixedCapability
 Capability = IDENT
 FixedCapability = Fs
@@ -519,6 +690,7 @@ Body = let @LetHead = @Expr ; @Body
 Body = return @ReturnValue ; @Body
 Body = @BodyExpr @ExprEnd
 Body = @NamedBody
+Body = @GroupedBody
 Body = @BlockItem
 Body = @Loop @Body
 Body = @AttributePrefix @AttributedBody
@@ -542,6 +714,7 @@ Body = let @LetHead = @Expr ; @Body
 Body = return @ReturnValue ; @Body
 Body = @BodyExpr @ExprEnd
 Body = @NamedBody
+Body = @GroupedBody
 Body = @BlockItem
 Body = @Loop @Body
 Body = @AttributePrefix @AttributedBody
@@ -564,11 +737,15 @@ TraitMembers =
 Function = fn IDENT @Generics ( @Params ) @With -> @Type @Block
 With = with ( @GrantArgs )
 With =
+GrantArgs = @Capability @GrantTail
+GrantArgs =
+GrantTail = , @GrantArgs
+GrantTail =
 CommonAtom = INTEGER
 CommonAtom = BYTE
 CommonAtom = STRING
 CommonAtom = true
 CommonAtom = false
 CommonAtom = move IDENT
-CommonAtom = @GroupAtom
+CommonAtom = @ExactArithmetic
 CommonAtom = [ @Expr @ArrayTail ]

@@ -1784,8 +1784,6 @@ ConcreteSpec.Core.typed_constant_closed_example_division	propext
 ConcreteSpec.Core.typed_constant_closed_planted_unit_binding_unitTypeConsts	propext
 ConcreteSpec.Core.typed_evalConsts_refusal_example_unused_div_zero	Classical.choice Quot.sound propext
 ConcreteSpec.Core.typed_evalConsts_refusal_planted_unused_div_zero_invalidRefusalEvalConsts	Classical.choice Quot.sound propext
-ConcreteSpec.DeclsOk.eq_1	
-ConcreteSpec.Discharged.eq_1	
 ConcreteSpec.Project.Manifest.DepthAccepted._sparseCasesOn_1.else_eq	propext
 ConcreteSpec.Project.Manifest.DepthAccepted._sparseCasesOn_2.else_eq	propext
 ConcreteSpec.Project.Manifest.DepthAccepted.eq_1	Classical.choice Quot.sound propext

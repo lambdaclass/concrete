@@ -29,10 +29,9 @@ Signed values are two's complement.
   one.
 - Bitwise and, or, xor and not act on the bit patterns.
 
-**Conversions.** The one canonical lossless conversion (docs/decisions.md#recovered-59-11,
-replacing `as`; its spelling is not yet approved) is allowed exactly when every value of the source
-type is a value of the target type (OD11's value-domain rule, ARITH-5), and it never changes the
-value: between integer types exactly when the source range lies inside the target's (`Lossless`). The checked
+**Conversions.** The lossless conversion `widen(type: T, x)` preserves the value. OD11's
+value-domain rule (ARITH-5) permits it exactly when every source value belongs to the target
+type. For integers, the source range must lie inside the target's (`Lossless`). The checked
 conversion `try_convert` returns `Except OutOfRange` (OD106), a different error type from
 `ArithmeticError`. A lossy integer conversion keeps the low bits of the target's
 width (`wrap`); the names of the lossy conversions are OD99's.
@@ -44,9 +43,8 @@ the first to the second, used by the plain operations (docs/decisions.md#recover
 **Contracts: machine and exact arithmetic** (OD12, OD145; docs/decisions.md#recovered-59-10). A
 contract term says which arithmetic it means: a *machine* operation at a width (`CTerm.machine`),
 which means exactly the runtime operation and is undefined where that one fails, or *exact*
-arithmetic on mathematical integers (`CTerm.exact`), which never overflows. The surface spelling of
-the exact boundary is not yet approved by the owner; `exact` here is a neutral name for its
-meaning only.
+arithmetic on mathematical integers (`CTerm.exact`), which never overflows. The reserved keyword
+in `exact { expr }` opens the exact arithmetic boundary in a proof expression (docs/decisions.md#decided-2026-11-27-token-ballot).
 
 Authority (all links refer to docs/decisions.md on the reconstruction base):
 
@@ -58,7 +56,7 @@ Authority (all links refer to docs/decisions.md on the reconstruction base):
   shift-count-only failure. Division's rounding and remainder sign: #od114.
 - Conversion value domains: #od11; named lossy conversions: #od99;
   checked conversion's separate Result error: #od106. Removal of `as`:
-  #recovered-59-11. These definitions specify meanings, not replacement syntax.
+  #recovered-59-11. The surface spellings follow #decided-2026-11-27-token-ballot.
 - Machine/exact contracts: #od12, #od145 and #recovered-59-10.
 - Arithmetic error to trap mapping: #decided-project-no-hidden-traps and
   trap spellings #recovered-59-4. The trap vocabulary itself is imported.
@@ -71,10 +69,9 @@ bytes this module defers to the existing definition in Spec/Rep.lean (false = 0,
 true = 1; other or uninitialized bytes invalid), without extending or reversing it.
 That existing behavior remains an authority conflict tracked by ISS-0069; it is
 not authority for a Boolean-to-integer conversion.
-Also held: replacement conversion/exact surface spellings, SPARK-style character
-conversion preconditions, floats, and constant-expression restrictions. The five
-items in #decided-2026-11-08-recovery-queue, U+FEFF scope, bare CR in comments and
-path-character policy supply no scalar rule here.
+SPARK-style character conversion preconditions, floats and constant-expression
+restrictions are also held. The five items in #decided-2026-11-08-recovery-queue, U+FEFF scope,
+bare CR in comments and path-character policy supply no scalar rule here.
 
 Floats come at slice 26; nothing here decides their rules.
 -/
@@ -295,9 +292,8 @@ def MachineOp.operandsOk (t : IntTy) (op : MachineOp) (x y : Int) : Bool :=
   decide (t.InRange x) && (op.countOperand || decide (t.InRange y))
 
 /-- An arithmetic term of a contract. `machine` means the runtime operation at width `t`; `exact`
-means mathematical integers. The two are distinct constructors so a reader, a checker and a proof
-always know which is meant (docs/decisions.md#recovered-59-10; the source spelling of `exact` is
-still to be approved). -/
+means mathematical integers inside the surface boundary `exact { expr }`
+(docs/decisions.md#recovered-59-10 and docs/decisions.md#decided-2026-11-27-token-ballot). -/
 inductive CTerm where
   | lit (n : Int)
   | var (x : Var)

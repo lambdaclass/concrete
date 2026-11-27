@@ -442,72 +442,27 @@ def Terminal.primitiveSlice : Terminal → Option Nat
   | .char_ => some 11
   | _ => none
 
-/-- The pre-slice-2 word classification is shared by the lexer and grammar projections.
+/-- Fixed word tokens at the pre-slice-2 lock. The lexer looks up a spelling and the
+draft grammar renders the resulting terminal from this same catalog.
 Decision: docs/decisions.md#decided-2026-11-27-token-ballot. -/
-def word : String → Terminal
-  | "fn" => .fn
-  | "let" => .let_
-  | "return" => .return_
-  | "u8" => .u8
-  | "struct" => .struct_
-  | "move" => .move_
-  | "if" => .if_
-  | "else" => .else_
-  | "mut" => .mut_
-  | "kept" => .kept
-  | "i8" => .i8
-  | "i16" => .i16
-  | "i32" => .i32
-  | "i64" => .i64
-  | "u16" => .u16
-  | "u32" => .u32
-  | "u64" => .u64
-  | "bool" => .bool_
-  | "Unit" => .Unit_
-  | "char" => .char_
-  | "spec" => .spec_
-  | "by" => .by_
-  | "Self" => .Self
-  | "while" => .while_
-  | "Entropy" => .Entropy
-  | "from" => .from_
-  | "until" => .until
-  | "cap" => .cap
-  | "type" => .type_
-  | "ghost" => .ghost
-  | "Copy" => .Copy
-  | "Fs" => .Fs
-  | "Network" => .Network
-  | "Env" => .Env
-  | "Time" => .Time
-  | "Alloc" => .Alloc
-  | "Device" => .Device
-  | "Console" => .Console
-  | "Process" => .Process
-  | "Unsafe" => .Unsafe
-  | "true" => .true_
-  | "false" => .false_
-  | "enum" => .enum_
-  | "match" => .match_
-  | "trait" => .trait_
-  | "impl" => .impl_
-  | "defer" => .defer_
-  | "assert" => .assert_
-  | "assume" => .assume_
-  | "with" => .with_
-  | "for" => .for_
-  | "break" => .break_
-  | "continue" => .continue_
-  | "pub" => .pub_
-  | "const" => .const_
-  | "mod" => .mod_
-  | "import" => .import_
-  | "borrow" => .borrow_
-  | "exact" => .exact_
-  | "trusted" => .trusted_
-  | "extern" => .extern_
-  | "_" => .wildcard
-  | _ => .ident
+def wordTokens : List (String × Terminal) :=
+  [("fn", .fn), ("let", .let_), ("return", .return_), ("u8", .u8), ("struct", .struct_),
+   ("move", .move_), ("if", .if_), ("else", .else_), ("mut", .mut_), ("kept", .kept),
+   ("i8", .i8), ("i16", .i16), ("i32", .i32), ("i64", .i64), ("u16", .u16), ("u32", .u32),
+   ("u64", .u64), ("bool", .bool_), ("Unit", .Unit_), ("char", .char_), ("spec", .spec_),
+   ("by", .by_), ("Self", .Self), ("while", .while_), ("Entropy", .Entropy), ("from", .from_),
+   ("until", .until), ("cap", .cap), ("type", .type_), ("ghost", .ghost), ("Copy", .Copy),
+   ("Fs", .Fs), ("Network", .Network), ("Env", .Env), ("Time", .Time), ("Alloc", .Alloc),
+   ("Device", .Device), ("Console", .Console), ("Process", .Process), ("Unsafe", .Unsafe),
+   ("true", .true_), ("false", .false_), ("enum", .enum_), ("match", .match_),
+   ("trait", .trait_), ("impl", .impl_), ("defer", .defer_), ("assert", .assert_),
+   ("assume", .assume_), ("with", .with_), ("for", .for_), ("break", .break_),
+   ("continue", .continue_), ("pub", .pub_), ("const", .const_), ("mod", .mod_),
+   ("import", .import_), ("borrow", .borrow_), ("exact", .exact_), ("trusted", .trusted_),
+   ("extern", .extern_), ("_", .wildcard)]
+
+def word (name : String) : Terminal :=
+  ((wordTokens.find? (fun entry => entry.1 == name)).map Prod.snd).getD .ident
 
 def punctuation : List (String × Terminal) :=
   [("(", .lparen), (")", .rparen), (r#"{"#, .lbrace), (r#"}"#, .rbrace), ("->", .arrow),
@@ -875,11 +830,13 @@ inductive Derives : List Token → Program → Prop
                 fixed .arrow arrow, fixed .u8 ty, fixed .lbrace lb] ++ body ++ [fixed .rbrace rb])
         ⟨name, binder, statements⟩
 
-/-- Already decided builtin type spellings, reserved under OD43. The complete later-slice
-reservation catalog belongs to the shared lexical audit. -/
+/-- Decided builtin type and trait names (OD43 and the token ballot). Primitive types
+and the Copy marker already have fixed word tokens. The remaining names lex as identifiers. -/
 def builtinTypeNames : List String :=
-  ["i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "bool", "f32", "f64",
-   "char", "String", "Unit", "Option", "Result", "Heap", "HeapArray", "Vec"]
+  wordTokens.filterMap (fun (name, kind) =>
+    if kind.primitiveSlice.isSome || kind == .Copy then some name else none) ++
+  ["Option", "Result", "ArithmeticError", "OutOfRange", "Destroy", "StaticStr",
+   "StdIn", "StdOut", "StdErr", "Heap", "HeapArray", "Vec", "String", "f32", "f64"]
 
 /-- Local binders share the reservation for the entry point, builtin types and intrinsics.
 Decision: docs/decisions.md#decided-2026-11-27-token-ballot. -/

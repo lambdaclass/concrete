@@ -14,8 +14,7 @@ consumers and reservation policy.
 
 ## Production provenance and remaining approvals
 
-The table gives the recorded Lean rules for slices 0 and 1 and the authority for later constructs. Each written production and generated
-expansion in those deltas is proposed for that slice's grammar approval.
+The table gives the recorded Lean rules for slices 0 and 1 and the authority for later constructs. Every production in those deltas is written in the table, including the head, body and constant expression ladders. Each delta is proposed for its slice's grammar approval.
 
 | Slice | Production groups | Recorded authority and holes |
 |---|---|---|
@@ -45,12 +44,14 @@ LEAN_NUM_THREADS=2 nix develop -c bash -c '
 '
 ```
 
-The checker builds one prediction table per cumulative slice, checks definedness and productivity, and replays each accept and refuse example from its first slice onward. It prints the production and example counts for each table. It uses the spec's word classifier before looking at the grammar, so reservations apply even before the corresponding construct is admitted. The literal controls preserve raw NUL and U+FEFF refusal, check the spec's raw string predicate, and check redundant suffixes in typed programs. Separate literal controls exercise the cases with and without an expected type.
+For each cumulative slice, the checker checks every written rule for definedness and productivity, then builds the prediction table from the rules reachable from `Program`. It reports the reachable production count and replays each accept and refuse example from its first slice onward. It projects each word from the terminal returned by the spec lexer. Reservations apply even before the corresponding construct is admitted. The literal controls preserve raw NUL and U+FEFF refusal, check the spec's raw string predicate, and check redundant suffixes in typed programs. Separate literal controls exercise the cases with and without an expected type.
 
 The controls exercise slice 1 lets, head braces and shielded literals, block
 statements and trailing values, assignment places, patterns and nonempty enum
 declarations, attributes, arrays and scoped borrow, constants and nonempty
-import lists, generic arguments and impl headers, and proof statements.
+import lists, generic arguments and impl headers, and proof statements. The slice 8
+call-resolution controls build a scope from the parsed module. After `import a::b::{x};`,
+`b::x()` resolves to `a::b::x`. A bare `x()` needs a same-module declaration.
 
 At the start of a body item, a match shares one production through the closing
 brace. It can end there as a statement, or a binary-only operator such as
@@ -107,7 +108,7 @@ results fail the projection controls. The production checker still needs
 name resolution and typing to establish the identity and validity of the
 place. [OD121](../decisions.md#od121)
 
-Slice 4 introduces `exact { expr }` in loop contracts. Function contracts, struct invariants, spec function bodies, assertions, theorem arguments and assumptions reuse the same production. In a condition head, parentheses or a call argument shield its braces. For example, a contract can contain `if (exact { x + 1 } > x) { true } else { false }`. An unshielded depth-zero exact expression in that head is refused. [Exact arithmetic](../decisions.md#decided-2026-11-27-token-ballot)
+Slice 4 introduces `exact { expr }` in loop contracts. Function contracts, struct invariants, spec function bodies, assertions, theorem arguments and assumptions reuse the same production. The reserved keyword consumes its own braced operand, so a contract can contain `if exact { x + 1 } > x { true } else { false }`. Exact arithmetic can also start a branch or a braced match arm in a proof expression. [Exact arithmetic](../decisions.md#decided-2026-11-27-token-ballot)
 
 Production qualification still needs resolution of attribute targets and
 confirmation of the trailing-comma policy for fixed-arity numeric and constant

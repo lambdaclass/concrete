@@ -40,7 +40,7 @@ The lexer returns an identifier for each intrinsic. The binder rule prevents loc
 | Later layout queries, argument builtin and float operations | `sizeof`, `alignof`, `get_args`, `trunc`, `round`, `floor`, `ceil` |
 | Later owned-string operations | `string_concat`, `string_slice`, `string_substr`, `string_trim`, `int_to_string`, `bool_to_string`, `float_to_string`, `string_push_char`, `string_append`, `string_append_int`, `string_append_bool`, `string_reserve` |
 
-The existing builtin type catalog also includes `HeapArray` and the later `f32` and `f64` names. The primitive keyword lock covers the types listed in Q1. Slice 6 introduces `Option`, `Result`, `ArithmeticError` and `OutOfRange`. Slice 9 introduces the `Destroy` trait, and slice 11 introduces `StaticStr` and the file and console types. [Builtin type catalog](../../ConcreteSpec/Spec/Surface0.lean) · [Vertical slices](../../ROADMAP.md#vertical-slices)
+The shared `builtinTypeNames` catalog defines the local binder reservations for types and traits. It includes the primitive keywords. Slice 6 uses `Copy`, `Option`, `Result`, `ArithmeticError` and `OutOfRange`. Slice 9 uses the `Destroy` trait, and slice 11 uses `StaticStr`, `StdIn`, `StdOut` and `StdErr`. Later consumers use `Heap`, `HeapArray`, `Vec`, `String`, `f32` and `f64`. File and directory types acquire entries when their spellings are decided. [Builtin type and trait catalog](../../ConcreteSpec/Spec/Surface0.lean) · [Vertical slices](../../ROADMAP.md#vertical-slices)
 
 ## Decided forms
 
@@ -50,7 +50,7 @@ The existing builtin type catalog also includes `HeapArray` and the later `f32` 
 | 2 | `widen(type: u32, x)`, `wrapping_add(type: u32, x, y)` | Every target-typed numeric intrinsic takes the target first. This includes wrapping, saturating and checked operations, `truncate`, `reinterpret` and `try_convert` when each becomes available. Intrinsic names lex as identifiers. |
 | 2 | `~x` | Bitwise complement. Slice 3 adds boolean negation `!x`. |
 | 4 | `#[name]`, `#[name(args)]` | One envelope for all attributes. Each listed attribute's argument and attachment rules still apply. |
-| 4 | `exact { x + 1 }` | Exact arithmetic in proof expressions. Parentheses or a call argument shield the braces in a condition head, for example `if (exact { x + 1 } > x) { … }`. |
+| 4 | `exact { x + 1 }` | Exact arithmetic in proof expressions. The keyword requires a braced operand and can start a condition head directly, as in `if exact { x + 1 } > x { … }`. |
 | 6 | `match x { 0 => a, _ => b, }` | Every arm consumes its own comma. |
 | 7 | `borrow mut v = a from 0 until n { … }` | Both `mut` and the whole range are optional. The binder always precedes the place. |
 | 8 | `import a::b::{x, y};` | The item list is nonempty. Use sites remain qualified, for example `b::x`. |
@@ -72,6 +72,9 @@ The existing builtin type catalog also includes `HeapArray` and the later `f32` 
 The draft checks the statement boundary of a body-leading `match`, including its trailing-value continuation and the shared unary operators. It also checks attribute attachment, struct invariants and counted-loop restrictions. [Boundary controls](README.md) · [OD104](../decisions.md#od104)
 
 ## Slice 2 literals
+
+The draft scanner exercises these decisions from slice 2. The production lexer currently refuses
+`1_000` and `'\xff'`. R-0722 owns their implementation. [Slice 2 literal work](../../ROADMAP.md#r-0722)
 
 Digit separators may occur between digits, including in nondecimal integers. `0xff_ff` is accepted. Uppercase hex digits, `0x_ff`, adjacent separators and trailing separators are refused. A suffix supplies a type only where the surrounding expression supplies none. `255u8` is redundant in a `u8` return or initializer. [Suffix typing](../decisions.md#decided-2026-11-08-language-literals)
 
