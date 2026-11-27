@@ -2028,7 +2028,12 @@ private theorem nextToken_payload {input lexeme rest : List Nat} {pos : Position
     · simp only [ite_eq_right hw, LosslessValue.Payload]
       generalize scalarText lexeme = wordText
       unfold word
-      split <;> decide
+      cases found : wordTokens.find? (fun entry => entry.1 == wordText) with
+      | none => decide
+      | some entry =>
+        have allowed : ∀ entry ∈ wordTokens,
+            entry.2 ≠ .stringLiteral ∧ entry.2 ≠ .byteLiteral ∧ entry.2 ≠ .label := by decide
+        exact allowed entry (List.mem_of_find?_eq_some found)
   · cases hb : boundedDigits (splitRadix input).1 integerDigitLimit (splitRadix input).2 with
     | none => simp [hb] at h
     | some digitOut =>

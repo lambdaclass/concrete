@@ -46,7 +46,7 @@ two_sites_ok	bir:two_sites_ok	exit 42 -	slice0
 source_answer	con:tests/slice0/answer.con	exit 42 -	slice0
 source_overflow	con:tests/slice0/overflow.con	pending-refusal 1 checker	slice0
 source_trap	con:tests/slice0/trap.con	trap arithmeticOverflow 1 636f6e63726574653a20747261703a206f766572666c6f772061742074657374732f736c696365302f747261702e636f6e3a343a31342028736974652031290a	slice0
-source_reserved_binder_trap	con:tests/slice0/reserved_binder_trap.con	refuse 1 reserved_binder OD67@1 22:26:1:23 -	slice0
+source_reserved_binder_trap	con:tests/slice0/reserved_binder_trap.con	refuse 1 reserved_binder OD67@2 22:28:1:23 -	slice0
 source_zero	con:tests/slice0/zero.con	exit 0 -	slice0
 source_syntax	con:tests/slice0/syntax_error.con	pending-refusal 1 syntax	slice0
 source_unsupported	con:tests/slice0/unsupported.con	pending-refusal 1 unsupported_form	slice0
@@ -63,7 +63,7 @@ source_malformed_if	con:tests/slice0/malformed_if.con	pending-refusal 1 syntax	s
 source_multiply	con:tests/slice0/multiply.con	pending-refusal 1 unsupported_form	slice0
 source_conditional	con:tests/slice0/conditional.con	pending-refusal 1 unsupported_form	slice0
 source_mutable	con:tests/slice0/mutable.con	pending-refusal 1 unsupported_form	slice0
-source_contextual_multiply	con:tests/slice0/contextual_multiply.con	pending-refusal 1 unsupported_form	slice0
+source_contextual_multiply	con:tests/slice0/contextual_multiply.con	pending-refusal 1 syntax	slice0
 source_shadow_destroy	con:tests/slice0/shadow_destroy.con	pending-refusal 1 checker	slice0
 source_shadow_discard	con:tests/slice0/shadow_discard.con	pending-refusal 1 checker	slice0
 source_shadow_alloc	con:tests/slice0/shadow_alloc.con	pending-refusal 1 checker	slice0

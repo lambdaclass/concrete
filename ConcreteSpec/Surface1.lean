@@ -87,6 +87,10 @@ inductive BodyDerives : List Token → List Statement → Prop
       LetTailDerives head binder → ExprDerives expr rhs → BodyDerives tail rest →
       BodyDerives ([fixed .let_ keyword, named name nameSpan] ++ head ++ [fixed .equal eq] ++
         expr ++ [fixed .semi semi] ++ tail) (.bind name binder rhs :: rest)
+  | wildcard {token expr tail ty rhs rest} (keyword mark colon eq semi) :
+      TypeDerives token ty → ExprDerives expr rhs → BodyDerives tail rest →
+      BodyDerives ([fixed .let_ keyword, fixed .wildcard mark, fixed .colon colon, token,
+        fixed .equal eq] ++ expr ++ [fixed .semi semi] ++ tail) (.bind "_" (.typed ty) rhs :: rest)
   | call {name tail rest} (site lp rp semi) : BodyDerives tail rest →
       BodyDerives ([named name site, fixed .lparen lp, fixed .rparen rp, fixed .semi semi] ++ tail)
         (.call name site :: rest)

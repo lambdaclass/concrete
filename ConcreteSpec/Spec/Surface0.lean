@@ -414,29 +414,55 @@ namespace ConcreteSpec.Surface0
 open Concrete.LL1
 
 inductive Terminal where
-  | fn | let_ | return_ | ident | integer | reserved | u8
+  | fn | let_ | return_ | ident | integer | kept | u8
   | lparen | rparen | lbrace | rbrace | arrow | colon | equal | semi | plus
   | minus | star | slash | percent | stringLiteral | byteLiteral | label
   | mut_ | if_ | else_ | struct_ | move_
+  | i8 | i16 | i32 | i64 | u16 | u32 | u64 | bool_ | Unit_ | char_
+  | spec_ | by_ | Self | while_ | Entropy | from_ | until | cap | type_ | ghost | Copy
+  | Fs | Network | Env | Time | Alloc | Device | Console | Process | Unsafe
+  | true_ | false_ | enum_ | match_ | trait_ | impl_ | defer_ | assert_ | assume_ | with_
+  | for_ | break_ | continue_ | pub_ | const_ | mod_ | import_ | borrow_ | exact_ | trusted_ | extern_
+  | wildcard
   deriving DecidableEq, Repr
 
-/-- The word terminals used below, the six item-40 reservations
-(decisions.md#decided-2026-11-08-removed-words), the explicit reservations OD50, OD73,
-OD81 and OD90, and the capability-name reservations in #decided-2026-11-02-authority,
-item 13. `main`, `self` and `as` are identifiers. -/
+def Terminal.count := Terminal.wildcard.ctorIdx + 1
+
+theorem Terminal.index_lt_count (kind : Terminal) : kind.ctorIdx < count := by
+  cases kind <;> decide
+
+theorem Terminal.index_ofNat : ∀ i : Fin count, (Terminal.ofNat i.val).ctorIdx = i.val := by
+  decide
+
+/-- First type production for each primitive keyword. Reservation precedes admission. -/
+def Terminal.primitiveSlice : Terminal → Option Nat
+  | .u8 => some 0
+  | .i8 | .i16 | .i32 | .i64 | .u16 | .u32 | .u64 => some 2
+  | .bool_ | .Unit_ => some 3
+  | .char_ => some 11
+  | _ => none
+
+/-- Fixed word tokens at the pre-slice-2 lock. The lexer looks up a spelling and the
+draft grammar renders the resulting terminal from this same catalog.
+Decision: docs/decisions.md#decided-2026-11-27-token-ballot. -/
+def wordTokens : List (String × Terminal) :=
+  [("fn", .fn), ("let", .let_), ("return", .return_), ("u8", .u8), ("struct", .struct_),
+   ("move", .move_), ("if", .if_), ("else", .else_), ("mut", .mut_), ("kept", .kept),
+   ("i8", .i8), ("i16", .i16), ("i32", .i32), ("i64", .i64), ("u16", .u16), ("u32", .u32),
+   ("u64", .u64), ("bool", .bool_), ("Unit", .Unit_), ("char", .char_), ("spec", .spec_),
+   ("by", .by_), ("Self", .Self), ("while", .while_), ("Entropy", .Entropy), ("from", .from_),
+   ("until", .until), ("cap", .cap), ("type", .type_), ("ghost", .ghost), ("Copy", .Copy),
+   ("Fs", .Fs), ("Network", .Network), ("Env", .Env), ("Time", .Time), ("Alloc", .Alloc),
+   ("Device", .Device), ("Console", .Console), ("Process", .Process), ("Unsafe", .Unsafe),
+   ("true", .true_), ("false", .false_), ("enum", .enum_), ("match", .match_),
+   ("trait", .trait_), ("impl", .impl_), ("defer", .defer_), ("assert", .assert_),
+   ("assume", .assume_), ("with", .with_), ("for", .for_), ("break", .break_),
+   ("continue", .continue_), ("pub", .pub_), ("const", .const_), ("mod", .mod_),
+   ("import", .import_), ("borrow", .borrow_), ("exact", .exact_), ("trusted", .trusted_),
+   ("extern", .extern_), ("_", .wildcard)]
+
 def word (name : String) : Terminal :=
-  match name with
-  | "fn" => .fn
-  | "let" => .let_
-  | "return" => .return_
-  | "u8" => .u8
-  | "struct" => .struct_
-  | "move" => .move_
-  | "spec" | "by" | "kept" | "Self" | "while" | "Entropy" => .reserved
-  | "from" | "until" | "cap" | "type" | "ghost" | "Copy" => .reserved
-  | "Fs" | "Network" | "Env" | "Time" | "Alloc" | "Device" | "Console"
-  | "Process" | "Unsafe" => .reserved
-  | _ => .ident
+  ((wordTokens.find? (fun entry => entry.1 == name)).map Prod.snd).getD .ident
 
 def punctuation : List (String × Terminal) :=
   [("(", .lparen), (")", .rparen), (r#"{"#, .lbrace), (r#"}"#, .rbrace), ("->", .arrow),
@@ -468,9 +494,9 @@ def surfaceProductions : List (Production × List GrammarView) :=
     ((.decls, [.t .struct_, .t .ident, .t .lbrace, .t .rbrace, .n .decls]), from1),
     ((.decls, []), from1),
     ((.body, [.t .let_, .t .ident, .t .colon, .t .u8, .t .equal, .n .expr, .t .semi, .n .body]), [.slice0]),
-    ((.body, [.t .let_, .t .ident, .n .letTail, .t .equal, .n .expr, .t .semi, .n .body]), [.slice1]),
-    ((.body, [.t .let_, .n .letHead, .t .equal, .n .expr, .t .semi, .n .body]), [.shared]),
-    ((.letHead, [.t .ident, .n .letTail]), [.shared]),
+    ((.body, [.t .let_, .n .letHead, .t .equal, .n .expr, .t .semi, .n .body]), from1),
+    ((.letHead, [.t .ident, .n .letTail]), from1),
+    ((.letHead, [.t .wildcard, .t .colon, .n .localTy]), from1),
     ((.letHead, [.t .mut_, .t .ident, .t .colon, .n .localTy]), [.shared]),
     ((.body, [.t .return_, .n .expr, .t .semi, .n .body]), all),
     ((.body, [.t .ident, .t .lparen, .t .rparen, .t .semi, .n .body]), from1),
@@ -527,22 +553,31 @@ def checkedGrammar0 : CheckedGrammar Terminal Nonterminal :=
 
 /-- Productions recognized for the slice refusal, with a flag marking forms outside slice 0
 (decisions.md#decided-slice0-surface-2026-11-06). The unmarked productions also recognize
-the slice grammar. Contextual markers can still be identifiers. -/
+the slice grammar. -/
 def refusalProductions : List ((Nonterminal × List (Sym Terminal Nonterminal)) × Bool) :=
   [
     ((.program, [.t .fn, .n .identifier, .t .lparen, .t .rparen, .t .arrow, .n .ty,
                  .t .lbrace, .n .body, .t .rbrace]), false),
     ((.ty, [.t .u8]), false),
     ((.ty, [.n .identifier]), true),
+    ((.ty, [.t .i8]), true),
+    ((.ty, [.t .i16]), true),
+    ((.ty, [.t .i32]), true),
+    ((.ty, [.t .i64]), true),
+    ((.ty, [.t .u16]), true),
+    ((.ty, [.t .u32]), true),
+    ((.ty, [.t .u64]), true),
+    ((.ty, [.t .bool_]), true),
+    ((.ty, [.t .Unit_]), true),
+    ((.ty, [.t .char_]), true),
     ((.body, [.t .let_, .n .binder, .t .colon, .n .ty, .t .equal, .n .expr, .t .semi, .n .body]), false),
     ((.body, [.t .return_, .n .expr, .t .semi, .n .body]), false),
     ((.body, [.n .conditional, .n .body]), false),
     ((.body, []), false),
     ((.binder, [.n .identifier]), false),
+    ((.binder, [.t .wildcard]), true),
     ((.binder, [.t .mut_, .n .identifier]), true),
     ((.identifier, [.t .ident]), false),
-    ((.identifier, [.t .if_]), false),
-    ((.identifier, [.t .else_]), false),
     ((.conditional, [.t .if_, .n .expr, .t .lbrace, .n .body, .t .rbrace, .n .alternative]), true),
     ((.alternative, [.t .else_, .n .elseBody]), false),
     ((.elseBody, [.t .lbrace, .n .body, .t .rbrace]), false),
@@ -559,6 +594,8 @@ def refusalProductions : List ((Nonterminal × List (Sym Terminal Nonterminal)) 
     ((.factors, []), false),
     ((.atom, [.t .integer]), false),
     ((.atom, [.n .identifier]), false),
+    ((.atom, [.t .true_]), true),
+    ((.atom, [.t .false_]), true),
     ((.atom, [.t .stringLiteral]), true),
     ((.atom, [.t .byteLiteral]), true),
     ((.atom, [.t .lparen, .n .expr, .t .rparen]), false)]
@@ -586,6 +623,7 @@ Item recovered-59-32 defines a single catalog with no aliases. The spellings rem
   `saturating_mul`: OD10 and OD145 (ARITH-4).
 * `checked_add`, `checked_sub`, `checked_mul`, `checked_div`, `checked_rem`, `checked_shl`,
   `checked_shr`, and `checked_neg`: decided-project-no-hidden-traps, spelling 1.
+* `widen`: decided-2026-11-27-token-ballot.
 * `try_convert`, `truncate`, `reinterpret`, `trunc`, `round`, `floor`, and `ceil`: OD99.
 
 Legacy-only spellings such as `alloc_array`, `free_array`, `realloc_array`, `vec_pop`,
@@ -601,7 +639,7 @@ def intrinsicNames : List String :=
    "saturating_add", "saturating_sub", "saturating_mul",
    "checked_add", "checked_sub", "checked_mul", "checked_div", "checked_rem", "checked_shl",
    "checked_shr", "checked_neg",
-   "try_convert", "truncate", "reinterpret", "trunc", "round", "floor", "ceil"]
+   "widen", "try_convert", "truncate", "reinterpret", "trunc", "round", "floor", "ceil"]
 
 structure Span where
   start : Nat
@@ -796,18 +834,29 @@ inductive Derives : List Token → Program → Prop
                 fixed .arrow arrow, fixed .u8 ty, fixed .lbrace lb] ++ body ++ [fixed .rbrace rb])
         ⟨name, binder, statements⟩
 
-/-- Already decided builtin type spellings, reserved under OD43. The complete later-slice
-reservation catalog belongs to the shared lexical audit. -/
+/-- Decided builtin type and trait names (OD43 and the token ballot). Primitive types
+and the Copy marker already have fixed word tokens. The remaining names lex as identifiers. -/
 def builtinTypeNames : List String :=
-  ["i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "bool", "f32", "f64",
-   "char", "String", "Unit", "Option", "Result", "Heap", "HeapArray", "Vec"]
+  wordTokens.filterMap (fun (name, kind) =>
+    if kind.primitiveSlice.isSome || kind == .Copy then some name else none) ++
+  ["Option", "Result", "ArithmeticError", "OutOfRange", "Destroy", "StaticStr",
+   "StdIn", "StdOut", "StdErr", "Heap", "HeapArray", "Vec", "String", "f32", "f64"]
 
-/-- Slice 0 supports named bindings that do not shadow the entry point, an intrinsic,
-a builtin type name or an earlier local. -/
+/-- Local binders share the reservation for the entry point, builtin types and intrinsics.
+Decision: docs/decisions.md#decided-2026-11-27-token-ballot. -/
+def UnreservedLocalName (name : String) : Prop :=
+  name ≠ "main" ∧ name ∉ intrinsicNames ∧ name ∉ builtinTypeNames
+
+instance (name : String) : Decidable (UnreservedLocalName name) := by
+  unfold UnreservedLocalName
+  infer_instance
+
+/-- Slice 0 additionally requires a named binder fresh in the local scope. -/
 def BinderLegal (locals : List String) (name : String) : Prop :=
-  name ≠ "_" ∧ name ≠ "main" ∧ name ∉ intrinsicNames ∧ name ∉ builtinTypeNames ∧ name ∉ locals
+  name ≠ "_" ∧ UnreservedLocalName name ∧ name ∉ locals
 
-instance (locals : List String) (name : String) : Decidable (BinderLegal locals name) :=
-  inferInstanceAs (Decidable (name ≠ "_" ∧ name ≠ "main" ∧ name ∉ intrinsicNames ∧ name ∉ builtinTypeNames ∧ name ∉ locals))
+instance (locals : List String) (name : String) : Decidable (BinderLegal locals name) := by
+  unfold BinderLegal
+  infer_instance
 
 end ConcreteSpec.Surface0

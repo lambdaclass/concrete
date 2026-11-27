@@ -489,9 +489,9 @@ example :
 private def parseSource (text : String) := (Lex.lex text.toUTF8).bind Parse.parse
 
 example :
-    ((parseSource r"fn main() -> u8 { return 42; let _: u8 = 1; }").bind
+    ((parseSource r"fn main() -> u8 { return 42; let Option: u8 = 1; }").bind
       (Admission.prepareParsed .admission)) =
-      .error (.checker "unreachable code (STMT-14) at 1:30, bytes 29..43") := by
+      .error (.checker "unreachable code (STMT-14) at 1:30, bytes 29..48") := by
   with_unfolding_all rfl
 
 private def pendingSource (text : String) : Option (AdmissionInput (sliceLanguage slice0)) := do

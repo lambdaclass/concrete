@@ -303,7 +303,7 @@ def checkSourceRefusal (input : Concrete.Stages.Input) (expected : RefusalExpect
     let .error issue@(.reservedBinder name span) :=
         ConcreteSpec.StageInterface.SurfacePreparation.prepareSurface0 ast | return 13
     let some diagnostic := actual.diagnosticAt issue.render.rule | return 13
-    unless diagnostic.rule.val.name == ``ConcreteSpec.Core.Slice0Rules.AvailableBinder &&
+    unless diagnostic.rule.val.name == ``ConcreteSpec.Core.Slice0Rules.UnreservedLocal &&
         expected.rule == "OD67" && expected.revision == diagnostic.rule.val.rev &&
         expected.primary == span && expected.related.isEmpty do return 14
     let refusal := Concrete.Refusal.checker s!"binding shadows '{name}' at byte {span.start}"

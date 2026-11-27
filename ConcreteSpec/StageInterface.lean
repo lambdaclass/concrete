@@ -608,7 +608,9 @@ private def binding (acc : Scope × State) (b : Binding) :
     infer_instance
   unless Slice0Rules.NamedBinding b.name do throw (.wildcard b.span)
   if b.name ∈ scope.map Prod.fst then throw (.duplicateBinder b.name b.span)
-  unless Slice0Rules.AvailableBinder b.name do throw (.reservedBinder b.name b.span)
+  letI : Decidable (Slice0Rules.UnreservedLocal b.name) :=
+    inferInstanceAs (Decidable (UnreservedLocalName b.name))
+  unless Slice0Rules.UnreservedLocal b.name do throw (.reservedBinder b.name b.span)
   let (rhs, s) ← expr scope b.rhs s
   let ((x, _), s) := rhs.bind s (some b.span) (.named ⟨b.name⟩)
   return ((b.name, x) :: scope, s)
@@ -1043,16 +1045,16 @@ def CoreInput.CheckerRefuses {language} (input : CoreInput language) (failure : 
     checkProgram v.program = .error reason ∧ v.render reason = some failure
 
 def Surface0Issue.render (reason : Surface0Issue) : CheckerRefusal :=
-  let (name, span) := match reason with
-    | .unexpectedEntry s => (``Slice0Rules.EntryName, s)
-    | .wildcard s => (``Slice0Rules.NamedBinding, s)
-    | .fallthrough s => (``Slice0Rules.Returns, s)
-    | .unreachable s => (``Slice0Rules.ReachableBody, s)
-    | .integerSuffix s => (``Slice0Rules.ExpectedTypeLiteral, s)
-    | .unknownLocal _ s => (``Slice0Rules.LocalBound, s)
-    | .duplicateBinder _ s => (``Slice0Rules.FreshLocal, s)
-    | .reservedBinder _ s => (``Slice0Rules.AvailableBinder, s)
-  ⟨⟨name, 1⟩, surfaceFileSpan span, [], none, .surface (.zero reason)⟩
+  let (rule, span) : RuleId × Surface0.Span := match reason with
+    | .unexpectedEntry s => (⟨``Slice0Rules.EntryName, 1⟩, s)
+    | .wildcard s => (⟨``Slice0Rules.NamedBinding, 1⟩, s)
+    | .fallthrough s => (⟨``Slice0Rules.Returns, 1⟩, s)
+    | .unreachable s => (⟨``Slice0Rules.ReachableBody, 1⟩, s)
+    | .integerSuffix s => (⟨``Slice0Rules.ExpectedTypeLiteral, 1⟩, s)
+    | .unknownLocal _ s => (⟨``Slice0Rules.LocalBound, 1⟩, s)
+    | .duplicateBinder _ s => (⟨``Slice0Rules.FreshLocal, 1⟩, s)
+    | .reservedBinder _ s => (⟨``Slice0Rules.UnreservedLocal, 2⟩, s)
+  ⟨rule, surfaceFileSpan span, [], none, .surface (.zero reason)⟩
 
 /-- Located source before name resolution. The slice determines its syntax.
 No diagnostic can be supplied on this handoff. -/

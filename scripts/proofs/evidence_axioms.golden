@@ -1277,8 +1277,7 @@ ConcreteSpec.Core.Slice0Rules.additionInvalidOperands	propext
 ConcreteSpec.Core.Slice0Rules.additionRefused	propext
 ConcreteSpec.Core.Slice0Rules.admissionAccepted	Quot.sound propext
 ConcreteSpec.Core.Slice0Rules.admissionRefused	propext
-ConcreteSpec.Core.Slice0Rules.binderAvailable	propext
-ConcreteSpec.Core.Slice0Rules.binderUnavailable	propext
+ConcreteSpec.Core.Slice0Rules.builtinTypeRefused	propext
 ConcreteSpec.Core.Slice0Rules.entryAccepted	
 ConcreteSpec.Core.Slice0Rules.entryRefused	
 ConcreteSpec.Core.Slice0Rules.freshAccepted	propext

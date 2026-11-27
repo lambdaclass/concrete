@@ -4442,6 +4442,7 @@ ConcreteSpec.StageGrammar.Action.some.injEq	propext
 ConcreteSpec.StageGrammar.Action.some.sizeOf_spec	propext
 ConcreteSpec.StageGrammar.CheckedTable.acyclic	propext
 ConcreteSpec.StageGrammar.CheckedTable.dimensions	propext
+ConcreteSpec.StageGrammar.CheckedTable.mk.congr_simp	propext
 ConcreteSpec.StageGrammar.CheckedTable.mk.inj	propext
 ConcreteSpec.StageGrammar.CheckedTable.mk.injEq	propext
 ConcreteSpec.StageGrammar.CheckedTable.mk.sizeOf_spec	propext
@@ -5111,35 +5112,89 @@ ConcreteSpec.Surface0.Statement.ret.injEq	propext
 ConcreteSpec.Surface0.Statement.ret.sizeOf_spec	
 ConcreteSpec.Surface0.StringBody.brecOn	
 ConcreteSpec.Surface0.TailDerives.brecOn	
+ConcreteSpec.Surface0.Terminal.Alloc.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.Console.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.Copy.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.Device.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.Entropy.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.Env.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.Fs.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.Network.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.Process.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.Self.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.Time.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.Unit_.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.Unsafe.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.arrow.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.assert_.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.assume_.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.bool_.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.borrow_.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.break_.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.by_.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.byteLiteral.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.cap.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.char_.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.colon.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.const_.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.continue_.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.defer_.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.else_.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.enum_.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.equal.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.exact_.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.extern_.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.false_.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.fn.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.for_.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.from_.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.ghost.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.i16.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.i32.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.i64.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.i8.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.ident.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.if_.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.impl_.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.import_.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.index_lt_count	
+ConcreteSpec.Surface0.Terminal.index_ofNat	
 ConcreteSpec.Surface0.Terminal.integer.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.kept.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.label.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.lbrace.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.let_.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.lparen.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.match_.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.minus.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.mod_.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.move_.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.mut_.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.ofNat_ctorIdx	
 ConcreteSpec.Surface0.Terminal.percent.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.plus.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.pub_.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.rbrace.sizeOf_spec	
-ConcreteSpec.Surface0.Terminal.reserved.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.return_.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.rparen.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.semi.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.slash.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.spec_.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.star.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.stringLiteral.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.struct_.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.trait_.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.true_.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.trusted_.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.type_.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.u16.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.u32.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.u64.sizeOf_spec	
 ConcreteSpec.Surface0.Terminal.u8.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.until.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.while_.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.wildcard.sizeOf_spec	
+ConcreteSpec.Surface0.Terminal.with_.sizeOf_spec	
 ConcreteSpec.Surface0.Token.mk.inj	
 ConcreteSpec.Surface0.Token.mk.injEq	propext
 ConcreteSpec.Surface0.Token.mk.sizeOf_spec	
@@ -5222,7 +5277,6 @@ ConcreteSpec.Surface0.grammar0_ll1	propext
 ConcreteSpec.Surface0.grammar1_ll1	propext
 ConcreteSpec.Surface0.grammar1_predicts_unique	Quot.sound propext
 ConcreteSpec.Surface0.instDecidableBidiControl._proof_1	
-ConcreteSpec.Surface0.instDecidableBinderLegal._proof_1	propext
 ConcreteSpec.Surface0.instDecidableByteEscape._proof_1	
 ConcreteSpec.Surface0.instDecidableByteRaw._proof_1	
 ConcreteSpec.Surface0.instDecidableCommentRaw._proof_1	
@@ -7207,18 +7261,19 @@ _private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.instReprRadix.repr.m
 _private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.bootstrapGrammar._proof_1	
 _private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.bootstrapGrammar._proof_2	
 _private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.bootstrapGrammar._proof_3	
-_private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.bootstrapGrammar._proof_4	
+_private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.bootstrapGrammar._proof_4	propext
 _private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.bootstrapGrammar._proof_5	propext
-_private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.bootstrapGrammar._proof_6	propext
 _private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.bootstrapTable._proof_1	propext
 _private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.bootstrapTable._proof_2	Classical.choice Quot.sound propext
 _private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.bootstrapTable._proof_3	propext
 _private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.bootstrapTable._simp_1	propext
+_private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.bootstrapTable.eq_1	Classical.choice Quot.sound propext
 _private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.bootstrapVerification._proof_1	propext
 _private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.bootstrapVerification._proof_2	Classical.choice Quot.sound propext
 _private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.bootstrapVerification._proof_3	Classical.choice Quot.sound propext
 _private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.bootstrapWords.eq_1	propext
 _private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.later._proof_1	
+_private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.returnCells.eq_1	propext
 _private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.returnRhs.eq_1	
 _private.ConcreteSpec.StageInterface.0.ConcreteSpec.StageInterface.AdmissionInput.prepare.match_1.eq_1	
 _private.ConcreteSpec.StageInterface.0.ConcreteSpec.StageInterface.AdmissionInput.prepare.match_1.eq_2	
