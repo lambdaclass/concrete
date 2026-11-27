@@ -12,7 +12,7 @@ Yet C, C++, and even Rust compilers almost never perform whole-aggregate or whol
 
 Concrete has a rare structural advantage:
 1. **Strictly second-class references:** No `&T` or `&mut T` can ever be stored in a struct/enum/collection or returned from a function. Field borrows exist only lexically inside scoped calls or `borrow` blocks.
-2. **Explicit raw-memory boundary:** Raw pointers (`*T`, `*mut T`) exist only inside `trusted` / `with(Unsafe)` boundaries (`C4` materialization rule in `R-0610`), and proposed wire markers such as `ByteSafe` remain subject to R-0714 approval.
+2. **Explicit raw-memory boundary.** A raw pointer type requires a qualifier, `*const T` or `*mut T`. The C4 materialization rule in R-0610 covers exposure to raw access. Proposed wire markers such as `ByteSafe` remain subject to R-0714 approval. [OD74](../../decisions.md#od74).
 3. **One materialized layout query.** The spec defines materialized layout and Memory consumes its query. Memory classifies virtual and materialized storage. [Indexed lowering](../../../Concrete/Memory/Lowering.lean).
 
 ---
@@ -85,7 +85,16 @@ Check independent, simultaneously live footprints across roots and banks, value 
 2. **Exact representation.** Prove that each active encoding decodes to its value and that different variants have distinguishable encodings. Rematerialize canonical bytes at observable boundaries and agree on the ABI of a non-inlined `&[S]` across modules.
 3. **Temporal reuse.** The per-function frame check must show that a destination aliases no argument read by the callee. Account for nested activations, active borrows and partial writes on a trap or error path.
 
-Prove initialized, aligned, in-bounds reads, writes and moves, preservation of other live storage, allocation behavior and rematerialization of canonical bytes at observable boundaries. Model exhaustion/OOM and C7 accounting per lineage when a multi-bank plan changes the allocation count or alignment slack. Establish `LowersMemory`, including `BehaviorRefinement` and `Memory.RepresentsCheckpoint`, for each supported plan constructor. The current contract matches ordinary results and permits physical `resourceExhausted`. Strict matching of every terminal result requires a bound ruling out reachable exhaustion (`LowersMemory.refines_of_bound`). A new heuristic can reuse the proof for existing plan constructors. Each new representation or reuse constructor needs a soundness case. [Memory refinement](../../../Concrete/Memory/Refinement.lean).
+Prove initialized, aligned, in-bounds reads, writes and moves, preservation of other live storage, allocation behavior and rematerialization of canonical bytes at observable boundaries. Model exhaustion/OOM and C7 accounting per lineage when a multi-bank plan changes the allocation count or alignment slack. Establish `LowersMemory`, including `BehaviorRefinement` and `Memory.RepresentsCheckpoint`, for each supported plan constructor. A new heuristic can reuse the proof for existing constructors. Each new representation or reuse constructor needs a soundness case.
+
+`LowersMemory.result_or_exhausted` has these hypotheses for a target result:
+
+```lean
+    (contract : LowersMemory (language := language) mir memory) (safe : ProgramSafe Src mir)
+    {q o} (reached : Dst.finite memory q) (outcome : Dst.result memory q o)
+```
+
+Under those hypotheses, either a reachable MIR execution has the same result and trace, or the Memory result is `.resourceExhausted`. For strict matching, `LowersMemory.refines_of_bound` takes `(contract : LowersMemory (language := language) mir memory)` and `(bound : ¬ Dst.observes memory .resourceExhausted)`. Its conclusion is `BehaviorRefinement Src Dst Src.result Dst.result mir memory`, which begins `ProgramSafe source input →`. Applying it to a target return still requires `ProgramSafe Src mir`, as well as reachability and the observed result. [Memory theorems](../../../Concrete/Memory/Refinement.lean) · [Refinement definition](../../../Concrete/Interfaces/Behavior.lean).
 
 ---
 

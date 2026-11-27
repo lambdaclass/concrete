@@ -11,7 +11,7 @@ LEAN_NUM_THREADS=2 lake build concrete
 .lake/build/bin/concrete build tests/slice0/answer.con -o build/answer
 ```
 
-On success, `build/answer` contains `llvm.exe` and `lcb.exe`. Both return 42 for this fixture.
+On success, `build/answer` contains `llvm.exe` and `lcb.exe`. Both return 42 for the checked-in file, whose last byte is a newline. The [Lean compilation witness](#supporting-theorems) uses an embedded string ending at the closing brace.
 Use `--backend llvm` or `--backend lcb` for a single executable. The driver uses the pinned
 native build helper and the LCB executable built by Lake. It compiles and links in a private
 directory beside the destination, checks that the retained link inputs match the generated inputs,
@@ -111,7 +111,7 @@ The compiler imports `Slice0.Program` and `Slice0.toCore` through `Concrete/Core
 | Admission, MIR and Memory | `MIR.lower_correct` uses `Admission.admit_never_traps`. Successful compilation preserves the Core outcome through Memory (`Stages.compile_core_correct`). |
 | SSA | The SSA validator proves BIR well-formedness and the return value or trap kind on the recorded Memory/BIR pair. `SSA.lower_wf` and `Stages.compile_ssa_correct` give the two results. Exact source provenance is a separate obligation. |
 | BIR → LCB adapter | The LCB adapter theorem applies to well-formed BIR that the adapter accepts. |
-| Native | The answer fixture has a compilation witness. Production native correctness also requires the registered reference and named native premises. |
+| Native | `Sanity.answerCompiles` witnesses shared compilation of the embedded answer example. The native conformance test builds the checked-in file. Production native correctness requires the registered reference and named native premises. |
 
 **The scalar BIR contract.** BIR defines integer and flag values, the site table used to decode trap results, and a frame-slot count. Final-image stack bytes require separate evidence about the native artifact and launcher.
 BIR is the one boundary that both backends read. It is designed for both from the start:
@@ -157,11 +157,15 @@ The adapter uses the integer, comparison, branch, phi and return instructions of
 
 This separates a normal return of 134 from a trap, whose encoding starts at 256.
 
-A fixed runtime entry, `Backend/Runtime.lean`, is emitted per backend as LLVM text and as QBE text for LCB's command line (the runtime is not on the adapter's proof path; it is premise `P_rt`). It calls `concrete_body`, and then:
-- for a word below 256, it exits with that status;
-- otherwise, it writes the trap line for `k` to fd 2 and exits 134.
+Both launchers call `concrete_body` and decode its word using the runtime emitted by [Backend/Runtime.lean](Backend/Runtime.lean).
 
-The decoding lives in this one place for both backends. Its correctness is premise `P_rt` (implementation, over libc `write`/`_exit`): an image whose `concrete_body` returns word `w` has the behaviour `decode w`, and a body that diverges gives a run that diverges.
+| Body word | Runtime action |
+|---|---|
+| Below 256 | Exit with that status. |
+| `256 + i`, with an entry at index `i` | Write the entry's trap line and a newline to fd 2, then exit 134. |
+| `256 + i`, with no entry at index `i` | Write `concrete: runtime: invalid result word` and a newline to fd 2, then call `abort()`. The Lean decoder gives `.stuck`. |
+
+The scalar native premise `P_rt` relates the observed behaviour of a non-killed launch to a result of the body on that launch. The exact diagnostic for a valid trap has its own premise, `P_trap_site`. [Native premise fields](Premises.lean) · [BIR decoder](BIR.lean).
 
 
 ## Layout (lean root, few cohesive folders)
@@ -195,7 +199,7 @@ The root inventory (`scripts/checks/root_inventory.txt`) lists each new root ent
   The parser starts at the grammar's start symbol and accepts only a `CheckedTable`, whose
   entries must equal `makeTable` of that grammar. The parser uses the precomputed Slice 0 entries. `table0_checked` proves that they equal the generated table.
   Later slices extend the shared surface grammar and must pass the same LL(1) check.
-- **`Derives : List Token → Surface.Program → Prop`**, which binds token payloads, not only token kinds.
+- **`Derives : List Token → Surface0.Program → Prop`** binds token payloads as well as token kinds.
 - **Elaboration.** `ConcreteSpec/Spec/Surface0.lean` defines `Lexes`, `Derives` and `checkBody`. The declarative `Elaborates` relation lives in `Concrete/Theorem.lean`. Preservation of evaluation by elaboration is the open premise `P_elab`.
 - **Refusals.** The driver distinguishes syntax errors, decided forms outside the supported grammar, and checker refusals. The manifest exercises each class.
 
@@ -277,16 +281,10 @@ structure NativePremises (B : Backend) (N : Native B) (T : TargetProfile) : Prop
       LCB: LCB's own importer, lowering, assembler and linker, i.e. its named trust boundaries
       (`docs/SEMANTICS.md`, "Target and environment assumptions"). -/
   toolchain : ∀ b t img r, b.WF → B.emit b = .ok t → N.Built T t img → N.BodyRuns T img r → B.Means t r
-  /-- P_rt (implementation): the runtime entry decodes. A launch whose body returns `w` has the
-      behaviour `decode w`: it exits with w below 256; otherwise it writes the whole trap line to
-      fd 2 (looping on partial writes, ignoring write errors) and then exits 134 unconditionally.
-      A body that diverges gives a launch that diverges. The trap line's presence also relies on
-      the admitted-launch fd-2 condition, which belongs to P_launch, not here. -/
+  /-- P_rt (implementation): relate the observed behaviour to the decoded body result. -/
   rt : ∀ b t img β, b.WF → B.emit b = .ok t → N.Built T t img → N.Runs T img β → β ≠ .killed →
     ∃ r, N.BodyRuns T img r ∧ β = r.behaviour
-  /-- P_launch (environment, resources): an admitted launch of an image built from a WF BIR
-      within the profile's frame bound is never killed (stack, signals), and fd 2 accepts the
-      trap line. -/
+  /-- P_launch (environment, resources): exclude a killed launch within the frame bound. -/
   launch : ∀ b t img β, b.WF → b.frameSlots ≤ T.maxSlots →
     B.emit b = .ok t → N.Built T t img → N.Runs T img β → β ≠ .killed
   /-- P_live (environment): an admitted launch happens and has a behaviour (maximal: a run that
@@ -312,9 +310,18 @@ The native helper recognizes x86-64 Linux, AArch64 Linux and AArch64 macOS. The 
 | P_launch | environment | not planned |
 | P_live | environment | not planned |
 
-The fd-2 condition is part of the admitted launch, so it is inside P_launch (environment).
+**Launch and trap reporting.** The registry prose mentions fd 2 under `P_launch`. The Lean field `Native.Premises.launch` concludes only `output ≠ .killed`. The exact bytes on fd 2 come from `Native.Premises.trapSite`, when that same admitted, observed launch returns the trap word and the table lookup succeeds. Native conformance compares the observed stderr bytes. The two field types are quoted from [Premises.lean](Premises.lean).
 
-**Trap reporting.** `Native.Premises.trapSite` assumes that an admitted launch whose body returns the word for trap index `i` writes the matching entry's trap line and newline. Native conformance tests check the observed stderr bytes.
+```lean
+  launch : ∀ p artifact image launch output stderr, BIR.WF p → p.frameSlots ≤ maxSlots →
+    backend.emit p = .ok artifact → world.built artifact image → world.launches image launch →
+    world.admitted launch → world.observes launch output stderr → output ≠ .killed
+  trapSite : ∀ p artifact image launch output stderr i entry, BIR.WF p →
+    backend.emit p = .ok artifact → world.built artifact image → world.launches image launch →
+    world.admitted launch → world.observes launch output stderr →
+    world.bodyRuns launch (.returns (BitVec.ofNat 32 (256 + i))) → p.sites[i]? = some entry →
+    stderr = Runtime.trapLine entry ++ "\n"
+```
 
 The certificate proposal would check parsing per compilation. The CLI currently checks the emitted LLVM link inputs (`component.ll` and `launcher.ll`) and replays the native build before publication. LCB receives its adapted function in process.
 
@@ -370,12 +377,12 @@ arguments, the complete trap-site entry, and the return. `SSA.lower_wf` establis
 well-formedness, and `Stages.compile_ssa_correct` applies `SSA.lower_correct` to the recorded
 Memory and BIR programs. Forward edges give the validator's block-count fuel bound.
 
-**Supporting theorems**
+### Supporting theorems
 
 - `BIR.binOvf_spec` gives the wrapped result and the exact out-of-range flag when the operands resolve to the two integer arguments.
 - `LCB.Proof.adapter_correct` and `emit_correct` apply to accepted well-formed BIR against LCB's imported `Source.Function` semantics. `Native.lcb_emit_correct` lifts the result to `Native.EmitCorrect`.
 - `Stages.prepareLCB_of_edges` composes successful emission of the function and its site table with job validation.
-- `ImageTheorem.Sanity.answerCompiles` proves `Stages.compile answerInput = .ok answerOutput`. The production reference registry has no entries. The native result for this fixture still depends on the image obligations above.
+- The full statement is `theorem answerCompiles : Stages.compile answerInput = .ok answerOutput`. It has no hypotheses. `ImageTheorem.Sanity.answerInput` loads the literal `r#"fn main() -> u8 { return 20 + 22; }"#.toUTF8` with the fixture's path as its name. The native test reads the file from disk, including its trailing newline. Editing the file does not change the theorem's input. [Theorem and embedded input](Theorem.lean) · [Native fixture](../tests/slice0/answer.con).
 
 ## Per-compilation certificate emission (proposed)
 
@@ -498,11 +505,9 @@ R-0575 would expose these reports per file or function through a facts subcomman
 2. **Axioms and trust.** The indexed LLVM boundary includes the opaque `llvmBehaviors` in `Concrete/Interfaces/Pipeline.lean`.
    The trust ban (`scripts/proofs/trust_ban.sh`) checks both `ConcreteSpec` and `Concrete`:
    sources, every constant, import-closure coverage and examples retained as named declarations.
-   Compiler imports must name an existing module under `ConcreteSpec`, `Concrete`, `Lean` or the
-   pinned `LeanCompilerBackend`; the allow-list comes from those roots' source-module inventories.
+   The compiler import allow-list enumerates existing modules under `ConcreteSpec`, `Concrete`, `Lean` and the pinned `LeanCompilerBackend`. It also permits the single pinned module `Std.Data.HashMap.Lemmas`, used by SSA. [Import check](../scripts/proofs/lean_lex.py).
    The trusted-base golden (gate 9) also fixes each headline theorem's axioms (a `sorryAx` fails it).
-   The compiler totality audit and compiler external-checker replay remain with R-0553;
-   `scripts/proofs/external.sh` currently replays `ConcreteSpec` and `ConcreteSpecEvidence`.
+   R-0553 owns the compiler totality audit. R-0702 owns external re-checking of the spec and compiler proof closures, in coordination with R-0553. `scripts/proofs/external.sh` currently replays `ConcreteSpec` and `ConcreteSpecEvidence`.
 3. **Premise registry and stage coverage.** The trusted-base gate checks the premise table. The indexed pipeline has a separate stage and end-to-end contract audit.
 4. **Conformance, both backends:** each `bir:` row in `tests/manifest.tsv` runs through:
    - the Lean `run`;
@@ -532,13 +537,17 @@ R-0575 would expose these reports per file or function through a facts subcomman
 
    An intended printer change needs a reviewed golden update.
 
-   **Classification uses the status and the runtime evidence, never the status alone.** `Observation.status` is many-to-one.
-   - Status 134 **with** the runtime's trap line on fd 2 is `trapped k`.
-   - Status 134 **without** it is `exited 134`.
-   - Status 125 **with** the launcher's refusal line is `startupRefused`.
-   - Status 125 **without** it is `exited 125`.
+   **Native observations.** The gate compares each run with its fixture's expected status and exact stderr bytes, and requires empty stdout. Three cases exercise shell status 134. [Manifest](../tests/manifest.tsv) · [Invalid-word control](../scripts/checks/compiler/slice0_bir.lean).
 
-   Accepted examples `return 125;` and `return 134;` are in the corpus and must classify as exits. Slice 0 can't produce a real startup refusal, because it has no grants. The refusal and trap classifications are also exercised by comparator self-tests: stub images, and the trap via gate 6.
+   | Case | Expected stderr | Meaning |
+   |---|---|---|
+   | Hand-written `bir:return134` | Empty | Normal exit 134 |
+   | Trap fixture | The expected site's exact trap line plus one newline | Language trap |
+   | Control returning word 257 with a one-entry table | `concrete: runtime: invalid result word` plus one newline | Runtime abort on an invalid word |
+
+   A different byte sequence fails the fixture comparison. The comparator self-tests use forged status, stderr and stdout files for a status-134 trap. They exercise an exact match, newline, status and stdout mismatches, an unexpected timeout, runner failure and an unsupported profile. [Comparator and controls](../scripts/checks/compiler/tests.sh).
+
+   Slice 0 has no grants and cannot produce a startup refusal. The native manifest has no normal exit-125 fixture, and the comparator has no startup-refusal control. The Slice 1 Lean reference-driver check exercises refusal before evaluation and checks status 125 for a missing or mismatched grant. [Reference check](../scripts/checks/compiler/slice1_driver.lean).
 
    The `llvm exit STATUS lcb resource RESOURCE BOUND MEASURED` row runs the public build command in each backend mode and checks the native LLVM exit and the LCB resource diagnostic. The CLI
    diagnostic rows check the diagnostic and exit status for an invalid backend, a non-canonical

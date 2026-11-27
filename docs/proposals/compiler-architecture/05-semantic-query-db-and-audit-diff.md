@@ -25,7 +25,7 @@ Concrete's existing architecture makes it uniquely easy to solve **both** proble
 For every declaration, distinguish three canonical values:
 
 1. **Bodyless declaration header.** Record the stable entity key, signature, capabilities, contracts, layout policy and dependency headers. Hash recursive dependency groups together in canonical order so mutually referring declarations do not require each other's completed hash.
-2. **Derived facts summary.** Derive or validate exported facts using their body dependencies. Collect termination, may-abort, allocation, frames, stack/step bounds, trust and evidence for each recursive group. The exported interface comprises its declaration header and exported facts.
+2. **Derived facts summary.** Derive or validate exported facts using their body dependencies. Collect termination, may-abort, allocation, frames, stack/step bounds, trust and evidence for each recursive group. Record the metric, input domain and premises of each bound so the audit can determine which bounds are comparable. The exported interface comprises its declaration header and exported facts.
 3. **Canonical body.** Record the implementation and body dependencies independently. A private edit preserves interface identity only when every exported field stays equal.
 
 A digest indexes candidate records. Validate the exact canonical values on a hit and handle hash failure. A body-independence proof uses equality of canonical inputs and injectivity of the encoding (`encode_injective` for its framed domain), without assuming SHA-256 is injective.
@@ -54,7 +54,7 @@ Independent recursive groups can run concurrently once their inputs are availabl
 
 ## 3. Zero-Boilerplate Semantic-Delta Auditing (`concrete diff`)
 
-With `InterfaceSummary` already canonical and compiler-owned, **`concrete diff <base> <head>`** (`R-0201`) becomes a tiny, exact, trustworthy structural diff over two `Map StableKey InterfaceSummary` tables:
+The proposed `concrete diff <base> <head>` (R-0201) would compare validated declaration headers, exported facts and evidence by stable key, and report changes to the canonical body separately. For example:
 
 ```text
 concrete diff origin/main HEAD
@@ -70,12 +70,12 @@ concrete diff origin/main HEAD
     step bound   : 4*n + 12 -> 2*n + 8  (improved)
     proof status : callable refinement proved under the recorded premises
 
-  VERDICT: 0 regressions, 0 new capabilities, 0 new trust premises.
+  No exported bound weakened. No new capability or trust premise was recorded.
 ```
 
 ### Why This Changes Code Review for LLM-Written Code
-- **Checked semantic delta.** This example preserves the declaration header and improves two exported bounds. The audit names the changed facts, the proof of refinement and the inputs it covers.
-- **Exact regression spotlight:** If a PR quietly adds `with(Fs)`, introduces a `may-abort` path, drops a theorem from `proved` to `not established`, or bumps a loop from `O(n)` to `O(n²)`, `concrete diff` (and `Concrete.toml` ratchets in CI) flags the exact `StableKey` and `FileSpan` immediately.
+- **Changes the audit can establish.** The example tightens two exported upper bounds. The diff identifies the declaration and reports changes to capability requirements, may-abort facts, comparable bounds, premises and proof status. An absent or incomparable bound leaves the cost comparison undetermined.
+- **Limit of an unchanged bound.** A linear loop and a quadratic replacement can both satisfy the same exported quadratic upper bound. For that change the diff should report the edited body, the unchanged upper bound, and that the available cost evidence cannot distinguish the implementations. Establishing an actual cost regression requires evidence that distinguishes their costs on the same metric and domain.
 
 ---
 
@@ -89,7 +89,7 @@ concrete diff origin/main HEAD
 | Increment | Slice | Deliverable | Gate |
 |---|---|---|---|
 | **1. Canonical exported summaries** | Slice 8 (R-0556), subject to OD39 | Separate header, derived-facts and canonical-body identities | An unchanged header with a changed exported bound changes the exported interface |
-| **2. Audit diff** | Slice 10 (R-0201) | Compare validated exported summaries, including evidence and bounds | A whitespace edit updates affected trap coordinates; changed capabilities and bounds appear in the diff |
+| **2. Audit diff** | Slice 10 (R-0201) | Compare validated exported summaries, including evidence and bounds | A whitespace edit updates affected trap coordinates. Changed capabilities and bounds appear in the diff. A linear-to-quadratic rewrite under a shared quadratic bound reports a body change and an undetermined cost comparison. |
 | **3. Incremental cache** | Phase G (R-0149) | Record all inputs and replay proofs under R-0697 | Compare clean and incremental results; reject stale spans, specialized bodies and corrupted records |
 
 **Spec impact:** The cache is compiler tooling. Public generic-body, layout and ABI guarantees remain subject to OD39 under R-0556.
