@@ -55,6 +55,28 @@ theorem ParamOutcome.empty {memory : Memory lang profile} {q next : MemoryRegist
     exact ⟨rfl, rfl⟩
   · exact (h.2.2 trivial).elim
 
+/-- A running jump with a valid complete transfer and no physical joint
+placement has a successor at its original checkpoint and a terminal result. -/
+theorem jump_exhausted_of_no_space {memory : Memory lang profile} {q read : MemoryRegisters language profile}
+    {entry dst : MemoryBlock lang} {edge values}
+    (running : q.resourceExhausted = false) (lookup : memory.blockAt q = some entry)
+    (pc : q.instruction = entry.body.length) (ending : entry.ending = .jump edge)
+    (args : memory.readOperands edge.arguments q = some (values, read))
+    (target : memory.blockAt {q with block := edge.target} = some dst)
+    (types : edge.arguments.map Sigma.fst = dst.params.map Sigma.fst)
+    (valid : memory.ParamsValid dst.params values {read with block := edge.target, instruction := 0})
+    (unavailable : ¬ memory.ParamSpaceFits dst.params {read with block := edge.target, instruction := 0}) :
+    let stopped := {q with resourceExhausted := true}
+    Execution.step memory q stopped ∧ Execution.result memory stopped .resourceExhausted := by
+  have endPC : entry.body[q.instruction]? = none := List.getElem?_eq_none (by omega)
+  refine ⟨silent_step ?_ ?_ rfl, memory.exhausted_result rfl⟩
+  · simp [terminalObservation, running, lookup, pc, ending]
+  · simp only [Step, running, Bool.false_eq_true, ite_false, ite_true, true_and]
+    refine ⟨{read with block := edge.target, instruction := 0}, entry, lookup, ?_⟩
+    simp only [endPC, ending]
+    refine ⟨pc, ?_⟩
+    exact ⟨_, _, _, args, target, types, valid.exhausted_of_no_space unavailable⟩
+
 theorem bind_cannot_exhaust {memory : Memory lang profile} {q next : MemoryRegisters language profile}
     {ty} {dst : MemoryPlace _ ty} {src} : ¬ memory.InstructionStep q next false (.bind dst src) true := by
   rintro ⟨_, _, _, _, impossible, _⟩

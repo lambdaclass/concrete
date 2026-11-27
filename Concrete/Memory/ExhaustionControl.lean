@@ -155,10 +155,9 @@ private def allocated (n : Nat) : State :=
 private def bound (n : Nat) : State :=
   {entry n with toMemoryFrame := boundFrame n, bytes := ⟨blocks (n+1), n+1⟩}
 
-private theorem allocation_fits (n extraAddrBits : Nat)
-    (h : n + 2 ≤ 2 ^ (profile.memoryTarget.addrBits + extraAddrBits) - 1) :
-    (entry n).bytes.Fits {profile.memoryTarget with addrBits := profile.memoryTarget.addrBits + extraAddrBits}
-      (candidate n) := by
+private theorem allocation_fits (n ceiling : Nat)
+    (h : n + 2 < ceiling) :
+    (entry n).bytes.Fits profile.memoryTarget (candidate n) ceiling := by
   refine ⟨(by decide : IsPow2 1), Nat.mod_one _, ?_, (by decide : 1 ≤ profile.memoryTarget.maxObject),
     fun _ => Nat.succ_ne_zero n, ?_, (by decide : (⟨0⟩ : AddrSpace) ∈ profile.memoryTarget.spaces)⟩
   · exact h
@@ -173,7 +172,7 @@ private theorem begin_at (n : Nat) (h : n < capacity) : target.step physical (en
     refine ⟨rfl, ⟨_, rfl, {allocated n with instruction := 0}, ⟨nofun, Or.inr ?_⟩, rfl⟩, [], rfl⟩
     refine ⟨rfl, ⟨1, 1⟩, rfl, Or.inr ⟨by decide, ⟨0⟩, n+1, ⟨n⟩, _, ?_, rfl⟩⟩
     unfold Mem.Memory.alloc
-    exact ite_eq_left (allocation_fits n 0 (by change n < 2^64 - 2 at h; change n + 2 ≤ 2^64 - 1; omega))
+    exact ite_eq_left (allocation_fits n _ (by change n < 2^64 - 2 at h; change n + 2 < 2^64; omega))
 
 private theorem writes_byte (n : Nat) :
     physical.Writes (allocated n) slot value {bound n with instruction := 1} := by
@@ -216,10 +215,10 @@ private theorem next_call (n : Nat) (h : n < capacity) (reached : target.finite 
 private theorem full : physical.BeginExhausted (entry capacity) ⟨0⟩ := by
   constructor
   · with_unfolding_all
-      refine ⟨1, {allocated capacity with instruction := 0}, nofun, .inr ⟨rfl, ⟨1, 1⟩, rfl, .inr
+      refine ⟨{allocated capacity with instruction := 0}, nofun, .inr ⟨rfl, ⟨1, 1⟩, rfl, .inr
         ⟨by decide, ⟨0⟩, capacity + 1, ⟨capacity⟩, _, ?_, rfl⟩⟩⟩
       unfold Mem.Memory.alloc
-      exact ite_eq_left (allocation_fits capacity 1 (by decide))
+      exact ite_eq_left (allocation_fits capacity _ (by with_unfolding_all decide))
   · rintro ⟨_, _, ⟨hv, _⟩ | ⟨_, layout, hl, zero | alloc⟩⟩
     · have no : some StorageClass.materialized = some .virtual := by with_unfolding_all exact hv
       contradiction
@@ -234,7 +233,7 @@ private theorem full : physical.BeginExhausted (entry capacity) ⟨0⟩ := by
         have spaceEq : space = ⟨0⟩ := List.mem_singleton.mp fits.2.2.2.2.2.2
         subst space
         have nonnull : base ≠ 0 := fits.2.2.2.2.1 Nat.zero_lt_one
-        have hb : base + 1 ≤ 2 ^ 64 - 1 := fits.2.2.1
+        have hb : base + 1 < 2 ^ 64 := fits.2.2.1
         obtain ⟨i, rfl⟩ := Nat.exists_eq_succ_of_ne_zero nonnull
         have hi : i < capacity := by change i < 2 ^ 64 - 2; omega
         have collides := fits.2.2.2.2.2.1 (⟨i⟩, written i) (mem_blocks.mpr ⟨i, hi, rfl⟩) rfl

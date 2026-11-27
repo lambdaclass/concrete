@@ -82,7 +82,8 @@ def PassFunctions.admissionEntry (passes : PassFunctions grammar language lang p
 def Memory.HandoffWF {Ty : Type} {lowering : LoweringLanguage Ty}
     (memory : Memory lowering profile) : Prop :=
   memory.TablesWF ∧ memory.entry ∈ List.map Prod.fst memory.functions ∧
-  ∀ origin ∈ memory.origins, ∃ span, origin.lexical.Binds memory.project span
+  (∀ origin ∈ memory.origins, ∃ span, origin.lexical.Binds memory.project span) ∧
+  ∀ table ∈ memory.layouts, ∀ slot ∈ table.2, slot.2.WellFormed profile.memoryTarget
 
 def SSA.WF (ssa : SSA lang profile) : Prop :=
   (ssa.memoryView (language := language)).HandoffWF

@@ -76,7 +76,7 @@ private theorem classifyGraph_origins (classes : AList PlaceId StorageClass) (gr
   simp only [classifyGraph, Interfaces.CFG.origins, Array.toList_map, List.flatMap_map,
     Function.comp_def, List.map_map, classifyTerm_origins]
 
-/-- A materialized root whose type has no layout on the selected profile. -/
+/-- A materialized root whose type has no valid layout on the selected profile. -/
 structure MissingLayout (Ty : Type) where
   fn : FnId
   root : PlaceId
@@ -89,7 +89,7 @@ private def rootLayouts (mir : MIR lang profile) (fn : FnId) (locals : LocalType
     | .virtual => pure none
     | .materialized =>
       match language.layout profile.memoryTarget ty with
-      | some layout => pure (some (root, layout))
+      | some layout => if layout.WellFormed profile.memoryTarget then pure (some (root, layout)) else throw ⟨fn, root, ty⟩
       | none => throw ⟨fn, root, ty⟩
 
 private def classifyLocals (mir : MIR lang profile) (fn : FnId)
@@ -146,7 +146,7 @@ private structure RootLayoutsMatch (mir : MIR lang profile) (fn : FnId)
     ∃ d, (root, d) ∈ slots ∧ language.layout profile.memoryTarget ty = some d
   sound : ∀ root d, (root, d) ∈ slots → ∃ ty, (root, ty) ∈ locals ∧
     storageClass (language := language) mir fn root ty = .materialized ∧
-    language.layout profile.memoryTarget ty = some d
+    language.layout profile.memoryTarget ty = some d ∧ d.WellFormed profile.memoryTarget
 
 private theorem rootLayouts_match (mir : MIR lang profile) (fn : FnId)
     {locals : LocalTypes language.operands.Ty} {slots}
@@ -171,16 +171,19 @@ private theorem rootLayouts_match (mir : MIR lang profile) (fn : FnId)
         · cases eq; rw [cls] at c; contradiction
         · exact tail.complete p t mem c
       · intro p d mem
-        obtain ⟨t, ht, c, l⟩ := tail.sound p d mem
-        exact ⟨t, .tail _ ht, c, l⟩
+        obtain ⟨t, ht, c, l, wf⟩ := tail.sound p d mem
+        exact ⟨t, .tail _ ht, c, l, wf⟩
     | materialized =>
       cases layout : language.layout profile.memoryTarget ty with
       | none => simp [cls, layout, bind, Except.bind, throw] at ok
       | some d =>
+        by_cases wf : d.WellFormed profile.memoryTarget
+        case neg => simp [cls, layout, wf, bind, Except.bind, throw] at ok
+        simp only [cls, layout, ite_eq_left wf] at ok
         cases hr : rootLayouts mir fn rest with
-        | error e => simp [cls, layout, hr, pure, Except.pure, bind, Except.bind] at ok
+        | error e => simp [hr, pure, Except.pure, bind, Except.bind] at ok
         | ok ds =>
-          simp only [cls, layout, hr, pure, Except.pure, bind, Except.bind, Except.ok.injEq] at ok
+          simp only [hr, pure, Except.pure, bind, Except.bind, Except.ok.injEq] at ok
           subst slots
           have tail := ih hr
           refine ⟨tail.keys.cons_cons _, ?_, ?_⟩
@@ -191,9 +194,9 @@ private theorem rootLayouts_match (mir : MIR lang profile) (fn : FnId)
               exact ⟨slot, .tail _ hm, desc⟩
           · intro p slot mem
             rcases List.mem_cons.mp mem with eq | mem
-            · cases eq; exact ⟨ty, .head _, cls, layout⟩
-            · obtain ⟨t, hm, c, desc⟩ := tail.sound p slot mem
-              exact ⟨t, .tail _ hm, c, desc⟩
+            · cases eq; exact ⟨ty, .head _, cls, layout, wf⟩
+            · obtain ⟨t, hm, c, desc, valid⟩ := tail.sound p slot mem
+              exact ⟨t, .tail _ hm, c, desc, valid⟩
 
 /-- Storage-annotated CFGs awaiting lifetime placement. The source MIR
 still owns the project, entry and signatures at this point. -/
@@ -226,7 +229,8 @@ theorem prepareGraph_layouts {mir : MIR lang profile} {graphs : PreparedGraphs l
     (source : mir.logicalView.TablesWF) :
     LayoutsMatch language.layout memory ∧
       (List.map Prod.fst memory.layouts = List.map Prod.fst mir.logicalView.functions) ∧
-      ∀ fn slots, (fn, slots) ∈ memory.layouts → (List.map Prod.fst slots).Nodup := by
+      (∀ fn slots, (fn, slots) ∈ memory.layouts → (List.map Prod.fst slots).Nodup) ∧
+      ∀ table ∈ memory.layouts, ∀ slot ∈ table.2, slot.2.WellFormed profile.memoryTarget := by
   unfold prepareGraph at prepared
   simp only [bind, Except.bind] at prepared
   split at prepared
@@ -265,7 +269,7 @@ theorem prepareGraph_layouts {mir : MIR lang profile} {graphs : PreparedGraphs l
       · rw [classifyLocals_keys]
         exact (source.2.2.2.2.2.2 fn locals graph member).1
       · exact List.mem_map_of_mem declared
-    refine ⟨⟨?_, ?_⟩, keys.symm, ?_⟩
+    refine ⟨⟨?_, ?_⟩, keys.symm, ?_, ?_⟩
     · intro fn locals graph member root ty declared
       have d := List.mem_map_of_mem (f := fun e => (e.1, e.2.1)) member
       rw [ds] at d
@@ -286,7 +290,7 @@ theorem prepareGraph_layouts {mir : MIR lang profile} {graphs : PreparedGraphs l
       obtain ⟨⟨_, locals, graph⟩, hs, rel⟩ := traversed.backward _ inTable
       obtain ⟨eq, desc⟩ := record rel
       cases eq
-      obtain ⟨ty, declared, classEq, layout⟩ := desc.sound _ _ inSlots
+      obtain ⟨ty, declared, classEq, layout, _⟩ := desc.sound _ _ inSlots
       have d := List.mem_map_of_mem (f := fun e => (e.1, e.2.1)) hs
       rw [← ds] at d
       obtain ⟨⟨_, _, placed⟩, member, eq⟩ := List.mem_map.mp d
@@ -296,6 +300,11 @@ theorem prepareGraph_layouts {mir : MIR lang profile} {graphs : PreparedGraphs l
     · intro fn slots member
       obtain ⟨x, hs, rel⟩ := traversed.backward _ member
       exact (record rel).2.keys.nodup (source.2.2.2.2.2.2 _ _ _ hs).1
+
+    · intro table member slot declared
+      obtain ⟨x, _, rel⟩ := traversed.backward _ member
+      obtain ⟨_, _, _, _, valid⟩ := (record rel).2.sound slot.1 slot.2 declared
+      exact valid
 
 theorem logicalView_origins (mir : MIR lang profile) :
     mir.logicalView.origins = mir.origins := by

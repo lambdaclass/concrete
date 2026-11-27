@@ -1,4 +1,4 @@
-"""Qualify the atomic rollback proof against an impossible reservation failure.
+"""Qualify the atomic rollback proof against an impossible failure after a prefix write.
 
 Run under the compiler gate's bounds. Lake rebuilds the mutated interface and
 its consumers in a disposable package using the ordinary dependency graph.
@@ -11,14 +11,27 @@ import subprocess
 import tempfile
 
 
+def check_rejection(package, module, constructor):
+    command = ["lake", "lean", str(module), "--", "-DwarningAsError=true", "-DautoImplicit=false", "--json"]
+    result = subprocess.run(command, cwd=package, capture_output=True, text=True)
+    diagnostics = [json.loads(line) for line in result.stdout.splitlines() if line.startswith("{")]
+    errors = [entry["data"] for entry in diagnostics if entry["severity"] == "error"]
+    if result.returncode != 1 or not errors or not all(constructor in error and "False" in error for error in errors):
+        raise SystemExit(f"expected rejection at {constructor}\n{result.stdout}{result.stderr}")
+
+
 def main():
     root = Path.cwd()
     control = Path("Concrete/Memory/TransferControl.lean")
     contracts = Path("Concrete/Interfaces/Contracts.lean")
-    premise = "      memory.BeginExhausted state place.logical.root →"
+    premise = "memory.Writes started place value stored ceiling →"
+    mutation = "(if exhausting then False else memory.Writes started place value stored ceiling) →"
+    unavailable = "(¬ memory.ParamSpaceFits (⟨ty, place⟩ :: params) state) →"
     source = contracts.read_text()
+    if source.count(unavailable) != 1:
+        raise SystemExit("expected one failed reservation in WriteParams.exhausted")
     if source.count(premise) != 1:
-        raise SystemExit("expected one exhaustion premise in WriteParams.exhausted")
+        raise SystemExit("expected one prefix step in WriteParams.cons")
 
     subprocess.run(["lake", "build", "Concrete.Memory.TransferControl"], check=True)
     with tempfile.TemporaryDirectory() as temporary:
@@ -50,16 +63,17 @@ end Concrete.Memory.TransferControl
         # A broken interface, import or compiler is a gate failure.
         command = ["lake", "lean", str(control), "--", "-DwarningAsError=true", "-DautoImplicit=false", "--json"]
         subprocess.run(command, cwd=package, check=True)
-        (package / contracts).write_text(source.replace(premise, "      False →"))
+        # Disabling failure altogether rejects the general progress theorem.
+        (package / contracts).write_text(source.replace(unavailable, "False →"))
+        check_rejection(package, contracts, "WriteParams.exhausted")
+        print("ok   an impossible WriteParams.exhausted prevents genuine exhaustion")
+
+        # Still allow an immediate abort, but disallow one following a write.
+        # This isolates the rollback fixture's nonempty physical prefix.
+        (package / contracts).write_text(source.replace(premise, mutation))
         subprocess.run(["lake", "build", "Concrete.Memory.Refinement"], cwd=package, check=True)
-        result = subprocess.run(command, cwd=package, capture_output=True, text=True)
-        diagnostics = [json.loads(line) for line in result.stdout.splitlines() if line.startswith("{")]
-        errors = [entry["data"] for entry in diagnostics if entry["severity"] == "error"]
-        if result.returncode != 1 or not errors or not all(
-            "WriteParams.exhausted" in error and "False" in error for error in errors
-        ):
-            raise SystemExit(f"expected rejection of the rollback witness\n{result.stdout}{result.stderr}")
-        print("ok   an impossible WriteParams.exhausted prevents the reachable rollback proof")
+        check_rejection(package, control, "WriteParams.cons")
+        print("ok   disabling exhaustion after a prefix write prevents the reachable rollback proof")
 
 
 if __name__ == "__main__":

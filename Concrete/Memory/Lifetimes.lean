@@ -384,7 +384,7 @@ theorem lowerGraph_handoff {mir : MIR lowering profile} {memory : Interfaces.Mem
       have ids := walk.keys Prod.fst Prod.fst fun _ _ h => (shape h).1
       have decls := walk.keys (fun e => (e.1, e.2.1)) (fun e => (e.1, e.2.1))
         fun _ _ h => Prod.ext (shape h).1 (shape h).2.1
-      obtain ⟨layouts, layoutKeys, slots⟩ := prepareGraph_layouts (memory := memory)
+      obtain ⟨layouts, layoutKeys, slots, geometry⟩ := prepareGraph_layouts (memory := memory)
         prep rfl rfl decls.symm source.1
       obtain ⟨keys, storageKeys, storage, valid⟩ := prepareGraph_tables prep source.1
       have retained fn locals graph (h : (fn, locals, graph) ∈ graphs.functions) :
@@ -418,7 +418,7 @@ theorem lowerGraph_handoff {mir : MIR lowering profile} {memory : Interfaces.Mem
         exact ⟨fun o => (origins o).mp, fun o => (origins o).mpr⟩
       · refine ⟨⟨fnKeys ▸ source.1.1, source.1.2.1, storageKeys ▸ source.1.1,
             layoutKeys ▸ source.1.1, storage, slots, ?_⟩,
-          fnKeys ▸ source.2.1, fun o h => source.2.2 o ((origins o).mp h)⟩
+          fnKeys ▸ source.2.1, fun o h => source.2.2.1 o ((origins o).mp h), geometry⟩
         intro fn locals graph hm
         obtain ⟨⟨oldFn, oldLocals, src⟩, hs, rel⟩ := walk.backward _ hm
         obtain ⟨rfl, rfl, placement⟩ := shape rel

@@ -211,6 +211,15 @@ structure Layout where
   align : Nat
   deriving DecidableEq, Repr
 
+/-- Declared layouts obey the storage laws at the physical target, including
+the alignment bound for zero-sized roots. -/
+def Layout.WellFormed (target : Target) (layout : Layout) : Prop :=
+  Slice0Layout.StorageGeometry target layout.size layout.align ∧ layout.align ≤ target.addressCeiling
+
+instance (target : Target) (layout : Layout) : Decidable (layout.WellFormed target) := by
+  unfold Layout.WellFormed
+  infer_instance
+
 abbrev LayoutOf (Ty : Type) := Target → Ty → Option Layout
 
 inductive AddressStorage where

@@ -2961,7 +2961,7 @@ private theorem literalTables : literalMemory.TablesWF := by
 
 set_option maxRecDepth 4096 in
 private theorem literalHandoff : literalMemory.HandoffWF := by
-  refine ⟨literalTables, List.mem_singleton_self _, ?_⟩
+  refine ⟨literalTables, List.mem_singleton_self _, ?_, nofun⟩
   intro origin present
   have member : origin ∈ [literalOrigin] := by with_unfolding_all exact present
   obtain rfl := List.mem_singleton.mp member
@@ -3559,7 +3559,8 @@ example :
     cases List.mem_singleton.mp present
     cases List.mem_singleton.mp inside
     cases trap
-  refine ⟨rfl, ⟨tables, List.mem_singleton_self _, by with_unfolding_all exact nofun⟩, ⟨noTrap, by decide, .cons nofun .nil,
+  refine ⟨rfl, ⟨tables, List.mem_singleton_self _, by with_unfolding_all exact ⟨nofun, nofun⟩⟩,
+    ⟨noTrap, by decide, .cons nofun .nil,
     List.mem_singleton_self _, nofun, ?_⟩, rfl,
     ⟨rfl, noTrap, ?_, ?_, by decide, ⟨rfl, by with_unfolding_all rfl⟩, ?_⟩, rfl⟩
   · with_unfolding_all exact tables

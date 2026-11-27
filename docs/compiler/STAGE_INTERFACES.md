@@ -56,9 +56,11 @@ independently requires a matching source execution for any target divergence.
 A fresh nonempty materialized lifetime can end execution with the typed
 `resourceExhausted` observation when no target space and base can hold its layout.
 This rule covers explicit begins and the parameter writes inside calls, returns,
-edge transfers and destructuring. A compound transfer exhausts only if a reservation
-fails after an authorized prefix and no joint allocation fits the distinct fresh
-nonempty materialized roots. A fitting transfer with an invalid write gets stuck.
+edge transfers and destructuring. A compound transfer exhausts when no joint allocation fits its distinct fresh
+nonempty materialized roots and all of its writes succeed at one widened address
+ceiling. Allocation, stores and readback share that ceiling, including empty
+runs at a one-past address. The handoff checks each declared layout against
+the physical target. An invalid write anywhere in the transfer prevents exhaustion.
 Memory, SSA and BIR retain the original PC, bytes, effects and ownership on exhaustion.
 `LowersMemory` matches ordinary terminal results and their traces, reflects divergence,
 and requires progress on a safe MIR input.

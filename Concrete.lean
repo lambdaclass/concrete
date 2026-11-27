@@ -21,6 +21,7 @@ import Concrete.Memory.Lifetimes
 import Concrete.Memory.Refinement
 import Concrete.Memory.Controls
 import Concrete.Memory.ExhaustionControl
+import Concrete.Memory.AddressCeilingControl
 import Concrete.Memory.TransferControl
 import Concrete.SSA
 import Concrete.Stages
