@@ -68,8 +68,7 @@ def Output.operatorSpan (out : Output) (index : Nat) : Option (ScopedSpan out.pr
     if projected.line = op.line ∧ projected.col = op.column then some projected else none
   else none
 
-private def lex (purpose : ConcreteSpec.StageInterface.SurfacePreparation.Purpose) (input : Input) :=
-  Parse.lexForEntry purpose input.source input.fileId
+private def lex (input : Input) := Lex.lex input.source input.fileId
 
 private def memory (p : MIR.Program) : Except Refusal Memory.Program := .ok (Memory.lower p)
 
@@ -94,7 +93,7 @@ private def Pipeline.run {A C : Type} (stages : Pipeline A C) (input : A) : Exce
     rest.run (input, output)
 
 private def stages (path : String) :=
-  Pipeline.next (lex .admission) <|
+  Pipeline.next lex <|
   .next (fun v => Parse.parseForDriver v.1.eof v.2) <|
   .next (fun v => Admission.prepareParsed .admission v.2) <|
   .next (fun v => Admission.check v.2) <|
@@ -123,7 +122,7 @@ private theorem edges_of_run {input : Input} {resolved tokens ast core admitted 
             split at h <;> try contradiction
             next loweredSSA hSSA =>
               cases Except.ok.inj h
-              exact ⟨Parse.lexForEntry_ok.mp hLex, Parse.parseForDriver_ok.mp hParse, hElab, hAdmit, hLower, rfl, hSSA⟩
+              exact ⟨hLex, Parse.parseForDriver_ok.mp hParse, hElab, hAdmit, hLower, rfl, hSSA⟩
 
 def compile (input : Input) : Except Refusal Output :=
   match h : (stages input.path).run input with
@@ -171,7 +170,7 @@ theorem compile_of_edges (input : Input) (tokens : List ConcreteSpec.Surface0.To
   have runEq : (stages input.path).run input =
       .ok (((((((input, tokens), ast), core), admitted), mir), mem), bir) := by
     simp [stages, Pipeline.run, lex, memory, bind, Except.bind,
-      Parse.lexForEntry_ok.mpr hLex, Parse.parseForDriver_ok.mpr hParse, hElab, hAdmit, hLower, hMem, hSSA]
+      hLex, Parse.parseForDriver_ok.mpr hParse, hElab, hAdmit, hLower, hMem, hSSA]
   unfold compile
   split
   · next failed h => rw [runEq] at h; contradiction
@@ -216,8 +215,8 @@ theorem prepareLCB_of_edges (bir : BIR.Program)
 /-- Conformance entry point for the residual check path. It goes through the same lexer,
 parser, elaborator and lowering stages, with every static rule and residual arithmetic checks. -/
 def unchecked (input : Input) : Except Refusal BIR.Program := do
-  let tokens ← lex .eligibility input
-  let ast ← Parse.parseForEntry .eligibility input.eof tokens
+  let tokens ← lex input
+  let ast ← Parse.parseForDriver input.eof tokens
   let core ← Admission.prepareParsed .eligibility ast
   let _ ← Admission.checkWith .runtime core
   let mir ← MIR.lowerUnchecked core

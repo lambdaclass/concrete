@@ -1,3 +1,4 @@
+import ConcreteSpec.Proofs.Slice1
 import ConcreteSpec.Admission.Types
 import ConcreteSpec.Spec.Ident
 import ConcreteSpec.Proofs.Basics
@@ -280,6 +281,12 @@ private theorem checkStmtExpr_iff {evidence : Ctx → Expr → Bool} {Δ : Decls
   · rintro ⟨ht, hu, ha⟩
     simp [checkStmtExprWith, requireExprType_iff.mpr ht, reads_iff.mpr hu, ha, Bind.bind, Except.bind]
 
+private theorem uses_fresh {Δ Γ e Γ' x} (h : Uses Δ Γ e Γ') : Fresh Γ' x ↔ Fresh Γ x := by
+  have same := congrArg (fun ctx => AList.lookup ctx x) (uses_tys h)
+  simp only [Ctx.tys, AList.lookup_map] at same
+  unfold Fresh
+  simpa only [Option.map_eq_none_iff] using congrArg (· = none) same |> Iff.of_eq
+
 theorem checkStmtWith_iff {evidence : Ctx → Expr → Bool} {Δ : Decls} {Γ Γ' : Ctx} {s : Stmt} :
     checkStmtWith evidence Δ Γ s = .ok Γ' ↔ StmtOkWith evidence Δ Γ s Γ' := by
   constructor
@@ -295,11 +302,12 @@ theorem checkStmtWith_iff {evidence : Ctx → Expr → Bool} {Δ : Decls} {Γ Γ
           exact .letWild ht ha (by assumption) hu
         · cases h
       | name x =>
-        obtain ⟨next, he, h⟩ := bind_ok_iff.mp h
-        obtain ⟨ht, hu, ha⟩ := checkStmtExpr_iff.mp he
+        simp only [checkStmtWith] at h
         split at h
-        · cases h
-          exact .let_ ht ha hu (by assumption)
+        · obtain ⟨next, he, h⟩ := bind_ok_iff.mp h
+          obtain ⟨ht, hu, ha⟩ := checkStmtExpr_iff.mp he
+          cases h
+          exact .let_ ht ha hu ((uses_fresh hu).2 (by assumption))
         · cases h
     | letStruct s pat e =>
       obtain ⟨next, he, h⟩ := bind_ok_iff.mp h
@@ -314,7 +322,7 @@ theorem checkStmtWith_iff {evidence : Ctx → Expr → Bool} {Δ : Decls} {Γ Γ
   · intro h
     cases h with
     | let_ ht hk hu hf =>
-      simp [checkStmtWith, checkStmtExpr_iff.mpr ⟨ht, hu, hk⟩, hf, Bind.bind, Except.bind]
+      simp [checkStmtWith, checkStmtExpr_iff.mpr ⟨ht, hu, hk⟩, (uses_fresh hu).1 hf, Bind.bind, Except.bind]
     | letWild ht hk hcopy hu =>
       unfold WildcardPermitted at hcopy
       simp [checkStmtWith, checkStmtExpr_iff.mpr ⟨ht, hu, hk⟩, hcopy, Bind.bind, Except.bind]

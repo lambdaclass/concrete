@@ -16,13 +16,13 @@ Fix (f) owns the lossless scanner. `Source` carries the admitted project, entry-
 
 ## Tokens → AST
 
-The registry selects the grammar and verification inputs from the slice. The closed bootstrap grammar covers the standalone literal-return fixture. Its checked table has a fixed word program and proposal, with kernel proofs of acceptance and exact row identity. Fix (f) replaces the bootstrap data with the full shared grammar and its certificate-producing verifier. The AST is indexed by the start symbol. First-order actions construct the shared syntax tree from retained token payloads and coordinates. The verifier runs a closed word machine over proposal memory and certifies the exact dense prediction table used by the parser. Its word-operation and memory budgets use a fixed multiplier of grammar positions times the exact number of lookahead columns. The boundary validates file IDs, ranges and exact starting coordinates in one pass over project bytes and tokens. Invalid streams receive a typed refusal before grammar execution. The parser executes the frozen cursor machine with indexed lookups and first-order typed constructor actions. It counts visits and action constructors on the same execution that returns the result. A stage proof must show that execution completes within its linear token budget, including on refusal. The full declarative and predictive derivations check each production and token's slice eligibility, including radix and suffix. The unsupported refusal names the least slice admitting the full stream. Its diagnostic uses the same source-order judgment as the driver, including entry and binder requirements that precede a later production or literal. The registered output and elaborator input share `Parsed.ElaborationDomain`. It requires a successful run of the fixed parser on a coordinate-valid stream and a defined reference elaboration result. Every successful handoff must satisfy `AdmissionInput.Ready` in the issuing project. It binds the selected slice, checks Core locations and arguments for each preparation route, and checks the primary and related locations of source refusals. The production parser classifies refused input with the shared grammar. Its annotated Slice 1 rows are a proved sublist of the refusal table’s grammar. Fix (f) also replaces token rewriting and handwritten body derivations.
+The registry selects the grammar and verification inputs from the slice. The closed bootstrap grammar covers the standalone literal-return fixture. Its checked table has a fixed word program and proposal, with kernel proofs of acceptance and exact row identity. Fix (f) replaces the bootstrap data with the full shared grammar and its certificate-producing verifier. The AST is indexed by the start symbol. First-order actions construct the shared syntax tree from retained token payloads and coordinates. The verifier runs a closed word machine over proposal memory and certifies the exact dense prediction table used by the parser. Its word-operation and memory budgets use a fixed multiplier of grammar positions times the exact number of lookahead columns. The boundary validates file IDs, ranges and exact starting coordinates in one pass over project bytes and tokens. Invalid streams receive a typed refusal before grammar execution. The parser executes the frozen cursor machine with indexed lookups and first-order typed constructor actions. It counts visits and action constructors on the same execution that returns the result. A stage proof must show that execution completes within its linear token budget, including on refusal. The full declarative and predictive derivations check each production and token's slice eligibility, including radix and suffix. The unsupported refusal names the least slice admitting the full stream and the span that raised the requirement. The registered output and elaborator input share `Parsed.ElaborationDomain`. It requires a successful run of the fixed parser on a coordinate-valid stream and a defined reference elaboration result. Every successful handoff must satisfy `AdmissionInput.Ready` in the issuing project. It binds the selected slice, checks Core locations and arguments for each preparation route, and checks the primary and related locations of source refusals. The production parser classifies refused input with the shared grammar. Its annotated Slice 1 rows are a proved sublist of the refusal table’s grammar. Fix (f) also replaces token rewriting and handwritten body derivations.
 
 ## AST → Core → admitted Core
 
 ### ISS-0118, interface revision round 5
 
-For Slice 0, the registered elaborator decodes the grammar tree directly into the project and located surface program carried by `AdmissionInput.pending`. The contract requires that exact program. An unresolved name and an unsupported entry name cross this boundary with their source coordinates. The spec checks the entry, then visits each reachable binding and return expression in source order. In `return 42; let Option: u8 = 1;` it reports the unreachable statement at `let`. The Slice 0 parser reports a keyword in binder position under `Parsed@1` and a syntactically complete wildcard binding under `AdmittedProduction@2`. It retains the offending token’s span. A stopped scanner retains every completed token. On a mismatch the shared parser closes its open productions at the failure boundary and evaluates the matched prefix with the ordinary Slice 0 preparation actions. The typed and destructuring alternatives of a let head determine whether its name introduces a local. A later failure checks the real reads and bindings already visited against the selected entry’s Core judgments. Checked arithmetic can therefore refuse an earlier overflowing addition where unchecked arithmetic continues to the later source violation.
+For Slice 0, the registered elaborator decodes the grammar tree directly into the project and located surface program carried by `AdmissionInput.pending`. The contract requires that exact program. An unresolved name and an unsupported entry name cross this boundary with their source coordinates. The spec checks the entry, then visits each reachable binding and return expression in source order. In `return 42; let Option: u8 = 1;` it reports the unreachable statement at `let`. The Slice 0 parser reports a keyword in binder position under `Parsed@1` and a syntactically complete wildcard binding under `AdmittedProduction@2`. It retains the offending token’s span. The driver classifies unsupported forms after the shared grammar recognizes the complete input.
 
 `SurfacePreparation.prepareSurface0` resolves local names to fresh IDs and preserves locations during A-normalization. Both routes need a supported entry, a straight-line body with a final return, named destinations, resolvable reads and operands representable in Slice 0 Core. Both routes enforce source binder availability, uniqueness and the expected-type literal rule before elaboration erases the spelling. Preparation and the registered `Slice0Rules.UnreservedLocal` rule (revision 2) share the ballot’s `Surface0.UnreservedLocalName` predicate for the entry point, builtin types and intrinsics.
 
@@ -57,7 +57,7 @@ block and terminator families and check the types of block arguments. The integr
 determines layouts, literal and operation values, field projections and aggregate codecs.
 Core literal operands have a profile-independent byte encoding. MIR/Memory operand reads call `CoreLanguage.literal`. Materialized scalar storage reads use the selected target's `Hybrid.decode`. For the Core bytes `fe ff`, an i16 literal is −2 under either byte order. The materialized load resolves the backing range and reads those two initialized bytes as −257 at the big-endian spec target.
 
-Core execution, MIR, Memory, SSA and BIR carry the same qualified declaration environment. Independent typing establishes the spec's `DeclsOk`; each lowering contract preserves the exact declarations. Layout, active fields and operation semantics consult that environment. A declared empty linear nominal has size zero and alignment one, the identity for maximum field alignment under foundation C3. It has a logical value and ownership lifetime even without a backing block. Materialized unknown or unsupported types produce `MissingLayout`. Fix (b) can use the declaration at the normal layout, construction, transfer and destructure entry points when proving the MIR-to-Memory simulation and promotion for eligible roots. The controls execute construction and consuming destructure, then try to read the consumed value.
+Core execution, MIR, Memory, SSA and BIR carry the same qualified declaration environment. Independent typing establishes the spec's `DeclsOk`; each lowering contract preserves the exact declarations. Layout, active fields and operation semantics consult that environment. A declared empty linear nominal has size zero and alignment one, the identity for maximum field alignment under foundation C3. It has a logical value and ownership lifetime even without a backing block. Memory lowering queries each materialized root in the MIR declaration environment and carries those declarations into the placed graph. A missing layout or one that fails `Layout.WellFormed` for the physical target produces `MissingLayout`. The controls execute construction and consuming destructure, then try to read the consumed value.
 
 Each reachable
 projection must execute the instruction fetched at its program counter. Calls push the
@@ -74,6 +74,20 @@ representation at each intermediate source state. The source path can follow the
 allocation decisions already made by the target. A target step that makes no
 source progress decreases a natural-valued rank. Complete behavior refinement
 independently requires a matching source execution for any target divergence.
+
+A fresh nonempty materialized lifetime can end execution with the typed
+`resourceExhausted` observation when no target space and base can hold its layout.
+This rule covers explicit begins and the parameter writes inside calls, returns,
+edge transfers and destructuring. A compound transfer exhausts when no joint allocation fits its distinct fresh
+nonempty materialized roots and all of its writes succeed at one widened address
+ceiling. Allocation, stores and readback share that ceiling, including empty
+runs at a one-past address. The handoff checks each declared layout against
+the physical target. An invalid write anywhere in the transfer prevents exhaustion.
+Memory, SSA and BIR retain the original PC, bytes, effects and ownership on exhaustion.
+`LowersMemory` matches ordinary terminal results and their traces, reflects divergence,
+and requires progress on a safe MIR input.
+The separate `Concrete.toml` memory-bound proof must exclude reachable exhaustion
+to recover strict matching of every terminal result.
 
 Address operands name typed places explicitly. Physical execution resolves a live,
 initialized materialized place through its recorded range and passes that range, byte
@@ -160,10 +174,10 @@ a pinned linked semantics and a proof of behavior preservation. The
 
 An execution starts in a program's designated initial configuration and follows
 small steps. A program is safe when no reachable state lacks both a successor
-and a terminal result. A terminal result records return, trap or startup
-refusal, with exact stderr and diagnostic sites where applicable. A language
-trap is a defined outcome. Interpreter failure to take a step or report a
-terminal result is going wrong.
+and a terminal result. A terminal result records return, trap, startup
+refusal or physical resource exhaustion, with exact stderr and diagnostic sites
+where applicable. A language trap is a defined outcome. Interpreter failure to
+take a step or report a terminal result is going wrong.
 
 `BehaviorRefinement` states safe-source backward inclusion directly. If the
 source is safe, every target termination has a reachable source termination

@@ -8,9 +8,8 @@ open ConcreteSpec.Core
 inductive ManifestRefusal where
   | read (detail : String)
   | size
-  | encoding
-  | depth
-  | malformed
+  | encoding (span : Manifest.ByteSpan)
+  | invalid (error : Manifest.Error)
   | schemaPending
   deriving DecidableEq, Repr
 
@@ -18,28 +17,28 @@ inductive ManifestRefusal where
 def ManifestRefusal.code : ManifestRefusal → String
   | .read _ => "MANIFEST-READ"
   | .size => "MANIFEST-SIZE"
-  | .encoding => "MANIFEST-ENCODING"
-  | .depth => "MANIFEST-DEPTH"
-  | .malformed => "MANIFEST-SYNTAX"
+  | .encoding _ => "MANIFEST-ENCODING"
+  | .invalid (.depth _) => "MANIFEST-DEPTH"
+  | .invalid (.malformed _) => "MANIFEST-SYNTAX"
   | .schemaPending => "MANIFEST-SCHEMA"
 
 /-- Manifest diagnostics cite the exact registered rule for the refusal. -/
-private def ManifestRefusal.registeredRule : ManifestRefusal → Option RegisteredRule
-  | .size => some ⟨Manifest.sizeRule, by decide⟩
-  | .encoding => some ⟨Manifest.encodingRule, by decide⟩
-  | .depth => some ⟨Manifest.depthRule, by decide⟩
-  | .malformed => some ⟨Manifest.syntaxRule, by decide⟩
+private def ManifestRefusal.reference : ManifestRefusal → Option (RegisteredRule × Manifest.ByteSpan)
+  | .size => some (⟨Manifest.sizeRule, by decide⟩, ⟨Manifest.byteLimit, Manifest.byteLimit + 1⟩)
+  | .encoding span => some (⟨Manifest.encodingRule, by decide⟩, span)
+  | .invalid (.depth span) => some (⟨Manifest.depthRule, by decide⟩, span)
+  | .invalid (.malformed span) => some (⟨Manifest.syntaxRule, by decide⟩, span)
   | .read _ | .schemaPending => none
 
 def ManifestRefusal.ruleId (refusal : ManifestRefusal) : Option RuleId :=
-  refusal.registeredRule.map Subtype.val
+  refusal.reference.map (·.1.val)
 
 def ManifestRefusal.message : ManifestRefusal → String
   | .read detail => s!"cannot read Concrete.toml ({detail})"
   | .size => s!"Concrete.toml exceeds {Manifest.byteLimit} bytes"
-  | .encoding => "Concrete.toml must be UTF-8"
-  | .depth => s!"Concrete.toml exceeds the nesting limit of {Manifest.depthLimit}"
-  | .malformed => "Concrete.toml is malformed"
+  | .encoding _ => "Concrete.toml must be UTF-8"
+  | .invalid (.depth _) => s!"Concrete.toml exceeds the nesting limit of {Manifest.depthLimit}"
+  | .invalid (.malformed _) => "Concrete.toml is malformed"
   | .schemaPending => "Concrete.toml requires an approved manifest schema"
 
 
@@ -56,7 +55,7 @@ private def RefusalCause.code : RefusalCause → String
 
 private def RefusalCause.message : RefusalCause → String
   | .lexical (.encoding reason) span => s!"invalid source at byte {span.start}: {repr reason}"
-  | .lexical (.digitLimit limit) span => s!"integer digit run at byte {span.start} exceeds limit {limit}"
+  | .lexical (.digitLimit limit) span => s!"integer digit at byte {span.start} exceeds limit {limit}"
   | .lexical issue span =>
     let detail := match issue with
       | .integer .leadingZero => "leading zero in decimal integer"
@@ -146,15 +145,16 @@ instance : Repr Refusal where
 private inductive DiagnosticLocation where
   | file (span : ConcreteSpec.StageInterface.FileSpan)
   | path (start stop : Nat)
+  | manifest (span : Manifest.ByteSpan)
 
-private def Refusal.reference : Refusal → Option (RegisteredRule × Option DiagnosticLocation)
-  | .source cause => some (cause.citation, some (.file cause.primary))
+private def Refusal.reference : Refusal → Option (RegisteredRule × DiagnosticLocation)
+  | .source cause => some (cause.citation, .file cause.primary)
   | .path failure =>
     let reason := failure.violation.reason
     let loc := failure.violation.location
     let rule : RegisteredRule := ⟨reason.ruleId, by cases reason <;> decide⟩
-    some (rule, some (.path loc.offset (min (loc.offset + 1) loc.stop)))
-  | .manifest detail => detail.registeredRule.map (·, none)
+    some (rule, .path loc.offset (min (loc.offset + 1) loc.stop))
+  | .manifest detail => detail.reference.map fun (rule, span) => (rule, .manifest span)
   | .missingLocation _ | .backendResource .. | .backendProfile .. | .toolFailure _
   | .usageError _ | .internal _ => none
 
@@ -164,9 +164,9 @@ def Refusal.render (r : Refusal) : String := Id.run do
   let base := s!"{r.code}: {detail}"
   let some (rule, location) := r.reference | return base
   let whereAt := match location with
-    | some (.file s) => s!", file {s.file.index}, bytes {s.startOffset}..{s.endOffset}"
-    | some (.path start stop) => s!", path, bytes {start}..{stop}"
-    | none => ""
+    | .file s => s!", file {s.file.index}, bytes {s.startOffset}..{s.endOffset}"
+    | .path start stop => s!", path, bytes {start}..{stop}"
+    | .manifest span => s!", Concrete.toml, bytes {span.start}..{span.stop}"
   return s!"{base} [rule {rule.val.name}@{rule.val.rev}{whereAt}]"
 
 /-- A transported citation must equal the producer's exact rule and revision. -/

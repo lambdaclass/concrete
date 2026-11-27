@@ -1,11 +1,21 @@
-import ConcreteSpec.SurfacePrefix
-import Concrete.Lex
+import ConcreteSpec.Spec.Surface0
+import Concrete.Refusal
 
 namespace Concrete.Parse
 open ConcreteSpec.Surface0 Concrete.LL1
 open ConcreteSpec.StageInterface (RefusalCause)
 
-export ConcreteSpec.SurfacePrefix (Table CheckedTable makeTable run)
+abbrev Table (T N : Type) := List ((N × Option T) × List (Sym T N))
+
+def makeTable {T N : Type} [DecidableEq T] [DecidableEq N] (g : Grammar T N) : Table T N :=
+  let (nu, fi, fo) := compute g
+  g.prods.flatMap fun (lhs, rhs) => (predictB nu fi fo lhs rhs).map fun look => ((lhs, look), rhs)
+
+/-- The parser can only use the prediction table of a checked grammar. -/
+structure CheckedTable (T N : Type) [DecidableEq T] [DecidableEq N] where
+  grammar : CheckedGrammar T N
+  entries : Table T N
+  entries_eq : entries = makeTable grammar.grammar
 
 open Sym in
 -- The checked constant avoids recomputing FIRST/FOLLOW in the compiler or its certificates.
@@ -27,6 +37,50 @@ theorem table0_checked :
 
 def table0 : CheckedTable Terminal Nonterminal :=
   ⟨checkedGrammar0, table0Entries, table0_checked⟩
+
+private inductive Task (T N : Type) where
+  | read (symbol : Sym T N)
+  | reduce (lhs : N) (rhs : List (Sym T N)) (start : Span)
+
+private def lookSpan (input : List Token) (eof : Span) : Span :=
+  input.head?.map Token.span |>.getD eof
+
+private def mismatch (input : List Token) (eof : Span) : RefusalCause :=
+  match input with
+  | tok :: _ => .parser .unexpectedToken tok.span
+  | [] => .parser .unexpectedEnd eof
+
+private def runTasks {T N V : Type} [DecidableEq T] [DecidableEq N]
+    (table : CheckedTable T N) (kind : Token → T) (leaf : Token → V)
+    (reduce : N → List (Sym T N) → Span → List V → Except RefusalCause V) (eof : Span) :
+    Nat → List (Task T N) → List Token → List V → Except RefusalCause V
+  | _, [], [], [result] => .ok result
+  | _, [], tok :: _, _ => .error (.parser .trailingTokens tok.span)
+  | 0, _, input, _ => .error (.parser (.internal (.advance 0)) (lookSpan input eof))
+  | fuel + 1, .read (.n lhs) :: pending, input, values => do
+    let look := input.head?.map kind
+    let some (_, rhs) := table.entries.find? (fun row => row.1 == (lhs, look))
+      | throw (mismatch input eof)
+    runTasks table kind leaf reduce eof fuel
+      (rhs.map Task.read ++ .reduce lhs rhs (lookSpan input eof) :: pending) input values
+  | fuel + 1, .read (.t expected) :: pending, input, values => do
+    match input with
+    | tok :: rest =>
+      if kind tok == expected then
+        runTasks table kind leaf reduce eof fuel pending rest (leaf tok :: values)
+      else throw (mismatch input eof)
+    | [] => throw (mismatch [] eof)
+  | fuel + 1, .reduce lhs rhs start :: pending, input, values => do
+    let value ← reduce lhs rhs start (values.take rhs.length).reverse
+    runTasks table kind leaf reduce eof fuel pending input (value :: values.drop rhs.length)
+  | _, [], [], values => .error (.parser (.internal (.finish values.length)) eof)
+
+/-- Parse from the checked grammar's start symbol. Reductions retain their first lookahead span. -/
+def run {T N V : Type} [DecidableEq T] [DecidableEq N]
+    (table : CheckedTable T N) (kind : Token → T) (leaf : Token → V)
+    (reduce : N → List (Sym T N) → Span → List V → Except RefusalCause V)
+    (eof : Span) (fuel : Nat) (input : List Token) : Except RefusalCause V :=
+  runTasks table kind leaf reduce eof fuel [.read (.n table.grammar.grammar.start)] input []
 
 private inductive Value where
   | tok (token : Token)
@@ -52,59 +106,54 @@ private def reduce (start : Span) : Nonterminal → List Value → Except Refusa
   | .atom, [_, .expr expr, _] => .ok (.expr expr)
   | _, _ => .error (.parser (.internal (.reduce false)) start)
 
-open ConcreteSpec.StageInterface hiding Terminal
-open ConcreteSpec.SurfacePrefix (literalIssue diagnose)
+private def refusalTable : CheckedTable Terminal Nonterminal :=
+  ⟨⟨sharedGrammar, sharedGrammar_ll1⟩, makeTable sharedGrammar, rfl⟩
 
-private def classify (eof : Span) (input : List Token) :
-    Except (SurfacePreparation.Purpose → RefusalCause) Program :=
+private def literalIssue (tok : Token) : Option RefusalCause :=
+  match tok.value with
+  | .integer _ radix _ =>
+    letI : Decidable (ConcreteSpec.Core.Slice0Rules.DecimalLiteral radix) :=
+      inferInstanceAs (Decidable (radix = .decimal))
+    if ConcreteSpec.Core.Slice0Rules.DecimalLiteral radix then none else some (.parser .nonDecimal tok.span)
+  | _ => none
+
+private def recognizeProduction (lhs : Nonterminal) (rhs : List (Sym Terminal Nonterminal))
+    (start : Span) (children : List (Option RefusalCause)) : Except RefusalCause (Option RefusalCause) := do
+  let some outside := (projectedProductions .shared).lookup (lhs, rhs)
+    | throw (.parser (.internal (.reduce false)) start)
+  return if outside then some (.parser .outsideProduction start) else children.findSome? id
+
+/-- Consume the entire refusal grammar before reporting its first unsupported production or literal.
+A malformed suffix therefore takes precedence over an otherwise unsupported prefix. -/
+def parse (eof : Span) (input : List Token) : Except RefusalCause Program := do
+  -- The checked grammars have bounded work and reductions between terminal reads.
   match run table0 (·.value.kind) Value.tok (fun lhs _ start => reduce start lhs)
       eof (16 * (input.length + 1)) input with
   | .ok (.program ast) =>
-    if (input.findSome? literalIssue).isNone then .ok ast
-    else .error fun purpose => diagnose eof input purpose (.parser .unexpectedEnd eof)
-  | .ok _ => .error fun _ => .parser (.internal (.finish 0)) eof
-  | .error (.parser .unexpectedToken _) | .error (.parser .unexpectedEnd _)
-  | .error (.parser .trailingTokens _) => .error fun purpose => diagnose eof input purpose (.parser .unexpectedEnd eof)
-  | .error cause => .error fun _ => cause
-
-/-- A failed parse diagnoses the recognized prefix in source order. -/
-def parse (eof : Span) (input : List Token) : Except RefusalCause Program :=
-  (classify eof input).mapError (· .admission)
+    if let some issue := input.findSome? literalIssue then throw issue
+    return ast
+  | .ok _ => throw (.parser (.internal (.finish 0)) eof)
+  | .error e =>
+    match e with
+    | .parser .unexpectedToken _ | .parser .unexpectedEnd _ | .parser .trailingTokens _ =>
+      match ← run refusalTable (·.value.kind) literalIssue recognizeProduction
+          eof (32 * (input.length + 1)) input with
+      | some issue => throw issue
+      | none => throw (.parser (.internal (.reduce false)) e.primary.surface)
+    | _ => throw e
 
 /-- The EOF of an in-memory source includes trailing trivia and belongs to the lexed file. -/
 def eofSpan (source : ByteArray) (fileId : ConcreteSpec.Core.FileId := ⟨0⟩) : Span :=
   let pos := source.data.foldl (fun (p : Position) b => p.advanceByte b.toNat) {}
   Position.span pos pos fileId
 
-/-- The scanner owns the boundary. The parser can only replace it with a
-judgment witnessed on the pieces the scanner completed before that boundary. -/
-def lexForEntry (purpose : SurfacePreparation.Purpose) (source : ByteArray)
-    (fileId : ConcreteSpec.Core.FileId) : Except Refusal (List Token) :=
-  let result := (Lex.scanLossless source fileId).map Lex.LosslessStream.parserView
-  result.mapError fun failure => match failure.refusal with
-    | .source cause => .source (diagnose cause.primary.surface
-        (failure.pieces.filterMap Lex.Piece.parserToken) purpose cause)
-    | other => other
+/-- Inject the located parser error into the driver's refusal vocabulary. -/
+def parseForDriver (eof : Span) (input : List Token) : Except Refusal Program :=
+  (parse eof input).mapError Refusal.source
 
-@[simp] theorem lexForEntry_ok {purpose source fileId tokens} :
-    lexForEntry purpose source fileId = .ok tokens ↔ Lex.lex source fileId = .ok tokens := by
-  unfold lexForEntry Lex.lex Lex.lexLossless
-  cases Lex.scanLossless source fileId <;> simp [Except.map, Except.mapError]
-
-/-- Successful syntax is shared by checked and unchecked compilation. Only
-arithmetic evidence in a refused input's semantic prefix depends on the entry. -/
-def parseForEntry (purpose : SurfacePreparation.Purpose) (eof : Span) (input : List Token) :
-    Except Refusal Program :=
-  (classify eof input).mapError fun report => .source (report purpose)
-
-abbrev parseForDriver := parseForEntry .admission
-
-@[simp] theorem parseForEntry_ok {purpose eof tokens ast} :
-    parseForEntry purpose eof tokens = .ok ast ↔ parse eof tokens = .ok ast := by
-  unfold parseForEntry parse
-  cases classify eof tokens <;> simp [Except.mapError]
-
-theorem parseForDriver_ok {eof tokens ast} :
-    parseForDriver eof tokens = .ok ast ↔ parse eof tokens = .ok ast := parseForEntry_ok
+@[simp] theorem parseForDriver_ok {eof tokens ast} :
+    parseForDriver eof tokens = .ok ast ↔ parse eof tokens = .ok ast := by
+  unfold parseForDriver
+  cases parse eof tokens <;> simp [Except.mapError]
 
 end Concrete.Parse

@@ -78,34 +78,22 @@ private def hasNamePart (accepts : String → Bool) : Name → Bool
 
 /-- Follow the definitions on both branches of the registered pipeline,
 including contracts under structure fields and aliases of model types. -/
-private partial def inspect (env : Environment) (origin : Name) (expr : Expr) (inComputation := false) :
-    StateRefT (Std.HashSet Name) MetaM (Option (Name × Name)) := do
+private partial def inspect (env : Environment) (origin : Name) (expr : Expr) :
+    StateM (Std.HashSet Name) (Option (Name × Name)) := do
   match expr with
-  | .forallE name domain body info =>
-    -- A function type used by a closed computation can have exactly the same
-    -- domain as a quantified model. Only a data type passed to executable code
-    -- can introduce this arrow without quantifying the contract.
-    if modelBinder env domain && (!inComputation || (← Meta.isProp expr)) then return some (origin, name)
-    let found ← inspect env origin domain inComputation
-    Meta.withLocalDecl name info domain fun x => do
-      return found <|> (← inspect env origin (body.instantiate1 x) inComputation)
-  | .lam name domain body info =>
-    let found ← inspect env origin domain inComputation
-    Meta.withLocalDecl name info domain fun x => do
-      return found <|> (← inspect env origin (body.instantiate1 x) inComputation)
-  | .letE name type value body nondep =>
-    let found := (← inspect env origin type inComputation) <|> (← inspect env origin value inComputation)
-    Meta.withLetDecl name type value (nondep := nondep) fun x => do
-      return found <|> (← inspect env origin (body.instantiate1 x) inComputation)
-  | .app .. =>
-    if let some hit ← inspect env origin expr.getAppFn then return some hit
-    -- Predicates restore the logical context even inside a closed computation.
-    -- A type-valued match motive inherits the context of the computation that supplies it.
-    let computational := !(← Meta.isProp expr) && (inComputation || !(← Meta.isType expr))
-    for arg in expr.getAppArgs do
-      if let some hit ← inspect env origin arg computational then return some hit
-    return none
-  | .mdata _ body | .proj _ _ body => inspect env origin body inComputation
+  | .forallE name domain body _ =>
+    if modelBinder env domain then return some (origin, name)
+    return (← inspect env origin domain) <|> (← inspect env origin body)
+  | .lam _ domain body _ =>
+    return (← inspect env origin domain) <|> (← inspect env origin body)
+  | .letE _ type value body _ =>
+    return (← inspect env origin type) <|> (← inspect env origin value) <|> (← inspect env origin body)
+  | .app fn arg =>
+    -- The type annotation on an identity application describes its supplied
+    -- value. Inspect that value even when it is itself a quantified type.
+    if expr.isAppOfArity ``id 2 then return ← inspect env origin arg
+    return (← inspect env origin fn) <|> (← inspect env origin arg)
+  | .mdata _ body | .proj _ _ body => inspect env origin body
   | .const name _ =>
     let root := privateToUserName name
     -- Generated eliminators quantify over motives and their arguments. The
@@ -123,28 +111,25 @@ private partial def inspect (env : Environment) (origin : Name) (expr : Expr) (i
       if resultIsProp info.type then
         for ctor in info.ctors do
           if let some (.ctorInfo ctorInfo) := env.find? ctor then
-            if let some hit ← Meta.forallBoundedTelescope ctorInfo.type (some ctorInfo.numParams)
-                (fun _ fields => inspectConstructor env root fields) then
+            if let some hit ← inspectConstructor env root (dropBinders ctorInfo.numParams ctorInfo.type) then
               return some hit
       return none
     | _ => return none
   | _ => return none
 where
   inspectConstructor (env : Environment) (origin : Name) (type : Expr) :
-      StateRefT (Std.HashSet Name) MetaM (Option (Name × Name)) := do
+      StateM (Std.HashSet Name) (Option (Name × Name)) := do
     match type with
-    | .forallE name domain body info =>
+    | .forallE name domain body _ =>
       -- The primitive continuation is fixed by the dispatch equality in Step.prim.
       let dispatchContinuation := origin == ``ConcreteSpec.Core.Exec.Step && name == `k
       if !dispatchContinuation && !usedInConstructorResult body 0 && modelBinder env domain then
         return some (origin, name)
-      let found ← inspect env origin domain
-      Meta.withLocalDecl name info domain fun x => do
-        return found <|> (← inspectConstructor env origin (body.instantiate1 x))
+      return (← inspect env origin domain) <|> (← inspectConstructor env origin body)
     | _ => return none
 
-private def check (env : Environment) (type : Expr) : MetaM (Option (Name × Name)) :=
-  (inspect env `endToEnd type).run' {}
+private def check (env : Environment) (type : Expr) : Option (Name × Name) :=
+  ((inspect env `endToEnd type).run {}).1
 
 -- This mutation hides a caller-selected model inside an unfolded relation.
 private abbrev Model := CoreLanguage
@@ -179,6 +164,28 @@ private def closedCodec : Prop :=
   (id (α := (ByteArray → Option UInt8) → Option UInt8) (fun decode => decode ByteArray.empty))
     (fun _ => none) = none
 
+-- Identity can also carry a quantified type as its value. That binder is open.
+private def plantedCodecIdentity : Prop :=
+  Nonempty (id ((decode : ByteArray → Option UInt8) → PLift (decode ByteArray.empty = none)))
+
+private def plantedCodecPair : Prop :=
+  Nonempty (Prod.fst (((decode : ByteArray → Option UInt8) → PLift (decode ByteArray.empty = none)), Nat))
+
+private def plantedCodecOption : Prop :=
+  Nonempty ((some ((decode : ByteArray → Option UInt8) → PLift (decode ByteArray.empty = none))).getD PUnit)
+
+private def plantedCodecList : Prop :=
+  Nonempty ([((decode : ByteArray → Option UInt8) → PLift (decode ByteArray.empty = none))].headD PUnit)
+
+private def plantedModelPair : Prop :=
+  Nonempty (Prod.fst (((model : Model) → PLift (model = model)), Nat))
+
+private def plantedModelOption : Prop :=
+  Nonempty ((some ((model : Model) → PLift (model = model))).getD PUnit)
+
+private def plantedModelList : Prop :=
+  Nonempty ([((model : Model) → PLift (model = model))].headD PUnit)
+
 private inductive PlantedInductive : Prop where
   | intro (evidence : ∀ decode : ByteArray → Option UInt8, decode ByteArray.empty = none)
 
@@ -199,7 +206,7 @@ example {slice : Slice} {profile : Profile} (passes : Passes slice profile) (unc
     (Registry.pipeline passes unchecked).Corresponds input output :=
   @Pipeline.endToEnd profile slice passes unchecked input output validated trusted ready ran
 
-run_cmd liftTermElabM do
+run_cmd do
   let env ← getEnv
   -- A model packaged inside the pass argument would still be caller-selected.
   let fields := #[`lex, `elaborate, `checkCore, `lowerCore, `lowerUnchecked, `lowerMemory,
@@ -211,27 +218,37 @@ run_cmd liftTermElabM do
   for name in [``Pipeline.endToEnd, ``registeredLCBEndToEnd] do
     let some theoremInfo := env.find? name
       | throwError "Missing registered end-to-end theorem {name}"
-    if let some (origin, binder) ← check env theoremInfo.type then
+    if let some (origin, binder) := check env theoremInfo.type then
       throwError "End-to-end statement has an open semantic binder {binder} in {origin}"
   let some soundInfo := env.find? ``Stage.Sound
     | throwError "Missing registered stage soundness"
-  if let some (origin, binder) := (← check env soundInfo.type) <|> (← check env (.const ``Stage.Sound [])) then
+  if let some (origin, binder) := check env soundInfo.type <|> check env (.const ``Stage.Sound []) then
     throwError "Stage soundness has an open semantic binder {binder} in {origin}"
-  unless (← check env (.const ``plantedDataBinder [])) == some (`EndToEndAudit.plantedDataBinder, `decode) do
-    throwError "End-to-end audit accepted a quantified codec inside a data-valued premise"
-  if (← check env (.const ``closedCodec [])).isSome then
+  -- Each wrapper extracts the original quantified type inside Nonempty.
+  -- Check the actual binder so unrelated findings cannot pass the controls.
+  for (name, binder) in [(``plantedDataBinder, `decode),
+      (``plantedCodecIdentity, `decode),
+      (``plantedCodecPair, `decode),
+      (``plantedCodecOption, `decode),
+      (``plantedCodecList, `decode),
+      (``plantedModelPair, `model),
+      (``plantedModelOption, `model),
+      (``plantedModelList, `model)] do
+    unless check env (.const name []) == some (privateToUserName name, binder) do
+      throwError "End-to-end audit accepted a caller-selected binder in {name}"
+  if (check env (.const ``closedCodec [])).isSome then
     throwError "End-to-end audit rejected a fixed executable codec"
-  unless ((← check env (.const ``plantedStatement [])) == some (`EndToEndAudit.plantedStatement, `model)) do
+  unless (check env (.const ``plantedStatement []) == some (`EndToEndAudit.plantedStatement, `model)) do
     throwError "End-to-end audit accepted a planted semantic model parameter"
-  unless ((← check env (.const ``plantedRelation [])) == some (`EndToEndAudit.plantedRelation, `meaning)) do
+  unless (check env (.const ``plantedRelation []) == some (`EndToEndAudit.plantedRelation, `meaning)) do
     throwError "End-to-end audit accepted a planted relation parameter"
-  unless ((← check env (.const ``plantedCodec [])) == some (`EndToEndAudit.plantedCodec, `decode)) do
+  unless (check env (.const ``plantedCodec []) == some (`EndToEndAudit.plantedCodec, `decode)) do
     throwError "End-to-end audit accepted a planted codec parameter"
-  unless ((← check env (.const ``plantedWrapped [])) == some (`EndToEndAudit.plantedWrapped, `wrapped)) do
+  unless (check env (.const ``plantedWrapped []) == some (`EndToEndAudit.plantedWrapped, `wrapped)) do
     throwError "End-to-end audit accepted a planted wrapped decoder"
-  unless ((← check env (.const ``PlantedInductive [])) == some (`EndToEndAudit.PlantedInductive, `decode)) do
+  unless (check env (.const ``PlantedInductive []) == some (`EndToEndAudit.PlantedInductive, `decode)) do
     throwError "End-to-end audit accepted a planted decoder under an inductive constructor"
-  unless ((← check env (.const ``PlantedConstructor [])) == some (`EndToEndAudit.PlantedConstructor, `decode)) do
+  unless (check env (.const ``PlantedConstructor []) == some (`EndToEndAudit.PlantedConstructor, `decode)) do
     throwError "End-to-end audit accepted a planted decoder as an inductive constructor field"
   unless badPassField env ``PlantedPassBundle == some `run do
     throwError "End-to-end audit accepted a planted decoder in the executable pass bundle"

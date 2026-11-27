@@ -59,8 +59,8 @@ source_reserved	con:tests/slice0/reserved.con	pending-refusal 1 syntax	slice0
 source_reserved_move	con:tests/slice0/reserved_move.con	pending-refusal 1 syntax	slice0
 source_reserved_struct	con:tests/slice0/reserved_struct.con	pending-refusal 1 syntax	slice0
 source_intrinsic_shadow	con:tests/slice0/intrinsic_shadow.con	pending-refusal 1 checker	slice0
-source_radix_missing_semi	con:tests/slice0/radix_missing_semi.con	refuse 1 non_decimal_literal DecimalLiteral@1 25:29:1:26 -	slice0
-source_malformed_if	con:tests/slice0/malformed_if.con	refuse 1 outside_production AdmittedProduction@2 18:20:1:19 -	slice0
+source_radix_missing_semi	con:tests/slice0/radix_missing_semi.con	refuse 1 unexpected_token Parsed@1 30:31:1:31 -	slice0
+source_malformed_if	con:tests/slice0/malformed_if.con	refuse 1 unexpected_token Parsed@1 21:22:1:22 -	slice0
 source_multiply	con:tests/slice0/multiply.con	pending-refusal 1 unsupported_form	slice0
 source_conditional	con:tests/slice0/conditional.con	pending-refusal 1 unsupported_form	slice0
 source_mutable	con:tests/slice0/mutable.con	pending-refusal 1 unsupported_form	slice0

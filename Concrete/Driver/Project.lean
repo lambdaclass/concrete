@@ -1,4 +1,4 @@
-import Concrete.Refusal
+import Concrete.Lex
 import Concrete.MIR
 import ConcreteSpec.Spec.ProjectPolicy
 
@@ -15,16 +15,15 @@ def manifestDepthLimit : Nat := Manifest.depthLimit
 /-- Validate the byte envelope before any decoder can inspect it. -/
 def manifestText (bytes : ByteArray) : Except ManifestRefusal String := do
   if ¬ Manifest.SizeAccepted bytes.size then throw .size
-  let some value := String.fromUTF8? bytes | throw .encoding
-  return value
+  match Lex.decodeUtf8 bytes.data.toList with
+  | .ok scalars => return ConcreteSpec.Surface0.scalarText scalars
+  | .error error => throw (.encoding ⟨error.offset, min (error.offset + 1) bytes.size⟩)
 
 
 /-- Check the bounded syntax supported by the configuration boundary. -/
 def parseManifest (text : String) : Except ManifestRefusal Unit :=
   if ¬ Manifest.SizeAccepted text.utf8ByteSize then .error .size
-  else (Manifest.validate manifestDepthLimit text).mapError fun
-    | .malformed => .malformed
-    | .depth => .depth
+  else (Manifest.validate manifestDepthLimit text).mapError ManifestRefusal.invalid
 
 /-- Only an absent directory entry denotes single-file mode. Symlinks, inaccessible
 entries and special files are refused. -/

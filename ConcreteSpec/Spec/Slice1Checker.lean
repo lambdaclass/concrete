@@ -139,8 +139,8 @@ abbrev checkStmtExpr := checkStmtExprWith admitted
 /-- Check one statement, retaining its output context for the next statement. -/
 def checkStmtWith (evidence : Ctx → Expr → Bool) (Δ : Decls) (Γ : Ctx) : Stmt → Except Reason Ctx
   | .let_ (.name x) t e => do
-    let next ← checkStmtExprWith evidence Δ Γ t e
-    if Fresh next x then
+    if Fresh Γ x then
+      let next ← checkStmtExprWith evidence Δ Γ t e
       .ok ((x, { ty := t, live := true, used := false, known := knownExpr Γ e,
                  kfields := knownFields Γ e }) :: next)
     else .error (.duplicateBinding x)

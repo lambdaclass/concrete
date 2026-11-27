@@ -7,8 +7,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 export LC_ALL=C
 manifest=scripts/checks/lib/stage_interfaces.sha256
 runtime=Concrete/Backend/Runtime.lean
-files=(ConcreteSpec/StageInterface.lean ConcreteSpec/StageGrammar.lean ConcreteSpec/SurfacePrefix.lean
-  ConcreteSpec/Spec/Slice0Syntax.lean
+files=(ConcreteSpec/StageInterface.lean ConcreteSpec/StageGrammar.lean ConcreteSpec/Spec/Slice0Syntax.lean
   Concrete/Backend/Observation.lean "$runtime" Concrete/Interfaces/*.lean)
 digest() (
   cd "$1"

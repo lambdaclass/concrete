@@ -285,8 +285,8 @@ def FileSpan.surface (span : FileSpan) : Surface0.Span :=
 
 inductive ParseRefusal where
   | invalidStream (atSpan : FileSpan)
-  | malformed (cause : RefusalCause)
-  | unsupported (cause : RefusalCause) (required : Slice)
+  | malformed (rule : RuleId) (atSpan : FileSpan)
+  | unsupported (rule : RuleId) (atSpan : FileSpan) (required : Slice)
 
 /-- Canonical identity of an ordered operand, shared with typed MIR reads.
 Literal bytes are the integrated Core instance's canonical value encoding. -/
@@ -328,11 +328,90 @@ inductive CoreValue (Other : Type) where
   | scalar (value : CVal)
   | other (value : Other)
 
-/-- Layout is a spec function at the resolved target. A zero extent still has logical lifetime. -/
+mutual
+/-- The declared byte representation, including the offset and representation
+of each immediate field. Projections and allocation consume this same tree. -/
 structure Layout where
   size : Nat
   align : Nat
+  fields : LayoutFields
   deriving DecidableEq, Repr
+
+inductive LayoutFields where
+  | nil
+  | cons (name : FieldId) (offset : Nat) (child : Layout) (rest : LayoutFields)
+  deriving DecidableEq, Repr
+end
+
+def Layout.scalar (size align : Nat) : Layout := ⟨size, align, .nil⟩
+
+def LayoutFields.lookup (name : FieldId) : LayoutFields → Option (Nat × Layout)
+  | .nil => none
+  | .cons key offset child rest => if key = name then some (offset, child) else rest.lookup name
+
+mutual
+/-- Slice 0 storage geometry at every node, with the physical alignment bound
+and the relative alignment and containment obligations at every field edge. -/
+def Layout.WellFormed (target : Target) : Layout → Bool
+  | ⟨size, align, fields⟩ => decide (Slice0Layout.StorageGeometry target size align ∧
+      align ≤ target.addressCeiling) && fields.check target size align
+
+def LayoutFields.check (target : Target) (size align : Nat) : LayoutFields → Bool
+  | .nil => true
+  | .cons _ offset child rest =>
+    decide (child.align ∣ offset ∧ child.align ∣ align ∧ offset + child.size ≤ size) &&
+      child.WellFormed target && rest.check target size align
+end
+
+def Layout.project (root : Layout) : List FieldId → Option (Nat × Layout)
+  | [] => some (0, root)
+  | field :: path => do
+    let (offset, child) ← root.fields.lookup field
+    let (inner, leaf) ← child.project path
+    return (offset + inner, leaf)
+
+private theorem LayoutFields.lookup_geometry {target size align name offset child} {fs : LayoutFields}
+    (checked : fs.check target size align) (found : fs.lookup name = some (offset, child)) :
+    (child.align ∣ offset ∧ child.align ∣ align ∧ offset + child.size ≤ size) ∧ child.WellFormed target := by
+  cases fs with
+  | nil => cases found
+  | cons key k sub rest =>
+    simp only [check, Bool.and_eq_true, decide_eq_true_eq] at checked
+    unfold lookup at found
+    split at found
+    · cases found
+      exact checked.1
+    · exact lookup_geometry checked.2 found
+termination_by structural fs
+
+/-- Alignment and containment compose over arbitrary nesting, including empty
+fields at the one-past offset. -/
+theorem Layout.project_aligned {target root path offset leaf base}
+    (wf : Layout.WellFormed target root) (found : root.project path = some (offset, leaf))
+    (aligned : root.align ∣ base) :
+    leaf.align ∣ base + offset ∧ offset + leaf.size ≤ root.size := by
+  induction path generalizing root base offset with
+  | nil =>
+    cases found
+    simpa using aligned
+  | cons name tail ih =>
+    simp only [Layout.project, Option.bind_eq_bind, Option.pure_def] at found
+    cases field : root.fields.lookup name with
+    | none => simp [field] at found
+    | some pair =>
+      obtain ⟨k, child⟩ := pair
+      cases nested : child.project tail with
+      | none => simp [field, nested] at found
+      | some pair =>
+        obtain ⟨n, sub⟩ := pair
+        simp [field, nested] at found
+        obtain ⟨rfl, rfl⟩ := found
+        have checked : root.fields.check target root.size root.align := by
+          cases root
+          exact (Bool.and_eq_true_iff.mp wf).2
+        obtain ⟨⟨off, divides, bounds⟩, childWF⟩ := LayoutFields.lookup_geometry checked field
+        have h := ih childWF nested (Nat.dvd_add (Nat.dvd_trans divides aligned) off)
+        exact ⟨by simpa [Nat.add_assoc] using h.1, by omega⟩
 
 abbrev Declarations := AList DeclId StructDecl
 
@@ -401,7 +480,6 @@ structure CoreLanguage where
   checkTrap : Opcode → Nat → List operands.Val → Bool
   field : operands.Val → List FieldId → Option operands.Val
   replaceField : operands.Val → List FieldId → operands.Val → Option operands.Val
-  fieldRange : operands.Ty → List FieldId → Layout → Option (Nat × Layout)
   encodeOther : Target → operands.Ty → OtherValue → Option (List (Nat × List Mem.MByte))
   decodeOther : Target → operands.Ty → List Mem.MByte → Option OtherValue
   safety : CoreOperation operands → List (SafetyCondition operands.Ty)
@@ -565,7 +643,7 @@ def sliceLanguage (_slice : Slice) : CoreLanguage where
       | .inl (.nominal id) => if env.emptyLinear id then some .logical else none
       | _ => none
     let layout ← Slice0Layout.query profile shape
-    return ⟨layout.byteSize, layout.alignment⟩
+    return .scalar layout.byteSize layout.alignment
   scalarType
     | .inl (.scalar ty) => some ty
     | _ => none
@@ -591,7 +669,6 @@ def sliceLanguage (_slice : Slice) : CoreLanguage where
     | _, _, _ => false
   field := fun _ _ => none
   replaceField := fun _ _ _ => none
-  fieldRange := fun _ _ _ => none
   encodeOther := fun _ _ _ => none
   decodeOther := fun _ _ _ => none
   safety
@@ -1010,11 +1087,15 @@ def AdmissionView.render (v : AdmissionView) (r : Admission.Refusal) : Option Re
   match r with
   | .atPosition pos reason =>
     let origin ← v.originAt pos
-    let primary ← match v, rejectedLiteral reason with
-      | .zero p, some atom => do
-        let (_, span) ← (p.readsAt pos).find? (fun read => read.1 == atom)
-        pure (surfaceFileSpan span)
-      | _, _ => pure origin.lexical
+    let primary ← match reason with
+      | .duplicateBinding _ => do
+        let binding ← v.located.bindings[pos]?
+        pure (surfaceFileSpan binding.declarationSpan)
+      | _ => match v, rejectedLiteral reason with
+        | .zero p, some atom => do
+          let (_, span) ← (p.readsAt pos).find? (fun read => read.1 == atom)
+          pure (surfaceFileSpan span)
+        | _, _ => pure origin.lexical
     let related ← match reason with
       | .unusedBinding x | .liveLinearBinding x => do
         let span ← v.bindingAt x
@@ -1100,76 +1181,53 @@ private def Rhs.asAtom (rhs : Rhs) (s : State) : LocatedAtom × State :=
     let ((x, site), s) := rhs.bind s
     (⟨.var x, site⟩, s)
 
-/-- Both an accepted syntax tree and a prefix of a larger slice use these same
-semantic actions. A blocked action is reached only after its source predecessors. -/
-abbrev ExprAction := Scope → State → Except RefusalCause (Rhs × State)
+private def expr (scope : Scope) (s : State) : Surface0.Expr → Except RefusalCause (Rhs × State)
+  | .integer n suffix span =>
+    letI : Decidable (Slice0Rules.ExpectedTypeLiteral suffix) := inferInstanceAs (Decidable (suffix = none))
+    if ¬ Slice0Rules.ExpectedTypeLiteral suffix then s.refuse (.surface (.integerSuffix span))
+    else .ok (.atom ⟨.lit n, span⟩, {s with visited := .integer n span :: s.visited})
 
-def integer (n : Nat) (suffix : Option IntTy) (span : Surface0.Span) : ExprAction := fun _ s =>
-  letI : Decidable (Slice0Rules.ExpectedTypeLiteral suffix) := inferInstanceAs (Decidable (suffix = none))
-  if ¬ Slice0Rules.ExpectedTypeLiteral suffix then s.refuse (.surface (.integerSuffix span))
-  else .ok (.atom ⟨.lit n, span⟩, {s with visited := .integer n span :: s.visited})
+  | .local name span =>
+    match scope.lookup name with
+    | some x => .ok (.atom ⟨.var x, span⟩, s)
+    | none => s.refuse (.surface (.unknownLocal name span))
 
-def readLocal (name : String) (span : Surface0.Span) : ExprAction := fun scope s =>
-  match scope.lookup name with
-  | some x => .ok (.atom ⟨.var x, span⟩, s)
-  | none => s.refuse (.surface (.unknownLocal name span))
+  | .add left right site => do
+    let (lhs, s) ← expr scope s left
+    let (a, beforeRight) := lhs.asAtom s
+    let (rhs, s) ← expr scope beforeRight right
+    -- A-normalization emits a non-atomic right operand before the outer addition.
+    -- Validate a literal left read before its check can move past that operation.
+    if let .add .. := rhs then
+      if let .lit _ := a.atom then
+        if let .error reason := inferAddOperand [] a.atom.toCore then
+          beforeRight.refuse (.core .slice0 (surfaceFileSpan a.span) [] (.atPosition beforeRight.next reason))
+    let (b, s) := rhs.asAtom s
+    return (.add a b site, s)
 
-def blockedExpr (cause : RefusalCause) : ExprAction := fun _ s => s.refuse cause
+private def body (scope : Scope) (s : State) (last : Surface0.Span) :
+    List Statement → Except RefusalCause EarlyProgram
+  | [] => s.refuse (.surface (.fallthrough last))
+  | .bind binding span :: rest => do
+    letI : Decidable (Slice0Rules.NamedBinding binding.name) := inferInstanceAs (Decidable (binding.name ≠ "_"))
+    unless Slice0Rules.NamedBinding binding.name do s.refuse (.surface (.wildcard binding.span))
+    if binding.name ∈ scope.map Prod.fst then s.refuse (.surface (.duplicateBinder binding.name binding.span))
+    letI : Decidable (Slice0Rules.UnreservedLocal binding.name) := inferInstanceAs (Decidable (UnreservedLocalName binding.name))
+    unless Slice0Rules.UnreservedLocal binding.name do s.refuse (.surface (.reservedBinder binding.name binding.span))
+    let (rhs, s) ← expr scope s binding.rhs
+    let ((x, _), s) := rhs.bind s (some binding.span) (.named ⟨binding.name⟩)
+    body ((binding.name, x) :: scope) s span rest
 
-def afterExpr (left : ExprAction) (cause : RefusalCause) : ExprAction := fun scope s => do
-  let (rhs, s) ← left scope s
-  (rhs.asAtom s).2.refuse cause
-
-def add (left right : ExprAction) (site : Surface0.Span) : ExprAction := fun scope s => do
-  let (lhs, s) ← left scope s
-  let (a, beforeRight) := lhs.asAtom s
-  let (rhs, s) ← right scope beforeRight
-  -- A-normalization emits a non-atomic right operand before the outer addition.
-  -- Validate a literal left read before its check can move past that operation.
-  if let .add .. := rhs then
-    if let .lit _ := a.atom then
-      if let .error reason := inferAddOperand [] a.atom.toCore then
-        beforeRight.refuse (.core .slice0 (surfaceFileSpan a.span) [] (.atPosition beforeRight.next reason))
-  let (b, s) := rhs.asAtom s
-  return (.add a b site, s)
-
-private def expr : Surface0.Expr → ExprAction
-  | .integer n suffix span => integer n suffix span
-  | .local name span => readLocal name span
-  | .add lhs rhs site => add (expr lhs) (expr rhs) site
-
-structure BodyAction where
-  first : Option Surface0.Span
-  run : Scope → State → Surface0.Span → Option RefusalCause → Except RefusalCause EarlyProgram
-
-def endBody : BodyAction :=
-  ⟨none, fun _ s last _ => s.refuse (.surface (.fallthrough last))⟩
-
-def blockedBody (cause : RefusalCause) (start : Surface0.Span) : BodyAction :=
-  ⟨some start, fun _ s _ _ => s.refuse cause⟩
-
-def bindBody (name : String) (binder span : Surface0.Span) (value : ExprAction) (rest : BodyAction) :
-    BodyAction := ⟨some span, fun scope s _ boundary => do
-  letI : Decidable (Slice0Rules.NamedBinding name) := inferInstanceAs (Decidable (name ≠ "_"))
-  unless Slice0Rules.NamedBinding name do s.refuse (.surface (.wildcard binder))
-  if name ∈ scope.map Prod.fst then s.refuse (.surface (.duplicateBinder name binder))
-  letI : Decidable (Slice0Rules.UnreservedLocal name) := inferInstanceAs (Decidable (UnreservedLocalName name))
-  unless Slice0Rules.UnreservedLocal name do s.refuse (.surface (.reservedBinder name binder))
-  let (rhs, s) ← value scope s
-  let ((x, _), s) := rhs.bind s (some binder) (.named ⟨name⟩)
-  rest.run ((name, x) :: scope) s span boundary⟩
-
-def returnBody (value : ExprAction) (span : Surface0.Span) (rest : BodyAction) : BodyAction :=
-  ⟨some span, fun scope s _ boundary => do
-    let (rhs, s) ← value scope s
+  | .ret value span :: rest => do
+    let (rhs, s) ← expr scope s value
     let (ret, s) := rhs.asAtom s
     let program : EarlyProgram := ⟨s.bindings.reverse, ret.atom, span, ret.span⟩
-    if let some later := (rest.first.map fun next => RefusalCause.surface (.unreachable next)) <|> boundary then
+    if let next :: _ := rest then
       -- The prefix carries a location for every operation, including this
       -- terminator. Report a checker failure directly at the operation visited.
       throw (s.firstFailure fun ctx pos =>
         match checkEnd [] ctx (.ret ret.atom.toCore) with
-        | .ok _ => later
+        | .ok _ => .surface (.unreachable next.span)
         | .error reason =>
           let related := match reason with
             | .unusedBinding x | .liveLinearBinding x =>
@@ -1177,21 +1235,13 @@ def returnBody (value : ExprAction) (span : Surface0.Span) (rest : BodyAction) :
             | _ => []
           let primary := if (rejectedLiteral reason).isSome then ret.span else span
           .core .slice0 (surfaceFileSpan primary) related (.atPosition pos reason))
-    return program⟩
-
-def entry (purpose : Purpose) (name : String) (span : Surface0.Span) (body : BodyAction)
-    (boundary : Option RefusalCause := none) : Except RefusalCause EarlyProgram := do
-  letI : Decidable (Slice0Rules.EntryName name) := inferInstanceAs (Decidable (name = "main"))
-  unless Slice0Rules.EntryName name do throw (.surface (.unexpectedEntry span))
-  body.run [] {purpose} span boundary
+    return program
 
 def prepareSurface0 (ast : Surface0.Program) (purpose : Purpose := .admission) :
-    Except RefusalCause EarlyProgram :=
-  entry purpose ast.name ast.nameSpan (ast.body.foldr statement endBody)
-where
-  statement : Statement → BodyAction → BodyAction
-    | .bind b span, rest => bindBody b.name b.span span (expr b.rhs) rest
-    | .ret value span, rest => returnBody (expr value) span rest
+    Except RefusalCause EarlyProgram := do
+  letI : Decidable (Slice0Rules.EntryName ast.name) := inferInstanceAs (Decidable (ast.name = "main"))
+  unless Slice0Rules.EntryName ast.name do throw (.surface (.unexpectedEntry ast.nameSpan))
+  body [] {purpose} ast.nameSpan ast.body
 
 end SurfacePreparation
 

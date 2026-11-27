@@ -302,6 +302,7 @@ def checkSourceRefusal (input : Concrete.Stages.Input) (expected : RefusalExpect
     | "reserved_binder", .surface (.reservedBinder ..)
     | "unreachable_statement", .surface (.unreachable _)
     | "integer_suffix", .surface (.integerSuffix _)
+    | "unexpected_token", .parser .unexpectedToken _
     | "non_decimal_literal", .parser .nonDecimal _
     | "outside_production", .parser .outsideProduction _ => true
     | _, _ => false

@@ -17,6 +17,13 @@ import Concrete.MIR
 import Concrete.Memory
 import Concrete.CFG
 import Concrete.Memory.Lowering
+import Concrete.Memory.Lifetimes
+import Concrete.Memory.Refinement
+import Concrete.Memory.Controls
+import Concrete.Memory.ExhaustionControl
+import Concrete.Memory.AddressCeilingControl
+import Concrete.Memory.AggregateLayoutControl
+import Concrete.Memory.TransferControl
 import Concrete.SSA
 import Concrete.Stages
 import Concrete.Theorem

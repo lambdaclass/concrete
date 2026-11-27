@@ -264,7 +264,8 @@ theorem alloc_failure (tgt : Target) (m : Memory) (s : AddrSpace) (base size ali
     rcases h with hp | ha | hb | hm | ⟨hpos, hnull⟩ | ⟨e, he, hl, ho⟩ | hs
     · exact hp hf.1
     · exact ha hf.2.1
-    · exact Nat.not_lt_of_ge hf.2.2.1 hb
+    · have bound : base + size < 2 ^ tgt.addrBits := hf.2.2.1
+      omega
     · exact Nat.not_lt_of_ge hf.2.2.2.1 hm
     · exact hf.2.2.2.2.1 hpos hnull
     · exact hf.2.2.2.2.2.1 e he hl ho
@@ -555,7 +556,7 @@ theorem fromExposed_none (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
 
 /-- Helper (inversion). Extract the block and bounds of a successful nonempty access. -/
 theorem access_some_inv (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat) (b : BlockId)
-    (off : Nat) (h : m.access tgt p n a = some (some (b, off))) :
+    (off : Nat) {ceiling : Nat} (h : m.access tgt p n a ceiling = some (some (b, off))) :
     ∃ x, p.prov = some b ∧ m.block b = some x ∧ n ≠ 0 ∧ x.live = true ∧
       x.space = p.space ∧ x.base ≤ p.addr ∧ p.addr + n ≤ x.base + x.size ∧
       p.addr % a = 0 ∧ off = p.addr - x.base := by
@@ -577,13 +578,13 @@ theorem access_some_inv (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat) (b : B
         next => cases h
 
 /-- Law (subject `ConcreteSpec.Core.Mem.Memory.access`). Nonempty access validity follows from the stored block geometry, rather than a runtime check. -/
-theorem access_valid (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
+theorem access_valid (tgt : Target) (m : Memory) {ceiling : Nat} (hw : m.WellFormed tgt ceiling)
     (n a : Nat) (hn : n ≠ 0) :
-    ∀ p, match m.access tgt p n a with
-      | some _ => p.Valid tgt
+    ∀ p, match m.access tgt p n a ceiling with
+      | some _ => p.Valid tgt ceiling
       | none => True := by
   intro p
-  cases h : m.access tgt p n a with
+  cases h : m.access tgt p n a ceiling with
   | none => trivial
   | some r =>
     cases r with
@@ -597,12 +598,11 @@ theorem access_valid (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
       obtain ⟨b, off⟩ := pair
       obtain ⟨x, _, hx, _, _, hs, hlo, hhi, _, _⟩ := access_some_inv tgt m p n a b off h
       have hf := hw.fits b x hx
-      have hpos : 0 < 2 ^ tgt.addrBits := Nat.two_pow_pos tgt.addrBits
       exact ⟨by have hnpos := Nat.pos_of_ne_zero hn; omega, hs ▸ hw.spaces b x hx⟩
 
 /-- Helper (inversion). Zero-size access explicitly checks validity; this extracts that guard only. -/
 theorem access_zero_valid_inv (tgt : Target) (m : Memory) (p : Ptr) (a : Nat)
-    (h : m.access tgt p 0 a = some none) : p.Valid tgt := by
+    {ceiling : Nat} (h : m.access tgt p 0 a ceiling = some none) : p.Valid tgt ceiling := by
   unfold Memory.access at h
   simp only [↓reduceIte] at h
   split at h

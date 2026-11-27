@@ -129,7 +129,7 @@ private def profile : Profile := ⟨.lcb, .x86_64Linux, 3, 4096⟩
 
 -- Keep the real elaborator and checker, and the shared static traversal.
 private def fragmentPasses (slice : Slice) : Passes slice profile where
-  lex _ input := .error (.missingFile input.entryFile)
+  lex input := .error (.missingFile input.entryFile)
   elaborate := elaborate slice
   checkCore := ConcreteSpec.Admission.checkInput
   lowerCore _ := .error (.invalidInput ⟨``elaborate, 1⟩)
@@ -261,6 +261,29 @@ private def moveByte : LocatedStraightBinding :=
 private def duplicateView : AdmissionView :=
   let bind (n : Nat) : LocatedBinding := ⟨⟨⟨0⟩, .atom (.lit n)⟩, useSpan, binderSpan, (), .unnamed none⟩
   .zero ⟨[bind 1, bind 42], .var ⟨0⟩, useSpan, useSpan⟩
+
+-- Distinct locations for both binders and their initializers. Even an
+-- out-of-range second initializer cannot precede the repeated binder.
+private def duplicateBinderAt (n : Nat) : Prop :=
+  let text := r"fn main() -> u8 { let x: u8 = 1; let x: u8 = " ++ toString n ++ r"; return x; }"
+  let file := Project.singleton mainSourcePath (SourceText.ofBytes text.toUTF8.data.toList)
+  let first := {byteBinding 0 1 with
+    operationSpan := ⟨30, 31, 1, 31, ⟨0⟩⟩
+    declarationSpan := ⟨22, 23, 1, 23, ⟨0⟩⟩}
+  let binder : ConcreteSpec.Surface0.Span := ⟨37, 38, 1, 38, ⟨0⟩⟩
+  let stop := 45 + (toString n).length
+  let second := {byteBinding 0 n with
+    operationSpan := ⟨45, stop, 1, 46, ⟨0⟩⟩
+    declarationSpan := binder}
+  let view : AdmissionView := .one ⟨[], [first, second], .ret (.var ⟨0⟩), ⟨stop + 2, stop + 11, 1, stop + 3, ⟨0⟩⟩⟩
+  let input : CoreInput (sliceLanguage sliceOne) := ⟨file, sliceOne, .straightLine view rfl⟩
+  let why := ConcreteSpec.Admission.Refusal.atPosition 1 (.duplicateBinding ⟨0⟩)
+  let cause := RefusalCause.core .returning (surfaceFileSpan binder) [] why
+  (registry (fragmentPasses sliceOne)).typing.run input = .error (.admission (.refused cause)) ∧
+    cause.rule = ⟨``OwnershipRule.FreshBinder, 1⟩ ∧ cause.primary = surfaceFileSpan binder
+
+example : duplicateBinderAt 1 ∧ duplicateBinderAt 256 := by
+  with_unfolding_all exact ⟨⟨rfl, rfl, rfl⟩, rfl, rfl, rfl⟩
 
 private def converseView : AdmissionView :=
   .one ⟨[(tokenName, binderSpan)], [introToken, takeToken, byteBinding 0 42, moveByte],
@@ -425,7 +448,7 @@ private def root : MemoryPlace _ nominalTy := ⟨⟨⟨0⟩, []⟩, .materialize
 private def memory : Memory (sliceLoweringLanguage sliceOne) profile :=
   { project := source.project, entry := earlyEntry, signatures := []
     functions := [(earlyEntry, [(root.logical.root, nominalTy)], ⟨⟨0⟩, #[]⟩)]
-    layouts := [(earlyEntry, [(root.logical.root, ⟨0, 1⟩)])]
+    layouts := [(earlyEntry, [(root.logical.root, .scalar 0 1)])]
     storage := [(earlyEntry, [(root.logical.root, .materialized)])]
     declarations := (tokenInput [introToken]).machineProgram.declarations }
 
@@ -449,7 +472,7 @@ example :
     refine ⟨?_, ?_, rfl⟩
     · refine ⟨[], started, [], .other tokenId, [], Memory.operationStore started false, stored,
         rfl, rfl, rfl, ⟨rfl, rfl, rfl, rfl⟩, rfl, ?_, rfl⟩
-      exact ⟨⟨rfl, nofun⟩, fun _ => ⟨⟨0, 1⟩, rfl, ⟨fun _ => rfl, fun _ => rfl⟩⟩, rfl, rfl, fun _ => .inl rfl⟩
+      exact ⟨⟨rfl, nofun⟩, fun _ => ⟨.scalar 0 1, rfl, ⟨fun _ => rfl, fun _ => rfl⟩⟩, rfl, rfl, fun _ => .inl rfl⟩
     · exact ⟨.other tokenId, consumed, [], consumed, rfl,
         ⟨.nil, [], rfl, nofun, nofun⟩, rfl, .nil _, rfl⟩
 
@@ -590,12 +613,12 @@ example :
     let place : MemoryPlace _ ty := ⟨⟨⟨0⟩, []⟩, .materialized⟩
     let mem : Memory (sliceLoweringLanguage sliceOne) profile := {memory with
       functions := [(earlyEntry, [(⟨0⟩, ty)], ⟨⟨0⟩, #[]⟩)],
-      layouts := [(earlyEntry, [(⟨0⟩, ⟨2, 2⟩)])]}
+      layouts := [(earlyEntry, [(⟨0⟩, .scalar 2 2)])]}
     let block := {Mem.candidate ⟨0⟩ 2 2 2 with bytes := [.init 254 none, .init 255 none]}
     let state : MemoryRegisters nominalLang profile := {started with
       initialized := [⟨0⟩],
       materialized := [(⟨0⟩, ⟨⟨⟨0⟩, 2, some ⟨0⟩⟩, 2, 2⟩)], bytes := ⟨[(⟨0⟩, block)], 1⟩}
-    nominalLang.layout [] big ty = some ⟨2, 2⟩ ∧
+    nominalLang.layout [] big ty = some (.scalar 2 2) ∧
     nominalLang.literal ty [254, 255] = some (.scalar (.int .i16 (-2))) ∧
     mem.loadMaterialized state place big = some (.scalar (.int .i16 (-257))) ∧
     mem.loadValue state place = some (.scalar (.int .i16 (-2))) := by
@@ -698,7 +721,7 @@ private theorem overflowWF : overflowCore.WF := by
     · exact ⟨⟨⟨0⟩, 31, 32, by decide, 1, 32, by decide, by decide⟩, _, rfl, rfl, by decide, rfl, rfl, rfl, rfl⟩
 
 private theorem overflowHandoff : overflowMIR.logicalView.HandoffWF := by
-  refine ⟨?_, List.mem_singleton_self _, ?_⟩
+  refine ⟨?_, List.mem_singleton_self _, ?_, nofun⟩
   · with_unfolding_all
       refine ⟨.cons nofun .nil, .cons nofun .nil, .cons nofun .nil, .nil, ?_, nofun, ?_⟩
       · intro fn classes member

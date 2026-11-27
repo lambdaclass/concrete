@@ -96,6 +96,9 @@ if [[ ${CONCRETE_TEST_EMIT_ONLY:-0} != 1 ]]; then
   build llvm-mutation-controls "$work/llvm-mutation-controls.log" bounded 120 \
     lake env python3 -B scripts/checks/compiler/llvm_mutation_controls.py
   cat "$work/llvm-mutation-controls.log"
+  build memory-exhaustion-mutation "$work/memory-exhaustion.log" bounded 300 \
+    python3 -B scripts/checks/compiler/memory_exhaustion_mutation.py
+  cat "$work/memory-exhaustion.log"
 fi
 
 fail=0
@@ -507,7 +510,7 @@ if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" != 1 ]; then
         printf '%65537s' '' >"$project_file"
         expected='Concrete.toml exceeds 65536 bytes' ;;
       encoding)
-        printf '\377' >"$project_file"
+        printf 'x=\377' >"$project_file"
         expected='Concrete.toml must be UTF-8' ;;
       directory)
         mkdir "$project_file"
@@ -519,12 +522,12 @@ if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" != 1 ]; then
     esac
     rule=
     case "$manifest_case" in
-      malformed) rule=SyntaxAccepted ;;
-      depth) rule=DepthAccepted ;;
-      size) rule=SizeAccepted ;;
-      encoding) rule=EncodingAccepted ;;
+      malformed) span=9..10; rule=SyntaxAccepted ;;
+      depth) span=34..35; rule=DepthAccepted ;;
+      size) span=65536..65537; rule=SizeAccepted ;;
+      encoding) span=2..3; rule=EncodingAccepted ;;
     esac
-    if [ -n "$rule" ]; then expected+=" [rule ConcreteSpec.Project.Manifest.$rule@1]"; fi
+    if [ -n "$rule" ]; then expected+=" [rule ConcreteSpec.Project.Manifest.$rule@1, Concrete.toml, bytes $span]"; fi
     case "$manifest_case" in
       directory|symlink) code=READ ;;
       malformed) code=SYNTAX ;;
@@ -536,7 +539,8 @@ if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" != 1 ]; then
     test "$rc" = 1
     test ! -e "$project_dir/output"
     test ! -s "$project_dir/stdout"
-    has_match -Fx "MANIFEST-$code: $expected" <"$project_dir/stderr"
+    printf '%s\n' "MANIFEST-$code: $expected" >"$project_dir/expected-stderr"
+    cmp "$project_dir/expected-stderr" "$project_dir/stderr"
     if [ "$manifest_case" = directory ]; then rmdir "$project_file"; else rm -- "$project_file"; fi
   done
   echo "ok   malformed, over-limit, non-file and pending-schema inputs refuse before output"
@@ -650,7 +654,7 @@ while IFS=$'\t' read -r name program expect; do
       mkdir -p "$d"
       read -r form status kind _ <<<"$expect"
       case "$form $kind" in
-        "pending-refusal syntax") code=SYNTAX ;;
+        "pending-refusal syntax"|"refuse unexpected_token") code=SYNTAX ;;
         "pending-refusal unsupported_form"|"refuse non_decimal_literal"|"refuse outside_production") code=SLICE-0 ;;
         *) code=CORE-CHECK ;;
       esac
