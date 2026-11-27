@@ -1573,6 +1573,8 @@ ConcreteSpec.Core.SourcePathSpan.Registry.offsetsRefused
 ConcreteSpec.Core.SourcePathSpan.Registry.slotResolvesAccepted	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.Registry.slotResolvesRefused	Quot.sound propext
 ConcreteSpec.Core.SourceText.bytes.eq_1	
+ConcreteSpec.Core.Vacuity.assignFunctionTable_insert_locality_example_leftBlock	Quot.sound propext
+ConcreteSpec.Core.Vacuity.assignFunctionTable_insert_locality_planted_leftBlock_insertUnderRight	Quot.sound propext
 ConcreteSpec.Core.Vacuity.assignFunctionTable_lookup_example_nestedBody	Quot.sound propext
 ConcreteSpec.Core.Vacuity.assignFunctionTable_lookup_planted_nestedBody_shallowAssign	Quot.sound propext
 ConcreteSpec.Core.Vacuity.assignFunctionTable_named_scope_example_namedNested	Quot.sound propext
@@ -2038,8 +2040,6 @@ _private.ConcreteSpecEvidence.Ident.0.ConcreteSpec.Core.SourcePath.reservedStemW
 _private.ConcreteSpecEvidence.Ident.0.ConcreteSpec.Core.Vacuity.shallowCollect.match_1._arg_pusher	
 _private.ConcreteSpecEvidence.Ident.0.ConcreteSpec.Core.Vacuity.shallowCollect.match_1.eq_1	
 _private.ConcreteSpecEvidence.Ident.0.ConcreteSpec.Core.Vacuity.shallowCollect.match_1.eq_2	
-_private.ConcreteSpecEvidence.Ident.0.ConcreteSpec.Core.instReprConstructName.repr.match_1.eq_1	
-_private.ConcreteSpecEvidence.Ident.0.ConcreteSpec.Core.instReprConstructName.repr.match_1.eq_2	
 _private.ConcreteSpecEvidence.Ident.0.List.decidableBAll.match_5.eq_1	
 _private.ConcreteSpecEvidence.Ident.0.List.decidableBAll.match_5.eq_2	
 _private.ConcreteSpecEvidence.Ident.0.List.filter.match_1.eq_1	

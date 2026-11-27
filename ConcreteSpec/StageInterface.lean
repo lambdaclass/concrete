@@ -465,13 +465,19 @@ structure Payload (language : CoreLanguage) where
   origins : AList SiteId Origin
   declarations : AList DeclId language.Declaration
 
+/-- A source let carries its binder name; an A-normal temporary is unnamed. -/
+structure LocatedBinding where
+  statement : ConcreteSpec.Slice0.Stmt
+  operationSpan : Surface0.Span
+  name : ConstructName
+
 structure EarlyProgram where
-  bindings : List (ConcreteSpec.Slice0.Stmt × Surface0.Span)
+  bindings : List LocatedBinding
   ret : ConcreteSpec.Slice0.Atom
   returnSpan : Surface0.Span
 
 def EarlyProgram.checkedSyntax (program : EarlyProgram) : ConcreteSpec.Program :=
-  ⟨[], program.bindings.map (ConcreteSpec.Slice0.Stmt.toCore ∘ Prod.fst), .ret program.ret.toCore⟩
+  ⟨[], program.bindings.map (ConcreteSpec.Slice0.Stmt.toCore ∘ LocatedBinding.statement), .ret program.ret.toCore⟩
 
 private def earlyOperand : ConcreteSpec.Slice0.Atom → EarlyOperand
   | .lit n => .literal (.int .u8 n)
@@ -481,10 +487,9 @@ private def earlyExpression : ConcreteSpec.Slice0.Expr → EarlyExpr
   | .atom atom => .read (earlyOperand atom)
   | .add left right => .add .u8 (earlyOperand left) (earlyOperand right)
 
-private def earlyOrigin (entry : FnId) (site : SiteId) (kind : ConstructKind)
-    (ordinal : Nat) (span : ConcreteSpec.Surface0.Span) : SiteId × Origin :=
-  (site, ⟨site, ⟨span.fileId, span.start, span.stop, span.line, span.column⟩,
-    ⟨.function entry, ⟨[⟨kind, .ordinal ordinal⟩]⟩⟩⟩)
+private def earlyOrigin (entry : FnId) (site : SiteId) (span : Surface0.Span)
+    (key : FunctionRelativeKey) : SiteId × Origin :=
+  (site, ⟨site, ⟨span.fileId, span.start, span.stop, span.line, span.column⟩, ⟨.function entry, key⟩⟩)
 
 /-- The standalone Slice 0 program has one internal function identity. -/
 def earlyEntry : FnId :=
@@ -496,16 +501,18 @@ def earlyPayload {language : CoreLanguage} (early : EarlyCore language)
   let entry := earlyEntry
   let scalar : CTy := .int .u8
   let ownership : AList ConcreteSpec.Var Own.Descriptor :=
-    out.bindings.map fun (bind, _) => (bind.x, ⟨scalar, true, false⟩)
+    out.bindings.map fun bind => (bind.statement.x, ⟨scalar, true, false⟩)
   let retSite : SiteId := ⟨out.bindings.length⟩
   let body : Exec.Stmt (language.instrumented ownership) :=
-    out.bindings.foldr (fun (bind, _) rest =>
+    out.bindings.foldr (fun located rest =>
+      let bind := located.statement
       .seq (.bind bind.x (early.expressions.symm ▸ Sum.inl (earlyExpression bind.e)) ⟨bind.x.id⟩) rest)
       (.ret (early.expressions.symm ▸ Sum.inl (EarlyExpr.read (earlyOperand out.ret))) retSite)
-  let origins := out.bindings.map fun (bind, span) =>
-    earlyOrigin entry ⟨bind.x.id⟩ .binding bind.x.id span
+  let origins := KeyConstruct.mapSiblingKeys .binding LocatedBinding.name
+    (fun bind => earlyOrigin entry ⟨bind.statement.x.id⟩ bind.operationSpan) [] out.bindings
+  let ret : KeyConstruct := ⟨.return, .unnamed none, []⟩
   ⟨ownership, ⟨[(entry, ⟨[], early.types.symm ▸ Sum.inl (EarlyTy.scalar scalar), ⟨0⟩, body⟩)]⟩,
-    entry, origins ++ [earlyOrigin entry retSite .return 0 out.returnSpan], []⟩
+    entry, origins ++ [earlyOrigin entry retSite out.returnSpan (ret.key [])], []⟩
 
 abbrev Payload.machine {language : CoreLanguage} (payload : Payload language) : Exec.Operands :=
   language.instrumented payload.ownership
@@ -618,7 +625,7 @@ private def earlyBodyTyped (locals : TyCtx) : List ConcreteSpec.Slice0.Stmt → 
 
 /-- Independent typing for the unchecked path. A typed addition may still overflow. -/
 def CoreInput.StaticallyTyped {language : CoreLanguage} (input : CoreInput language) : Prop :=
-  ∃ program, input.EarlyProgram program ∧ earlyBodyTyped [] (program.bindings.map Prod.fst) program.ret
+  ∃ program, input.EarlyProgram program ∧ earlyBodyTyped [] (program.bindings.map LocatedBinding.statement) program.ret
 
 /-- Acceptance uses the spec's independent checker judgment on the same fragment. -/
 def CoreInput.Accepted {language : CoreLanguage} (input : CoreInput language) : Prop :=

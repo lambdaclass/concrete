@@ -14,7 +14,7 @@ Authorities below are current rows in `docs/decisions.md`; historical source app
 are not authorities and have been removed.
 
 * `decided-2026-11-08-c9-identities`: structured function-relative keys, same-kind unnamed
-  ordinals under the nearest named ancestor, pinned labels, package versions and origin
+  ordinals among direct siblings (as revised 2026-11-27), pinned labels, package versions and origin
   collisions. The collection, lookup, edit-invariance and renumbering laws establish the
   executable assignment interface's consequences, rather than choosing a new key policy.
 * Q9.1–Q9.2: fresh and nominal identities; OD109: specialization depends on capability
@@ -281,7 +281,8 @@ is the actual key-assignment operation, not an invariant rechecked by the theore
 theorem KeyConstruct.key_insert_differentKind (before after : List KeyConstruct)
     (inserted target : KeyConstruct) (different : inserted.kind ≠ target.kind) :
     target.key (before ++ inserted :: after) = target.key (before ++ after) := by
-  simp [KeyConstruct.key, KeyConstruct.segment, List.filter_append, different]
+  simp [KeyConstruct.key, KeyConstruct.segment, KeyConstruct.segmentAtOrdinal, KeyConstruct.countsToward,
+      List.filter_append, different]
 
 /-- Law (subject `ConcreteSpec.Core.KeyConstruct.key`, `ConcreteSpec.Core.KeyConstruct.segment`, `ConcreteSpec.Core.ConstructName.isUnnamed`).
 **A named insertion does not consume an unnamed ordinal.** Every existing sibling key is
@@ -290,7 +291,8 @@ theorem KeyConstruct.key_insert_named (before after : List KeyConstruct)
     (label : Name) (kind : ConstructKind) (children : List KeyConstruct) (target : KeyConstruct) :
     target.key (before ++ KeyConstruct.mk kind (.named label) children :: after) =
       target.key (before ++ after) := by
-  simp [KeyConstruct.key, KeyConstruct.segment, List.filter_append, ConstructName.isUnnamed]
+  simp [KeyConstruct.key, KeyConstruct.segment, KeyConstruct.segmentAtOrdinal, KeyConstruct.countsToward,
+      List.filter_append, ConstructName.isUnnamed]
 
 /-- Helper (projection). Renaming preserves participation in unnamed-sibling ordinals. -/
 theorem ConstructName.isUnnamed_rename (constructName : ConstructName) (name : Name) :
@@ -310,7 +312,8 @@ theorem KeyConstruct.segment_replace_same_unnamed (before after : List KeyConstr
     (sameUnnamed : first.name.isUnnamed = second.name.isUnnamed) :
     other.segment (before ++ first :: after) = other.segment (before ++ second :: after) := by
   by_cases h : second.kind = other.kind ∧ second.name.isUnnamed = true <;>
-    simp [KeyConstruct.segment, List.filter_append, sameKind, sameUnnamed, h]
+    simp [KeyConstruct.segment, KeyConstruct.segmentAtOrdinal, KeyConstruct.countsToward,
+      List.filter_append, sameKind, sameUnnamed, h]
 
 /-- Law (subject `ConcreteSpec.Core.KeyConstruct.key`, `ConcreteSpec.Core.KeyConstruct.rename`).
 **Renaming one item leaves every sibling key unchanged.** Renaming preserves the item's kind
@@ -344,7 +347,7 @@ theorem KeyConstruct.key_rename_named (preceding : List KeyConstruct) (kind : Co
     (old : Name) (children : List KeyConstruct) (name : Name) :
     ((KeyConstruct.mk kind (.named old) children).rename name).key preceding =
       ⟨[⟨kind, .named name⟩]⟩ := by
-  simp [KeyConstruct.key, KeyConstruct.segment, KeyConstruct.rename, ConstructName.rename]
+  simp [KeyConstruct.key, KeyConstruct.segment, KeyConstruct.segmentAtOrdinal, KeyConstruct.rename, ConstructName.rename]
 
 /-- Helper (computation). Computes the pinned root construct's own key for
 `KeyConstruct.assignFunctionTable_pin`. -/
@@ -352,91 +355,7 @@ theorem KeyConstruct.key_pin_unnamed (preceding : List KeyConstruct) (kind : Con
     (old : Option Name) (children : List KeyConstruct) (label : Name) :
     ((KeyConstruct.mk kind (.unnamed old) children).pin (some label)).key preceding =
       ⟨[⟨kind, .pinned label⟩]⟩ := by
-  simp [KeyConstruct.key, KeyConstruct.segment, KeyConstruct.pin, ConstructName.pin]
-
-/-- Helper (congruence). Replacing an in-scope construct with one of the same kind and unnamed
-status leaves `KeyConstruct.pathAtIn` unchanged. -/
-theorem KeyConstruct.pathAtIn_replace_same_unnamed (forest : List KeyConstruct)
-    (route : Numbers) (before after : List KeyConstruct) (first second : KeyConstruct)
-    (sameKind : first.kind = second.kind)
-    (sameUnnamed : first.name.isUnnamed = second.name.isUnnamed) :
-    KeyConstruct.pathAtIn (before ++ first :: after) forest route =
-      KeyConstruct.pathAtIn (before ++ second :: after) forest route := by
-  induction route generalizing forest before after with
-  | nil => rfl
-  | cons index rest ih =>
-    unfold KeyConstruct.pathAtIn
-    cases hget : forest[index]? with
-    | none => rfl
-    | some construct =>
-      simp only [List.append_assoc, List.cons_append]
-      have hseg :=
-        KeyConstruct.segment_replace_same_unnamed before (after ++ forest.take index)
-          first second construct sameKind sameUnnamed
-      cases hname : construct.name with
-      | named _ =>
-        simp [KeyConstruct.childScope, hname, hseg]
-      | unnamed _ =>
-        have hrec := ih construct.children before (after ++ forest.take index)
-        simp [KeyConstruct.childScope, hname, hseg, hrec]
-
-/-- Helper (computation). Inserting a named construct in the inherited scope leaves
-`KeyConstruct.pathAtIn` unchanged. -/
-theorem KeyConstruct.pathAtIn_insert_named (forest : List KeyConstruct) (route : Numbers)
-    (before after : List KeyConstruct) (label : Name) (kind : ConstructKind)
-    (children : List KeyConstruct) :
-    KeyConstruct.pathAtIn
-        (before ++ KeyConstruct.mk kind (.named label) children :: after) forest route =
-      KeyConstruct.pathAtIn (before ++ after) forest route := by
-  induction route generalizing forest before after with
-  | nil => rfl
-  | cons index rest ih =>
-    unfold KeyConstruct.pathAtIn
-    cases hget : forest[index]? with
-    | none => rfl
-    | some construct =>
-      simp only [List.append_assoc, List.cons_append]
-      have hseg :
-          construct.segment
-            (before ++ KeyConstruct.mk kind (.named label) children :: (after ++ forest.take index)) =
-          construct.segment (before ++ (after ++ forest.take index)) := by
-        simp [KeyConstruct.segment, List.filter_append, ConstructName.isUnnamed]
-      cases hname : construct.name with
-      | named _ =>
-        simp [KeyConstruct.childScope, hname, hseg]
-      | unnamed _ =>
-        have hrec := ih construct.children before (after ++ forest.take index)
-        simp [KeyConstruct.childScope, hname, hseg, hrec]
-
-/-- Helper (computation). Inserting a construct whose kind is avoided along `route` in the
-enclosing named scope leaves `KeyConstruct.pathAtIn` unchanged. -/
-theorem KeyConstruct.pathAtIn_insert_differentKind (forest : List KeyConstruct) (route : Numbers)
-    (before after : List KeyConstruct) (inserted : KeyConstruct)
-    (avoids : KeyConstruct.RouteAvoidsKind inserted.kind forest route) :
-    KeyConstruct.pathAtIn (before ++ inserted :: after) forest route =
-      KeyConstruct.pathAtIn (before ++ after) forest route := by
-  induction route generalizing forest before after with
-  | nil => rfl
-  | cons index rest ih =>
-    unfold KeyConstruct.pathAtIn
-    cases hget : forest[index]? with
-    | none => rfl
-    | some construct =>
-      simp only [KeyConstruct.RouteAvoidsKind, KeyConstruct.routeAvoidsKind, hget,
-        Bool.and_eq_true, bne_iff_ne] at avoids
-      rcases avoids with ⟨hne, hchild⟩
-      simp only [List.append_assoc, List.cons_append]
-      have hseg :
-          construct.segment (before ++ inserted :: (after ++ forest.take index)) =
-          construct.segment (before ++ (after ++ forest.take index)) := by
-        simp [KeyConstruct.segment, List.filter_append, hne]
-      cases hname : construct.name with
-      | named _ =>
-        simp [KeyConstruct.childScope, hname, hseg]
-      | unnamed _ =>
-        rw [hname] at hchild
-        have hrec := ih construct.children before (after ++ forest.take index) hchild
-        simp [KeyConstruct.childScope, hname, hseg, hrec]
+  simp [KeyConstruct.key, KeyConstruct.segment, KeyConstruct.segmentAtOrdinal, KeyConstruct.pin, ConstructName.pin]
 
 /-- Helper (computation). Unfolds `KeyConstruct.pathAt` at the exact index `before.length` of a
 split forest `before ++ target :: tail`. -/
@@ -449,26 +368,15 @@ theorem KeyConstruct.pathAt_at_length (before tail : List KeyConstruct)
   simp [KeyConstruct.pathAt, KeyConstruct.pathAtIn, htake,
     KeyConstruct.descendantKey, Option.map_eq_bind, Function.comp_def]
 
-/-- Law (subject `ConcreteSpec.Core.KeyConstruct.descendantKey`, `ConcreteSpec.Core.KeyConstruct.SubtreeAvoidsKind`).
-Inserting a sibling whose kind is avoided along `route` in the enclosing named scope preserves the
-complete assigned descendant path, including through unnamed intermediate constructs. -/
+/-- Law (subject `ConcreteSpec.Core.KeyConstruct.descendantKey`).
+A different-kind sibling preserves the target's entire path, for every descendant route. -/
 theorem KeyConstruct.descendant_insert_differentKind (before after : List KeyConstruct)
-    (inserted target : KeyConstruct) (route : Numbers)
-    (avoids : KeyConstruct.SubtreeAvoidsKind inserted.kind target route) :
+    (inserted target : KeyConstruct) (route : Numbers) (different : inserted.kind ≠ target.kind) :
     target.descendantKey (before ++ inserted :: after) route =
       target.descendantKey (before ++ after) route := by
-  simp only [KeyConstruct.SubtreeAvoidsKind, KeyConstruct.subtreeAvoidsKind,
-    Bool.and_eq_true, bne_iff_ne] at avoids
-  rcases avoids with ⟨hne, hchild⟩
-  have hseg : target.segment (before ++ inserted :: after) = target.segment (before ++ after) := by
-    simp [KeyConstruct.segment, List.filter_append, hne]
-  cases hname : target.name with
-  | named _ =>
-    simp [KeyConstruct.descendantKey, KeyConstruct.childScope, hname, hseg]
-  | unnamed _ =>
-    rw [hname] at hchild
-    have hrec := KeyConstruct.pathAtIn_insert_differentKind target.children route before after inserted hchild
-    simp [KeyConstruct.descendantKey, KeyConstruct.childScope, hname, hseg, hrec]
+  have equal := congrArg FunctionRelativeKey.path (key_insert_differentKind before after inserted target different)
+  simp only [key, List.cons.injEq, and_true] at equal
+  simp only [descendantKey, childScope, equal]
 
 /-- Law (subject `ConcreteSpec.Core.KeyConstruct.descendantKey`, `ConcreteSpec.Core.ConstructName.isUnnamed`).
 Inserting a named sibling preserves complete descendant paths, not just root segments. -/
@@ -480,13 +388,9 @@ theorem KeyConstruct.descendant_insert_named (before after : List KeyConstruct)
   have hseg :
       target.segment (before ++ KeyConstruct.mk kind (.named label) children :: after) =
       target.segment (before ++ after) := by
-    simp [KeyConstruct.segment, List.filter_append, ConstructName.isUnnamed]
-  cases hname : target.name with
-  | named _ =>
-    simp [KeyConstruct.descendantKey, KeyConstruct.childScope, hname, hseg]
-  | unnamed _ =>
-    have hrec := KeyConstruct.pathAtIn_insert_named target.children route before after label kind children
-    simp [KeyConstruct.descendantKey, KeyConstruct.childScope, hname, hseg, hrec]
+    simp [KeyConstruct.segment, KeyConstruct.segmentAtOrdinal, KeyConstruct.countsToward,
+      List.filter_append, ConstructName.isUnnamed]
+  simp only [KeyConstruct.descendantKey, KeyConstruct.childScope, hseg]
 
 /-- Law (subject `ConcreteSpec.Core.KeyConstruct.pathAt`).
 **Inserting a sibling after a construct in a forest leaves that construct's and its descendants'
@@ -512,12 +416,12 @@ theorem KeyConstruct.pathAt_insert_named (before mid after : List KeyConstruct)
   rw [KeyConstruct.pathAt_at_length, KeyConstruct.pathAt_at_length]
   exact KeyConstruct.descendant_insert_named before mid label kind children target route
 
-/-- Law (subject `ConcreteSpec.Core.KeyConstruct.pathAt`, `ConcreteSpec.Core.KeyConstruct.SubtreeAvoidsKind`).
+/-- Law (subject `ConcreteSpec.Core.KeyConstruct.pathAt`).
 **Inserting a different-kind sibling before `target` in a forest shifts `target`'s raw child index
 without changing its assigned path.** -/
 theorem KeyConstruct.pathAt_insert_differentKind (before mid after : List KeyConstruct)
     (inserted target : KeyConstruct) (route : Numbers)
-    (avoids : KeyConstruct.SubtreeAvoidsKind inserted.kind target route) :
+    (different : inserted.kind ≠ target.kind) :
     KeyConstruct.pathAt
         ((before ++ inserted :: mid) ++ target :: after)
         ((before ++ inserted :: mid).length :: route) =
@@ -525,7 +429,7 @@ theorem KeyConstruct.pathAt_insert_differentKind (before mid after : List KeyCon
         ((before ++ mid) ++ target :: after)
         ((before ++ mid).length :: route) := by
   rw [KeyConstruct.pathAt_at_length, KeyConstruct.pathAt_at_length]
-  exact KeyConstruct.descendant_insert_differentKind before mid inserted target route avoids
+  exact KeyConstruct.descendant_insert_differentKind before mid inserted target route different
 
 /-- Helper (computation). Splits collection at a forest boundary, carrying all preceding roots
 into the suffix scope. Used to isolate actual subtree entries in the assigned table. -/
@@ -537,6 +441,141 @@ theorem KeyConstruct.collectKeysIn_append (scope before after : List KeyConstruc
   | cons root rest ih =>
     simp only [List.cons_append, collectKeysIn, ih]
     simp [List.append_assoc]
+
+namespace KeyConstruct
+
+/-- The effect of inserting one sibling on an existing later sibling's segment. -/
+def shiftSegment (inserted : KeyConstruct) (segment : KeySegment) : KeySegment :=
+  match segment.name with
+  | .ordinal n =>
+    if inserted.countsToward segment.kind then ⟨segment.kind, .ordinal (n + 1)⟩ else segment
+  | _ => segment
+
+/-- Only the first segment of a path relative to the edited parent can move. -/
+def shiftSibling (inserted : KeyConstruct) : FunctionRelativeKey → FunctionRelativeKey
+  | ⟨[]⟩ => ⟨[]⟩
+  | ⟨root :: suffix⟩ => ⟨shiftSegment inserted root :: suffix⟩
+
+private theorem segment_insert (before mid : List KeyConstruct) (inserted target : KeyConstruct) :
+    target.segment (before ++ inserted :: mid) = shiftSegment inserted (target.segment (before ++ mid)) := by
+  rcases target with ⟨kind, name, children⟩
+  cases name with
+  | named => rfl
+  | unnamed label =>
+    cases label with
+    | some => rfl
+    | none =>
+      cases h : inserted.countsToward kind <;>
+        simp [segment, segmentAtOrdinal, shiftSegment, List.filter_append, h, Nat.add_assoc]
+
+private theorem collectKeysIn_shift (before mid forest : List KeyConstruct) (inserted : KeyConstruct) :
+    collectKeysIn (before ++ inserted :: mid) forest =
+      (collectKeysIn (before ++ mid) forest).map (shiftSibling inserted) := by
+  induction forest generalizing mid with
+  | nil => simp [collectKeysIn]
+  | cons root rest ih =>
+    simp only [collectKeysIn, key, childScope, List.map_cons, List.map_append, List.map_map,
+      Function.comp_def, shiftSibling, segment_insert, List.append_assoc, List.cons_append]
+    rw [ih]
+
+private theorem collectKeysIn_replace (before mid forest : List KeyConstruct) (a b : KeyConstruct)
+    (kind : a.kind = b.kind) (unnamed : a.name.isUnnamed = b.name.isUnnamed) :
+    collectKeysIn (before ++ a :: mid) forest = collectKeysIn (before ++ b :: mid) forest := by
+  induction forest generalizing mid with
+  | nil => simp [collectKeysIn]
+  | cons root rest ih =>
+    simp only [collectKeysIn, key, childScope, segment_replace_same_unnamed before mid a b root kind unnamed,
+      List.append_assoc, List.cons_append]
+    rw [ih]
+
+/-- A location for a child list at any depth. Each enclosing frame remembers the parent
+and its direct siblings on both sides. -/
+inductive ParentContext where
+  | body
+  | children (outer : ParentContext) (before : List KeyConstruct) (parent : KeyConstruct)
+      (after : List KeyConstruct)
+
+/-- Fill the child list and reconstruct the enclosing function body. -/
+def ParentContext.fill : ParentContext → List KeyConstruct → List KeyConstruct
+  | .body, forest => forest
+  | .children outer before parent after, forest =>
+    outer.fill (before ++ {parent with children := forest} :: after)
+
+private def prependPath (segments : List KeySegment) (key : FunctionRelativeKey) : FunctionRelativeKey :=
+  ⟨segments ++ key.path⟩
+
+private theorem collectKeys_children (before after children : List KeyConstruct) (parent : KeyConstruct) :
+    collectKeys (before ++ {parent with children := children} :: after) =
+      collectKeys before ++ parent.key before ::
+        ((collectKeys children).map (prependPath [parent.segment before]) ++
+          collectKeysIn (before ++ [parent]) after) := by
+  simp only [collectKeys, collectKeysIn_append, List.nil_append, collectKeysIn, childScope]
+  rw [collectKeysIn_replace before [] after {parent with children := children} parent rfl rfl]
+  rfl
+
+/-- The full parent path and the preorder entries surrounding its child list. -/
+structure PreorderFrame where
+  parentPath : List KeySegment
+  earlier : List FunctionRelativeKey
+  later : List FunctionRelativeKey
+
+/-- Read the preorder split from the supplied context. Each parent header precedes its
+children, and the enclosing siblings retain their order on either side. -/
+def ParentContext.preorder : ParentContext → PreorderFrame
+  | .body => ⟨[], [], []⟩
+  | .children outer before parent after =>
+    let frame := outer.preorder
+    let underOuter := prependPath frame.parentPath
+    ⟨frame.parentPath ++ [parent.segment before],
+     frame.earlier ++ (collectKeys before).map underOuter ++ [underOuter (parent.key before)],
+     (collectKeysIn (before ++ [parent]) after).map underOuter ++ frame.later⟩
+
+private theorem ParentContext.collectKeys_fill (context : ParentContext) (forest : List KeyConstruct) :
+    collectKeys (context.fill forest) =
+      context.preorder.earlier ++ (collectKeys forest).map (prependPath context.preorder.parentPath) ++
+        context.preorder.later := by
+  induction context generalizing forest with
+  | body => simp [fill, preorder, show prependPath [] = id by funext key; rfl]
+  | children outer before parent after ih =>
+    rw [fill, ih, collectKeys_children]
+    simp [preorder, List.map_append, List.map_map, Function.comp_def, prependPath, List.append_assoc]
+
+/-- The two preorder key lists of an insertion at this context and sibling split.
+Both lists use the same enclosing path, unchanged prefix, and unchanged suffix. -/
+def ParentContext.InsertionKeys (context : ParentContext) (f : FnId)
+    (before after : List KeyConstruct) (inserted : KeyConstruct) (oldKeys newKeys : List StableKey) : Prop :=
+  let frame := context.preorder
+  let owner := fun key : FunctionRelativeKey => (⟨.function f, key⟩ : StableKey)
+  let underParent := fun key : FunctionRelativeKey => owner ⟨frame.parentPath ++ key.path⟩
+  let earlier := frame.earlier.map owner ++ (collectKeys before).map underParent
+  let later := frame.later.map owner
+  let siblings := collectKeysIn before after
+  oldKeys = earlier ++ siblings.map underParent ++ later ∧
+  newKeys = earlier ++ (collectKeysIn before [inserted]).map underParent ++
+    siblings.map (underParent ∘ shiftSibling inserted) ++ later
+
+/-- Law (subject `ConcreteSpec.Core.KeyConstruct.assignFunctionTable`).
+The context fixes the parent path and the surrounding preorder entries in both tables.
+The inserted subtree follows the parent's earlier children. Of the later siblings' paths,
+only a same-kind ordinal segment can increment, and only for an unnamed insertion. Every
+descendant retains its complete suffix, independently of the tables' lexical offsets. -/
+theorem assignFunctionTable_insert_locality (f : FnId) (oldStart newStart : Nat)
+    (context : ParentContext) (before after : List KeyConstruct) (inserted : KeyConstruct) :
+    context.InsertionKeys f before after inserted
+      (List.map Prod.snd (assignFunctionTable f oldStart (context.fill (before ++ after))))
+      (List.map Prod.snd (assignFunctionTable f newStart (context.fill (before ++ inserted :: after)))) := by
+  have split (forest : List KeyConstruct) : collectKeys (before ++ forest) =
+      collectKeys before ++ collectKeysIn before forest := by simp [collectKeys, collectKeysIn_append]
+  have changed : collectKeysIn before (inserted :: after) =
+      collectKeysIn before [inserted] ++ (collectKeysIn before after).map (shiftSibling inserted) := by
+    rw [show inserted :: after = [inserted] ++ after from rfl, collectKeysIn_append]
+    simpa only [List.append_nil] using congrArg (collectKeysIn before [inserted] ++ ·)
+      (collectKeysIn_shift before [] after inserted)
+  simp only [ParentContext.InsertionKeys, assignFunctionTable, numberFunctionKeys_snd,
+    ParentContext.collectKeys_fill, split, changed, List.map_append, List.map_map, Function.comp_def,
+    prependPath, List.append_assoc, and_self]
+
+end KeyConstruct
 
 /-- Law (subject `ConcreteSpec.Core.KeyConstruct.assignFunctionTable`).
 Replacing the outer forest of a named construct preserves its entire ordered assigned subtree:
@@ -558,7 +597,7 @@ theorem KeyConstruct.assignFunctionTable_named_scope (f : FnId) (start₁ start�
     collectKeysIn_append, List.map_append]
   simp only [← List.length_map (f := fun rel : FunctionRelativeKey =>
     (⟨.function f, rel⟩ : StableKey)), List.drop_left]
-  simp [collectKeysIn, KeyConstruct.key, KeyConstruct.segment, KeyConstruct.childScope,
+  simp [collectKeysIn, KeyConstruct.key, KeyConstruct.segment, KeyConstruct.segmentAtOrdinal, KeyConstruct.childScope,
     List.map_append, List.take_succ_cons]
 
 /-- Helper (computation). Computes the scope reset of a named root for
@@ -568,7 +607,7 @@ theorem KeyConstruct.descendant_named_ancestor_resets_scope
     (children : List KeyConstruct) (route : Numbers) :
     (KeyConstruct.mk kind (.named name) children).descendantKey preceding₁ route =
       (KeyConstruct.mk kind (.named name) children).descendantKey preceding₂ route := by
-  simp [KeyConstruct.descendantKey, KeyConstruct.childScope, KeyConstruct.segment]
+  simp [KeyConstruct.descendantKey, KeyConstruct.childScope, KeyConstruct.segment, KeyConstruct.segmentAtOrdinal]
 
 /-- Helper (computation). Transports the named-root scope equation through forest locators.
 This is not assignment soundness; `KeyConstruct.assignFunctionTable_named_scope` establishes
@@ -593,13 +632,7 @@ theorem KeyConstruct.descendant_rename_other (before after : List KeyConstruct)
       other.descendantKey (before ++ target :: after) route := by
   have hseg := KeyConstruct.segment_replace_same_unnamed before after (target.rename name) target other
     rfl (ConstructName.isUnnamed_rename target.name name)
-  cases hname : other.name with
-  | named _ =>
-    simp [KeyConstruct.descendantKey, KeyConstruct.childScope, hname, hseg]
-  | unnamed _ =>
-    have hrec := KeyConstruct.pathAtIn_replace_same_unnamed other.children route before after
-      (target.rename name) target rfl (ConstructName.isUnnamed_rename target.name name)
-    simp [KeyConstruct.descendantKey, KeyConstruct.childScope, hname, hseg, hrec]
+  simp only [KeyConstruct.descendantKey, KeyConstruct.childScope, hseg]
 
 /-- Law (subject `ConcreteSpec.Core.KeyConstruct.descendantKey`, `ConcreteSpec.Core.KeyConstruct.pin`).
 Pinning or unpinning a sibling's label cannot change the complete assigned path of any descendant
@@ -610,13 +643,7 @@ theorem KeyConstruct.descendant_pin_other (before after : List KeyConstruct)
       other.descendantKey (before ++ target :: after) route := by
   have hseg := KeyConstruct.segment_replace_same_unnamed before after (target.pin label) target other
     rfl (ConstructName.isUnnamed_pin target.name label)
-  cases hname : other.name with
-  | named _ =>
-    simp [KeyConstruct.descendantKey, KeyConstruct.childScope, hname, hseg]
-  | unnamed _ =>
-    have hrec := KeyConstruct.pathAtIn_replace_same_unnamed other.children route before after
-      (target.pin label) target rfl (ConstructName.isUnnamed_pin target.name label)
-    simp [KeyConstruct.descendantKey, KeyConstruct.childScope, hname, hseg, hrec]
+  simp only [KeyConstruct.descendantKey, KeyConstruct.childScope, hseg]
 
 /-- Helper (computation). Computes the renamed prefix over a descendant route for
 `KeyConstruct.assignFunctionTable_rename_named`. -/
@@ -626,7 +653,7 @@ theorem KeyConstruct.descendant_rename_named (preceding : List KeyConstruct)
       (KeyConstruct.pathAt children route).map (fun suffix =>
         ⟨⟨kind, .named name⟩ :: suffix.path⟩) := by
   simp [KeyConstruct.descendantKey, KeyConstruct.rename, ConstructName.rename,
-    KeyConstruct.segment, KeyConstruct.childScope, KeyConstruct.pathAt]
+    KeyConstruct.segment, KeyConstruct.segmentAtOrdinal, KeyConstruct.childScope, KeyConstruct.pathAt]
 
 /-- Helper (computation). Transports a located descendant through the occurrence/table
 correspondence; supplies no independent soundness evidence. -/
@@ -642,7 +669,7 @@ theorem KeyConstruct.assignFunctionTable_descendant_mem (f : FnId) (startSite : 
 
 /-- Law (subject `ConcreteSpec.Core.KeyConstruct.assignFunctionTable`, `ConcreteSpec.Core.KeyConstruct.rename`).
 Renaming a named root assigns the new name to the construct's own table entry and the new prefix to
-every actual descendant. Its suffix is resolved in a fresh named scope, regardless of preceding
+every actual descendant. Its suffix is resolved among the renamed parent’s children, regardless of preceding
 siblings of any kind. Sibling preservation is proved by `KeyConstruct.descendant_rename_other` and
 the occurrence/table correspondence. -/
 theorem KeyConstruct.assignFunctionTable_rename_named (f : FnId) (startSite : Nat)
@@ -665,11 +692,11 @@ theorem KeyConstruct.assignFunctionTable_rename_named (f : FnId) (startSite : Na
 
 /-- Law (subject `ConcreteSpec.Core.KeyConstruct.assignFunctionTable`, `ConcreteSpec.Core.KeyConstruct.pin`).
 Pinning an unnamed root assigns its label to the construct's own table entry and throughout its
-actual subtree while preserving the inherited named scope used to resolve the suffix. -/
+actual subtree. The suffix is resolved among the pinned root’s own children. -/
 theorem KeyConstruct.assignFunctionTable_pin (f : FnId) (startSite : Nat)
     (before after : List KeyConstruct) (kind : ConstructKind) (old : Option Name)
     (label : Name) (children : List KeyConstruct) (route : Numbers) (suffix : FunctionRelativeKey)
-    (found : pathAtIn before children route = some suffix) :
+    (found : pathAt children route = some suffix) :
     (⟨.function f, ⟨[⟨kind, .pinned label⟩]⟩⟩ : StableKey) ∈
       (List.map Prod.snd (assignFunctionTable f startSite
         (before ++ (KeyConstruct.mk kind (.unnamed old) children).pin (some label) :: after))) ∧
@@ -682,6 +709,7 @@ theorem KeyConstruct.assignFunctionTable_pin (f : FnId) (startSite : Nat)
     rfl
   · apply assignFunctionTable_descendant_mem f startSite before after _ route
     simp only [descendantKey, pin, ConstructName.pin, childScope, segment]
+    change (pathAt children route).map _ = _
     rw [found]
     rfl
 

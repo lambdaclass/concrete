@@ -31,7 +31,7 @@ Authority (all in `docs/decisions.md` on main):
 - `decided-project-facts-report`: typed identities and conditional evidence;
   Q9.1–Q9.3, Q9.6–Q9.8: fresh locals, nominal declarations, loops and primitives;
   OD77/OD148: no generic trait-method/trait-parameter category; OD109: capability-sensitive specialization.
-- `decided-2026-11-08-c9-identities`: structured stable keys, package name/version,
+- `decided-2026-11-08-c9-identities`, revised by `decided-2026-11-27-c9-siblings`: structured stable keys, package name/version,
   origin collision refusal, closed versioned premise categories; OD44: top-level collisions.
 - `decided-project-concrete-toml`, `decided-2026-11-07-stack-randomness`, OD80:
   the seven premise categories. Numeric wire tags are this schema's closed encoding.
@@ -343,8 +343,7 @@ inductive ConstructName where
   deriving DecidableEq, Repr
 
 /-- A named segment is keyed by its source item name; an unnamed segment with a user label by its
-pinned label; an unlabelled unnamed segment by its per-kind ordinal within the enclosing named
-scope. -/
+pinned label; an unlabelled unnamed segment by its per-kind ordinal among direct siblings. -/
 inductive SegmentName where
   | named (name : Name)
   | pinned (label : Name)
@@ -408,43 +407,69 @@ def KeyConstruct.rename (construct : KeyConstruct) (name : Name) : KeyConstruct 
 def KeyConstruct.pin (construct : KeyConstruct) (label : Option Name) : KeyConstruct :=
   { construct with name := construct.name.pin label }
 
-/-- The persistent segment assigned among these preceding constructs in the enclosing named scope.
-Named constructs do not consume unnamed ordinals; ordinals are per construct kind, and pinned labels
-replace ordinals in the emitted segment while still participating in the unnamed ordinal sequence. -/
-def KeyConstruct.segment (preceding : List KeyConstruct) (construct : KeyConstruct) : KeySegment :=
-  let ordinal := (preceding.filter fun sibling =>
-    sibling.kind == construct.kind && sibling.name.isUnnamed).length
+/-- A pinned sibling occupies an ordinal slot just like an unlabelled unnamed sibling. -/
+def KeyConstruct.countsToward (kind : ConstructKind) (sibling : KeyConstruct) : Bool :=
+  sibling.kind == kind && sibling.name.isUnnamed
+
+/-- Emit the name, pin, or sibling ordinal at one level of the path. -/
+def KeyConstruct.segmentAtOrdinal (construct : KeyConstruct) (ordinal : Nat) : KeySegment :=
   ⟨construct.kind, match construct.name with
     | .named name => .named name
     | .unnamed (some label) => .pinned label
     | .unnamed none => .ordinal ordinal⟩
 
-/-- The key of a construct root under its preceding constructs in the enclosing named scope. -/
+/-- Assign one segment using only the earlier children of the same parent. -/
+def KeyConstruct.segment (preceding : List KeyConstruct) (construct : KeyConstruct) : KeySegment :=
+  construct.segmentAtOrdinal (preceding.filter (countsToward construct.kind)).length
+
+/-- The key of a construct root under its preceding direct siblings. -/
 def KeyConstruct.key (preceding : List KeyConstruct) (construct : KeyConstruct) : FunctionRelativeKey :=
   ⟨[construct.segment preceding]⟩
 
-/-- The enclosing named scope passed to a construct's children: a `.named` construct establishes a
-fresh named scope (`[]`), whereas an `.unnamed` construct retains the enclosing named scope's
-preceding constructs (`localPreceding`) (docs/decisions.md#decided-2026-11-08-c9-identities). -/
-def KeyConstruct.childScope (localPreceding : List KeyConstruct) (construct : KeyConstruct) :
-    List KeyConstruct :=
-  match construct.name with
-  | .named _ => []
-  | .unnamed _ => localPreceding
+/-- Issue root keys for a list of direct siblings of one kind, retaining the caller's
+payload at each occurrence. The specification uses the actual preceding constructs. -/
+def KeyConstruct.mapSiblingKeys {α β : Type} (kind : ConstructKind) (name : α → ConstructName)
+    (emit : α → FunctionRelativeKey → β) (preceding : List KeyConstruct) : List α → List β
+  | [] => []
+  | item :: rest =>
+    let root : KeyConstruct := ⟨kind, name item, []⟩
+    emit item (root.key preceding) :: mapSiblingKeys kind name emit (preceding ++ [root]) rest
 
-/-- Assign the complete persistent path to an occurrence in a construct forest within an inherited
-unnamed-ancestor scope `scope`. The numeric route is only a locator in this particular syntax tree;
-no child index enters the assigned key. Every level counts its per-kind unnamed ordinal against
-`scope ++ forest.take index` and resets the child scope to `[]` only when entering a `.named`
-construct. -/
-def KeyConstruct.pathAtIn (scope : List KeyConstruct) (forest : List KeyConstruct) :
+private def KeyConstruct.mapSiblingKeysImpl {α β : Type} (kind : ConstructKind) (name : α → ConstructName)
+    (emit : α → FunctionRelativeKey → β) (preceding : List KeyConstruct) (items : List α) : List β :=
+  go (preceding.filter (countsToward kind)).length items
+where
+  go (ordinal : Nat) : List α → List β
+    | [] => []
+    | item :: rest =>
+      let root : KeyConstruct := ⟨kind, name item, []⟩
+      emit item ⟨[root.segmentAtOrdinal ordinal]⟩ ::
+        go (if root.countsToward kind then ordinal + 1 else ordinal) rest
+
+/-- Helper (computation). A single counter suffices for every remaining sibling of this kind. -/
+@[csimp] private theorem KeyConstruct.mapSiblingKeys_eq : @mapSiblingKeys = @mapSiblingKeysImpl := by
+  funext α β kind name emit preceding items
+  unfold mapSiblingKeysImpl
+  induction items generalizing preceding with
+  | nil => rfl
+  | cons item rest ih =>
+    cases h : countsToward kind ⟨kind, name item, []⟩ <;>
+      simp [mapSiblingKeys, mapSiblingKeysImpl.go, key, segment, ih, List.filter_append, h]
+
+/-- Each parent starts a fresh ordinal sequence for its children (C9, revised 2026-11-27). -/
+def KeyConstruct.childScope (_preceding : List KeyConstruct) (_construct : KeyConstruct) :
+    List KeyConstruct := []
+
+/-- Resolve an occurrence in a suffix of a sibling list. `preceding` holds the direct siblings
+before that suffix. The route locates the occurrence; the key contains its full segment path. -/
+def KeyConstruct.pathAtIn (preceding : List KeyConstruct) (forest : List KeyConstruct) :
     Numbers → Option FunctionRelativeKey
   | [] => some ⟨[]⟩
   | index :: route => do
     let construct ← forest[index]?
-    let localPreceding := scope ++ forest.take index
-    let descendant ← KeyConstruct.pathAtIn (construct.childScope localPreceding) construct.children route
-    pure ⟨construct.segment localPreceding :: descendant.path⟩
+    let siblings := preceding ++ forest.take index
+    let descendant ← KeyConstruct.pathAtIn (construct.childScope siblings) construct.children route
+    pure ⟨construct.segment siblings :: descendant.path⟩
 
 /-- Assign the complete persistent path to an occurrence from the root of an enclosing item's
 construct forest. -/
@@ -452,60 +477,13 @@ def KeyConstruct.pathAt (forest : List KeyConstruct) (route : Numbers) :
     Option FunctionRelativeKey :=
   KeyConstruct.pathAtIn [] forest route
 
-/-- Assign a descendant path beneath a located root with preceding constructs `preceding` in the
-enclosing named scope. -/
+/-- Assign a descendant path beneath a located root with earlier direct siblings `preceding`. -/
 def KeyConstruct.descendantKey (preceding : List KeyConstruct) (construct : KeyConstruct)
     (route : Numbers) : Option FunctionRelativeKey :=
   (KeyConstruct.pathAtIn (construct.childScope preceding) construct.children route).map
     fun descendant => ⟨construct.segment preceding :: descendant.path⟩
 
-/-- Check that every construct encountered along `route` in `forest` within the current enclosing
-named scope has kind different from `k`. Entering a `.named` construct starts a new named scope and
-needs no further check on `k`. -/
-def KeyConstruct.routeAvoidsKind (k : ConstructKind) : List KeyConstruct → Numbers → Bool
-  | _, [] => true
-  | forest, index :: route =>
-    match forest[index]? with
-    | none => true
-    | some construct =>
-      (k != construct.kind) &&
-        match construct.name with
-        | .named _ => true
-        | .unnamed _ => KeyConstruct.routeAvoidsKind k construct.children route
-
-/-- Every construct encountered along `route` in `forest` within the current enclosing named scope
-has kind different from `k`. -/
-def KeyConstruct.RouteAvoidsKind (k : ConstructKind) (forest : List KeyConstruct)
-    (route : Numbers) : Prop :=
-  KeyConstruct.routeAvoidsKind k forest route = true
-
-instance (k : ConstructKind) (forest : List KeyConstruct) (route : Numbers) :
-    Decidable (KeyConstruct.RouteAvoidsKind k forest route) := by
-  unfold KeyConstruct.RouteAvoidsKind
-  infer_instance
-
-/-- Check that every construct encountered from `target` along `route` within `target`'s enclosing
-named scope has kind different from `k`. -/
-def KeyConstruct.subtreeAvoidsKind (k : ConstructKind) (target : KeyConstruct)
-    (route : Numbers) : Bool :=
-  (k != target.kind) &&
-    match target.name with
-    | .named _ => true
-    | .unnamed _ => KeyConstruct.routeAvoidsKind k target.children route
-
-/-- Every construct encountered from `target` along `route` within `target`'s enclosing named scope
-has kind different from `k`. -/
-def KeyConstruct.SubtreeAvoidsKind (k : ConstructKind) (target : KeyConstruct)
-    (route : Numbers) : Prop :=
-  KeyConstruct.subtreeAvoidsKind k target route = true
-
-instance (k : ConstructKind) (target : KeyConstruct) (route : Numbers) :
-    Decidable (KeyConstruct.SubtreeAvoidsKind k target route) := by
-  unfold KeyConstruct.SubtreeAvoidsKind
-  infer_instance
-
-/-- Collect the persistent function-relative keys of a construct forest in order within the
-inherited unnamed-ancestor scope `scope`. -/
+/-- Collect keys in preorder. The scope contains earlier direct siblings of the forest roots. -/
 def KeyConstruct.collectKeysIn (scope : List KeyConstruct) :
     List KeyConstruct → List FunctionRelativeKey
   | [] => []
@@ -2013,9 +1991,9 @@ theorem example_Ordinals_are_per_kind_named_siblings : KeyConstruct.collectKeys
      ⟨[⟨.call, .ordinal 2⟩]⟩,
      ⟨[⟨.binding, .ordinal 1⟩]⟩] := by cbv
 
-/-- Entering a named construct resets the scope, but entering an unnamed one inherits it.
+/-- Entering either a named or an unnamed block starts its child ordinals at zero.
 Both the collector and the occurrence resolver must retain the complete ancestor path. -/
-theorem example_Entering_named_construct_resets_scope_but : let body : List KeyConstruct :=
+theorem example_block_children_start_at_zero : let body : List KeyConstruct :=
     [⟨.call, .unnamed none, []⟩,
      ⟨.block, .named ⟨"inner"⟩, [⟨.call, .unnamed none, []⟩]⟩,
      ⟨.block, .unnamed none,
@@ -2026,17 +2004,29 @@ theorem example_Entering_named_construct_resets_scope_but : let body : List KeyC
        ⟨[⟨.block, .named ⟨"inner"⟩⟩]⟩,
        ⟨[⟨.block, .named ⟨"inner"⟩⟩, ⟨.call, .ordinal 0⟩]⟩,
        ⟨[⟨.block, .ordinal 0⟩]⟩,
-       ⟨[⟨.block, .ordinal 0⟩, ⟨.call, .ordinal 1⟩]⟩,
-       ⟨[⟨.block, .ordinal 0⟩, ⟨.call, .ordinal 1⟩, ⟨.binding, .ordinal 0⟩]⟩] ∧
+       ⟨[⟨.block, .ordinal 0⟩, ⟨.call, .ordinal 0⟩]⟩,
+       ⟨[⟨.block, .ordinal 0⟩, ⟨.call, .ordinal 0⟩, ⟨.binding, .ordinal 0⟩]⟩] ∧
     KeyConstruct.pathAt body [1, 0] =
       some ⟨[⟨.block, .named ⟨"inner"⟩⟩, ⟨.call, .ordinal 0⟩]⟩ ∧
     KeyConstruct.pathAt body [2, 0, 0] =
-      some ⟨[⟨.block, .ordinal 0⟩, ⟨.call, .ordinal 1⟩, ⟨.binding, .ordinal 0⟩]⟩ := by cbv
+      some ⟨[⟨.block, .ordinal 0⟩, ⟨.call, .ordinal 0⟩, ⟨.binding, .ordinal 0⟩]⟩ := by cbv
 
-/-- Descendant assignment retains a pinned ancestor and inherited per-kind ordinals. -/
-theorem example_Descendant_assignment_retains_pinned_ancestor_and : KeyConstruct.descendantKey [⟨.call, .unnamed none, []⟩]
+/-- A pinned ancestor retains its label and starts fresh ordinals for its children. -/
+theorem example_pinned_block_children_start_at_zero : KeyConstruct.descendantKey [⟨.call, .unnamed none, []⟩]
     ⟨.block, .unnamed (some ⟨"outer"⟩), [⟨.call, .unnamed none, []⟩]⟩ [0] =
-    some ⟨[⟨.block, .pinned ⟨"outer"⟩⟩, ⟨.call, .ordinal 1⟩]⟩ := by cbv
+    some ⟨[⟨.block, .pinned ⟨"outer"⟩⟩, ⟨.call, .ordinal 0⟩]⟩ := by cbv
+
+/-- An early call shifts the block's lexical site. The call inside it keeps its full key. -/
+theorem example_early_call_preserves_nested_key :
+    let f : FnId := ⟨loadedA.module, ⟨"f"⟩⟩
+    let call : KeyConstruct := ⟨.call, .unnamed none, []⟩
+    let block : KeyConstruct := ⟨.block, .unnamed none, [call]⟩
+    let key : StableKey := ⟨.function f, ⟨[⟨.block, .ordinal 0⟩, ⟨.call, .ordinal 0⟩]⟩⟩
+    AList.lookup (KeyConstruct.assignFunctionTable f 0 [block]) ⟨1⟩ = some key ∧
+    AList.lookup (KeyConstruct.assignFunctionTable f 0 [call, block]) ⟨2⟩ = some key := by
+  simp only [KeyConstruct.assignFunctionTable, KeyConstruct.collectKeys, KeyConstruct.collectKeysIn,
+    List.map_cons, List.map_nil, List.cons_append, List.nil_append, KeyConstruct.numberFunctionKeys]
+  decide
 
 /-- Assigned tables attach every key, in preorder, to its actual owner and sequential sites
 starting at a nonzero offset. Program assignment uses the selected function's body and offset. -/

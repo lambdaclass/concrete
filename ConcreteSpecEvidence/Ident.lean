@@ -113,6 +113,42 @@ def nestedPath : FunctionRelativeKey :=
   ⟨[⟨.block, .ordinal 0⟩, ⟨.loop, .ordinal 0⟩, ⟨.primitive, .pinned ⟨"effect"⟩⟩]⟩
 def insertedCall : KeyConstruct := ⟨.call, .unnamed none, []⟩
 
+private def callBlock (name : String) : KeyConstruct :=
+  ⟨.block, .named ⟨name⟩, [insertedCall]⟩
+
+/-- In [L { call }, R { call }], focus on L's children. -/
+def leftBlock : KeyConstruct.ParentContext :=
+  .children .body [] (callBlock "L") [callBlock "R"]
+
+private def blockKey (name : String) (calls : List KeySegment := []) : StableKey :=
+  ⟨.function function, ⟨⟨.block, .named ⟨name⟩⟩ :: calls⟩⟩
+
+private def afterLeftInsertion : List StableKey :=
+  [blockKey "L", blockKey "L" [⟨.call, .ordinal 0⟩], blockKey "L" [⟨.call, .ordinal 1⟩],
+   blockKey "R", blockKey "R" [⟨.call, .ordinal 0⟩]]
+
+/-- Instance (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_insert_locality`, case `ConcreteSpec.Core.Vacuity.leftBlock`). -/
+theorem assignFunctionTable_insert_locality_example_leftBlock :
+    List.map Prod.snd (KeyConstruct.assignFunctionTable function 0
+      (leftBlock.fill [insertedCall, insertedCall])) = afterLeftInsertion := by
+  with_unfolding_all exact
+    (KeyConstruct.assignFunctionTable_insert_locality function 0 0 leftBlock [] [insertedCall] insertedCall).2
+
+/-- Issue the table for an insertion before R's call, leaving L untouched. -/
+def insertUnderRight : SiteKeyTable :=
+  let right : KeyConstruct.ParentContext := .children .body [callBlock "L"] (callBlock "R") []
+  KeyConstruct.assignFunctionTable function 0 (right.fill [insertedCall, insertedCall])
+
+/-- Planted (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_insert_locality`, case `ConcreteSpec.Core.Vacuity.leftBlock`, subject `ConcreteSpec.Core.KeyConstruct.assignFunctionTable`, mutant `ConcreteSpec.Core.Vacuity.insertUnderRight`). -/
+theorem assignFunctionTable_insert_locality_planted_leftBlock_insertUnderRight :
+    ¬ leftBlock.InsertionKeys function [] [insertedCall] insertedCall
+      (List.map Prod.snd (KeyConstruct.assignFunctionTable function 0 (leftBlock.fill [insertedCall])))
+      (List.map Prod.snd insertUnderRight) := by
+  intro wrong
+  have different : List.map Prod.snd insertUnderRight ≠ afterLeftInsertion :=
+    of_decide_eq_true (by with_unfolding_all rfl)
+  with_unfolding_all exact different wrong.2
+
 /-- Mutant collector that reproduces the old omission of every descendant. -/
 def shallowCollect (scope : List KeyConstruct) : List KeyConstruct → List FunctionRelativeKey
   | [] => []
@@ -159,7 +195,7 @@ theorem collectKeysIn_collectionSound_planted_nestedBody_unprefixedCollect : ¬ 
     (unprefixedCollect [] [nestedBody]) := by
   intro sound
   obtain ⟨route, nonempty, found⟩ := sound ⟨[⟨.loop, .ordinal 0⟩]⟩ (by
-    simp [unprefixedCollect, nestedBody, KeyConstruct.key, KeyConstruct.segment,
+    simp [unprefixedCollect, nestedBody, KeyConstruct.key, KeyConstruct.segment, KeyConstruct.segmentAtOrdinal,
       KeyConstruct.childScope])
   cases route with
   | nil => exact nonempty rfl
@@ -175,7 +211,7 @@ theorem collectKeysIn_collectionSound_planted_nestedBody_unprefixedCollect : ¬ 
         cases found
       | some suffix =>
         rw [hchild] at found
-        simp [nestedBody, KeyConstruct.segment] at found
+        simp [nestedBody, KeyConstruct.segment, KeyConstruct.segmentAtOrdinal] at found
     | succ n =>
       simp [KeyConstruct.pathAtIn] at found
 
@@ -222,12 +258,12 @@ theorem assignFunctionTable_lookup_planted_nestedBody_shallowAssign : ¬ (AList.
   intro equal
   have found := equal.mpr ⟨by
     simp [KeyConstruct.collectKeys, KeyConstruct.collectKeysIn, nestedBody, nestedPath,
-      KeyConstruct.key, KeyConstruct.segment, KeyConstruct.childScope],
+      KeyConstruct.key, KeyConstruct.segment, KeyConstruct.segmentAtOrdinal, KeyConstruct.childScope],
     [0, 0, 0], by decide, by decide⟩
   revert found
   decide
 
-/-- Suffix below the toy block, independently resolved in its named scope. -/
+/-- Suffix below the toy block, independently resolved among its children. -/
 def nestedSuffix : FunctionRelativeKey := ⟨[⟨.loop, .ordinal 0⟩, ⟨.primitive, .pinned ⟨"effect"⟩⟩]⟩
 def renamedRootKey : FunctionRelativeKey := ⟨[⟨.block, .named ⟨"new"⟩⟩]⟩
 def renamedPath : FunctionRelativeKey := ⟨⟨.block, .named ⟨"new"⟩⟩ :: nestedSuffix.path⟩
@@ -280,7 +316,7 @@ theorem assignFunctionTable_named_scope_planted_namedNested_unresetScopeAssign :
           (KeyConstruct.collectKeys [KeyConstruct.mk .block (.named ⟨"body"⟩) nestedBody.children]).length) := by
   simp [unresetScopeAssign, KeyConstruct.numberFunctionKeys_snd, unresetScopeCollect,
     KeyConstruct.collectKeys, KeyConstruct.collectKeysIn, KeyConstruct.key,
-    KeyConstruct.segment, KeyConstruct.childScope, ConstructName.isUnnamed,
+    KeyConstruct.segment, KeyConstruct.segmentAtOrdinal, KeyConstruct.countsToward, KeyConstruct.childScope, ConstructName.isUnnamed,
     unnamedLoop, nestedBody, namedCall, unnamedBinding]
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_rename_named`, case `ConcreteSpec.Core.Vacuity.namedNested`). -/
@@ -305,7 +341,7 @@ theorem assignFunctionTable_rename_named_planted_namedNested_noopRename : KeyCon
   rintro ⟨member, _⟩
   simp [KeyConstruct.assignFunctionTable, KeyConstruct.numberFunctionKeys_snd,
     KeyConstruct.collectKeys, KeyConstruct.collectKeysIn, noopRename, unnamedLoop, nestedBody,
-    renamedRootKey, KeyConstruct.key, KeyConstruct.segment, KeyConstruct.childScope] at member
+    renamedRootKey, KeyConstruct.key, KeyConstruct.segment, KeyConstruct.segmentAtOrdinal, KeyConstruct.childScope] at member
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_rename_named`, case `ConcreteSpec.Core.Vacuity.namedNested`, subject `ConcreteSpec.Core.KeyConstruct.assignFunctionTable`, mutant `ConcreteSpec.Core.Vacuity.unresetScopeAssign`). -/
 theorem assignFunctionTable_rename_named_planted_namedNested_unresetScopeAssign : KeyConstruct.pathAt nestedBody.children [0, 0] = some nestedSuffix ∧
@@ -319,7 +355,7 @@ theorem assignFunctionTable_rename_named_planted_namedNested_unresetScopeAssign 
   rintro ⟨_, member⟩
   simp [unresetScopeAssign, KeyConstruct.numberFunctionKeys_snd, unresetScopeCollect,
     KeyConstruct.rename, ConstructName.rename, unnamedLoop, nestedBody, renamedPath, nestedSuffix,
-    KeyConstruct.key, KeyConstruct.segment] at member
+    KeyConstruct.key, KeyConstruct.segment, KeyConstruct.segmentAtOrdinal] at member
   revert member
   decide
 
@@ -345,7 +381,7 @@ theorem assignFunctionTable_rename_named_planted_namedCall_noopRename : KeyConst
   rintro ⟨member, _⟩
   simp [KeyConstruct.assignFunctionTable, KeyConstruct.numberFunctionKeys_snd,
     KeyConstruct.collectKeys, KeyConstruct.collectKeysIn, noopRename, KeyConstruct.key,
-    KeyConstruct.segment] at member
+    KeyConstruct.segment, KeyConstruct.segmentAtOrdinal] at member
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_pin`, case `ConcreteSpec.Core.Vacuity.nestedBody`). -/
 theorem assignFunctionTable_pin_example_nestedBody : (⟨.function function, pinnedRootKey⟩ : StableKey) ∈
@@ -358,7 +394,7 @@ theorem assignFunctionTable_pin_example_nestedBody : (⟨.function function, pin
     [0, 0] nestedSuffix (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_pin`, case `ConcreteSpec.Core.Vacuity.nestedBody`, subject `ConcreteSpec.Core.KeyConstruct.pin`, mutant `ConcreteSpec.Core.Vacuity.noopPin`). -/
-theorem assignFunctionTable_pin_planted_nestedBody_noopPin : KeyConstruct.pathAtIn [] nestedBody.children [0, 0] = some nestedSuffix ∧
+theorem assignFunctionTable_pin_planted_nestedBody_noopPin : KeyConstruct.pathAt nestedBody.children [0, 0] = some nestedSuffix ∧
     ¬ ((⟨.function function, pinnedRootKey⟩ : StableKey) ∈
         (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7
           ([] ++ noopPin (KeyConstruct.mk .block (.unnamed none) nestedBody.children) (some ⟨"pin"⟩) :: []))) ∧
@@ -369,7 +405,7 @@ theorem assignFunctionTable_pin_planted_nestedBody_noopPin : KeyConstruct.pathAt
   rintro ⟨member, _⟩
   simp [KeyConstruct.assignFunctionTable, KeyConstruct.numberFunctionKeys_snd,
     KeyConstruct.collectKeys, KeyConstruct.collectKeysIn, noopPin, nestedBody, pinnedRootKey,
-    KeyConstruct.key, KeyConstruct.segment, KeyConstruct.childScope] at member
+    KeyConstruct.key, KeyConstruct.segment, KeyConstruct.segmentAtOrdinal, KeyConstruct.childScope] at member
 
 /-- Instance (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_pin`, case `ConcreteSpec.Core.Vacuity.unnamedBinding`). -/
 theorem assignFunctionTable_pin_example_unnamedBinding : (⟨.function function, ⟨[⟨.binding, .pinned ⟨"pinned"⟩⟩]⟩⟩ : StableKey) ∈
@@ -381,7 +417,7 @@ theorem assignFunctionTable_pin_example_unnamedBinding : (⟨.function function,
   KeyConstruct.assignFunctionTable_pin function 7 [] [] .binding none ⟨"pinned"⟩ [] [] ⟨[]⟩ rfl
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_pin`, case `ConcreteSpec.Core.Vacuity.unnamedBinding`, subject `ConcreteSpec.Core.KeyConstruct.pin`, mutant `ConcreteSpec.Core.Vacuity.noopPin`). -/
-theorem assignFunctionTable_pin_planted_unnamedBinding_noopPin : KeyConstruct.pathAtIn [] ([] : List KeyConstruct) [] = some ⟨[]⟩ ∧
+theorem assignFunctionTable_pin_planted_unnamedBinding_noopPin : KeyConstruct.pathAt ([] : List KeyConstruct) [] = some ⟨[]⟩ ∧
     ¬ ((⟨.function function, ⟨[⟨.binding, .pinned ⟨"pinned"⟩⟩]⟩⟩ : StableKey) ∈
         (List.map Prod.snd (KeyConstruct.assignFunctionTable function 7
           ([] ++ noopPin (KeyConstruct.mk .binding (.unnamed none) []) (some ⟨"pinned"⟩) :: []))) ∧
@@ -392,7 +428,7 @@ theorem assignFunctionTable_pin_planted_unnamedBinding_noopPin : KeyConstruct.pa
   rintro ⟨member, _⟩
   simp [KeyConstruct.assignFunctionTable, KeyConstruct.numberFunctionKeys_snd,
     KeyConstruct.collectKeys, KeyConstruct.collectKeysIn, noopPin, KeyConstruct.key,
-    KeyConstruct.segment] at member
+    KeyConstruct.segment, KeyConstruct.segmentAtOrdinal] at member
 
 /-- A bad assignment that uses one ordinal across all unnamed construct kinds. -/
 def allKindsOrdinal (preceding : List KeyConstruct) (target : KeyConstruct) : FunctionRelativeKey :=
@@ -472,7 +508,7 @@ theorem descendant_insert_differentKind_example_nestedBody : nestedBody.descenda
   KeyConstruct.descendant_insert_differentKind [] [] insertedCall nestedBody [0, 0] (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.descendant_insert_differentKind`, case `ConcreteSpec.Core.Vacuity.nestedBody`, subject `ConcreteSpec.Core.KeyConstruct.descendantKey`, mutant `ConcreteSpec.Core.Vacuity.allKindsDescendantKey`). -/
-theorem descendant_insert_differentKind_planted_nestedBody_allKindsDescendantKey : KeyConstruct.SubtreeAvoidsKind insertedCall.kind nestedBody [0, 0] ∧
+theorem descendant_insert_differentKind_planted_nestedBody_allKindsDescendantKey : insertedCall.kind ≠ nestedBody.kind ∧
     ¬ (allKindsDescendantKey ([] ++ insertedCall :: []) nestedBody [0, 0] =
       allKindsDescendantKey ([] ++ []) nestedBody [0, 0]) :=
   ⟨by decide, by decide⟩
@@ -559,7 +595,7 @@ theorem pathAt_insert_differentKind_example_nestedBody : KeyConstruct.pathAt
   KeyConstruct.pathAt_insert_differentKind [] [] [] insertedCall nestedBody [0, 0] (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.KeyConstruct.pathAt_insert_differentKind`, case `ConcreteSpec.Core.Vacuity.nestedBody`, subject `ConcreteSpec.Core.KeyConstruct.pathAt`, mutant `ConcreteSpec.Core.Vacuity.allKindsPathAt`). -/
-theorem pathAt_insert_differentKind_planted_nestedBody_allKindsPathAt : KeyConstruct.SubtreeAvoidsKind insertedCall.kind nestedBody [0, 0] ∧
+theorem pathAt_insert_differentKind_planted_nestedBody_allKindsPathAt : insertedCall.kind ≠ nestedBody.kind ∧
     ¬ (allKindsPathAt
         (([] ++ insertedCall :: []) ++ nestedBody :: [])
         (([] ++ insertedCall :: []).length :: [0, 0]) =
