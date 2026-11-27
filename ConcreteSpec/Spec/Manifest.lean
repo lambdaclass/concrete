@@ -165,17 +165,32 @@ where
       if bareKeyChar c then invalid (offset + 1) cs
       else some ⟨offset, offset + c.utf8Size⟩
 
-private def path (eof : ByteSpan) : Nat → List Token → Except Error (List String × List Token)
+-- Successful parses return a remainder bounded by the number of input tokens.
+-- The proof is erased. A caller consuming a delimiter can recurse on a shorter list.
+private abbrev Remainder (n : Nat) := { rest : List Token // rest.length ≤ n }
+
+private def Remainder.weaken {m n : Nat} (rest : Remainder m) (h : m ≤ n) : Remainder n :=
+  ⟨rest.val, Nat.le_trans rest.property h⟩
+
+private def path (eof : ByteSpan) : Nat → (ts : List Token) →
+    Except Error (List String × Remainder ts.length)
   | _, [] => .error (.malformed eof)
   | 0, tok :: _ => .error (pathLimitError tok)
   | budget + 1, tok :: ⟨.mark '.', _⟩ :: rest => do
     let segment ← key tok
-    let (suffix, rest) ← path eof budget rest
-    return (segment :: suffix, rest)
-  | _ + 1, tok :: rest => do return ([← key tok], rest)
+    let (suffix, tail) ← path eof budget rest
+    return (segment :: suffix, tail.weaken (by simp +arith))
+  | _ + 1, tok :: rest => do return ([← key tok], ⟨rest, by simp⟩)
 
-private def skipLines (tokens : List Token) : List Token :=
-  tokens.dropWhile (fun tok => tok.kind matches .mark '\n')
+private def skipLines (tokens : List Token) : Remainder tokens.length :=
+  ⟨tokens.dropWhile (fun tok => tok.kind matches .mark '\n'), (List.dropWhile_suffix _).length_le⟩
+
+private def consumeMark (eof : ByteSpan) (mark : Char) (tokens : List Token) :
+    Except Error { rest : List Token // rest.length < tokens.length } :=
+  match tokens with
+  | ⟨.mark c, _⟩ :: rest =>
+    if c == mark then .ok ⟨rest, by simp⟩ else .error (.malformed (look eof tokens))
+  | _ => .error (.malformed (look eof tokens))
 
 private def decimalInteger (text : String) : Bool :=
   let digits := match text.toList with
@@ -186,44 +201,59 @@ private def decimalInteger (text : String) : Bool :=
   | '0' :: rest => rest.isEmpty
   | _ => digits.all (fun c => '0' ≤ c && c ≤ '9')
 
--- Container children use a strictly smaller budget, while siblings use token fuel.
-private def value (eof : ByteSpan) : Nat → Nat → List Token → Except Error (List Token)
-  | 0, _, tokens => .error (.malformed (look eof tokens))
-  | fuel + 1, budget, tokens =>
-    match tokens with
-    | ⟨.quoted _ contents, _⟩ :: rest => contents.mapError Error.malformed *> .ok rest
-    | ⟨.bare atom, span⟩ :: rest =>
-      if atom == "true" || atom == "false" || decimalInteger atom then .ok rest
-      else .error (.malformed span)
-    | ⟨.mark '[', span⟩ :: rest => array span fuel budget (skipLines rest)
-    | ⟨.mark '{', span⟩ :: rest => inlineTable span fuel budget [] rest
-    | _ => .error (.malformed (look eof tokens))
-termination_by fuel _ _ => fuel
+-- A container has consumed its opener before it asks for a child. At the
+-- same token count a container may enter value, which has the lower phase.
+private def value (eof : ByteSpan) (budget : Nat) (tokens : List Token) :
+    Except Error (Remainder tokens.length) := do
+  match ht : tokens with
+  | ⟨.quoted _ contents, _⟩ :: rest => contents.mapError Error.malformed *> pure ⟨rest, by simp [ht]⟩
+  | ⟨.bare atom, span⟩ :: rest =>
+    if atom == "true" || atom == "false" || decimalInteger atom then return ⟨rest, by simp [ht]⟩
+    else throw (.malformed span)
+  | ⟨.mark '[', span⟩ :: rest =>
+    let ⟨items, shorter⟩ := skipLines rest
+    array span budget items (by simp_all <;> omega)
+  | ⟨.mark '{', span⟩ :: rest =>
+    inlineTable span budget [] rest (by simp [ht])
+  | _ => throw (.malformed (look eof tokens))
+termination_by (tokens.length, 0)
+decreasing_by all_goals (try simp_all +arith) <;> omega
 where
-  array (opener : ByteSpan) : Nat → Nat → List Token → Except Error (List Token)
-    | _, 0, _ => .error (.depth opener)
-    | 0, _, tokens => .error (.malformed (look eof tokens))
-    | _ + 1, _ + 1, ⟨.mark ']', _⟩ :: rest => .ok rest
-    | fuel + 1, budget + 1, tokens => do
-      match skipLines (← value eof fuel budget tokens) with
-      | ⟨.mark ']', _⟩ :: rest => return rest
-      | ⟨.mark ',', _⟩ :: rest => array opener fuel (budget + 1) (skipLines rest)
-      | tail => throw (.malformed (look eof tail))
-  termination_by fuel _ _ => fuel
-  inlineTable (opener : ByteSpan) : Nat → Nat → List (List String) → List Token → Except Error (List Token)
-    | _, 0, _, _ => .error (.depth opener)
-    | 0, _, _, tokens => .error (.malformed (look eof tokens))
-    | _ + 1, _ + 1, [], ⟨.mark '}', _⟩ :: rest => .ok rest
-    | fuel + 1, remaining + 1, seen, tokens => do
-      let (segments, tail) ← path eof remaining tokens
-      let ⟨.mark '=', _⟩ :: rest := tail | throw (.malformed (look eof tail))
-      if seen.any (fun p => p.isPrefixOf segments || segments.isPrefixOf p) then
-        throw (.malformed (look eof tokens))
-      match ← value eof fuel (remaining - segments.length) rest with
-      | ⟨.mark '}', _⟩ :: rest => return rest
-      | ⟨.mark ',', _⟩ :: rest => inlineTable opener fuel (remaining + 1) (segments :: seen) rest
-      | tail => throw (.malformed (look eof tail))
-  termination_by fuel _ _ _ => fuel
+  -- Keep the enclosing bound across siblings so the comma branches are tail calls.
+  array {bound : Nat} (opener : ByteSpan) (budget : Nat) (tokens : List Token)
+      (within : tokens.length ≤ bound) : Except Error (Remainder bound) := do
+    match budget, ht : tokens with
+    | 0, _ => throw (.depth opener)
+    | _ + 1, ⟨.mark ']', _⟩ :: rest => return ⟨rest, by simp_all <;> omega⟩
+    | remaining + 1, ts =>
+      let ⟨tail, parsed⟩ ← value eof remaining ts
+      let ⟨afterLines, skipped⟩ := skipLines tail
+      match h : afterLines with
+      | ⟨.mark ']', _⟩ :: rest => return ⟨rest, by simp_all <;> omega⟩
+      | ⟨.mark ',', _⟩ :: rest =>
+        let ⟨next, skippedRest⟩ := skipLines rest
+        array opener (remaining + 1) next (by simp_all <;> omega)
+      | rest => throw (.malformed (look eof rest))
+  termination_by (tokens.length, 1)
+  decreasing_by all_goals (try simp_all +arith) <;> omega
+  inlineTable {bound : Nat} (opener : ByteSpan) (budget : Nat) (seen : List (List String))
+      (tokens : List Token) (within : tokens.length ≤ bound) : Except Error (Remainder bound) := do
+    match budget, seen, ht : tokens with
+    | 0, _, _ => throw (.depth opener)
+    | _ + 1, [], ⟨.mark '}', _⟩ :: rest => return ⟨rest, by simp_all <;> omega⟩
+    | remaining + 1, keys, ts =>
+      let (segments, ⟨tail, keyed⟩) ← path eof remaining ts
+      let ⟨rest, consumed⟩ ← consumeMark eof '=' tail
+      if keys.any (fun p => p.isPrefixOf segments || segments.isPrefixOf p) then
+        throw (.malformed (look eof ts))
+      let ⟨afterValue, parsed⟩ ← value eof (remaining - segments.length) rest
+      match h : afterValue with
+      | ⟨.mark '}', _⟩ :: rest => return ⟨rest, by simp_all <;> omega⟩
+      | ⟨.mark ',', _⟩ :: rest =>
+        inlineTable opener (remaining + 1) (segments :: keys) rest (by simp_all <;> omega)
+      | rest => throw (.malformed (look eof rest))
+  termination_by (tokens.length, 1)
+  decreasing_by all_goals (try simp_all +arith) <;> omega
 
 private structure Definitions where
   explicitTables : List (List String) := []
@@ -237,39 +267,40 @@ private def dottedPrefixes (header : List String) : List String → List (List S
     let tablePath := header ++ [segment]
     tablePath :: dottedPrefixes tablePath (next :: rest)
 
-private def document (eof : ByteSpan) (limit : Nat) :
-    Nat → List String → Definitions → List Token → Except Error Unit
-  | _, _, _, [] => .ok ()
-  | 0, _, _, tokens => .error (.malformed (look eof tokens))
-  | fuel + 1, header, defs, tokens =>
-    match tokens with
-    | ⟨.mark '\n', _⟩ :: rest => document eof limit fuel header defs rest
-    | ⟨.mark '[', _⟩ :: rest => do
-      let (segments, afterPath) ← path eof limit rest
-      let ⟨.mark ']', _⟩ :: tail := afterPath | throw (.malformed (look eof afterPath))
-      if defs.explicitTables.contains segments || defs.dottedTables.contains segments ||
-          defs.keys.any (·.isPrefixOf segments) then throw (.malformed (look eof rest))
-      unless tail.isEmpty || (tail.head?.map Token.kind matches some (.mark '\n')) do
-        throw (.malformed (look eof tail))
-      document eof limit fuel segments { defs with explicitTables := segments :: defs.explicitTables } tail
-    | _ => do
-      let (segments, afterPath) ← path eof (limit - header.length) tokens
-      let ⟨.mark '=', _⟩ :: rest := afterPath | throw (.malformed (look eof afterPath))
-      let full := header ++ segments
-      if defs.keys.any (fun p => p.isPrefixOf full || full.isPrefixOf p) ||
-          defs.explicitTables.any (fun table =>
-            full.isPrefixOf table ||
-              (header != table && header.isPrefixOf table && table.isPrefixOf full)) then throw (.malformed (look eof tokens))
-      let tail ← value eof (fuel + 1) (limit - full.length) rest
-      unless tail.isEmpty || (tail.head?.map Token.kind matches some (.mark '\n')) do
-        throw (.malformed (look eof tail))
-      document eof limit fuel header
-        { defs with keys := full :: defs.keys
-                    dottedTables := dottedPrefixes header segments ++ defs.dottedTables } tail
+private def document (eof : ByteSpan) (limit : Nat) (header : List String) (defs : Definitions)
+    (tokens : List Token) : Except Error Unit :=
+  match _h : tokens with
+  | [] => .ok ()
+  | ⟨.mark '\n', _⟩ :: rest => document eof limit header defs rest
+  | ⟨.mark '[', _⟩ :: rest => do
+    let (segments, ⟨afterPath, _keyed⟩) ← path eof limit rest
+    let ⟨tail, _consumed⟩ ← consumeMark eof ']' afterPath
+    if defs.explicitTables.contains segments || defs.dottedTables.contains segments ||
+        defs.keys.any (·.isPrefixOf segments) then throw (.malformed (look eof rest))
+    unless tail.isEmpty || (tail.head?.map Token.kind matches some (.mark '\n')) do
+      throw (.malformed (look eof tail))
+    document eof limit segments { defs with explicitTables := segments :: defs.explicitTables } tail
+  | _ => do
+    let (segments, ⟨afterPath, _keyed⟩) ← path eof (limit - header.length) tokens
+    let ⟨rest, _consumed⟩ ← consumeMark eof '=' afterPath
+    let full := header ++ segments
+    if defs.keys.any (fun p => p.isPrefixOf full || full.isPrefixOf p) ||
+        defs.explicitTables.any (fun table =>
+          full.isPrefixOf table ||
+            (header != table && header.isPrefixOf table && table.isPrefixOf full)) then throw (.malformed (look eof tokens))
+    let ⟨tail, _parsed⟩ ← value eof (limit - full.length) rest
+    unless tail.isEmpty || (tail.head?.map Token.kind matches some (.mark '\n')) do
+      throw (.malformed (look eof tail))
+    document eof limit header
+      { defs with keys := full :: defs.keys
+                  dottedTables := dottedPrefixes header segments ++ defs.dottedTables } tail
+
+termination_by tokens.length
+decreasing_by all_goals (try simp_all +arith) <;> omega
 
 def validate (limit : Nat) (text : String) : Except Error Unit :=
   let fuel := text.utf8ByteSize + 1
-  document ⟨text.utf8ByteSize, text.utf8ByteSize⟩ limit fuel [] {} (lex fuel 0 text.toList [])
+  document ⟨text.utf8ByteSize, text.utf8ByteSize⟩ limit [] {} (lex fuel 0 text.toList [])
 
 def byteLimit : Nat := 64 * 1024
 
@@ -309,7 +340,7 @@ instance (text : String) : Decidable (SyntaxAccepted text) :=
 
 def sizeRule : Core.RuleId := ⟨``SizeAccepted, 1⟩
 def encodingRule : Core.RuleId := ⟨``EncodingAccepted, 1⟩
-def depthRule : Core.RuleId := ⟨``DepthAccepted, 1⟩
+def depthRule : Core.RuleId := ⟨``DepthAccepted, 2⟩
 def syntaxRule : Core.RuleId := ⟨``SyntaxAccepted, 1⟩
 
 end ConcreteSpec.Project.Manifest

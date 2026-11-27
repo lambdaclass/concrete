@@ -5,9 +5,9 @@ from tempfile import TemporaryDirectory
 
 driver = Path(".lake/build/bin/concrete").resolve()
 cases = [
-    ("main.con", "let x: u8 = 1; let x {} = x; return 0;", "Slice0Rules.AdmittedProduction@2", "file 0", "39..40", ""),
-    ("main.con", "let Option {} = 1; return 0;", "Slice0Rules.AdmittedProduction@2", "file 0", "29..30", ""),
-    ("main.con", "let main {} = 1; return 0;", "Slice0Rules.AdmittedProduction@2", "file 0", "27..28", ""),
+    ("main.con", "let x: u8 = 1; let x {} = x; return 0;", "Slice0Rules.AdmittedProduction@3", "file 0", "39..40", ""),
+    ("main.con", "let Option {} = 1; return 0;", "Slice0Rules.AdmittedProduction@3", "file 0", "29..30", ""),
+    ("main.con", "let main {} = 1; return 0;", "Slice0Rules.AdmittedProduction@3", "file 0", "27..28", ""),
     ("main.con", "return 01;", "Slice0Rules.Lexed@2", "file 0", "26..27", "leading zero"),
     ("main.con", "return 1z;", "Slice0Rules.Lexed@2", "file 0", "26..27", "invalid integer suffix"),
     ("main.con", r'return "a\q";', "Slice0Rules.Lexed@2", "file 0", "28..29", "invalid string escape (113)"),

@@ -4,7 +4,7 @@
 
 ## Problem Statement
 
-On modern CPUs and accelerators, **memory layout**—struct field ordering and padding elimination, enum niche packing, hot/cold field splitting, destination-passing copy elision, and Array-of-Structs (AoS) to Struct-of-Arrays (SoA) transformation—routinely produces **5×–50×** real-world speedups, dwarfing instruction-level peephole optimization.
+Field order, padding, copy elision and array layout can change cache traffic and the number of bytes moved. Measure their effect on the target workload.
 
 Yet C, C++, and even Rust compilers almost never perform whole-aggregate or whole-collection layout synthesis automatically:
 - In C/C++, `offsetof`, pointer arithmetic, `void*` casts, and escaping field pointers bake physical memory layout into program semantics.
@@ -12,12 +12,12 @@ Yet C, C++, and even Rust compilers almost never perform whole-aggregate or whol
 
 Concrete has a rare structural advantage:
 1. **Strictly second-class references:** No `&T` or `&mut T` can ever be stored in a struct/enum/collection or returned from a function. Field borrows exist only lexically inside scoped calls or `borrow` blocks.
-2. **Explicit raw-memory boundary:** Raw pointers (`*T`, `*mut T`) exist only inside `trusted` / `with(Unsafe)` boundaries (`C4` materialization rule in `R-0610`), and foreign/wire types are explicitly marked (`#[repr(C)]`, `ByteSafe` under `R-0714`).
-3. **One `Layout` authority (`Memory.lean`):** [Concrete/Memory.lean](../../../Concrete/Memory.lean) is *already* architected as the sole layout authority between `MIR` and `SSA`/`BIR` (`R-0580`), and already separates `.virtual` (non-escaping scalar) from `.materialized` storage via `storageClass` and `escapes`.
+2. **Explicit raw-memory boundary.** A raw pointer type requires a qualifier, `*const T` or `*mut T`. The C4 materialization rule in R-0610 covers exposure to raw access. Proposed wire markers such as `ByteSafe` remain subject to R-0714 approval. [OD74](../../decisions.md#od74).
+3. **One materialized layout query.** The spec defines materialized layout and Memory consumes its query. Memory classifies virtual and materialized storage. [Indexed lowering](../../../Concrete/Memory/Lowering.lean).
 
 ---
 
-## 1. The Spec Boundary Question (Owner-Gated Before Slice 6 / `A2c`)
+## 1. The Spec Boundary Question (Before Slice 6, Ahead of the Slice 11 Core Freeze)
 
 Look closely at `R-0502` and `R-0609` in [ROADMAP.md](../../../ROADMAP.md#a-core-and-theorem) on `main`:
 - `R-0502` currently states: *"the default struct layout is declaration order, natural alignment defined exactly per target, size rounded up to the alignment, zero-sized fields taking no bytes, with no C ABI promise."*
@@ -35,7 +35,7 @@ Under this split, predictable default layouts stay intact, `concrete facts` repo
 ## 2. Architecture: `LayoutPolicy` + `LayoutPlan` + Parametric Lowering
 
 ### Current Architecture on `main`
-In the Slice-0 prototype ([Concrete/Memory.lean](../../../Concrete/Memory.lean)), layout is a single hardcoded query (`u8LayoutQuery`), while [Concrete/Interfaces/Carriers.lean](../../../Concrete/Interfaces/Carriers.lean) defines the slice-indexed `Memory lang profile` carrier (`MemoryPlace`, `MemoryInst`, `StorageClass`, `MemoryState`). Layout search is intentionally deferred until Slice 6 (structs/enums) rather than complicating Slice 0.
+The scalar prototype uses `u8LayoutQuery`. Indexed Memory lowering queries `language.layout mir.declarations profile.memoryTarget ty`. `LayoutsMatch` ties the recorded layouts to that query. The handoff checks layout geometry for the physical target. `Layout.project` resolves a field path inside the root's single materialized range. The early language returns scalar layout trees, while the aggregate control exercises a materialized field at a declared offset. Multiple banks per root would require an extension. [Lowering](../../../Concrete/Memory/Lowering.lean) · [Contracts](../../../Concrete/Interfaces/Contracts.lean) · [Stage interface](../../../ConcreteSpec/StageInterface.lean) · [Aggregate layout control](../../../Concrete/Memory/AggregateLayoutControl.lean).
 
 ### Proposed 3-Part Architecture in `Memory` (Slice 6+)
 
@@ -55,9 +55,8 @@ In the Slice-0 prototype ([Concrete/Memory.lean](../../../Concrete/Memory.lean))
                               │ `hValid : plan.valid policy = true`
                               ▼
                ┌──────────────────────────────┐
-               │  `Memory.lower (plan)`        │  ONE parametric refinement proof:
-               │  `∀ plan, plan.valid →`       │  works for EVERY valid plan,
-               │  `Refines MIR (Memory plan)`  │  forever!
+               │ Parametric LowersMemory      │
+               │ for checked plan constructors│
                └──────────────────────────────┘
 ```
 
@@ -69,8 +68,7 @@ In the Slice-0 prototype ([Concrete/Memory.lean](../../../Concrete/Memory.lean))
 3. **Per-array / collection storage strategy (`StorageShape`):**
    - `aos` (contiguous struct elements), or
    - `soa` (parallel field arrays: `[S; N]` lowered to `(Field₀[N], Field₁[N], ...)` whenever no whole-element raw address is taken and every access is indexed field projection `arr[i].f` or whole-element value copy/move).
-4. **Destination-passing / copy-elision annotations (`SlotReuse`):**
-   - Marks value-returning calls and struct literals that write directly into the caller's destination slot across disjoint lifetimes.
+4. **Destination passing (`SlotReuse`):** A separate per-function MIR/Memory frame plan proposes a destination for each eligible call or struct construction.
 
 ---
 
@@ -81,17 +79,22 @@ A naive "all distinct paths have disjoint byte ranges" lemma (`p₁ ≠ p₂ →
 2. **Tag/niche bit-sharing:** Niche-encoded enum tags **share bits/bytes with the payload** (they are disjoint only in the *value domain*, not as raw byte ranges).
 3. **Temporal slot reuse:** Destination-passing and `SlotReuse` intentionally **share the exact same bytes** across sequentially disjoint lifetimes.
 
-Therefore, `LayoutPlan.valid` and the parametric refinement theorem separate the three invariants cleanly:
+Check independent, simultaneously live footprints across roots and banks, value round-trips for each active encoding, and non-overlap of reused storage across every live activation and borrow.
 
-1. **Spatial disjointness of incomparable sibling paths (within one live value):**
-   - Only **incomparable (non-prefix)** field/element paths inside the same live aggregate (`¬ Prefix p₁ p₂ ∧ ¬ Prefix p₂ p₁`) occupy disjoint byte ranges (`Disjoint (plan.range p₁) (plan.range p₂)`). A parent path's range is the union of its children's ranges (plus any tag/padding).
-   - This discharges the **spatial frame lemma** for field writes (`p.f₁ := v` leaves `p.f₂` untouched whenever `f₁ ≠ f₂`, whether laid out as reordered AoS, hot/cold banks, or SoA arrays).
-2. **Exact value-representation round-trip (for tags & niches):**
-   - Rather than claiming disjoint byte ranges for niche tags, each aggregate/enum `LayoutPlan` provides an explicit `encode`/`decode` pair proved injective on valid spec values (`∀ v, ValidVal v → decode (encode v) = some v`), and proves variant encodings have disjoint encoded bit-pattern images even when sharing bytes with payload fields.
-3. **Temporal non-overlap (for `SlotReuse` / destination passing):**
-   - Two distinct logical locals share a physical slot `(blockId, offset)` **only** when the MIR liveness/linearity analysis proves their live intervals do not overlap (the old linear owner is dead/consumed before the new write begins).
+1. **Spatial disjointness.** Check co-active incomparable sibling field/element paths within the same struct, array or active enum variant. Distinct variants may reuse payload storage. A write must preserve all other independent live storage, including caller storage in other roots or banks.
+2. **Exact representation.** Prove that each active encoding decodes to its value and that different variants have distinguishable encodings. Rematerialize canonical bytes at observable boundaries and agree on the ABI of a non-inlined `&[S]` across modules.
+3. **Temporal reuse.** The per-function frame check must show that a destination aliases no argument read by the callee. Account for nested activations, active borrows and partial writes on a trap or error path.
 
-Because `LayoutPlan.valid` checks these three separate conditions decidably in Lean, **any** future layout synthesizer (simple alignment sort in Slice 6, hot/cold splitter, or MAP-Elites layout search in Phase E under `R-0727`) plugs into the same parametric `Memory.lower_correct` proof with **zero new lowering proofs**.
+Prove initialized, aligned, in-bounds reads, writes and moves, preservation of other live storage, allocation behavior and rematerialization of canonical bytes at observable boundaries. Model exhaustion/OOM and C7 accounting per lineage when a multi-bank plan changes the allocation count or alignment slack. Establish `LowersMemory`, including `BehaviorRefinement` and `Memory.RepresentsCheckpoint`, for each supported plan constructor. A new heuristic can reuse the proof for existing constructors. Each new representation or reuse constructor needs a soundness case.
+
+`LowersMemory.result_or_exhausted` has these hypotheses for a target result:
+
+```lean
+    (contract : LowersMemory (language := language) mir memory) (safe : ProgramSafe Src mir)
+    {q o} (reached : Dst.finite memory q) (outcome : Dst.result memory q o)
+```
+
+Under those hypotheses, either a reachable MIR execution has the same result and trace, or the Memory result is `.resourceExhausted`. For strict matching, `LowersMemory.refines_of_bound` takes `(contract : LowersMemory (language := language) mir memory)` and `(bound : ¬ Dst.observes memory .resourceExhausted)`. Its conclusion is `BehaviorRefinement Src Dst Src.result Dst.result mir memory`, which begins `ProgramSafe source input →`. Applying it to a target return still requires `ProgramSafe Src mir`, as well as reachability and the observed result. [Memory theorems](../../../Concrete/Memory/Refinement.lean) · [Refinement definition](../../../Concrete/Interfaces/Behavior.lean).
 
 ---
 
@@ -109,7 +112,7 @@ Does private optimized layout violate Concrete's transparency philosophy? **No, 
 | Increment | Slice | Deliverable | Gate |
 |---|---|---|---|
 | **0. Owner decisions** | Pre-Slice 6 (`Batch 2`) | (a) Keep predictable defaults while allowing private optimized layouts backed by exact conversion proofs; (b) separately decide compact/niche enum tags (`R-0609`) | Decisions recorded in `docs/decisions.md` |
-| **1. Parametric `Memory` + private packing + copy elision** | Slice 6 (structs & enums) | `LayoutPlan`, decidable 3-part `LayoutPlan.valid` (incomparable-sibling spatial disjointness, injective tag/niche codec, temporal slot-reuse non-overlap), parametric `Memory.lower_correct` | Parametric refinement theorem (zero `sorry`), negative controls rejecting (a) overlapping sibling fields, (b) colliding niche encodings, (c) live-overlap slot reuse, and (d) mutated `#[repr(C)]`/default-boundary layout |
+| **1. Parametric `Memory` + private packing + copy elision** | Slice 6, subject to approval | Checked plan and per-function frame plan with parametric `LowersMemory` | Prove the access, frame, allocation and canonical-boundary obligations above. Reject a write into live caller storage, a tag collision, reuse across a live borrow or trap, and changed observable ABI bytes. |
 | **2. Proved AoS↔SoA & hot/cold splitting** | Slices 7 & 13 (arrays / `HeapArray`) | Multi-bank / SoA `StorageShape` in `LayoutPlan` + incomparable-path disjointness for indexed array/slice projections | Refinement proof + cross-backend differential match (`aos` vs `soa` identical observations) + benchmark evidence (`R-0424`) |
 
 ### Owner Questions Required Before Implementation

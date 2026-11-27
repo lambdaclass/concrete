@@ -263,7 +263,7 @@ def RefusalCause.citation : RefusalCause → RegisteredRule
   | .lexical (.digitLimit _) _ => ⟨⟨``Slice0Rules.WithinLimit, 1⟩, by decide⟩
   | .lexical _ _ => ⟨⟨``Slice0Rules.Lexed, 2⟩, by decide⟩
   | .parser (.internal _) _ => ⟨⟨``Slice0Rules.ParserCanStep, 1⟩, by decide⟩
-  | .parser .outsideProduction _ => ⟨⟨``Slice0Rules.AdmittedProduction, 2⟩, by decide⟩
+  | .parser .outsideProduction _ => ⟨⟨``Slice0Rules.AdmittedProduction, 3⟩, by decide⟩
   | .parser .nonDecimal _ => ⟨⟨``Slice0Rules.DecimalLiteral, 1⟩, by decide⟩
   | .parser _ _ => ⟨⟨``Slice0Rules.Parsed, 1⟩, by decide⟩
   | .surface issue => issue.location.1

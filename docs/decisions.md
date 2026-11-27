@@ -4427,6 +4427,16 @@ ok yes
   declaration name and revision. The approval authorizes the inventory landing
   repair.
 
+- <a id="decided-2026-11-27-compiler-architecture-publication"></a>**Compiler architecture research on main (2026-11-27).**
+  The owner approved keeping the [compiler architecture series](proposals/compiler-architecture/README.md)
+  on `main` and linking it from the READMEs, as an exception to the November 17 publication rule above.
+  The series (R-0730 through R-0742) remains a set of proposals. Its implementation and language-design
+  decisions retain their own approval requirements. The owner's words on 2026-11-27 were
+
+  > can we merge the docs the readme etc
+
+  > i want to do this, it's very important for the langauge
+
 - <a id="decided-2026-11-17-file-names"></a>**File-name characters, reserved names and
   exact file/directory prefix conflicts (2026-11-17).**
   Status: decided

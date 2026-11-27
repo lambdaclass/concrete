@@ -41,6 +41,18 @@ example : ((Refusal.manifest .size).diagnosticAt Manifest.depthRule).isNone = tr
 example : ((Refusal.manifest .schemaPending).diagnosticAt Manifest.sizeRule).isNone = true :=
   by decide
 
+-- The changed judgments have new live revisions. Older diagnostics remain identifiable.
+example : Slice0Rules.AdmittedProduction (.decls, []) ∧
+    ¬ Manifest.DepthAccepted "[a.b.c.d.e.f.g.h.i.j.k.l.m.n.o.p]\nx = \"oops" := by
+  cbv <;> decide
+
+example : (validateRule ⟨``Slice0Rules.AdmittedProduction, 3⟩).isSome ∧
+    (validateRule ⟨``Slice0Rules.AdmittedProduction, 2⟩).isNone := by decide
+example : (validateRule ⟨``Manifest.DepthAccepted, 2⟩).isSome ∧
+    (validateRule ⟨``Manifest.DepthAccepted, 1⟩).isNone := by decide
+example : ⟨``Slice0Rules.AdmittedProduction, 2⟩ ∈ retiredRuleIds ∧
+    ⟨``Manifest.DepthAccepted, 1⟩ ∈ retiredRuleIds := by decide
+
 -- A literal-range or generic admission example cannot stand in for OWN-5.
 example : ((rulesForSlice ⟨0⟩).getD []).any
     (fun rule => rule.val.name == `ConcreteSpec.Core.Slice0Rules.LocalsUsed) = true := by decide

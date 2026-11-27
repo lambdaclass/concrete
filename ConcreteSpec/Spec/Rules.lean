@@ -61,7 +61,7 @@ def slice0Rules : List RuleId :=
    ⟨``Slice0Rules.UnreservedLocal, 2⟩,
    ⟨``Slice0Rules.NamedBinding, 1⟩,
    ⟨``Slice0Rules.DecimalLiteral, 1⟩,
-   ⟨``Slice0Rules.AdmittedProduction, 2⟩,
+   ⟨``Slice0Rules.AdmittedProduction, 3⟩,
    ⟨``Slice0Rules.LiteralTyped, 1⟩,
    ⟨``Slice0Rules.Admitted, 1⟩,
    ⟨``Slice0Rules.LocalsUsed, 1⟩,
@@ -88,6 +88,12 @@ def registeredRules : List RuleId :=
    ⟨``SourcePathSpan.ColumnMatches, 2⟩, Project.languagePinRule, Project.clauseRule,
    Project.tableVersionRule, Project.Manifest.sizeRule, Project.Manifest.encodingRule,
    Project.Manifest.depthRule, Project.Manifest.syntaxRule] ++ slice0Rules
+
+/-- Historical diagnostic IDs retained when a dependency changed the judgment.
+DepthAccepted@2 checks path depth in source order, including before later malformed text.
+AdmittedProduction@3 admits the shared grammar's empty declarations production. -/
+def retiredRuleIds : List RuleId :=
+  [⟨`ConcreteSpec.Project.Manifest.DepthAccepted, 1⟩, ⟨`ConcreteSpec.Core.Slice0Rules.AdmittedProduction, 2⟩]
 
 /-- A rule reference whose exact name and revision occur in the registry. -/
 abbrev RegisteredRule := { rule : RuleId // rule ∈ registeredRules }

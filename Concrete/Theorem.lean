@@ -845,7 +845,7 @@ example : keywordBinderParse = .error (.source (.parser .unexpectedToken ⟨22, 
 
 open ConcreteSpec.Core in
 example : wildcardParse = .error (.source (.parser .outsideProduction ⟨22, 23, 1, 23, ⟨0⟩⟩)) ∧
-    cites wildcardParse ⟨``Slice0Rules.AdmittedProduction, 2⟩ = true ∧
+    cites wildcardParse ⟨``Slice0Rules.AdmittedProduction, 3⟩ = true ∧
     cites wildcardParse ⟨``Slice0Rules.EntryName, 1⟩ = false := ⟨rfl, rfl, rfl⟩
 
 -- The shared classification requires a complete parse.
@@ -857,7 +857,7 @@ example :
     let result := parseBinderExample r#"fn main() -> u8 { return 0xff; }"#
     result = .error (.source (.parser .nonDecimal ⟨25, 29, 1, 26, ⟨0⟩⟩)) ∧
       cites result ⟨``Slice0Rules.DecimalLiteral, 1⟩ = true ∧
-      cites result ⟨``Slice0Rules.AdmittedProduction, 2⟩ = false := ⟨rfl, rfl, rfl⟩
+      cites result ⟨``Slice0Rules.AdmittedProduction, 3⟩ = false := ⟨rfl, rfl, rfl⟩
 
 -- The complete refusal parse selects the first violation when both rules apply.
 example : parseBinderExample r#"fn main() -> u8 { return 0xff * 1; }"# =
@@ -880,7 +880,7 @@ private def ExactRefusal (text : String) (rule : ConcreteSpec.Core.RuleId)
 
 open ConcreteSpec.Core in
 example : ExactRefusal r"fn main() -> u8 { let _: u8 = 1; abort(); }"
-    ⟨``Slice0Rules.AdmittedProduction, 2⟩ ⟨22, 23, 1, 23, ⟨0⟩⟩ := by
+    ⟨``Slice0Rules.AdmittedProduction, 3⟩ ⟨22, 23, 1, 23, ⟨0⟩⟩ := by
   with_unfolding_all exact ⟨_, rfl, rfl, Refusal.source_diagnosticAt_iff _⟩
 
 open ConcreteSpec.Core in
@@ -921,12 +921,12 @@ private def bothEntriesRefuse (text : String) (cause : ConcreteSpec.StageInterfa
 
 open ConcreteSpec.Core in
 example : bothEntriesRefuse r"fn main() -> u8 { let x: u8 = 1; let x {} = x; return 0; }"
-    (.parser .outsideProduction ⟨39, 40, 1, 40, ⟨0⟩⟩) ⟨``Slice0Rules.AdmittedProduction, 2⟩ := by
+    (.parser .outsideProduction ⟨39, 40, 1, 40, ⟨0⟩⟩) ⟨``Slice0Rules.AdmittedProduction, 3⟩ := by
   with_unfolding_all exact ⟨rfl, rfl, rfl, rfl⟩
 
 open ConcreteSpec.Core in
 example : bothEntriesRefuse r"fn main() -> u8 { let Option {} = 1; return 0; }"
-    (.parser .outsideProduction ⟨29, 30, 1, 30, ⟨0⟩⟩) ⟨``Slice0Rules.AdmittedProduction, 2⟩ := by
+    (.parser .outsideProduction ⟨29, 30, 1, 30, ⟨0⟩⟩) ⟨``Slice0Rules.AdmittedProduction, 3⟩ := by
   with_unfolding_all exact ⟨rfl, rfl, rfl, rfl⟩
 
 -- Unchecked arithmetic can continue through this prefix to the later call.

@@ -10,19 +10,11 @@ trusted. This states the project's goal: each guarantee holds only as its eviden
 correctness and program correctness need separate proofs, and native claims remain conditional on
 their named assumptions ([decision](docs/decisions.md#decided-project-core-statement)).
 
-It checks resource ownership, makes external authority explicit at every use, and is specified in
-Lean so that its rules can be proved about. From the first compiler slice, you can ask the compiler
-what any function may do: its capabilities and reachable resources, allocation, trusted and foreign
-boundaries, how each possible failure is handled, termination and proof status, each with its reason
-and evidence ([decision](docs/decisions.md#decided-project-facts-report)).
-
-Accepted safe code has no hidden traps: an index, a division, a shift or an arithmetic operation
-is either proven safe when the program is compiled or has its failure handled in the code. Before a
-program runs, every function has termination evidence with its premises, or a report naming the
-explicitly permitted unresolved obligations, each traced to a written permission at the loop or
-boundary responsible, and the compiler reports recursion depth, stack use, allocation,
-blocking and foreign calls per function, SPARK-style. Each guarantee holds as its evidence lands
-([decision](docs/decisions.md#decided-project-no-hidden-traps)).
+Concrete’s design requires explicit ownership, authority, failure handling and termination evidence.
+R-0575 owns the per-function report of these facts, their evidence and any unresolved obligations.
+The current CLI supports build and help. Per-function facts, stack reporting and project-budget
+enforcement are planned. [Facts report](docs/decisions.md#decided-project-facts-report) ·
+[No hidden traps](docs/decisions.md#decided-project-no-hidden-traps).
 
 ## Why Concrete?
 
@@ -50,12 +42,13 @@ The long-term goal is verified compilation from source to native execution,
 with evidence that can be composed and independently replayed. This is a target,
 not a current guarantee.
 
-**Status: early vertical slices (Slice 0 / Slice 1 on an unfrozen Core).** A new compiler is being
-built from a Lean specification. Slice 0 compiles closed `u8` arithmetic `.con` files end-to-end
-through lex/parse → elaborate → Core → MIR → Memory → BIR to unverified LLVM and LCB native
-binaries ([Concrete/README.md](Concrete/README.md#running-the-current-slice)), while Slice 1 and
-the frozen stage-interfaces cutover are in progress. Nothing is normative until Core freezes at
-`0.1` (Slice 11, `A2c`).
+**Status: early vertical slices.** The standalone Slice 0 driver compiles a parameterless `main`
+returning `u8`, with immutable typed `u8` bindings, decimal literals, reads, parentheses and checked
+addition. It builds native executables through LLVM and LCB on supported hosts, subject to backend
+limits. The input is a canonical project-relative `.con` file in a project without `Concrete.toml`.
+Native correctness remains conditional. Slice 1 and the stage-interface cutover are in progress.
+The language specification remains provisional until the Slice 11 Core freeze (`A2c`).
+[Running the current slice](Concrete/README.md#running-the-current-slice).
 
 ## Where to read
 
@@ -120,10 +113,9 @@ until they migrate; [RETENTION.tsv](RETENTION.tsv) records each one.
 ## Building
 
 ```sh
-nix develop                  # Lean and the tools the checks use
-lake build                   # the specification (ConcreteSpec) and compiler library (Concrete)
-lake build concrete          # the CLI executable (.lake/build/bin/concrete)
-bash scripts/checks/run.sh   # the root checks (also run by CI)
+nix develop -c lake build                  # specification and compiler library
+nix develop -c lake build concrete         # CLI executable (.lake/build/bin/concrete)
+nix develop .#gates -c bash scripts/checks/run.sh
 ```
 
 ## License

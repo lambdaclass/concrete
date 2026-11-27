@@ -98,6 +98,14 @@ example :
       Project.parseManifest text = .error (.invalid (.malformed ⟨37, 38⟩)) := by
   cbv <;> decide
 
+-- Nested arrays reach the actual lookahead, including EOF and an invalid comment byte.
+example : Project.parseManifest "a=[[[[[0]]]]]" = .ok () ∧
+    Project.parseManifest "a=[[[[[" = .error (.invalid (.malformed ⟨7, 7⟩)) ∧
+    Project.parseManifest "a=[[[[[[[[[[[[[[[[" = .error (.invalid (.depth ⟨17, 18⟩)) ∧
+    Project.parseManifest ("a = [[[[[[[[[[[[[[[ #ok" ++ String.singleton (Char.ofNat 1)) =
+      .error (.invalid (.malformed ⟨23, 24⟩)) := by
+  cbv <;> decide
+
 -- A missing token binds EOF. A wrong token binds its own byte range,
 -- including after multibyte text or before a later unterminated quote.
 example : Project.parseManifest "\"é\" = [" = .error (.invalid (.malformed ⟨8, 8⟩)) ∧
