@@ -561,7 +561,7 @@ R-0575 would expose these reports per file or function through a facts subcomman
    or a failed CLI output write. If stderr cannot carry a diagnostic, the CLI still exits 2.
    Compiler invariant failures use `INTERNAL`.
 
-   The current gate checks manifest observations and refusal controls. A `pending-refusal` row checks the exit status and refusal class. A structured `refuse` row also checks the rule and source origins. Trap fixtures must refuse admission before the conformance route exercises the residual check through both native backends.
+   The current gate checks manifest observations and refusal controls. A `pending-refusal` row checks the exit status and refusal class. A structured `refuse` row also checks the rule and source origins. Source trap fixtures must refuse admission before the conformance route exercises the residual check through both native backends.
 5. **Source differential.** Seeded source fuzzing is planned.
 6. **Unchecked differential.** The conformance gate compares the manifest trap observations, including stderr, with both backends on x86-64 Linux and AArch64 macOS.
 7. **Certificates.** General acceptance and refusal certificate emission is a roadmap obligation.
