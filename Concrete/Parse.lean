@@ -128,8 +128,9 @@ private def recognizeDecided (input : List Token) : Except Refusal Bool :=
     (32 * (input.length + 1)) input
 
 def parse (input : List Token) : Except Refusal Program := do
-  -- Classify a form as unsupported only after consuming its entire syntax. Both grammars
-  -- require an identifier in a binder position, so a reserved keyword there is SYNTAX.
+  -- Classify a form as unsupported only after consuming its entire syntax.
+  -- Slice 0 requires an identifier as a let binder. The refusal grammar also
+  -- recognizes the wildcard and `mut` followed by an identifier.
   match run table0 (·.value.kind) (fun tok => .ok (.tok tok)) (fun lhs _ => reduce lhs)
       (fun _ tokens _ => syntaxError tokens)
       (16 * (input.length + 1)) input with

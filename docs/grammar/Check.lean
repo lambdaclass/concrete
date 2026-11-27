@@ -371,12 +371,26 @@ def placeTailProjectsOrAssigns : Tree → Bool
   | .node "PlaceTail" (.leaf token :: _) => token.kind == "="
   | _ => false
 
+-- In a parsed bound, grouping and unary minus can surround a single integer.
+-- The parser has already matched the parentheses and checked the literal spelling.
+private def boundHasSuffix? (slice : Nat) (bound : Tree) : Option Bool := do
+  let literal :: rest := bound.tokens.dropWhile (fun t => t.kind == "(" || t.kind == "-") | none
+  guard (literal.kind == "INTEGER" && rest.all (·.kind == ")"))
+  return !(← integerSuffix slice literal.spelling.toList).isEmpty
+
+-- OD48: if both bounds are integer literals, exactly one must carry a suffix.
+private def countedBoundsValid (slice : Nat) (lower upper : Tree) : Bool :=
+  match boundHasSuffix? slice lower, boundHasSuffix? slice upper with
+  | some lo, some hi => lo != hi
+  | _, _ => true
+
 mutual
   partial def draftRestrictions (slice : Nat) (inContract : Bool) :
       Tree → Bool
-    | .leaf token =>
-      token.kind != "PRIMITIVE" ||
-        (token.primitiveSlice.any (· ≤ slice))
+    | .leaf token => token.primitiveSlice.all (· ≤ slice)
+    | .node "LoopForm" [_, _, _, lower, _, upper, body] =>
+      countedBoundsValid slice lower upper &&
+        [lower, upper, body].all (draftRestrictions slice inContract)
     | .node "GroupAtom" [_, group, _, suffixTree] =>
       (!suffixTree.hasTokens || traceableGroupBase group) &&
         draftRestrictions slice inContract group &&
@@ -406,20 +420,17 @@ mutual
     | _ => false
 end
 
--- Stop at the value argument. Nested calls, target types and trailing commas
--- cannot add operands to this call's arity or consume one of its formals.
+-- Count value arguments at this call site. Nested calls, target types and
+-- trailing commas contribute no extra operands.
 private partial def callOperands : Tree → List Tree
   | t@(.node "Expr" _) | t@(.node "ConstExpr" _) => [t]
   | .node "TargetArgument" _ => []
   | .node _ parts => parts.flatMap callOperands
   | .leaf _ => []
 
-private def targetArgument? : Tree → Option Tree
-  | .node _ (t@(.node "TargetArgument" _) :: _) => some t
+def targetArity : Tree → Option Nat
+  | args@(.node _ (.node "TargetArgument" _ :: _)) => some (callOperands args).length
   | _ => none
-
-def targetArity (args : Tree) : Option Nat :=
-  (targetArgument? args).map fun _ => (callOperands args).length
 
 -- Named operations represented by CExpr.convert, .wrapping and .saturating.
 def constPrimitiveArity (callee : String) : Nat :=
@@ -471,257 +482,15 @@ def parseSource (slice : Nat) (g : DraftGrammar) (table : PredictionTable)
     | none
   return tree
 
--- An annotation belongs to the binding itself. Colons nested in a destructuring
--- pattern introduce field binders and supply no expected type for its initializer.
-private def bindingAnnotation : Tree → Bool
-  | .node "LetHead" parts => parts.any fun
-    | .node "LetTail" tail => tail.any (Tree.isNode "Type")
-    | child => child.isNode "Type"
-  | .leaf token => token.kind == ":"
-  | _ => false
-
 private partial def Tree.collectNodes {α : Type}
     (select : String → List Tree → List α) : Tree → List α
   | .leaf _ => []
   | .node name parts => select name parts ++ parts.flatMap (Tree.collectNodes select)
 
--- A generic argument is outside the path that names a callee or constructor.
-private partial def pathNames : Tree → List String
-  | .leaf t => if t.kind == "IDENT" || t.primitiveSlice.isSome then [t.spelling] else []
-  | .node "TypeArgs" _ => []
-  | .node _ parts => parts.flatMap pathNames
-
-private partial def parameterCount : Tree → Nat
-  | .node "Params" [_, _, _, tail] => 1 + parameterCount tail
-  | .node "ParamTail" [_, params] => parameterCount params
-  | _ => 0
-
--- OD138 depends on the presence of a declared type. Its particular width and
--- the value's range are checked by typing. Keep each formal and field distinct.
-private inductive DeclaredSlot where
-  | parameter (path : List String) (index : Nat)
-  | field (path : List String) (name : String)
-  deriving BEq
-
-private def directIdentifier (parts : List Tree) : Option String :=
-  parts.findSome? fun
-    | .leaf t => if t.kind == "IDENT" then some t.spelling else none
-    | _ => none
-
-private def fieldSlots (path : List String) (fields : Tree) : List DeclaredSlot :=
-  fields.collectNodes fun name parts =>
-    if name == "Fields" || name == "VariantFields" then
-      (directIdentifier parts).toList.map (.field path ·)
-    else []
-
-private partial def declaredSlots (tree : Tree) (owner : List String := []) : List DeclaredSlot :=
-  match tree with
-  | .node "Decl" (.leaf kw :: parts) =>
-    match kw.kind, directIdentifier parts with
-    | "struct", some name =>
-      (parts.find? (·.isNode "Fields")).toList.flatMap (fieldSlots [name])
-    | "enum", some name =>
-      tree.collectNodes fun tag variant =>
-        match tag, variant with
-        | "Variants", .leaf v :: fields :: _ => fieldSlots [name, v.spelling] fields
-        | _, _ => []
-    | "impl", _ =>
-      -- The final outer Type in the header is the receiver in both impl forms.
-      let rec receivers : Tree → List Tree
-        | t@(.node "Type" _) => [t]
-        | .node _ children => children.flatMap receivers
-        | _ => []
-      match parts with
-      | header :: _ :: members :: _ =>
-        (receivers header).getLast?.toList.flatMap fun t => declaredSlots members (pathNames t)
-      | _ => []
-    | "fn", _ | "spec", _ => parameters (.leaf kw :: parts) owner
-    | _, _ => []
-  | .node name parts =>
-    if ["Program", "Functions", "MoreFunctions", "Items", "Item", "Decl", "ImplMembers", "Function"].contains name
-    then parameters parts owner ++ parts.flatMap (declaredSlots · owner)
-    else []
-  | _ => []
-where
-  parameters (parts : List Tree) (owner : List String) :=
-    match parts.dropWhile (fun | .leaf t => t.kind != "fn" | _ => true) with
-    | _ :: .leaf binder :: _ =>
-      let count := (parts.find? (·.isNode "Params")).elim 0 parameterCount
-      (List.range count).map (.parameter (owner ++ [binder.spelling]) ·)
-    | _ => []
-
--- Carry just the callee or constructor path through its factored suffix.
-private def suffixPath (name : String) (parts : List Tree) (base : List String) : List String :=
-  match name, parts with
-  | "Atom", .leaf root :: rest | "HeadAtom", .leaf root :: rest | "NamedBody", .leaf root :: rest =>
-    if root.kind == "IDENT" then
-      root.spelling :: ((rest.find? (·.isNode "PathTail")).toList.flatMap pathNames)
-    else []
-  | "BodyNameTail", .leaf sep :: path :: _ =>
-    if sep.kind == "::" then base ++ pathNames path else base
-  | "Body", .leaf kw :: path :: _ => if kw.kind == "defer" then pathNames path else []
-  | _, path :: _ => if path.isNode "PrimitivePath" then pathNames path else base
-  | _, _ => base
-
--- For a parsed operand, record whether its literals pass in either context and
--- whether its result can supply a peer's width. A grammar-only example may
--- contain unresolved names. Qualification checks the type sources visible here.
-private inductive WidthSource where
-  | unknown | needsWidth | suppliesWidth
-  deriving BEq, Inhabited
-
-private structure OperandWidth where
-  free : Bool := true
-  expected : Bool := true
-  source : WidthSource := .unknown
-  deriving Inhabited
-
-private def OperandWidth.atPosition (w : OperandWidth) (supplied : Bool) :=
-  if supplied then w.expected else w.free
-
--- Consume a child at its own position; its literals cannot inherit any later expectation.
-private def OperandWidth.fixed (w : OperandWidth) (supplied : Bool) : OperandWidth :=
-  let ok := w.atPosition supplied
-  ⟨ok, ok, .unknown⟩
-
-private def OperandWidth.and (a b : OperandWidth) : OperandWidth :=
-  let source := match a.source, b.source with
-    | .suppliesWidth, _ | _, .suppliesWidth => WidthSource.suppliesWidth
-    | .needsWidth, _ | _, .needsWidth => .needsWidth
-    | _, _ => .unknown
-  ⟨a.free && b.free, a.expected && b.expected, source⟩
-
-private def combineWidths (ws : List OperandWidth) : OperandWidth :=
-  ws.foldl OperandWidth.and {}
-
-private def peerOperands (a b : OperandWidth) : Bool :=
-  a.atPosition (b.source == .suppliesWidth) && b.atPosition (a.source == .suppliesWidth)
-
--- OD48: two literal loop bounds need exactly one width source, in either order.
--- OD138 gives comparison operands the same relation; their Boolean result has
--- no bearing on either operand's integer width.
-private def independentPair (a b : OperandWidth) : OperandWidth :=
-  let ok := peerOperands a b && !(a.source == .needsWidth && b.source == .needsWidth)
-  ⟨ok, ok, .suppliesWidth⟩
-
-private def binaryWidth (op : String) (a b : OperandWidth) : OperandWidth :=
-  if ["<", ">", "<=", ">=", "==", "!=", "&&", "||"].contains op then independentPair a b
-  else { a.and b with free := peerOperands a b }
-
-private def operatorName : Tree → Option String
-  | .leaf t | .node "CompareOp" [.leaf t] => some t.kind
-  | _ => none
-
-private def isOperatorTail : Tree → Bool
-  | .node name _ =>
-    let level := ((name.dropPrefix "Head").dropPrefix "Const").toString
-    ["AddTail", "LogicOrTail", "LogicAndTail", "EqualityTail", "CompareTail",
-     "OrBits", "XorBits", "AndBits", "ShiftTail", "SumTail", "ProductTail"].contains level
-  | _ => false
-
--- Fold the operators in the order given by the parsed precedence productions.
--- A body continuation resumes this same fold with its first operand already read.
-private partial def continueWidth (visit : Tree → OperandWidth) (lhs : OperandWidth) : Tree → OperandWidth
-  | .node _ [] => lhs
-  | .node _ [first, rest] =>
-    if let some op := operatorName first then binaryWidth op lhs (visit rest)
-    else continueWidth visit (continueWidth visit lhs first) rest
-  | .node _ [op, rhs, rest] =>
-    match operatorName op with
-    | some name => continueWidth visit (binaryWidth name lhs (visit rhs)) rest
-    | none => ⟨false, false, .unknown⟩
-  | _ => ⟨false, false, .unknown⟩
-
-private def followedBy (visit : Tree → OperandWidth) (value : OperandWidth) (body : Tree) :=
-  if body.hasTokens then (value.fixed false).and (visit body) else value
-
-private partial def finishBodyValue (visit : Tree → OperandWidth) (value : OperandWidth) : Tree → OperandWidth
-  | .node "ExprEnd" [] => value
-  | .node "ExprEnd" [_, body] => (value.fixed false).and (visit body)
-  | .node "MatchEnd" [body@(.node "Body" _)] => followedBy visit value body
-  | .node "MatchEnd" [continuation] => continueWidth visit value continuation
-  | t@(.node "MatchEnd" _) => continueWidth visit value t
-  | .node _ [ops, ending@(.node "ExprEnd" _)] =>
-    finishBodyValue visit (continueWidth visit value ops) ending
-  | .node "PlaceTail" [proj, rest] =>
-    finishBodyValue visit { (value.and (visit proj)).fixed false with source := .suppliesWidth } rest
-  | .node _ [.leaf _, rhs, _, body] =>
-    ((value.fixed false).and ((visit rhs).fixed true)).and (visit body)
-  | _ => ⟨false, false, .unknown⟩
-
-private partial def operandWidths (slice : Nat) (decls : List DeclaredSlot) (tree : Tree)
-    (base : List String := []) : OperandWidth :=
-  match tree with
-  | .leaf t =>
-    if t.kind == "INTEGER" then
-      let bare := (integerSuffix slice t.spelling.toList).any List.isEmpty
-      ⟨true, bare, if bare then .needsWidth else .suppliesWidth⟩
-    else if ["IDENT", "BYTE", "true", "false"].contains t.kind then {source := .suppliesWidth}
-    else {}
-  | .node name children =>
-    let path := suffixPath name children base
-    let visit := fun child =>
-      let named := ["BodyNameTail", "NameTail", "HeadNameTail", "NameCall", "NameLiteral",
-        "Initializers", "InitializerTail"].any child.isNode
-      operandWidths slice decls child (if named then path else [])
-    let positions := fun (supplies : Tree → Bool) =>
-      combineWidths (children.map fun child => (visit child).fixed (supplies child))
-    match name, children with
-    | "Program", _ | "Functions", _ | "Function", _ | "Decl", _ =>
-      positions fun child => ["Block", "ConstExpr", "ProofExpr"].any child.isNode
-    | "Body", .leaf first :: _ =>
-      let typed := first.kind == "return" || children.any bindingAnnotation
-      combineWidths (children.map fun child =>
-        if child.isNode "Body" then visit child
-        else (visit child).fixed (typed && ["Expr", "ReturnValue", "ProofExpr"].any child.isNode))
-    | "ArmBody", .leaf first :: _ => positions (fun _ => first.kind == "return")
-    | "Arms", _ =>
-      combineWidths (children.map fun child =>
-        if child.isNode "ArmBody" || child.isNode "Arms" then visit child else (visit child).fixed false)
-    | "Initializers", [.leaf field, _, rhs, tail] =>
-      ((visit rhs).fixed (decls.contains (.field base field.spelling))).and (visit tail)
-    | "NamedBody", [.leaf _, tail] => visit tail
-    | "NameCall", [_, args, _] =>
-      let ok := (targetArgument? args).all (fun target => (visit target).free) &&
-        (callOperands args).zipIdx.all fun (arg, i) =>
-          (visit arg).atPosition (decls.contains (.parameter base i))
-      ⟨ok, ok, .suppliesWidth⟩
-    | "LoopForm", [_, _, _, lo, _, hi, body] =>
-      (independentPair (visit lo) (visit hi)).and ((visit body).fixed false)
-    | "Match", _ | "BlockExpr", _ | "BlockStmt", _ | "ValueElse", _ | "StmtElseBody", _ =>
-      combineWidths (children.map fun child =>
-        if child.isNode "Head" then (visit child).fixed false else visit child)
-    | "Projection", _ | "Loop", _ | "BorrowPlace", _ | "BorrowRange", _
-    | "AttributePrefix", _ | "Type", _ | "ConstNameTail", _ => positions (fun _ => false)
-    | "ExactArithmetic", _ => {combineWidths (children.map visit) with source := .suppliesWidth}
-    | _, [lhs, tail] =>
-      if isOperatorTail tail then continueWidth visit (visit lhs) tail
-      else bodyOrValue name visit children
-    | _, _ => bodyOrValue name visit children
-where
-  bodyOrValue (name : String) (visit : Tree → OperandWidth) (children : List Tree) : OperandWidth :=
-    match children.reverse with
-    | ending :: earlier =>
-      let first := earlier.reverse
-      let value := fun (parts : List Tree) => combineWidths (parts.map visit)
-      if ending.isNode "Body" then followedBy visit (value first) ending
-      else if ["ExprEnd", "MatchEnd", "PlaceTail", "DerefTail"].any ending.isNode then
-        let lhs := match earlier with
-          | ops :: before =>
-            if ops.isNode "ExprContinuation" then continueWidth visit (value before.reverse) ops
-            else value first
-          | [] => if name == "BodyNameTail" then {source := .suppliesWidth} else {}
-        finishBodyValue visit lhs ending
-      else value children
-    | [] => {}
-
-def literalSuffixesValid (slice : Nat) (tree : Tree) : Bool :=
-  (operandWidths slice (declaredSlots tree) tree).free
-
 def parseDraft (slice : Nat) (g : DraftGrammar) (table : PredictionTable)
     (source : String) : Option Tree := do
   let tree ← parseSource slice g table source
-  guard (literalSuffixesValid slice tree && draftRestrictions slice false tree &&
+  guard (draftRestrictions slice false tree &&
     (validateNamedSuffixes slice (default, default) tree).isSome)
   return tree
 
@@ -784,65 +553,23 @@ private def checkWordIdentities : IO Unit := do
       throw (IO.userError s!"keyword {spelling}: expected {repr expected}, got {repr actual}")
   IO.println s!"pass: {decidedWords.length} decided word identities"
 
--- Both sides of each pair must parse. checkProjection also checks the verdict
--- of the specific restriction, so a syntax error cannot satisfy a refusal.
-private def operandExamples : Nat → List Example
-  | 3 => [
-    ⟨"an if condition supplies no integer width", fnBody "if 255u8 == 0 { return 1; }", true⟩,
-    ⟨"the other literal supplies the width in an if condition",
-      fnBody "if 255u8 == 0u8 { return 1; }", false⟩,
-    ⟨"comparison in a typed Boolean binding", fnBody "let b: bool = 255u8 == 0; return 1;", true⟩,
-    ⟨"assignment type reaches the RHS before another statement",
-      fnBody "let mut x: u8 = 0; x = 1u8; return x;", false⟩,
-    ⟨"assignment type reaches the last statement equally",
-      fnBody "let mut x: u8 = 0; x = 1u8;", false⟩,
-    ⟨"an unsuffixed assignment uses the place type",
-      fnBody "let mut x: u8 = 0; x = 1; return x;", true⟩]
-  | 4 => [
-    ⟨"two bare loop bounds lack a width", fnBody "for i from 0 until 5 {}", false⟩,
-    ⟨"lower loop bound supplies the width", fnBody "for i from 0u8 until 5 {}", true⟩,
-    ⟨"upper loop bound supplies the width", fnBody "for i from 0 until 5u8 {}", true⟩,
-    ⟨"two suffixed loop bounds duplicate the width", fnBody "for i from 0u8 until 5u8 {}", false⟩,
-    ⟨"grouping and a minus preserve a literal bound", fnBody "for i from (-2i8) until (5i8) {}", false⟩]
-  | 5 => [
-    ⟨"declared argument supplies the width", "fn g(x: u8) -> u8 { x } fn f() -> u8 { g(255) }", true⟩,
-    ⟨"declared argument refuses a suffix", "fn g(x: u8) -> u8 { x } fn f() -> u8 { g(255u8) }", false⟩,
-    ⟨"forward declaration types the second argument in a head",
-      "fn f() -> u8 { if g(0, 255u8) { 1 } else { 0 } } fn g(a: u8, b: u8) -> bool { true }", false⟩,
-    ⟨"a nested call checks its own arguments",
-      "fn g(x: u8) -> u8 { x } fn f() -> u8 { g(unknown(255u8)) }", true⟩,
-    ⟨"Boolean result supplies no integer width", "fn f() -> bool { return 255u8 == 0; }", true⟩,
-    ⟨"right comparison operand supplies the width", "fn f() -> bool { return 255 == 0u8; }", true⟩,
-    ⟨"two widths in a Boolean return", "fn f() -> bool { return 255u8 == 0u8; }", false⟩,
-    ⟨"no width in an integer comparison", "fn f() -> bool { return 255 == 0; }", false⟩,
-    ⟨"comparison as a trailing expression", "fn f() -> bool { 255u8 == 0 }", true⟩,
-    ⟨"condition compares with a typed parameter", "fn f(x: u8) -> bool { if x == 255u8 { true } else { false } }", false⟩,
-    ⟨"condition uses the parameter width", "fn f(x: u8) -> bool { if x == 255 { true } else { false } }", true⟩]
-  | 6 => [
-    ⟨"declared field supplies the width", "struct S { a: u8 } fn f() -> S { return S { a: 200 }; }", true⟩,
-    ⟨"declared field refuses a suffix", "struct S { a: u8 } fn f() -> S { return S { a: 200u8 }; }", false⟩,
-    ⟨"each field checks its own operand", "struct S { a: u8, b: bool } fn f() -> S { S { a: 200, b: 255u8 == 0 } }", true⟩,
-    ⟨"a field in a qualified variant has its declared width",
-      "enum E { A { n: u8 } } fn f() -> E { E::A { n: 1u8 } }", false⟩,
-    ⟨"a module function supplies no parameter to a different qualified call",
-      "fn g(x: u8) -> u8 { x } fn f() -> u8 { m::g(255u8) }", true⟩]
-  | 7 => [
-    ⟨"dereference assignment before another statement",
-      "fn f(p: &mut u8) -> u8 { *p = 255u8; return 0; }", false⟩,
-    ⟨"dereference assignment supplies the width",
-      "fn f(p: &mut u8) -> u8 { *p = 255; return 0; }", true⟩,
-    ⟨"grouped leading comparison operand supplies the width", "fn f() -> bool { (255u8) == 0 }", true⟩,
-    ⟨"grouping preserves both comparison operands' positions", "fn f() -> bool { (255u8) == 0u8 }", false⟩]
-  | 8 => [
-    ⟨"constant Boolean result supplies no integer width", "const OK: bool = 255u8 == 0;", true⟩]
-  | 9 => [
-    ⟨"qualified method supplies its parameter width",
-      "impl S { fn g(x: u8) -> u8 { x } } fn f() -> u8 { S::g(255u8) }", false⟩,
-    ⟨"method parameter uses the declared width",
-      "impl S { fn g(x: u8) -> u8 { x } } fn f() -> u8 { S::g(255) }", true⟩]
-  | 10 => [
-    ⟨"Boolean spec result supplies no integer width", "spec fn ok() -> bool = 255u8 < 256;", true⟩]
-  | _ => []
+-- Ballot first consumers, independent of Terminal.primitiveSlice. The same
+-- named let is grammatical from slice 0, so only its annotation varies.
+private def primitiveExamples (slice : Nat) : List Example :=
+  [(0, ["u8"]), (2, words "i8 i16 i32 i64 u16 u32 u64"),
+   (3, ["bool", "Unit"]), (11, ["char"])].flatMap fun (first, names) =>
+    names.map fun name =>
+      ⟨s!"{name} annotation (first slice {first})", fnBody s!"let v: {name} = 1; return 0;",
+        slice >= first⟩
+
+private def countedLoopExamples : List Example := [
+  ⟨"two bare loop bounds", fnBody "for i from 0 until 5 {}", false⟩,
+  ⟨"only the lower bound has a suffix", fnBody "for i from 0u8 until 5 {}", true⟩,
+  ⟨"only the upper bound has a suffix", fnBody "for i from 0 until 5u8 {}", true⟩,
+  ⟨"two suffixed loop bounds", fnBody "for i from 0u8 until 5u8 {}", false⟩,
+  ⟨"grouping and unary minus preserve a literal bound", fnBody "for i from (-2i8) until (5i8) {}", false⟩,
+  ⟨"a named bound needs typing", fnBody "for i from n until 5u8 {}", true⟩,
+  ⟨"a compound bound needs typing", fnBody "for i from 0 until (4 + 1) {}", true⟩]
 
 private def ghostExamples : List Example := [
   ⟨"ghost initializer is a proof expression",
@@ -876,9 +603,6 @@ def examples (slice currentSlice : Nat) : List Example :=
     ⟨"separators between digits", fnBody "return 0xf_f;", true⟩,
     ⟨"uppercase integer hex", fnBody "return 0xFF;", false⟩,
     ⟨"separator adjacent to radix prefix", fnBody "return 0x_ff;", false⟩,
-    ⟨"redundant suffix in return", fnBody "return 255u8;", false⟩,
-    ⟨"redundant suffix in typed let", fnBody "let x: u8 = (255u8); return x;", false⟩,
-    ⟨"suffix without a supplied argument type", fnBody "return id(255u8);", true⟩,
     ⟨"lowercase hex byte", fnBody "return '\\xff';", true⟩,
     ⟨"target-type conversion", fnBody "return widen(type: u32, x);", true⟩,
     ⟨"target-type binary arithmetic", fnBody "return wrapping_add(type: u32, x, y);", true⟩,
@@ -894,9 +618,7 @@ def examples (slice currentSlice : Nat) : List Example :=
     ⟨"boolean NOT begins at slice 3", fnBody "return !x;", currentSlice >= 3⟩,
     ⟨"primitive keyword classification",
       "fn u32() -> u8 { return 1; }", false⟩,
-    ⟨"ordinary named type", fnBody "let x : T = 1 ;", true⟩,
-    ⟨"char type begins in slice 11", fnBody "let x: char = c; return 1;", currentSlice >= 11⟩,
-    ⟨"bool type begins in slice 3", fnBody "let x: bool = b; return 1;", currentSlice >= 3⟩] ++
+    ⟨"ordinary named type", fnBody "let x : T = 1 ;", true⟩] ++
     [(2, "x", words "truncate reinterpret"),
      (2, "x, y", words "wrapping_sub wrapping_mul saturating_add saturating_sub saturating_mul"),
      (6, "x", words "checked_neg try_convert"),
@@ -906,12 +628,6 @@ def examples (slice currentSlice : Nat) : List Example :=
         ⟨s!"missing target of {name}", fnBody s!"return {name}({args});", false⟩]
   | 3 => [
     ⟨"semicolon-free if statement", fnBody "if true { return 1 ; } return 1 ;", true⟩,
-    ⟨"result type reaches the then branch", fnBody "return if true { 255u8 } else { 1 };", false⟩,
-    ⟨"unsuffixed result in the then branch", fnBody "return if true { 255 } else { 1 };", true⟩,
-    ⟨"result type reaches the else branch after a statement",
-      fnBody "let x: u8 = if true { 0 } else { f(); 255u8 };", false⟩,
-    ⟨"branch result type does not reach an earlier statement",
-      fnBody "return if true { f(255u8); 1 } else { 0 };", true⟩,
     ⟨"value if with an operator continuation",
       fnBody "return if true { 1 } else { 1 } + 1 ;", true⟩,
     ⟨"statement if followed by a trailing unary minus",
@@ -1034,10 +750,6 @@ def examples (slice currentSlice : Nat) : List Example :=
     ⟨"tuple pattern is excluded",
       fnBody ("match x { " ++ arm s!"x :: x ( _ )" "1" ++ " }"), false⟩,
     ⟨"ignored payload", fnBody ("match x { " ++ arm "x :: x { .. }" "1" ++ " }"), true⟩,
-    ⟨"match result reaches a braced arm",
-      fnBody "return match x { 0 => { f(); (255u8) }, _ => 1, };", false⟩,
-    ⟨"match result reaches an unbraced arm",
-      fnBody "return match x { 0 => 1, _ => 255u8, };", false⟩,
     ⟨"braced match arm",
       fnBody ("match x { " ++ arm "_" "{ return 1 ; }" ++ " }"), true⟩,
     ⟨"unbraced return arm",
@@ -1096,7 +808,7 @@ def examples (slice currentSlice : Nat) : List Example :=
     ⟨"nonempty import with trailing comma",
       s!"import x :: \{ x , } ;", true⟩,
     ⟨"constant target-type conversion",
-      "const X : u32 = widen(type: u32, 1);", true⟩,
+      "const X : u32 = widen(type: u32, 1u8);", true⟩,
     ⟨"constant target-type binary arithmetic",
       "const X : u32 = wrapping_add(type: u32, 1, 2);", true⟩,
     ⟨"constant target-type binary arithmetic rejects one operand",
@@ -1168,8 +880,6 @@ def examples (slice currentSlice : Nat) : List Example :=
       fnBody "assert(true) by lemma(exact { x + 1 }); return 1;", true⟩,
     ⟨"proof context does not extend to the following runtime statement",
       fnBody "assert(true); return exact { 1 + 2 };", false⟩,
-    ⟨"typed ghost binding refuses a redundant suffix", fnBody "ghost let x: u8 = 255u8;", false⟩,
-    ⟨"typed ghost binding supplies a literal type", fnBody "ghost let x: u8 = 255;", true⟩,
     ⟨"typed ghost binding", fnBody "ghost let x: u8 = 1; return 1;", true⟩,
     ⟨"ghost destructuring is refused", fnBody "ghost let S { a: x } = s; return 1;", false⟩,
     ⟨"assertion requires parentheses",
@@ -1316,13 +1026,13 @@ def checkProjection (slice : Nat) (rules : List Rule) : IO Unit := do
   let (g, table) ← requireProjection label rules
   checkDraftBoundaries slice g table label
   let slices := List.range (slice + 1)
-  let operands := slices.flatMap operandExamples
-  let ghosts := if slice >= 10 then ghostExamples else []
-  for (group, check) in [(operands, literalSuffixesValid slice), (ghosts, draftRestrictions slice false)] do
-    for fixture in group do
-      unless (parseSource slice g table fixture.input).any (fun t => check t == fixture.expected) do
-        throw (IO.userError s!"{label}, {fixture.label}: wrong parsed operand or proof context: {fixture.input}")
-  let fixtures := slices.flatMap (fun first => examples first slice) ++ operands ++ ghosts
+  let restrictions := (if slice >= 4 then countedLoopExamples else []) ++
+    (if slice >= 10 then ghostExamples else [])
+  for fixture in restrictions do
+    unless (parseSource slice g table fixture.input).any (fun tree =>
+        draftRestrictions slice false tree == fixture.expected) do
+      throw (IO.userError s!"{label}, {fixture.label}: wrong parsed restriction: {fixture.input}")
+  let fixtures := primitiveExamples slice ++ slices.flatMap (fun first => examples first slice) ++ restrictions
   for fixture in fixtures do
     unless recognizes slice g table fixture.input == fixture.expected do
       throw (IO.userError s!"{label}, {fixture.label}: expected {fixture.expected}: {fixture.input}")
@@ -1360,17 +1070,12 @@ def requireConflict (label : String) (rules : List Rule) : IO Unit := do
   | .error other => throw (IO.userError s!"{label}: expected a prediction conflict, got {repr other}")
   | .ok _ => throw (IO.userError s!"missing planted conflict: {label}")
 
--- OD138 supplies the typing context. A suffix is required exactly when the
--- surrounding expression supplies no type. The lexer retains the suffix.
-def literalInContext (source : String) (expectedType : Bool) : Bool :=
-  (integerSuffix 2 source.toList).any (fun suffix => suffix.isEmpty == expectedType)
-
 def checkLiterals : IO Unit := do
   let kind (slice : Nat) (source : String) := (draftTokens slice source).map (·.kind)
   let cases := [
     ("1_000", "INTEGER"), ("0xff_ff", "INTEGER"), ("0b1_0", "INTEGER"),
     ("0xFF", "INVALID"), ("0x_ff", "INVALID"), ("1__0", "INVALID"), ("1_", "INVALID"),
-    ("00_1", "INVALID"), ("255u9", "INVALID"), ("'\\x00'", "BYTE"), ("'\\xff'", "BYTE"),
+    ("0xffu8", "INTEGER"), ("255u8", "INTEGER"), ("00_1", "INVALID"), ("255u9", "INVALID"), ("'\\x00'", "BYTE"), ("'\\xff'", "BYTE"),
     ("'\\xFF'", "INVALID"), ("'\\x100'", "INVALID"), ("\"\\x41\"", "INVALID"),
     ("\"\\u{d800}\"", "INVALID"), ("\"\\u{dfff}\"", "INVALID"), ("\"\\u{10FFFF}\"", "INVALID"),
     ("\"\\u{}\"", "INVALID"), ("\"\\u{110000}\"", "INVALID"), ("\"\\u{10ffff}\"", "STRING"),
@@ -1385,11 +1090,9 @@ def checkLiterals : IO Unit := do
   for scalar in forbidden do
     unless kind 11 ("\"" ++ String.singleton (Char.ofNat scalar) ++ "\"") == ["INVALID"] do
       throw (IO.userError s!"forbidden raw string scalar accepted: {scalar}")
-  unless kind 11 (String.singleton (Char.ofNat 0xFEFF) ++ "fn") == ["INVALID"] &&
-      kind 2 "255u8" == ["INTEGER"] && !literalInContext "255u8" true &&
-      literalInContext "255u8" false && literalInContext "255" true && !literalInContext "255" false do
-    throw (IO.userError "raw BOM or expected-type suffix control failed")
-  IO.println s!"pass: {cases.length} literal examples, slice boundary, raw scalars and expected-type suffix controls"
+  unless kind 11 (String.singleton (Char.ofNat 0xFEFF) ++ "fn") == ["INVALID"] do
+    throw (IO.userError "raw BOM accepted")
+  IO.println s!"pass: {cases.length} literal examples, slice boundary and raw scalars"
 
 def main : IO Unit := do
   unless (wordTokens.map Prod.fst).Nodup && (wordTokens.map Prod.snd).Nodup do
