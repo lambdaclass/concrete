@@ -13,11 +13,11 @@ structure Output where
   sites : List SourceSite
 
 def LocatedOutput.erase (out : LocatedOutput) : Output :=
-  let sites := out.bindings.filterMap fun (bind, span) =>
-    match bind.e with
+  let sites := out.bindings.filterMap fun binding =>
+    match binding.statement.e with
     | .atom _ => none
-    | .add .. => some (⟨bind.x, span⟩ : SourceSite)
-  ⟨⟨out.bindings.map Prod.fst, out.ret⟩, sites⟩
+    | .add .. => some (⟨binding.statement.x, binding.operationSpan⟩ : SourceSite)
+  ⟨⟨out.bindings.map (·.statement), out.ret⟩, sites⟩
 
 def elaborate (ast : Program) : Except Refusal Output :=
   ((elaborateLocated ast).map LocatedOutput.erase).mapError Failure.diagnostic

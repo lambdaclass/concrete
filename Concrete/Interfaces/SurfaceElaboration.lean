@@ -6,7 +6,8 @@ import Concrete.Refusal
 namespace Concrete.Elab
 open ConcreteSpec.Surface0
 
-open ConcreteSpec.StageInterface (SyntaxTree FileSpan)
+open ConcreteSpec.StageInterface (SyntaxTree FileSpan LocatedBinding)
+open ConcreteSpec.Core (ConstructName)
 
 private def surfaceSpan (span : FileSpan) : Span :=
   ⟨span.startOffset, span.endOffset, span.line, span.col, span.file⟩
@@ -57,12 +58,12 @@ abbrev LocatedOutput := ConcreteSpec.StageInterface.EarlyProgram
 
 private structure State where
   next : Nat := 0
-  bindings : List (ConcreteSpec.Slice0.Stmt × Span) := []
+  bindings : List LocatedBinding := []
 
-private def State.bind (s : State) (rhs : ConcreteSpec.Slice0.Expr) (span : Span) :
+private def State.bind (s : State) (name : ConstructName) (rhs : ConcreteSpec.Slice0.Expr) (span : Span) :
     ConcreteSpec.Var × State :=
   let x : ConcreteSpec.Var := ⟨s.next⟩
-  (x, ⟨s.next + 1, (⟨x, rhs⟩, span) :: s.bindings⟩)
+  (x, ⟨s.next + 1, {statement := ⟨x, rhs⟩, operationSpan := span, name} :: s.bindings⟩)
 
 abbrev Scope := List (String × ConcreteSpec.Var)
 
@@ -70,16 +71,16 @@ private inductive Rhs where
   | atom (value : ConcreteSpec.Slice0.Atom) (span : Span)
   | add (lhs rhs : ConcreteSpec.Slice0.Atom) (site : Span)
 
-private def Rhs.bind (rhs : Rhs) (s : State) : ConcreteSpec.Var × State :=
+private def Rhs.bind (rhs : Rhs) (name : ConstructName) (s : State) : ConcreteSpec.Var × State :=
   match rhs with
-  | .atom a span => s.bind (.atom a) span
-  | .add a b site => s.bind (.add a b) site
+  | .atom a span => s.bind name (.atom a) span
+  | .add a b site => s.bind name (.add a b) site
 
 private def Rhs.asAtom (rhs : Rhs) (s : State) : ConcreteSpec.Slice0.Atom × State :=
   match rhs with
   | .atom a _ => (a, s)
   | .add .. =>
-    let (x, s) := rhs.bind s
+    let (x, s) := rhs.bind (.unnamed none) s
     (.var x, s)
 
 private def expr (scope : Scope) : Expr → State → Except Failure (Rhs × State)
@@ -103,7 +104,7 @@ private def binding (acc : Scope × State) (b : Binding) : Except Failure (Scope
     throw (if b.name == "_" then .wildcard b.span
       else .shadowing b.name b.span)
   let (rhs, s) ← expr scope b.rhs s
-  let (x, s) := rhs.bind s
+  let (x, s) := rhs.bind (.named ⟨b.name⟩) s
   return ((b.name, x) :: scope, s)
 
 /-- The same elaboration, retaining the location of each A-normal binding and
@@ -121,8 +122,8 @@ def elaborateLocated (ast : Program) : Except Failure LocatedOutput := do
   let (ret, s) := rhs.asAtom s
   return ⟨s.bindings.reverse, ret, returnSpan⟩
 
-private theorem bind_fresh (s : State) (rhs : ConcreteSpec.Slice0.Expr) (span : Span)
-    (x : ConcreteSpec.Var) (h : x.id < s.next) : (s.bind rhs span).1 ≠ x := by
+private theorem bind_fresh (s : State) (name : ConstructName) (rhs : ConcreteSpec.Slice0.Expr) (span : Span)
+    (x : ConcreteSpec.Var) (h : x.id < s.next) : (s.bind name rhs span).1 ≠ x := by
   intro eq
   have he := congrArg ConcreteSpec.Var.id eq
   exact Nat.ne_of_lt h he.symm
