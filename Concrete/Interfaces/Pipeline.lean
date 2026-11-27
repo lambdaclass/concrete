@@ -83,7 +83,7 @@ def Memory.HandoffWF {Ty : Type} {lowering : LoweringLanguage Ty}
     (memory : Memory lowering profile) : Prop :=
   memory.TablesWF ∧ memory.entry ∈ List.map Prod.fst memory.functions ∧
   (∀ origin ∈ memory.origins, ∃ span, origin.lexical.Binds memory.project span) ∧
-  ∀ table ∈ memory.layouts, ∀ slot ∈ table.2, slot.2.WellFormed profile.memoryTarget
+  memory.LayoutsWF
 
 def SSA.WF (ssa : SSA lang profile) : Prop :=
   (ssa.memoryView (language := language)).HandoffWF
@@ -92,7 +92,7 @@ def BIR.WF (bir : BIR lang profile) : Prop :=
   bir.TrapSlotsWF ∧ bir.frameSlots ≤ profile.maxBIRSlots ∧
   (List.map Prod.fst bir.functions).Nodup ∧ bir.entry ∈ List.map Prod.fst bir.functions ∧
   (∀ site ∈ bir.sites.toList, ∃ span, site.origin.lexical.Binds bir.project span) ∧
-  (bir.memoryView (language := language)).TablesWF
+  (bir.memoryView (language := language)).TablesWF ∧ (bir.memoryView (language := language)).LayoutsWF
 
 private def Profile.Refuses (profile : Profile) (backend : BackendKind) : StageFailure → Prop
   | .unsupportedProfile rule =>

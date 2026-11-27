@@ -261,7 +261,7 @@ private abbrev testLanguage : CoreLanguage where
   argumentReadNoTrap := by simp
   OtherValue := Unit
   valueShape := rfl
-  layout := fun _ _ => some ⟨1, 1⟩
+  layout := fun _ _ => some ⟨1, 1, .nil⟩
   scalarType := fun _ => some (.int .u8)
   literal := fun _ _ => some (.scalar (.int .u8 42))
   typeDecidableEq := inferInstance
@@ -271,7 +271,6 @@ private abbrev testLanguage : CoreLanguage where
   checkTrap := fun _ _ _ => false
   field := fun _ _ => none
   replaceField := fun _ _ _ => none
-  fieldRange := fun _ _ _ => none
   encodeOther := fun _ _ _ => none
   decodeOther := fun _ _ _ => none
   safety
@@ -1082,7 +1081,7 @@ private def argLanguage : CoreLanguage where
     · cases h : AList.lookup locals argTemp <;> simp [h]
   OtherValue := Empty
   valueShape := rfl
-  layout := fun _ _ => some ⟨1, 1⟩
+  layout := fun _ _ => some ⟨1, 1, .nil⟩
   scalarType := fun _ => some (.int .u8)
   literal := fun _ bytes => bytes.head?.map fun byte => .scalar (.int .u8 (Int.ofNat byte.toNat))
   typeDecidableEq := inferInstance
@@ -1092,7 +1091,6 @@ private def argLanguage : CoreLanguage where
   checkTrap := fun _ _ _ => false
   field := fun _ _ => none
   replaceField := fun _ _ _ => none
-  fieldRange := fun _ _ _ => none
   encodeOther := fun _ _ other => nomatch other
   decodeOther := fun _ _ _ => none
   safety
@@ -1213,7 +1211,7 @@ private def storingMemory (project : Project) : Memory testLowering testProfile 
     [⟨testOrigin, .beginLifetime storeRoot⟩, ⟨testOrigin, .bind storePlace (.literal ⟨[42]⟩)⟩],
     .ret none, []⟩
   ⟨project, Exec.Demo.mainF, [], [(Exec.Demo.mainF, [(storeRoot, ())], ⟨⟨0⟩, #[block]⟩)],
-    [(Exec.Demo.mainF, [(storeRoot, ⟨1, 1⟩)])], [(Exec.Demo.mainF, [(storeRoot, .materialized)])],
+    [(Exec.Demo.mainF, [(storeRoot, ⟨1, 1, .nil⟩)])], [(Exec.Demo.mainF, [(storeRoot, .materialized)])],
     [(Exec.Demo.mainF, [storeRoot])]⟩
 
 private def storeInitial : MemoryRegisters testLanguage testProfile :=
@@ -1240,12 +1238,12 @@ private def storeAfter : MemoryRegisters testLanguage testProfile :=
 
 example (project : Project) : (storingMemory project).Step (language := testLanguage) storeInitial storeBefore := by
   refine ⟨_, rfl, {storeBefore with instruction := 0}, ⟨by decide, Or.inr ?_⟩, rfl⟩
-  exact ⟨rfl, ⟨⟨1, 1⟩, rfl, Or.inr ⟨by decide, ⟨0⟩, 1, ⟨0⟩, storeBefore.bytes, rfl, rfl⟩⟩⟩
+  exact ⟨rfl, ⟨⟨1, 1, .nil⟩, rfl, Or.inr ⟨by decide, ⟨0⟩, 1, ⟨0⟩, storeBefore.bytes, rfl, rfl⟩⟩⟩
 
 private theorem storingWrite (project : Project) :
     (storingMemory project).Writes (language := testLanguage) storeBefore storePlace storeValue
       {storeAfter with instruction := 1} := by
-  refine ⟨⟨rfl, fun _ => rfl⟩, (fun _ => ⟨⟨1, 1⟩, rfl, by decide⟩), rfl, rfl, fun _ => Or.inr ⟨storeRange, [(0, [.init 42 none])], rfl, rfl, ?_, ?_⟩⟩
+  refine ⟨⟨rfl, fun _ => rfl⟩, (fun _ => ⟨⟨1, 1, .nil⟩, rfl, by decide⟩), rfl, rfl, fun _ => Or.inr ⟨storeRange, [(0, [.init 42 none])], rfl, rfl, ?_, ?_⟩⟩
   · exact fun _ => ⟨0, [.init 42 none], List.mem_cons_self .., by decide⟩
   · intro offset bytes member
     have eq := List.mem_singleton.mp member
@@ -1435,7 +1433,7 @@ private abbrev zeroLanguage : CoreLanguage :=
   {testLanguage with
     operands := {testLanguage.operands with isCopy := fun _ => false}
     safety := fun _ => []
-    layout := fun _ _ => some ⟨0, 1⟩
+    layout := fun _ _ => some ⟨0, 1, .nil⟩
     scalarType := fun _ => none
     literal := fun _ _ => some (.scalar .unit)}
 
@@ -1445,7 +1443,7 @@ private def zeroMemory (project : Project) : Memory testLowering testProfile :=
       ⟨testOrigin, .endLifetime storeRoot⟩], .ret none, []⟩
   {(storingMemory project) with
     functions := [(Exec.Demo.mainF, [(storeRoot, ())], ⟨⟨0⟩, #[block]⟩)]
-    layouts := [(Exec.Demo.mainF, [(storeRoot, ⟨0, 1⟩)])]}
+    layouts := [(Exec.Demo.mainF, [(storeRoot, ⟨0, 1, .nil⟩)])]}
 
 private def zeroStarted : MemoryRegisters zeroLanguage testProfile :=
   {storeInitial with instruction := 1, live := [storeRoot]}
@@ -1469,12 +1467,12 @@ example (project : Project) :
   dsimp only
   refine ⟨?_, ?_, rfl, rfl, ?_⟩
   · exact ⟨_, rfl, {zeroStarted with instruction := 0},
-      ⟨by decide, Or.inr ⟨rfl, ⟨0, 1⟩, rfl, Or.inl ⟨rfl, rfl⟩⟩⟩, rfl⟩
+      ⟨by decide, Or.inr ⟨rfl, ⟨0, 1, .nil⟩, rfl, Or.inl ⟨rfl, rfl⟩⟩⟩, rfl⟩
   · refine ⟨_, rfl, _, zeroStarted, {zeroBound with instruction := 1}, rfl, ?_, rfl⟩
-    exact ⟨⟨rfl, nofun⟩, (fun _ => ⟨⟨0, 1⟩, rfl, by decide⟩), rfl, rfl,
+    exact ⟨⟨rfl, nofun⟩, (fun _ => ⟨⟨0, 1, .nil⟩, rfl, by decide⟩), rfl, rfl,
       fun _ => Or.inl rfl⟩
   · exact ⟨_, rfl, {storeInitial with instruction := 2},
-      ⟨⟨by decide, rfl⟩, Or.inr ⟨rfl, Or.inl ⟨⟨0, 1⟩, rfl, rfl, rfl⟩⟩⟩, rfl⟩
+      ⟨⟨by decide, rfl⟩, Or.inr ⟨rfl, Or.inl ⟨⟨0, 1, .nil⟩, rfl, rfl, rfl⟩⟩⟩, rfl⟩
 
 private def splitField : FieldId := ⟨.struct ⟨Exec.Demo.mainF.module, ⟨"record"⟩⟩, ⟨"item"⟩⟩
 
@@ -1694,7 +1692,7 @@ private def projectedStorePlace : MemoryPlace Unit () :=
 private abbrev projectedLanguage : CoreLanguage :=
   {testLanguage with
     fieldType := fun _ _ => some ()
-    fieldRange := fun _ _ _ => some (0, ⟨1, 1⟩)}
+    layout := fun _ _ => some ⟨1, 1, .cons splitField 0 (.scalar 1 1) .nil⟩}
 
 private abbrev linearProjectedLanguage : CoreLanguage :=
   {projectedLanguage with
@@ -1704,7 +1702,8 @@ private abbrev linearProjectedLanguage : CoreLanguage :=
 -- A projected write can replace an initialized field. It cannot revive a
 -- consumed root, even when the physical bytes of the moved value remain.
 example (project : Project) :
-    let memory := storingMemory project
+    let memory := {storingMemory project with layouts :=
+      [(Exec.Demo.mainF, [(storeRoot, ⟨1, 1, .cons splitField 0 (.scalar 1 1) .nil⟩)])]}
     let moved := {storeAfter with initialized := []}
     memory.readValue (language := linearProjectedLanguage) storeAfter (.move storePlace) =
       some (storeValue, moved) ∧
@@ -1728,7 +1727,7 @@ example (project : Project) :
     memory.Writes (language := projectedZeroLanguage) zeroBound projectedStorePlace (.scalar .unit) zeroBound ∧
     memory.writeValue (language := projectedZeroLanguage) zeroStarted projectedStorePlace (.scalar .unit) =
       none := by
-  exact ⟨rfl, ⟨⟨rfl, fun _ => rfl⟩, (fun _ => ⟨⟨0, 1⟩, rfl, by decide⟩), rfl,
+  exact ⟨rfl, ⟨⟨rfl, fun _ => rfl⟩, (fun _ => ⟨⟨0, 1, .nil⟩, rfl, by decide⟩), rfl,
     rfl, fun _ => Or.inl rfl⟩, rfl⟩
 
 example (project : Project) (next : MemoryRegisters zeroLanguage testProfile) :
@@ -2129,7 +2128,7 @@ private abbrev erasureLanguage : CoreLanguage :=
   {zeroLanguage with
     operands := testLanguage.operands
     safety := fun _ => []
-    layout := fun _ _ => some ⟨1, 1⟩
+    layout := fun _ _ => some ⟨1, 1, .nil⟩
     literal := fun _ encoding =>
       if encoding.isEmpty then some (.other ()) else some (.scalar (.int .u8 0))
     encodeOther := fun _ _ _ => some [(0, [.init 42 none])]
@@ -2141,7 +2140,7 @@ private def immediateReturn (project : Project) : Memory testLowering testProfil
     signatures := [(Exec.Demo.mainF, ⟨[], some ()⟩)]
     functions := [(Exec.Demo.mainF, [(storeRoot, ())], ⟨⟨0⟩,
       #[⟨⟨0⟩, [], [], .ret (some ⟨(), .literal ⟨[0]⟩⟩), [testOrigin]⟩]⟩)]
-    layouts := [(Exec.Demo.mainF, [(storeRoot, ⟨1, 1⟩)])]}
+    layouts := [(Exec.Demo.mainF, [(storeRoot, ⟨1, 1, .nil⟩)])]}
 
 private def erasureSource (project : Project) : MIR testLowering testProfile :=
   {(shadowMIR project) with
@@ -3086,7 +3085,7 @@ example (unchecked : Bool) :
   have elaborates : (registry literalReturnPasses).elaborator.success parsedReturn literalCore :=
     ⟨rfl, rfl, returnedCoreWF 42, returnProgram, rfl, rfl⟩
   have birWF : BIR.WF (language := earlyFixtureLanguage) literalBIR :=
-    ⟨literalBIRContract.2.1, by decide, .cons nofun .nil, List.mem_singleton_self _, nofun, by with_unfolding_all exact literalTables⟩
+    ⟨literalBIRContract.2.1, by decide, .cons nofun .nil, List.mem_singleton_self _, nofun, by with_unfolding_all exact literalTables, nofun⟩
   have ready : Source.WF elaborationSource ∧ elaborationSource.slice = slice0 := ⟨parsedReturnDomain.1, rfl⟩
   have front := returnLexerContract
   have parse := returnParserContract
@@ -3170,7 +3169,7 @@ example (parser : Parser grammar) (project : Project) :
   intro observed sound
   have eligible : (stages 42).emitLLVM.inputInvariant input := by
     refine ⟨?_, (by decide : 0 ≤ 2), by simp [input, original, birReturn, testBIR],
-      by simp [input, original, birReturn, testBIR], nofun, birReturnTables project macLLVM⟩
+      by simp [input, original, birReturn, testBIR], nofun, birReturnTables project macLLVM, nofun⟩
     intro fn member block included slot trap
     cases List.mem_singleton.mp member
     cases List.mem_singleton.mp included
@@ -3441,7 +3440,7 @@ private theorem singletonTrapWF (sites : TrapTable) (slot : TrapIndex)
     (locations : ∀ site ∈ sites.toList, ∃ span, site.origin.lexical.Binds tabProject span) :
     BIR.WF (language := earlyFixtureLanguage) (singletonTrapBIR sites slot) := by
   obtain ⟨entry, found⟩ := resolves
-  refine ⟨?_, Nat.zero_le _, .cons nofun .nil, List.mem_singleton_self _, locations, ?_⟩
+  refine ⟨?_, Nat.zero_le _, .cons nofun .nil, List.mem_singleton_self _, locations, ?_, nofun⟩
   · intro fn member block inside index trapped
     cases List.mem_singleton.mp member
     cases List.mem_singleton.mp inside
@@ -3563,7 +3562,7 @@ example :
     ⟨noTrap, by decide, .cons nofun .nil,
     List.mem_singleton_self _, nofun, ?_⟩, rfl,
     ⟨rfl, noTrap, ?_, ?_, by decide, ⟨rfl, by with_unfolding_all rfl⟩, ?_⟩, rfl⟩
-  · with_unfolding_all exact tables
+  · with_unfolding_all exact ⟨tables, nofun⟩
   · intro fn present block inside kind site trap
     cases List.mem_singleton.mp present
     cases List.mem_singleton.mp inside
@@ -3576,7 +3575,7 @@ example :
 example :
     ¬ BIR.WF (language := testLanguage) (birReturn tabProject false) := by
   intro wf
-  have checked := wf.2.2.2.2.2
+  have checked := wf.2.2.2.2.2.1
   obtain ⟨_, _, signature⟩ := checked.2.2.2.2.2.2 _ _ _ (List.mem_singleton_self _)
   obtain ⟨_, found, _⟩ := signature
   cases found
@@ -3621,7 +3620,7 @@ example (parser : Parser grammar) :
       cases List.mem_singleton.mp member
       cases List.mem_singleton.mp included
       cases trap
-    · exact birReturnTables tabProject testProfile
+    · exact ⟨birReturnTables tabProject testProfile, nofun⟩
   have wrong : false = true := by
     with_unfolding_all exact valid.2 input .lcbLinkingUnavailable eligible rfl
   cases wrong
@@ -3975,12 +3974,11 @@ example : loanMemory.Represents (language := enumFieldLanguage) enumLogical (enu
       [enumSurviving] (.inl (.scalar (.int .u8))) (.scalar (.int .u8 25)) rfl rfl rfl
     cases loaded
 
+private def pairLayout : Layout :=
+  ⟨2, 1, .cons splitField 0 (.scalar 1 1) (.cons secondSplitField 1 (.scalar 1 1) .nil)⟩
+
 private abbrev physicalFieldLanguage : CoreLanguage :=
-  {linearProjectedLanguage with
-    fieldRange := fun _ path _ =>
-      if path = [splitField] then some (0, ⟨1, 1⟩)
-      else if path = [secondSplitField] then some (1, ⟨1, 1⟩)
-      else none}
+  {linearProjectedLanguage with layout := fun _ _ => some pairLayout}
 
 private def physicalFields : MemoryRegisters physicalFieldLanguage testProfile :=
   {storeInitial with
@@ -3997,7 +3995,7 @@ private def physicalFieldSSA : SSA testLowering testProfile :=
   ⟨tabProject, Exec.Demo.mainF, [],
     [(Exec.Demo.mainF, [(storeRoot, ())], ⟨⟨0⟩, #[⟨⟨0⟩, [],
       physicalFieldLoads, .ret none, []⟩]⟩)],
-    [(Exec.Demo.mainF, [(storeRoot, ⟨2, 1⟩)])], []⟩
+    [(Exec.Demo.mainF, [(storeRoot, pairLayout)])], []⟩
 
 private def physicalFieldBIR : BIR testLowering testProfile :=
   ⟨tabProject, Exec.Demo.mainF, [],
@@ -4051,14 +4049,14 @@ private def splitSSA (project : Project) (dropSecond : Bool := false) : SSA test
     [(Exec.Demo.mainF, [(storeRoot, ())], ⟨⟨0⟩, #[⟨⟨0⟩, [],
       [⟨testOrigin, .destructure (.materialized (ty := ()) ⟨storeRoot, []⟩)
         (if dropSecond then splitRegisters.take 1 else splitRegisters)⟩], .ret none, []⟩]⟩)],
-    [(Exec.Demo.mainF, [(storeRoot, ⟨1, 1⟩)])], []⟩
+    [(Exec.Demo.mainF, [(storeRoot, ⟨1, 1, .nil⟩)])], []⟩
 
 private def splitBIR (project : Project) : BIR testLowering testProfile :=
   ⟨project, Exec.Demo.mainF, [],
     [(Exec.Demo.mainF, [(storeRoot, ())], ⟨⟨0⟩, #[⟨⟨0⟩, [],
       [⟨testOrigin, .destructure (.materialized (ty := ()) ⟨storeRoot, []⟩)
         splitRegisters⟩], .ret none, []⟩]⟩)],
-    [(Exec.Demo.mainF, [(storeRoot, ⟨1, 1⟩)])], #[], []⟩
+    [(Exec.Demo.mainF, [(storeRoot, ⟨1, 1, .nil⟩)])], #[], []⟩
 
 private def splitBefore : MemoryRegisters twoFieldLanguage testProfile :=
   {backingAfter ⟨0⟩ 1 with instruction := 0}
@@ -4079,7 +4077,7 @@ private def splitBlock : MemoryBlock testLowering := ⟨⟨0⟩, [],
 private def splitMemory (project : Project) : Memory testLowering testProfile :=
   ⟨project, Exec.Demo.mainF, [],
     [(Exec.Demo.mainF, [(storeRoot, ()), (⟨1⟩, ()), (⟨2⟩, ())], ⟨⟨0⟩, #[splitBlock]⟩)],
-    [(Exec.Demo.mainF, [(storeRoot, ⟨1, 1⟩)])],
+    [(Exec.Demo.mainF, [(storeRoot, ⟨1, 1, .nil⟩)])],
     [(Exec.Demo.mainF, [(storeRoot, .materialized), (⟨1⟩, .virtual), (⟨2⟩, .virtual)])],
     [(Exec.Demo.mainF, [⟨1⟩, ⟨2⟩])]⟩
 
@@ -4309,12 +4307,12 @@ private theorem fullSplitReturns (project : Project) :
   have allocate : exec.step bir start allocated := by
     with_unfolding_all
       refine ⟨rfl, ⟨_, rfl, {allocated with instruction := 0},
-        ⟨nofun, Or.inr ⟨rfl, ⟨1, 1⟩, rfl, Or.inr ?_⟩⟩, rfl⟩, [], rfl⟩
+        ⟨nofun, Or.inr ⟨rfl, ⟨1, 1, .nil⟩, rfl, Or.inr ?_⟩⟩, rfl⟩, [], rfl⟩
       exact ⟨by decide, ⟨0⟩, 1, ⟨0⟩, allocated.bytes, rfl, rfl⟩
   have bind : exec.step bir allocated bound := by
     with_unfolding_all
       refine ⟨rfl, ⟨_, rfl, .other (), allocated, {bound with instruction := 1}, rfl, ?_, rfl⟩, [], rfl⟩
-      refine ⟨⟨rfl, nofun⟩, fun _ => ⟨⟨1, 1⟩, rfl, ⟨nofun, nofun⟩⟩, rfl, rfl, ?_⟩
+      refine ⟨⟨rfl, nofun⟩, fun _ => ⟨⟨1, 1, .nil⟩, rfl, ⟨nofun, nofun⟩⟩, rfl, rfl, ?_⟩
       intro _
       refine Or.inr ⟨backingRange ⟨0⟩ 1, [(0, [.init 42 none])], rfl, rfl,
         fun _ => ⟨0, [.init 42 none], List.mem_singleton_self _, nofun⟩, ?_⟩
@@ -4376,7 +4374,7 @@ private theorem fullSplitReturns (project : Project) :
     have memoryBind : memory.Step allocated bound := by
       with_unfolding_all
         refine ⟨_, rfl, .other (), allocated, {bound with instruction := 1}, rfl, ?_, rfl⟩
-        refine ⟨⟨rfl, nofun⟩, fun _ => ⟨⟨1, 1⟩, rfl, ⟨nofun, nofun⟩⟩, rfl, rfl, ?_⟩
+        refine ⟨⟨rfl, nofun⟩, fun _ => ⟨⟨1, 1, .nil⟩, rfl, ⟨nofun, nofun⟩⟩, rfl, rfl, ?_⟩
         intro _
         refine Or.inr ⟨backingRange ⟨0⟩ 1, [(0, [.init 42 none])], rfl, rfl,
           fun _ => ⟨0, [.init 42 none], List.mem_singleton_self _, nofun⟩, ?_⟩
@@ -4774,7 +4772,7 @@ private def nonzeroAddressBIR (project : Project) : BIR testLowering testProfile
       [⟨(), ⟨shadowRoot, []⟩⟩]⟩]}
   {(birReturn project false) with
     functions := [(Exec.Demo.mainF, [(shadowRoot, ())], ⟨⟨0⟩, #[block]⟩)]
-    layouts := [(Exec.Demo.mainF, [(shadowRoot, ⟨1, 1⟩)])]}
+    layouts := [(Exec.Demo.mainF, [(shadowRoot, ⟨1, 1, .nil⟩)])]}
 
 private def addressAtOne : MemoryRegisters nonzeroAddressLanguage testProfile :=
   {splitBefore with
@@ -4904,9 +4902,9 @@ private theorem aggregateWrite (project : Project) (space : AddrSpace) (base : N
         simp [backingAfter, backingBefore, backingRange, Mem.Memory.access, Mem.Memory.block,
           AList.lookup, Mem.candidate, Nat.mod_one]]
     rfl
-  refine ⟨⟨rfl, fun _ => rfl⟩, (fun _ => ⟨⟨1, 1⟩, rfl, ⟨nofun, nofun⟩⟩),
+  refine ⟨⟨rfl, fun _ => rfl⟩, (fun _ => ⟨⟨1, 1, .nil⟩, rfl, ⟨nofun, nofun⟩⟩),
     ?_, ?_, fun _ => Or.inr ⟨backingRange space base, [(0, [.init 42 none])], rfl, rfl, ?_, ?_⟩⟩
-  · simp [Memory.writeValue, Memory.mayInitialize, Memory.authorizeWrite, Memory.writeOwnerView, Memory.ownerView, Memory.zeroRoot, Memory.rangeAt, Memory.byteRuns,
+  · simp [Memory.writeValue, Memory.markWritten, Memory.storeRuns, Memory.atOffset, Memory.mayInitialize, Memory.authorizeWrite, Memory.writeOwnerView, Memory.ownerView, Memory.zeroRoot, Memory.rangeAt, Memory.byteRuns,
       Memory.layoutAt, materializedBinding, immediateReturn, zeroMemory, storePlace,
       backingBefore, backingAfter, backingRange, storeBefore, storeInitial, storeRoot,
       Mem.Memory.store, Mem.Memory.access, Mem.Memory.block, Mem.Memory.modify,
@@ -4945,13 +4943,13 @@ private theorem materializedRepresents (project : Project) (space : AddrSpace) (
   · intro place range member
     cases List.mem_singleton.mp member
     exact ⟨List.mem_singleton_self _, rfl,
-      ⟨⟨1, 1⟩, ⟨0⟩, _, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩⟩
+      ⟨⟨1, 1, .nil⟩, ⟨0⟩, _, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩⟩
   · intro place member
     have eq := List.mem_singleton.mp member
     subst place
     refine ⟨_, _, (), .materialized, List.mem_singleton_self _, rfl, rfl, ?_, ?_⟩
     · intro _
-      exact ⟨⟨1, 1⟩, rfl, ⟨nofun, nofun⟩⟩
+      exact ⟨⟨1, 1, .nil⟩, rfl, ⟨nofun, nofun⟩⟩
     · intro value lookedUp
       have same : some (CoreValue.other ()) = some value := lookedUp
       cases same
@@ -4995,10 +4993,10 @@ private theorem materializationNormal (project : Project) (p : Materialization) 
       rcases begins.2 with ⟨impossible, _⟩ | ⟨_, layout, lookup, isZero | allocated⟩
       · have wrong : some StorageClass.materialized = some .virtual := impossible
         cases wrong
-      · have same : some (⟨1, 1⟩ : Layout) = some layout := lookup
+      · have same : some (⟨1, 1, .nil⟩ : Layout) = some layout := lookup
         cases same
         exact (Nat.one_ne_zero isZero.1).elim
-      · have same : some (⟨1, 1⟩ : Layout) = some layout := lookup
+      · have same : some (⟨1, 1, .nil⟩ : Layout) = some layout := lookup
         cases same
         obtain ⟨_, space, base, id, bytes, alloc, rfl⟩ := allocated
         have result : Mem.Memory.empty.alloc testProfile.memoryTarget space base 1 1 = .ok (id, bytes) := alloc
@@ -5037,7 +5035,7 @@ private theorem materializationNormal (project : Project) (p : Materialization) 
     cases tick with
     | allocate space base fits =>
       refine ⟨_, rfl, {backingBefore space base with instruction := 0}, ⟨by decide, Or.inr ?_⟩, rfl⟩
-      refine ⟨rfl, ⟨⟨1, 1⟩, rfl, Or.inr ⟨by decide, space, base, ⟨0⟩, _, ?_, rfl⟩⟩⟩
+      refine ⟨rfl, ⟨⟨1, 1, .nil⟩, rfl, Or.inr ⟨by decide, space, base, ⟨0⟩, _, ?_, rfl⟩⟩⟩
       change Mem.Memory.empty.alloc testProfile.memoryTarget space base 1 1 = _
       unfold Mem.Memory.alloc
       have ok : Mem.Memory.empty.Fits testProfile.memoryTarget (Mem.candidate space base 1 1) := fits
@@ -5327,11 +5325,11 @@ private theorem materializationRepresents (project : Project) (q : Materializati
     · intro place range member
       cases List.mem_singleton.mp member
       exact ⟨List.mem_singleton_self _, rfl,
-        ⟨⟨1, 1⟩, ⟨0⟩, _, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩⟩
+        ⟨⟨1, 1, .nil⟩, ⟨0⟩, _, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩⟩
     · intro place member
       cases List.mem_singleton.mp member
       exact ⟨_, _, (), .materialized, List.mem_singleton_self _, rfl, rfl,
-        fun _ => ⟨⟨1, 1⟩, rfl, ⟨nofun, nofun⟩⟩, fun _ => nofun⟩
+        fun _ => ⟨⟨1, 1, .nil⟩, rfl, ⟨nofun, nofun⟩⟩, fun _ => nofun⟩
   | bound space base fits => exact materializedRepresents project space base fits
 
 private theorem materializationStatic (project : Project) :
@@ -5411,9 +5409,9 @@ private theorem AddressAllocation.storeScalar (allocation : AddressAllocation) (
     (addressMemory project).Writes (language := addressLanguage) allocation.before storePlace storeValue
       {allocation.bound with instruction := 1} := by
   have encoded : Hybrid.encode testProfile.memoryTarget (.int .u8 42) = some [.init 42 none] := rfl
-  refine ⟨⟨rfl, fun _ => rfl⟩, (fun _ => ⟨⟨1, 1⟩, rfl, ⟨nofun, nofun⟩⟩),
+  refine ⟨⟨rfl, fun _ => rfl⟩, (fun _ => ⟨⟨1, 1, .nil⟩, rfl, ⟨nofun, nofun⟩⟩),
     ?_, ?_, fun _ => Or.inr ⟨allocation.range, [(0, [.init 42 none])], rfl, rfl, ?_, ?_⟩⟩
-  · simp [Memory.writeValue, Memory.mayInitialize, Memory.authorizeWrite, Memory.writeOwnerView, Memory.ownerView, Memory.zeroRoot, Memory.rangeAt, Memory.byteRuns, Memory.layoutAt,
+  · simp [Memory.writeValue, Memory.markWritten, Memory.storeRuns, Memory.atOffset, Memory.mayInitialize, Memory.authorizeWrite, Memory.writeOwnerView, Memory.ownerView, Memory.zeroRoot, Memory.rangeAt, Memory.byteRuns, Memory.layoutAt,
       addressMemory, storingMemory, storePlace, AddressAllocation.before, AddressAllocation.bound,
       backingBefore, backingAfter, backingRange, storeBefore, storeInitial, storeRoot,
       Mem.Memory.store, Mem.Memory.access, Mem.Memory.block, Mem.Memory.modify,
@@ -5780,10 +5778,10 @@ private theorem addressTargetNormal (project : Project) (phase : AddressTargetPh
       rcases begins.2 with ⟨impossible, _⟩ | ⟨_, layout, found, zero | allocated⟩
       · have wrong : some StorageClass.materialized = some .virtual := impossible
         cases wrong
-      · have same : some (⟨1, 1⟩ : Layout) = some layout := found
+      · have same : some (⟨1, 1, .nil⟩ : Layout) = some layout := found
         cases same
         exact (Nat.one_ne_zero zero.1).elim
-      · have same : some (⟨1, 1⟩ : Layout) = some layout := found
+      · have same : some (⟨1, 1, .nil⟩ : Layout) = some layout := found
         cases same
         obtain ⟨_, space, base, id, bytes, alloc, rfl⟩ := allocated
         have result : Mem.Memory.empty.alloc testProfile.memoryTarget space base 1 1 = .ok (id, bytes) := alloc
@@ -5827,7 +5825,7 @@ private theorem addressTargetNormal (project : Project) (phase : AddressTargetPh
     refine ⟨addressBlock, block, ?_⟩
     cases tick with
     | allocate a =>
-      refine ⟨{a.before with instruction := 0}, ⟨by decide, Or.inr ⟨rfl, ⟨1, 1⟩, rfl, Or.inr ?_⟩⟩, rfl⟩
+      refine ⟨{a.before with instruction := 0}, ⟨by decide, Or.inr ⟨rfl, ⟨1, 1, .nil⟩, rfl, Or.inr ?_⟩⟩, rfl⟩
       refine ⟨by decide, a.space, a.base, ⟨0⟩, a.before.bytes, ?_, rfl⟩
       change Mem.Memory.empty.alloc testProfile.memoryTarget a.space a.base 1 1 = _
       unfold Mem.Memory.alloc
@@ -6044,7 +6042,7 @@ private theorem addressRepresents (project : Project) (q : AddressTargetPhase) :
     · exact (List.not_mem_nil member).elim
     all_goals
       cases List.mem_singleton.mp member
-      refine ⟨?_, rfl, ⟨⟨1, 1⟩, ⟨0⟩, _, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩⟩
+      refine ⟨?_, rfl, ⟨⟨1, 1, .nil⟩, ⟨0⟩, _, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩⟩
       first | exact List.mem_singleton_self _ | exact List.mem_cons_of_mem _ (List.mem_singleton_self _)
   · intro place member
     cases q with
@@ -6052,7 +6050,7 @@ private theorem addressRepresents (project : Project) (q : AddressTargetPhase) :
     | allocated a =>
       cases List.mem_singleton.mp member
       exact ⟨_, _, (), .materialized, List.mem_singleton_self _, rfl, rfl,
-        fun _ => ⟨⟨1, 1⟩, rfl, ⟨nofun, nofun⟩⟩, fun _ => nofun⟩
+        fun _ => ⟨⟨1, 1, .nil⟩, rfl, ⟨nofun, nofun⟩⟩, fun _ => nofun⟩
     | bound a | ready a | reference a | done a =>
       have membership : place = storeRoot ∨ place = shadowRoot := by
         first
@@ -6064,7 +6062,7 @@ private theorem addressRepresents (project : Project) (q : AddressTargetPhase) :
       all_goals
         first
         | (refine ⟨_, _, (), .materialized, List.mem_singleton_self _, rfl, rfl,
-              fun _ => ⟨⟨1, 1⟩, rfl, ⟨nofun, nofun⟩⟩, ?_⟩
+              fun _ => ⟨⟨1, 1, .nil⟩, rfl, ⟨nofun, nofun⟩⟩, ?_⟩
            intro value found
            first
            | (have same : some storeValue = some value := found

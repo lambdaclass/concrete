@@ -113,7 +113,7 @@ private def physical : M :=
    functions := [(mir.entry, [(⟨0⟩, u8Ty)], ⟨⟨0⟩, #[
      ⟨⟨0⟩, [], body [.beginLifetime ⟨0⟩, bind, call], ret, []⟩,
      ⟨⟨1⟩, [], body [.beginLifetime ⟨0⟩, addr], ret, []⟩]⟩)]
-   storage := [(mir.entry, [(⟨0⟩, .materialized)])], layouts := [(mir.entry, [(⟨0⟩, ⟨1, 1⟩)])]}
+   storage := [(mir.entry, [(⟨0⟩, .materialized)])], layouts := [(mir.entry, [(⟨0⟩, ⟨1, 1, .nil⟩)])]}
 
 private theorem lowered : lowerGraph (language := Language) recurMIR = .ok physical := by with_unfolding_all rfl
 
@@ -170,7 +170,7 @@ private theorem allocation_fits (n ceiling : Nat)
 private theorem begin_at (n : Nat) (h : n < capacity) : target.step physical (entry n) (allocated n) := by
   with_unfolding_all
     refine ⟨rfl, ⟨_, rfl, {allocated n with instruction := 0}, ⟨nofun, Or.inr ?_⟩, rfl⟩, [], rfl⟩
-    refine ⟨rfl, ⟨1, 1⟩, rfl, Or.inr ⟨by decide, ⟨0⟩, n+1, ⟨n⟩, _, ?_, rfl⟩⟩
+    refine ⟨rfl, ⟨1, 1, .nil⟩, rfl, Or.inr ⟨by decide, ⟨0⟩, n+1, ⟨n⟩, _, ?_, rfl⟩⟩
     unfold Mem.Memory.alloc
     exact ite_eq_left (allocation_fits n _ (by change n < 2^64 - 2 at h; change n + 2 < 2^64; omega))
 
@@ -184,10 +184,10 @@ private theorem writes_byte (n : Nat) :
     rw [show (bound n).bytes.access profile.memoryTarget (range n).ptr 1 1 = _ from access [.init 42 none]]
     simp [bound, blocks, written, Mem.Memory.block, AList.lookup]
   with_unfolding_all
-    refine ⟨⟨rfl, fun _ => rfl⟩, fun _ => ⟨⟨1, 1⟩, rfl, ⟨nofun, nofun⟩⟩, ?_, ?_,
+    refine ⟨⟨rfl, fun _ => rfl⟩, fun _ => ⟨⟨1, 1, .nil⟩, rfl, ⟨nofun, nofun⟩⟩, ?_, ?_,
       fun _ => Or.inr ⟨range n, [(0, [.init 42 none])], rfl, rfl, ?_, ?_⟩⟩
     · have encoded : Hybrid.encode profile.memoryTarget (.int .u8 42) = some [.init 42 none] := rfl
-      simp [Interfaces.Memory.writeValue, Interfaces.Memory.mayInitialize, Interfaces.Memory.authorizeWrite,
+      simp [Interfaces.Memory.writeValue, Interfaces.Memory.markWritten, Interfaces.Memory.storeRuns, Interfaces.Memory.atOffset, Interfaces.Memory.mayInitialize, Interfaces.Memory.authorizeWrite,
         Interfaces.Memory.writeOwnerView, Interfaces.Memory.ownerView, Interfaces.Memory.zeroRoot,
         Interfaces.Memory.rangeAt, Interfaces.Memory.byteRuns, Interfaces.Memory.layoutAt, physical,
         allocated, bound, entry, boundFrame, blocks, slot, root, value, written, range, candidate,
@@ -215,14 +215,14 @@ private theorem next_call (n : Nat) (h : n < capacity) (reached : target.finite 
 private theorem full : physical.BeginExhausted (entry capacity) ⟨0⟩ := by
   constructor
   · with_unfolding_all
-      refine ⟨{allocated capacity with instruction := 0}, nofun, .inr ⟨rfl, ⟨1, 1⟩, rfl, .inr
+      refine ⟨{allocated capacity with instruction := 0}, nofun, .inr ⟨rfl, ⟨1, 1, .nil⟩, rfl, .inr
         ⟨by decide, ⟨0⟩, capacity + 1, ⟨capacity⟩, _, ?_, rfl⟩⟩⟩
       unfold Mem.Memory.alloc
       exact ite_eq_left (allocation_fits capacity _ (by with_unfolding_all decide))
   · rintro ⟨_, _, ⟨hv, _⟩ | ⟨_, layout, hl, zero | alloc⟩⟩
     · have no : some StorageClass.materialized = some .virtual := by with_unfolding_all exact hv
       contradiction
-    all_goals have eq : some (⟨1, 1⟩ : Layout) = some layout := by with_unfolding_all exact hl
+    all_goals have eq : some (⟨1, 1, .nil⟩ : Layout) = some layout := by with_unfolding_all exact hl
     all_goals cases eq
     · exact Nat.one_ne_zero zero.1
     · obtain ⟨_, space, base, _, _, chosen, _⟩ := alloc

@@ -205,20 +205,90 @@ inductive CoreValue (Other : Type) where
   | scalar (value : CVal)
   | other (value : Other)
 
-/-- Layout is a spec function at the resolved target. A zero extent still has logical lifetime. -/
+mutual
+/-- The declared byte representation, including the offset and representation
+of each immediate field. Projections and allocation consume this same tree. -/
 structure Layout where
   size : Nat
   align : Nat
+  fields : LayoutFields
   deriving DecidableEq, Repr
 
-/-- Declared layouts obey the storage laws at the physical target, including
-the alignment bound for zero-sized roots. -/
-def Layout.WellFormed (target : Target) (layout : Layout) : Prop :=
-  Slice0Layout.StorageGeometry target layout.size layout.align ∧ layout.align ≤ target.addressCeiling
+inductive LayoutFields where
+  | nil
+  | cons (name : FieldId) (offset : Nat) (child : Layout) (rest : LayoutFields)
+  deriving DecidableEq, Repr
+end
 
-instance (target : Target) (layout : Layout) : Decidable (layout.WellFormed target) := by
-  unfold Layout.WellFormed
-  infer_instance
+def Layout.scalar (size align : Nat) : Layout := ⟨size, align, .nil⟩
+
+def LayoutFields.lookup (name : FieldId) : LayoutFields → Option (Nat × Layout)
+  | .nil => none
+  | .cons key offset child rest => if key = name then some (offset, child) else rest.lookup name
+
+mutual
+/-- Slice 0 storage geometry at every node, with the physical alignment bound
+and the relative alignment and containment obligations at every field edge. -/
+def Layout.WellFormed (target : Target) : Layout → Bool
+  | ⟨size, align, fields⟩ => decide (Slice0Layout.StorageGeometry target size align ∧
+      align ≤ target.addressCeiling) && fields.check target size align
+
+def LayoutFields.check (target : Target) (size align : Nat) : LayoutFields → Bool
+  | .nil => true
+  | .cons _ offset child rest =>
+    decide (child.align ∣ offset ∧ child.align ∣ align ∧ offset + child.size ≤ size) &&
+      child.WellFormed target && rest.check target size align
+end
+
+def Layout.project (root : Layout) : List FieldId → Option (Nat × Layout)
+  | [] => some (0, root)
+  | field :: path => do
+    let (offset, child) ← root.fields.lookup field
+    let (inner, leaf) ← child.project path
+    return (offset + inner, leaf)
+
+private theorem LayoutFields.lookup_geometry {target size align name offset child} {fs : LayoutFields}
+    (checked : fs.check target size align) (found : fs.lookup name = some (offset, child)) :
+    (child.align ∣ offset ∧ child.align ∣ align ∧ offset + child.size ≤ size) ∧ child.WellFormed target := by
+  cases fs with
+  | nil => cases found
+  | cons key k sub rest =>
+    simp only [check, Bool.and_eq_true, decide_eq_true_eq] at checked
+    unfold lookup at found
+    split at found
+    · cases found
+      exact checked.1
+    · exact lookup_geometry checked.2 found
+termination_by structural fs
+
+/-- Alignment and containment compose over arbitrary nesting, including empty
+fields at the one-past offset. -/
+theorem Layout.project_aligned {target root path offset leaf base}
+    (wf : Layout.WellFormed target root) (found : root.project path = some (offset, leaf))
+    (aligned : root.align ∣ base) :
+    leaf.align ∣ base + offset ∧ offset + leaf.size ≤ root.size := by
+  induction path generalizing root base offset with
+  | nil =>
+    cases found
+    simpa using aligned
+  | cons name tail ih =>
+    simp only [Layout.project, Option.bind_eq_bind, Option.pure_def] at found
+    cases field : root.fields.lookup name with
+    | none => simp [field] at found
+    | some pair =>
+      obtain ⟨k, child⟩ := pair
+      cases nested : child.project tail with
+      | none => simp [field, nested] at found
+      | some pair =>
+        obtain ⟨n, sub⟩ := pair
+        simp [field, nested] at found
+        obtain ⟨rfl, rfl⟩ := found
+        have checked : root.fields.check target root.size root.align := by
+          cases root
+          exact (Bool.and_eq_true_iff.mp wf).2
+        obtain ⟨⟨off, divides, bounds⟩, childWF⟩ := LayoutFields.lookup_geometry checked field
+        have h := ih childWF nested (Nat.dvd_add (Nat.dvd_trans divides aligned) off)
+        exact ⟨by simpa [Nat.add_assoc] using h.1, by omega⟩
 
 abbrev LayoutOf (Ty : Type) := Target → Ty → Option Layout
 
@@ -279,7 +349,6 @@ structure CoreLanguage where
   checkTrap : Opcode → Nat → List operands.Val → Bool
   field : operands.Val → List FieldId → Option operands.Val
   replaceField : operands.Val → List FieldId → operands.Val → Option operands.Val
-  fieldRange : operands.Ty → List FieldId → Layout → Option (Nat × Layout)
   encodeOther : Target → operands.Ty → OtherValue → Option (List (Nat × List Mem.MByte))
   decodeOther : Target → operands.Ty → List Mem.MByte → Option OtherValue
   safety : CoreOperation operands → List (SafetyCondition operands.Ty)
@@ -424,7 +493,7 @@ def sliceLanguage (_slice : Slice) : CoreLanguage where
     | .inl (.scalar (.int ty)) => do
       if target ≠ linuxX8664 then none else
       let .stored storage ← Slice0Layout.query Slice0Layout.linuxX8664Profile (.integer ty) | none
-      some ⟨storage.byteSize, storage.align⟩
+      some (.scalar storage.byteSize storage.align)
     | _ => none
   scalarType
     | .inl (.scalar ty) => some ty
@@ -448,7 +517,6 @@ def sliceLanguage (_slice : Slice) : CoreLanguage where
     | _, _, _ => false
   field := fun _ _ => none
   replaceField := fun _ _ _ => none
-  fieldRange := fun _ _ _ => none
   encodeOther := fun _ _ _ => none
   decodeOther := fun _ _ _ => none
   safety

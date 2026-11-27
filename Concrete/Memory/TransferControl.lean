@@ -11,8 +11,8 @@ private def aggregateId : DeclId := ⟨(bindReturnControl slice0).entry.module, 
 private def suffixRuns : List (Nat × List Mem.MByte) := [(0, [.init 42 none]), (4, [])]
 private abbrev Language : CoreLanguage := {sliceLanguage slice0 with
   layout := fun target ty => match ty with
-    | .inr false => some ⟨backingSize, 1⟩
-    | .inr true => some ⟨4, 1⟩
+    | .inr false => some ⟨backingSize, 1, .nil⟩
+    | .inr true => some ⟨4, 1, .nil⟩
     | _ => (sliceLanguage slice0).layout target ty
   literal := fun ty bytes => match ty with
     | .inr true => if bytes == [42] then some (.other aggregateId) else none
@@ -40,7 +40,7 @@ private def origin := mir.functions[0].2.2.blocks[0].body[0].origin
 private def locals : LocalTypes Language.operands.Ty :=
   [(byte.logical.root, u8Ty), (word.logical.root, u16Ty), (backing, .inr false)]
 private def layouts : AList FnId (AList PlaceId Layout) :=
-  [(mir.entry, [(byte.logical.root, ⟨1, 1⟩), (word.logical.root, ⟨2, 2⟩), (backing, ⟨backingSize, 1⟩)])]
+  [(mir.entry, [(byte.logical.root, ⟨1, 1, .nil⟩), (word.logical.root, ⟨2, 2, .nil⟩), (backing, ⟨backingSize, 1, .nil⟩)])]
 private def params : List (Sigma (MemoryPlace Language.operands.Ty)) := [⟨u8Ty, byte⟩, ⟨u16Ty, word⟩]
 private def edge : CFGEdge (Sigma (MemoryRead _ Lowering.literal)) :=
   ⟨⟨1⟩, [⟨u8Ty, .literal ⟨[42]⟩⟩, ⟨u16Ty, .literal ⟨[42, 0]⟩⟩]⟩
@@ -142,15 +142,14 @@ private theorem no_word_allocation {bytes : Mem.Memory} {contents : List Mem.MBy
 private theorem fragmented {m : M} {s : State}
     (fresh : word.logical.root ∉ s.live)
     (cls : m.classAt (language := Language) s.frame word.logical.root = some .materialized)
-    (shape : m.layoutAt (language := Language) s.frame word.logical.root = some ⟨2, 2⟩)
+    (shape : m.layoutAt (language := Language) s.frame word.logical.root = some ⟨2, 2, .nil⟩)
     (bytes : s.bytes = (writtenByte 2).bytes) : m.BeginExhausted (language := Language) s word.logical.root := by
   refine ⟨⟨reserved s word.logical.root (2^64) 2 2, fresh, .inr ⟨cls, _, shape, .inr
     ⟨by decide, ⟨0⟩, 2^64, ⟨s.bytes.next⟩, _, ?_, rfl⟩⟩⟩, ?_⟩
   · change s.bytes.alloc _ _ _ _ _ _ = .ok (_, ⟨_ :: s.bytes.blocks, s.bytes.next + 1⟩)
     have bound : m.transferCeiling (language := Language) s [word.logical.root] = 2^64 + 4 := by
       unfold Interfaces.Memory.transferCeiling Interfaces.Memory.freshLayouts
-      rw [show [word.logical.root].eraseDups = [word.logical.root] by rfl]
-      simp [List.filterMap, fresh, cls, shape]
+      simp [Interfaces.Memory.freshLayoutsFrom, fresh, cls, shape]
       rfl
     rw [bound, bytes]
     with_unfolding_all rfl
@@ -214,7 +213,7 @@ private theorem blocked_transfer : (program true).ParamOutcome (language := Lang
   · let opened := reserved (writtenByte 2) word.logical.root (2^64) 2 2
     let limit := (program true).transferCeiling (language := Language) (openByte 2) (params.map fun p => p.2.logical.root)
     let stored := ((program true).writeValue (language := Language) opened word wordValue limit).getD opened
-    refine ⟨⟨stored, .cons (stored := writtenByte 2) rfl (by with_unfolding_all exact write_byte 2 (.inr rfl) _) (.cons (started := opened) ?_ ?_ (.nil _))⟩, ?_⟩
+    refine ⟨⟨by with_unfolding_all decide, stored, .cons (stored := writtenByte 2) rfl (by with_unfolding_all exact write_byte 2 (.inr rfl) _) (.cons (started := opened) ?_ ?_ (.nil _))⟩, ?_⟩
     · with_unfolding_all exact ⟨by decide, .inr ⟨rfl, _, rfl, .inr
         ⟨by decide, ⟨0⟩, 2^64, ⟨2⟩, _, rfl, rfl⟩⟩⟩
     · with_unfolding_all
@@ -316,7 +315,7 @@ theorem bir_exhaustion : bir.WF (language := Language) ∧ birExec.finite bir at
       change block ∈ [_] at present
       cases List.mem_singleton.mp present
       contradiction
-    · with_unfolding_all exact ssa_exhaustion.1.1
+    · with_unfolding_all exact ⟨ssa_exhaustion.1.1, ssa_exhaustion.1.2.2.2⟩
   · with_unfolding_all exact ssa_exhaustion.2
 
 namespace TrailingParam
@@ -464,7 +463,7 @@ private theorem materialized_write {m : M} {q stored : State} {ty value} {p : Me
     (whole : p.logical.path = []) (moved : q.movedFields = []) :
     ∃ bytes, stored = {q with bytes, initialized := p.logical.root :: q.initialized} := by
   have put := write.2.2.1
-  simp only [Interfaces.Memory.writeValue, cls, whole, List.isEmpty_nil, fresh, nonzero,
+  simp only [Interfaces.Memory.writeValue, Interfaces.Memory.markWritten, Interfaces.Memory.storeRuns, cls, whole, List.isEmpty_nil, fresh, nonzero,
     moved, List.filter_nil, Bool.false_eq_true, ite_true, ite_false] at put
   split at put
   · contradiction
@@ -485,9 +484,9 @@ private theorem immutable_rejected (s : State) :
   obtain ⟨_, _, open₁, write₁, tail⟩ := uncons path
   obtain ⟨_, _, open₂, write₂, tail⟩ := uncons tail
   obtain ⟨_, stored, open₃, write₃, _⟩ := uncons tail
-  obtain ⟨r₁, b₁, rfl⟩ := materialized_begin open₁ rfl (layout := ⟨1, 1⟩) rfl (by decide)
+  obtain ⟨r₁, b₁, rfl⟩ := materialized_begin open₁ rfl (layout := ⟨1, 1, .nil⟩) rfl (by decide)
   obtain ⟨b₁', rfl⟩ := materialized_write write₁ rfl rfl rfl rfl rfl rfl
-  obtain ⟨r₂, b₂, rfl⟩ := materialized_begin open₂ rfl (layout := ⟨2, 2⟩) rfl (by decide)
+  obtain ⟨r₂, b₂, rfl⟩ := materialized_begin open₂ rfl (layout := ⟨2, 2, .nil⟩) rfl (by decide)
   obtain ⟨b₂', rfl⟩ := materialized_write write₂ rfl rfl rfl rfl rfl rfl
   obtain rfl := open₃
   have denied : none = some stored := by with_unfolding_all exact write₃.2.2.1
@@ -660,7 +659,7 @@ private theorem stuck_at_jump {language : CoreLanguage} {lang : LoweringLanguage
     cases Option.some.inj (target.symm.trans hb)
     cases mode
     · exact invalid _ s outcome
-    · obtain ⟨_, valid⟩ := outcome.valid_of_exhausted
+    · obtain ⟨_, valid⟩ := outcome.valid_of_exhausted.2
       exact invalid _ _ valid
   · intro o obs
     obtain ⟨_, observed, _⟩ := Option.bind_eq_some_iff.mp obs
@@ -679,7 +678,7 @@ private def suffixProgram (tag : StorageClass) : M :=
   let decls := locals ++ [(⟨3⟩, suffixTy)]
   {program true with functions := [(mir.entry, decls, ⟨⟨0⟩, #[suffixEntry, suffixDest tag]⟩)]
                      storage := [(mir.entry, List.map (fun d => (d.1, .materialized)) decls)]
-                     layouts := [(mir.entry, layouts[0].2 ++ [(⟨3⟩, ⟨4, 1⟩)])]}
+                     layouts := [(mir.entry, layouts[0].2 ++ [(⟨3⟩, ⟨4, 1, .nil⟩)])]}
 private def suffixValues : List Language.operands.Val := [byteValue, wordValue, .other aggregateId]
 
 private theorem suffix_no_space (tag : StorageClass) :
@@ -720,6 +719,7 @@ private theorem suffixWrite : (suffixProgram .materialized).Writes (language := 
 
 private theorem suffix_valid : (suffixProgram .materialized).ParamsValid (language := Language)
     (suffixDest .materialized).params suffixValues (openByte 2) := by
+  refine ⟨by with_unfolding_all decide, ?_⟩
   change ∃ next, (suffixProgram .materialized).WriteParams (language := Language)
     (suffixDest .materialized).params suffixValues (openByte 2) next false (2^64 + 8)
   refine ⟨lastDone, .cons (stored := writtenByte 2) rfl
@@ -795,7 +795,7 @@ private def threeBytes (p : MemoryPlace _ u8Ty) : M :=
   let decls := locals ++ [(⟨3⟩, u32Ty)]
   {program false with functions := [(mir.entry, decls, ⟨⟨0⟩, #[first opening, last p]⟩)]
                       storage := [(mir.entry, List.map (fun d => (d.1, .materialized)) decls)]
-                      layouts := [(mir.entry, layouts[0].2 ++ [(⟨3⟩, ⟨4, 4⟩)])]}
+                      layouts := [(mir.entry, layouts[0].2 ++ [(⟨3⟩, ⟨4, 4, .nil⟩)])]}
 
 private theorem at_jump (p : MemoryPlace _ u8Ty) : exec.finite (threeBytes p) jumping := by
   refine ⟨start, by with_unfolding_all rfl, .cons ?_ (.nil _)⟩
@@ -823,7 +823,7 @@ theorem wrong_u32_root :
 private def misaligned (align : Nat) : M :=
   {program false with functions := [(mir.entry, [(byte.logical.root, u8Ty)], ⟨⟨0⟩, #[first [], last byte]⟩)]
                       storage := [(mir.entry, [(byte.logical.root, .materialized)])]
-                      layouts := [(mir.entry, [(byte.logical.root, ⟨1, align⟩)])]}
+                      layouts := [(mir.entry, [(byte.logical.root, ⟨1, align, .nil⟩)])]}
 
 private abbrev Plain := sliceLanguage slice0
 private def atParam : MemoryRegisters Plain profile := {start with block := jump.target}
@@ -832,7 +832,7 @@ private theorem no_begin (ceiling : Nat) (next : MemoryRegisters Plain profile) 
     ¬ (misaligned 3).Begins atParam byte.logical.root next ceiling := by
   rintro ⟨_, ⟨virtual, _⟩ | ⟨_, layout, found, zero | placed⟩⟩
   · cases virtual
-  all_goals have eq : some (⟨1, 3⟩ : Layout) = some layout := by with_unfolding_all exact found
+  all_goals have eq : some (⟨1, 3, .nil⟩ : Layout) = some layout := by with_unfolding_all exact found
   all_goals cases eq
   · exact Nat.one_ne_zero zero.1
   · obtain ⟨_, _, _, _, _, alloc, _⟩ := placed
@@ -872,7 +872,7 @@ theorem alignment_ceiling_refused : ¬ (misaligned (2^64)).HandoffWF := by
 -- In the corrupted target only the parameter's root changes.
 private abbrev Huge : CoreLanguage := {sliceLanguage slice0 with
   layout := fun target ty => match ty with
-    | .inr false => some ⟨2^64 - 1, 1⟩
+    | .inr false => some ⟨2^64 - 1, 1, .nil⟩
     | _ => (sliceLanguage slice0).layout target ty}
 private abbrev source := Interfaces.MIR.Execution (language := Huge) (lang := Lowering) (profile := profile)
 private abbrev target := Interfaces.Memory.Execution (language := Huge) (lang := Lowering) (profile := profile)
@@ -893,7 +893,7 @@ private def hugeTarget (p : MemoryPlace _ u8Ty) : M :=
     .ret (some ⟨u8Ty, .literal ⟨[0]⟩⟩), []⟩
   {program false with functions := [(mir.entry, decls, ⟨⟨0⟩, #[first [], last p, dead]⟩)]
                       storage := [(mir.entry, [(byte.logical.root, .materialized), (unused.logical.root, .materialized)])]
-                      layouts := [(mir.entry, [(byte.logical.root, ⟨1, 1⟩), (unused.logical.root, ⟨2^64 - 1, 1⟩)])]}
+                      layouts := [(mir.entry, [(byte.logical.root, ⟨1, 1, .nil⟩), (unused.logical.root, ⟨2^64 - 1, 1, .nil⟩)])]}
 
 private def entering : registers := {start with block := jump.target}
 private def bound : registers := {entering with live := [⟨0⟩], initialized := [⟨0⟩], virtualValues := [(⟨0⟩, byteValue)]}

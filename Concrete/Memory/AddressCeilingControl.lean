@@ -15,7 +15,7 @@ private abbrev aggregateValue : baseLang.operands.Val := .other decl
 private def runs : List (Nat × List Mem.MByte) := [(0, [.init 42 none]), (1, [])]
 private abbrev full := 2^64 - 2
 private def layout (target : Target) (ty : baseLang.operands.Ty) : Option Layout :=
-  if ty == aggregateTy then some ⟨1, 1⟩ else if ty == blockTy then some ⟨full, 1⟩ else baseLang.layout target ty
+  if ty == aggregateTy then some ⟨1, 1, .nil⟩ else if ty == blockTy then some ⟨full, 1, .nil⟩ else baseLang.layout target ty
 private def literal (ty : baseLang.operands.Ty) (bs : List UInt8) : Option baseLang.operands.Val :=
   if (ty == aggregateTy || ty == blockTy) && bs == [42] then some aggregateValue else baseLang.literal ty bs
 private def encode (_ : Target) (ty : baseLang.operands.Ty) (v : DeclId) :=
@@ -53,7 +53,7 @@ private def physical : M :=
   {project := mir.project, entry := mir.entry, signatures := mir.signatures
    functions := [(mir.entry, [(dst.logical.root, aggregateTy), (backing, blockTy)], ⟨⟨0⟩, #[entry, dest]⟩)]
    storage := [(mir.entry, [(dst.logical.root, .materialized), (backing, .materialized)])]
-   layouts := [(mir.entry, [(dst.logical.root, ⟨1, 1⟩), (backing, ⟨full, 1⟩)])]}
+   layouts := [(mir.entry, [(dst.logical.root, ⟨1, 1, .nil⟩), (backing, ⟨full, 1, .nil⟩)])]}
 private def start : State := ⟨⟨mir.entry, ⟨0⟩, 0, [], [], [], [], [], [], []⟩, .empty, [], [], {}, 0, false⟩
 private def reserve (s : State) (root : PlaceId) (base size : Nat) : State :=
   let ptr : Mem.Ptr := ⟨⟨0⟩, base, some ⟨s.bytes.next⟩⟩
@@ -94,7 +94,7 @@ private def ceiling := physical.transferCeiling (language := Language) arrive [d
 private def written := (physical.writeValue (language := Language) opened dst aggregateValue ceiling).getD opened
 
 private theorem valid : physical.ParamsValid (language := Language) params [aggregateValue] arrive := by
-  refine ⟨written, Interfaces.Memory.WriteParams.cons (language := Language) (started := opened) ?_ ?_ (.nil _)⟩
+  refine ⟨by with_unfolding_all decide, written, Interfaces.Memory.WriteParams.cons (language := Language) (started := opened) ?_ ?_ (.nil _)⟩
   · with_unfolding_all exact ⟨by decide, .inr ⟨rfl, _, rfl, .inr
       ⟨by decide, ⟨0⟩, 2^64 - 1, ⟨1⟩, _, rfl, rfl⟩⟩⟩
   · with_unfolding_all
@@ -204,7 +204,7 @@ private theorem open_only {next : State} (tick : exec.step physical start next) 
     fun _ raw => (atBegin raw).unavailable ⟨_, begins⟩)
   rcases fresh.2 with ⟨cls, _⟩ | ⟨_, l, hl, zero | placed⟩
   · cases cls
-  all_goals have shape : some (⟨full, 1⟩ : Layout) = some l := by with_unfolding_all exact hl
+  all_goals have shape : some (⟨full, 1, .nil⟩ : Layout) = some l := by with_unfolding_all exact hl
   all_goals cases shape
   · exact ((by decide : full ≠ 0) zero.1).elim
   obtain ⟨_, space, base, id, bytes, alloc, rfl⟩ := placed
@@ -242,7 +242,7 @@ private theorem jump_only {next : State} (tick : exec.step physical atJump next)
   | cons opened _ _ =>
     rcases opened.2 with ⟨cls, _⟩ | ⟨_, l, hl, zero | placed⟩
     · cases cls
-    all_goals have shape : some (⟨1, 1⟩ : Layout) = some l := by with_unfolding_all exact hl
+    all_goals have shape : some (⟨1, 1, .nil⟩ : Layout) = some l := by with_unfolding_all exact hl
     all_goals cases shape
     · exact (Nat.one_ne_zero zero.1).elim
     · obtain ⟨_, sp, b, id, bs, alloc, _⟩ := placed

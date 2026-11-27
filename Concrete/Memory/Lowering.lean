@@ -526,7 +526,7 @@ example :
     (prepareGraph (language := sliceLanguage slice1) layoutControl).map
       (fun memory => (memory.storage, memory.layouts)) =
       .ok ([(controlFn, [(⟨0⟩, .virtual), (⟨1⟩, .materialized)])],
-        [(controlFn, [(⟨1⟩, ⟨1, 1⟩)])]) := by with_unfolding_all rfl
+        [(controlFn, [(⟨1⟩, ⟨1, 1, .nil⟩)])]) := by with_unfolding_all rfl
 
 example :
     (prepareGraph (language := sliceLanguage slice1) layoutControl).map
