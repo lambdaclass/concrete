@@ -1,3 +1,4 @@
+import ConcreteSpec.Spec.GrammarVocab
 import ConcreteSpec.Spec.LL1
 import ConcreteSpec.Spec.Outcome
 import ConcreteSpec.Spec.Slice0

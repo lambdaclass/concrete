@@ -14,6 +14,29 @@ the earlier behaviour, the answer below governs, and the code follows as its new
 
 The shape of Core was approved provisionally on 2026-11-05 ([stage A2a](#decided-2026-11-05)): it binds the design, and the owner freezes Core at stage A2c, after the four design theorems are proved against the proposed `Spec.lean` and the integration stage A2i (2026-11-06) is accepted (freeze timing revised to 0.1 on [2026-11-22](#decided-2026-11-22-roadmap-reordering)). The project and architecture decisions are recorded here too, [below](#decided-project).
 
+<a id="decided-2026-11-27-result-position"></a>
+## Decided 2026-11-27 — First slice for function result types
+
+The owner delegated the grammar and ballot decisions on 2026-11-27.
+
+> please talk with agy and codex to decide these things, just tell me at the end what you guys decide. always do what is the best long term play
+
+The owner's follow-up was
+
+> make sure everything is LL1 and very clear and the best long term thing
+
+Claude, Codex and agy agreed. Under revised OD24, `main` returns only `u8` in every slice. Ordinary functions enter at slice 5. A non-`u8` result row therefore starts at the later of slice 5 and the type's first availability. [OD24 revision](#decided-2026-11-02-main) · [Slice schedule](../ROADMAP.md#vertical-slices)
+
+| Type | First local annotation | First function result |
+|---|---:|---:|
+| `u8` | 0 | 0 |
+| Named type (empty struct) | 1 | 5 |
+| `i8`, `i16`, `i32`, `i64`, `u16`, `u32`, `u64` | 2 | 5 |
+| `bool`, `Unit` | 3 | 5 |
+| `char` | 11 | 11 |
+
+Local annotations follow the keyword ballot for primitive types and the first empty struct for named types. Each result alternative uses one distinct keyword or the identifier token as its lookahead. [Keyword ballot](grammar/TOKEN-BALLOT.md#reservation-at-the-pre-slice-2-lock) · [Empty structs](#od65)
+
 <a id="decided-2026-11-27-token-ballot"></a>
 ## Decided 2026-11-27 — Token ballot closed
 

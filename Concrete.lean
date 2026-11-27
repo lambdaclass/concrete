@@ -1,3 +1,4 @@
+import Concrete.Lex.StreamProofs
 -- The Concrete compiler (provisional, slice 0). Start with Concrete/README.md.
 import Concrete.LL1
 import Concrete.Artifact.Encoding

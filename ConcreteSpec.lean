@@ -1,3 +1,5 @@
+import ConcreteSpec.Proofs.GrammarPrediction
+import ConcreteSpec.Proofs.GrammarData
 import ConcreteSpec.Proofs.Hybrid
 import ConcreteSpec.Proofs.Memory
 -- The specification of the new compiler. Start with ConcreteSpec/README.md.

@@ -25,6 +25,9 @@ diff -u "$work/legal-binder-trap.con" "$fixture_dir/slice0/legal_binder_trap.con
 # Lean also needs the file as the argument to --run.
 # Emit-only runs validate fixture expectations without building native executables.
 if [[ ${CONCRETE_TEST_EMIT_ONLY:-0} != 1 ]]; then
+  # Exercise the standalone certificate before the census builds the full spec.
+  build grammar-certificate "$work/grammar-certificate.log" bounded 240 \
+    lake lean scripts/spec/grammar_certificate.lean -- --run scripts/spec/grammar_certificate.lean
   build rule-registry "$work/rule-registry.log" bounded 1800 \
     lake lean scripts/checks/compiler/rule_registry.lean
   echo "ok   slice-0 rule references and layout controls"

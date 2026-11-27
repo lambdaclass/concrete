@@ -529,7 +529,7 @@ private theorem advance_encoding {scalar : Nat} {bytes : List UInt8}
       show ¬scalar < 65536 by omega, show scalar ≠ 13 by omega, show scalar ≠ 10 by omega]
   | [] | _ :: _ :: _ :: _ :: _ :: _ => contradiction
 
-private theorem advance_decoding {bytes : List UInt8} {scalars : List Nat}
+theorem advance_decoding {bytes : List UInt8} {scalars : List Nat}
     (decoded : Utf8.Decodes bytes scalars) (pos : Position) :
     scalars.foldl Position.advance pos =
       (bytes.map UInt8.toNat).foldl Core.Position.advanceByte pos := by

@@ -1,3 +1,4 @@
+import ConcreteSpec.Spec.GrammarVocab
 import ConcreteSpec.Proofs.Slice1
 import ConcreteSpec.Spec.Basics
 import ConcreteSpec.Spec.Ident

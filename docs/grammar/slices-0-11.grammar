@@ -1,24 +1,33 @@
-# @ marks a nonterminal. An empty right-hand side means epsilon.
-# Each slice replaces the complete alternatives for every left-hand side it mentions.
-# See README.md for production provenance and the checker command.
+# Sections [0] and [1] are generated from ConcreteSpec.Spec.GrammarData.
+# Regenerate with the grammar checker --write. Later sections are compatibility drafts.
 
 [0]
-Program = fn IDENT ( ) -> u8 @Block
-Block = { @Body }
-Body = let IDENT : u8 = @Expr ; @Body
+Program = @Structs fn IDENT ( ) -> @ReturnType { @Body }
+Structs =
+ReturnType = u8
+Type = u8
+Body = let @LetHead = @Expr ; @Body
 Body = return @Expr ; @Body
 Body =
-Expr = @Atom @AddTail
-AddTail = + @Atom @AddTail
-AddTail =
+LetHead = IDENT @LetTail
+LetTail = : @Type
+Expr = @Product @SumTail
+SumTail = + @Product @SumTail
+SumTail =
+Product = @Atom @ProductTail
+ProductTail =
 Atom = INTEGER
-Atom = IDENT
+Atom = IDENT @NameTail
 Atom = ( @Expr )
+NameTail =
 
 [1]
-Program = @Structs fn IDENT ( ) -> u8 @Block
+Program = @Structs fn IDENT ( ) -> @ReturnType { @Body }
 Structs = struct IDENT { } @Structs
 Structs =
+ReturnType = u8
+Type = u8
+Type = IDENT
 Body = let @LetHead = @Expr ; @Body
 Body = return @Expr ; @Body
 Body = IDENT ( ) ; @Body
@@ -27,17 +36,20 @@ LetHead = IDENT @LetTail
 LetHead = WILDCARD : @Type
 LetTail = : @Type
 LetTail = { }
-# u8 has its own terminal from slice 0.
-Type = u8
-Type = IDENT
+Expr = @Product @SumTail
+SumTail = + @Product @SumTail
+SumTail =
+Product = @Atom @ProductTail
+ProductTail =
 Atom = INTEGER
-Atom = IDENT @LiteralTail
+Atom = IDENT @NameTail
 Atom = ( @Expr )
 Atom = move IDENT
-LiteralTail = { }
-LiteralTail =
+NameTail = { }
+NameTail =
 
 [2]
+Block = { @Body }
 Expr = @BitOr
 BitOr = @BitXor @OrBits
 OrBits = | @BitXor @OrBits
