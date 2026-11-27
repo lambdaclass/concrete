@@ -54,7 +54,7 @@ inductive RuleRefusalCategory where
 /-- Slice 0's required rule identities and the categories that may cite them.
 Proof links live in the evidence inventory. -/
 def slice0RuleEntries : List (RuleId × RuleRefusalCategory) :=
-  [⟨⟨``Slice0Rules.Lexed, 1⟩, .malformed⟩,
+  [⟨⟨``Slice0Rules.Lexed, 2⟩, .malformed⟩,
    ⟨⟨``Slice0Rules.Predictive, 1⟩, .internal⟩,
    ⟨⟨``Slice0Rules.Parsed, 1⟩, .malformed⟩,
    ⟨⟨``Slice0Rules.EntryName, 1⟩, .unsupported⟩,
@@ -63,10 +63,10 @@ def slice0RuleEntries : List (RuleId × RuleRefusalCategory) :=
    ⟨⟨``Slice0Rules.ExpectedTypeLiteral, 1⟩, .checker⟩,
    ⟨⟨``Slice0Rules.LocalBound, 1⟩, .checker⟩,
    ⟨⟨``Slice0Rules.FreshLocal, 1⟩, .checker⟩,
-   ⟨⟨``Slice0Rules.UnreservedLocal, 1⟩, .checker⟩,
+   ⟨⟨``Slice0Rules.UnreservedLocal, 2⟩, .checker⟩,
    ⟨⟨``Slice0Rules.NamedBinding, 1⟩, .unsupported⟩,
    ⟨⟨``Slice0Rules.DecimalLiteral, 1⟩, .unsupported⟩,
-   ⟨⟨``Slice0Rules.AdmittedProduction, 1⟩, .unsupported⟩,
+   ⟨⟨``Slice0Rules.AdmittedProduction, 2⟩, .unsupported⟩,
    ⟨⟨``Slice0Rules.LiteralTyped, 1⟩, .checker⟩,
    ⟨⟨``Slice0Rules.Admitted, 1⟩, .checker⟩,
    ⟨⟨``Slice0Rules.LocalsUsed, 1⟩, .checker⟩,

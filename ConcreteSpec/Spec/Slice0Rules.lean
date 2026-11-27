@@ -77,9 +77,9 @@ abbrev intrinsicNames : List String := ConcreteSpec.Surface0.intrinsicNames
 /-- A binding may not reuse a local already in scope. Decision: OD67 (SCOPE-1). -/
 def FreshLocal (input : String × List String) : Prop := input.1 ∉ input.2
 
-/-- A local may not shadow the entry function or an intrinsic. Decision: OD67, OD153,
-docs/decisions.md#recovered-59-32. -/
-def UnreservedLocal (name : String) : Prop := name ≠ "main" ∧ name ∉ intrinsicNames
+/-- A local may not shadow the entry function, a builtin type or an intrinsic. Decision: OD67, OD153,
+docs/decisions.md#decided-2026-11-27-token-ballot. -/
+def UnreservedLocal (name : String) : Prop := UnreservedLocalName name
 
 /-- Slice 0 binds a name rather than a wildcard. Decision: OD62, Q8.3,
 docs/decisions.md#decided-slice0-surface-2026-11-06. -/

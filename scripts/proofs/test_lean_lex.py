@@ -139,6 +139,20 @@ end Witness{index}
         with self.assertRaises(lexer.LexError):
             lexer.module_imports(source + 'def bad := 0; import ConcreteSpec.Spec.Basics\n', modules)
 
+    def test_trust_scan_distinguishes_import_commands_from_literals(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'Imports.lean'
+            path.write_text('import ConcreteSpec.Spec.Basics\n'
+                            'def keyword := "import"\n'
+                            'def forbidden := "sorry"\n'
+                            'import ConcreteSpec.Spec.Scalar\n')
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.assertEqual(lexer.scan(r'\bsorry\b', [path]), 0)
+            self.assertEqual(output.getvalue().splitlines(), [
+                f'{path}:3: def forbidden := "sorry"',
+                f'{path}:4: import ConcreteSpec.Spec.Scalar'])
+
     def test_compiler_import_graph_and_banned_words(self):
         header = lexer.compiler_header()
         for module, allowed in (("Concrete.Lex", True), ("Lean.Meta.Basic", True),

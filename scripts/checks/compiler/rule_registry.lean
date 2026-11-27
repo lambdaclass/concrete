@@ -14,10 +14,15 @@ example : (refusal.diagnosticAt ⟨``Slice0Rules.ReachableBody, 2⟩).isNone = t
 example : (refusal.diagnosticAt ⟨``Slice0Rules.ReachableBody, 1⟩).isSome = true := by decide
 
 example : (refusal.diagnostic ``Slice0Rules.Lexed).isNone = true := by decide
-example : (refusal.diagnosticAt ⟨``Slice0Rules.Lexed, 1⟩).isNone = true := by decide
+example : (refusal.diagnosticAt ⟨``Slice0Rules.Lexed, 2⟩).isNone = true := by decide
 
 example : ((Refusal.syntaxError "invalid source").diagnostic ``Slice0Rules.Lexed).isSome =
     true := by decide
+
+example : ((Refusal.syntaxError "invalid source").diagnosticAt ⟨``Slice0Rules.Lexed, 1⟩).isNone =
+    true := by decide
+example : (refusal.diagnosticAt ⟨``Slice0Rules.UnreservedLocal, 2⟩).isSome = true := by decide
+example : (refusal.diagnosticAt ⟨``Slice0Rules.UnreservedLocal, 1⟩).isNone = true := by decide
 
 example : ((Refusal.lexerDigitLimit 0 1024).diagnostic ``Slice0Rules.WithinLimit).isSome =
     true := by decide

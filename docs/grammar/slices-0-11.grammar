@@ -1,14 +1,11 @@
-# Non-normative. @ marks a nonterminal. Empty RHS means epsilon.
-# Sections replace earlier definitions of the same nonterminal.
-# Check.lean derives the Head, Body and Const expression ladders
-# and the ExprContinuation and MatchEnd operator branches from shared precedence rules.
-# See README.md for provenance, alternatives and the checker command.
+# @ marks a nonterminal. An empty right-hand side means epsilon.
+# Each slice replaces only the named productions. The checker derives the Head, Body
+# and Const expression ladders and the operator continuations from the precedence rules.
+# See README.md for production provenance and the checker command.
+
 [0]
-# Recorded November 25 approval: ../decisions.md#decided-2026-11-25-freeze-and-grammar.
-# Program and Block factor the single Surface0 grammar0 program rule.
 Program = fn IDENT ( ) -> u8 @Block
 Block = { @Body }
-# Body, Expr, AddTail and Atom transcribe Surface0 grammar0 body, expr, more and atom.
 Body = let IDENT : u8 = @Expr ; @Body
 Body = return @Expr ; @Body
 Body =
@@ -18,36 +15,29 @@ AddTail =
 Atom = INTEGER
 Atom = IDENT
 Atom = ( @Expr )
+
 [1]
-# Surface0 grammar1 program and decls, with the same Block factoring as slice 0.
 Program = @Structs fn IDENT ( ) -> u8 @Block
 Structs = struct IDENT { } @Structs
 Structs =
-# Surface0 grammar1 let, letTail and localTy, with the leading identifier factored.
 Body = let @LetHead = @Expr ; @Body
-LetHead = IDENT @LetTail
-# Draft-only OD62 token alternatives. Surface0 grammar1 uses its identifier path.
-LetHead = WILDCARD : @Type
-# Surface0 grammar1 return and empty body. The standalone call resolves only to abort
-# under the delegated slice 1 agreement reported in plan v4. See README for the evidence gap.
 Body = return @Expr ; @Body
 Body = IDENT ( ) ; @Body
 Body =
+LetHead = IDENT @LetTail
+LetHead = RESERVED_UNDERSCORE : @Type
 LetTail = : @Type
 LetTail = { }
 Type = u8
 Type = IDENT
-# Surface0 grammar1 atom and literal tail. The named move uses the reported
-# delegated agreement. Exact presented productions and raw verdicts are pending E8.
 Atom = INTEGER
 Atom = IDENT @LiteralTail
 Atom = ( @Expr )
 Atom = move IDENT
 LiteralTail = { }
 LiteralTail =
+
 [2]
-# This and subsequent sections are written grammar proposals. README links the
-# construct decisions and the outstanding production approvals per slice.
 Expr = @BitOr
 BitOr = @BitXor @OrBits
 OrBits = | @BitXor @OrBits
@@ -72,25 +62,29 @@ ProductTail = / @Unary @ProductTail
 ProductTail = % @Unary @ProductTail
 ProductTail =
 Unary = - @Unary
-Unary = BIT_NOT @Unary
+Unary = ~ @Unary
 Unary = @Atom
 Type = u8
 Type = IDENT
 Type = PRIMITIVE
 Atom = INTEGER
 Atom = BYTE
-Atom = IDENT @NumericNameTail
+Atom = IDENT @NameTail
 Atom = ( @Expr )
 Atom = move IDENT
-NumericNameTail = @NameCall
-NumericNameTail = @NameLiteral
-NumericNameTail =
-NameCall = ( @EarlyArgs )
+NameTail = @NameCall
+NameTail = @NameLiteral
+NameTail =
+NameCall = ( @CallArgs )
 NameLiteral = { }
-EarlyArgs = @Expr @SecondArg
-EarlyArgs =
+# Intrinsics lex as names. The checker validates the marker and arity against the parsed callee.
+TargetArgument = type : @Type ,
+CallArgs = @TargetArgument @Expr @SecondArg
+CallArgs = @Expr @SecondArg
+CallArgs =
 SecondArg = , @Expr
 SecondArg =
+
 [3]
 Body = let @LetHead = @Expr ; @Body
 Body = return @Expr ; @Body
@@ -100,7 +94,7 @@ Body = @BlockItem
 Body =
 LetHead = IDENT @LetTail
 LetHead = mut IDENT : @Type
-LetHead = WILDCARD : @Type
+LetHead = RESERVED_UNDERSCORE : @Type
 ExprEnd = ; @Body
 ExprEnd =
 Expr = @LogicOr
@@ -123,11 +117,11 @@ CompareOp = >
 CompareOp = >=
 Unary = - @Unary
 Unary = ! @Unary
-Unary = BIT_NOT @Unary
+Unary = ~ @Unary
 Unary = @Atom
 Atom = @CommonAtom
 Atom = @BlockExpr
-Atom = IDENT @NumericNameTail
+Atom = IDENT @NameTail
 CommonAtom = INTEGER
 CommonAtom = BYTE
 CommonAtom = true
@@ -153,22 +147,21 @@ StmtElse = else @StmtElseBody
 StmtElse =
 StmtElseBody = @Block
 StmtElseBody = if @Head @Block @StmtElse
-# @Head is the same precedence ladder with @HeadAtom at its leaves.
+# A depth-zero head keeps the block opener available. Grouping re-enters Expr.
 Head = @HeadExpr
 HeadAtom = @CommonAtom
 HeadAtom = @BlockExpr
 HeadAtom = IDENT @HeadNameTail
 HeadNameTail = @NameCall
 HeadNameTail =
+
 [4]
-CommonAtom = INTEGER
-CommonAtom = BYTE
-CommonAtom = true
-CommonAtom = false
-CommonAtom = move IDENT
-CommonAtom = @GroupAtom
-CommonAtom = @ExactArithmetic
-ExactArithmetic = math { @Expr }
+Atom = @CommonAtom
+Atom = @BlockExpr
+Atom = IDENT @NameTail
+Atom = @ExactArithmetic
+# Exact arithmetic in a condition head requires shielding.
+ExactArithmetic = exact { @Expr }
 Body = let @LetHead = @Expr ; @Body
 Body = return @Expr ; @Body
 Body = @BodyExpr @ExprEnd
@@ -189,19 +182,16 @@ LoopForm = for @Binder from @Expr until @Head @Block
 LabelOpt = LABEL
 LabelOpt =
 Binder = IDENT
-Binder = WILDCARD
-LetHead = IDENT @LetTail
-LetHead = mut IDENT : @Type
-LetHead = WILDCARD : @Type
+Binder = RESERVED_UNDERSCORE
 Attrs = @AttributePrefix
+Attrs =
 AttributePrefix = @Attribute @Attrs
 Attribute = #[ IDENT @AttrArgs ]
 Unary = - @Unary
 Unary = ! @Unary
-Unary = BIT_NOT @Unary
+Unary = ~ @Unary
 Unary = @AttributePrefix @Atom
 Unary = @Atom
-Attrs =
 AttrArgs = ( @AttributeArgs )
 AttrArgs =
 AttributeArgs = STRING
@@ -210,6 +200,7 @@ Args = @Expr @ArgTail
 Args =
 ArgTail = , @Args
 ArgTail =
+
 [5]
 Program = @Structs @Functions
 Functions = @Attrs fn IDENT ( @Params ) -> @Type @Block @MoreFunctions
@@ -219,7 +210,9 @@ Params = @Binder : @Type @ParamTail
 Params =
 ParamTail = , @Params
 ParamTail =
-NameCall = ( @Args )
+CallArgs = @TargetArgument @Expr @ArgTail
+CallArgs = @Args
+
 [6]
 Program = @Items
 Body = let @LetHead = @Expr ; @Body
@@ -249,15 +242,15 @@ FieldTail = , @Fields
 FieldTail =
 Variants = IDENT @VariantTail @MoreVariants
 VariantTail = { @VariantFields }
+VariantTail =
 VariantFields = IDENT : @Type @VariantFieldTail
 VariantFields =
 VariantFieldTail = , @VariantFields
 VariantFieldTail =
-VariantTail =
 MoreVariants = , @VariantsOpt
+MoreVariants =
 VariantsOpt = @Variants
 VariantsOpt =
-MoreVariants =
 Type = u8
 Type = PRIMITIVE
 Type = @Path
@@ -269,25 +262,25 @@ PathTail =
 QualifiedTail = IDENT @PathTail
 Atom = @CommonAtom
 Atom = @BlockExpr
-Atom = IDENT @PathTail @NumericNameTail
+Atom = IDENT @PathTail @NameTail
 Atom = @PrimitivePath @NameCall
+Atom = @ExactArithmetic
 HeadAtom = @CommonAtom
 HeadAtom = @BlockExpr
 HeadAtom = IDENT @PathTail @HeadNameTail
 HeadAtom = @PrimitivePath @NameCall
-NumericNameTail = @NameCall
-NumericNameTail = @NameLiteral
-NameCall = ( @Args )
+NameTail = @NameCall
+NameTail = @NameLiteral
+NameTail = @Postfix
 NameLiteral = { @Initializers }
 BodyNameTail = @NameCall @ExprContinuation @ExprEnd
 BodyNameTail = @NameLiteral @ExprContinuation @ExprEnd
-BodyNameTail = :: @QualifiedTail @NumericNameTail @ExprContinuation @ExprEnd
+BodyNameTail = :: @QualifiedTail @NameTail @ExprContinuation @ExprEnd
 BodyNameTail = @PlaceTail
 GroupAtom = ( @Group ) @Postfix
 PlaceTail = @Projection @PlaceTail
 PlaceTail = = @Expr ; @Body
 PlaceTail = @ExprContinuation @ExprEnd
-NumericNameTail = @Postfix
 HeadNameTail = @NameCall
 HeadNameTail = @Postfix
 Postfix = @Projection @Postfix
@@ -297,10 +290,9 @@ Initializers = IDENT : @Expr @InitializerTail
 Initializers =
 InitializerTail = , @Initializers
 InitializerTail =
-# PAT-11 applies mut to every binder of the irrefutable pattern.
 LetHead = IDENT @LetTail
 LetHead = mut IDENT @LetTail
-LetHead = WILDCARD : @Type
+LetHead = RESERVED_UNDERSCORE : @Type
 LetTail = : @Type
 LetTail = { @PatternFields }
 LetTail = :: IDENT @DestructurePath
@@ -310,13 +302,11 @@ PatternFields = IDENT : @Binder @MorePatternFields
 PatternFields =
 MorePatternFields = , @PatternFields
 MorePatternFields =
-
 BlockExpr = if @Head @Block else @ValueElse
 BlockExpr = @Match
-BlockStmt = if @Head @Block @StmtElse
 BlockItem = @BlockStmt @Body
 BlockItem = @Match @MatchEnd
-# Binary continuations ending at the closing brace are synthesized by the checker.
+# The checker derives the binary continuations of a trailing match from the expression ladder.
 MatchEnd = @Body
 Match = match @Head { @Arms }
 Arms = @Pattern @PatternAlternatives => @ArmBody , @Arms
@@ -329,7 +319,7 @@ ArmBody = return @ReturnValue
 ReturnValue = @Expr
 ReturnValue =
 Pattern = IDENT @VariantPattern
-Pattern = WILDCARD
+Pattern = RESERVED_UNDERSCORE
 Pattern = INTEGER
 Pattern = - INTEGER
 Pattern = BYTE
@@ -342,6 +332,7 @@ QualifiedPattern = { @VariantPatternFields }
 QualifiedPattern =
 VariantPatternFields = ..
 VariantPatternFields = @PatternFields
+
 [7]
 Type = u8
 Type = PRIMITIVE
@@ -352,42 +343,42 @@ MutOpt = mut
 MutOpt =
 Unary = - @Unary
 Unary = ! @Unary
-Unary = BIT_NOT @Unary
+Unary = ~ @Unary
 Unary = * IDENT
-NamedBody = IDENT @BodyNameTail
-NamedBody = * IDENT @DerefTail
-DerefTail = = @Expr ; @Body
-DerefTail = @ExprContinuation @ExprEnd
-GroupedBody = ( @Group ) @PlaceTail
-NamedBody = @PrimitivePath @NameCall @ExprContinuation @ExprEnd
 Unary = & @MutOpt @Unary
 Unary = @AttributePrefix @Atom
 Unary = @Atom
+NamedBody = IDENT @BodyNameTail
+NamedBody = * IDENT @DerefTail
+NamedBody = @PrimitivePath @NameCall @ExprContinuation @ExprEnd
+DerefTail = = @Expr ; @Body
+DerefTail = @ExprContinuation @ExprEnd
+GroupedBody = ( @Group ) @PlaceTail
 CommonAtom = INTEGER
 CommonAtom = BYTE
 CommonAtom = true
 CommonAtom = false
 CommonAtom = move IDENT
 CommonAtom = @GroupAtom
-CommonAtom = @ExactArithmetic
 CommonAtom = [ @Expr @ArrayTail ]
 BlockExpr = if @Head @Block else @ValueElse
 BlockExpr = @Match
 BlockExpr = @Borrow
 BlockStmt = if @Head @Block @StmtElse
 BlockStmt = @Borrow
-# The spelling ballot chooses one form before LL(1) qualification.
-Borrow = BORROW_WORD @MutOpt @BorrowForm @Block @BorrowElse
-SuffixBorrow = @Head @Range BINDER_MARK IDENT
-PrefixBorrow = IDENT = @Head @Range
+Borrow = borrow @MutOpt IDENT = @BorrowPlace @BorrowRange @Block @BorrowElse
+BorrowPlace = IDENT @Postfix
+BorrowPlace = * IDENT
+BorrowPlace = ( @BorrowPlace ) @Postfix
 ArrayTail = @ArgTail
 ArrayTail = ; @Expr
 BorrowElse = else @Block
 BorrowElse =
-Range = RANGE_START @Expr RANGE_END @Head
-Range =
+BorrowRange = from @Expr until @Head
+BorrowRange =
 Projection = . IDENT
 Projection = [ @Expr ]
+
 [8]
 Item = @Attrs @Visibility @Decl
 Fields = @Visibility IDENT : @Type @FieldTail
@@ -400,42 +391,41 @@ Decl = enum @CopyOpt IDENT { @Variants }
 Decl = type IDENT = @Type ;
 Decl = const IDENT : @Type = @ConstExpr ;
 Decl = mod IDENT ;
-Decl = IMPORT_WORD IDENT @ImportTail ;
-ImportTail = :: @ImportPart
-ImportPart = IDENT @ImportTail
+Decl = @Import
+Import = import IDENT :: @ImportPart ;
+ImportPart = IDENT :: @ImportPart
 ImportPart = { @ImportNames }
 ImportNames = IDENT @MoreImports
 MoreImports = , @ImportNamesOpt
+MoreImports =
 ImportNamesOpt = @ImportNames
 ImportNamesOpt =
-MoreImports =
 ConstAtom = INTEGER
 ConstAtom = BYTE
 ConstAtom = true
 ConstAtom = false
 ConstAtom = ( @ConstExpr )
-# Names remain identifiers. The draft checks application against the closed set
-# of primitive operations. Resolution checks constant references. E4 owns conversion spelling.
 ConstAtom = IDENT @ConstNameTail
 ConstNameTail = :: IDENT @ConstPathTail
+ConstNameTail = ( @ConstArgs )
+ConstNameTail =
 ConstPathTail = :: IDENT @ConstPathTail
 ConstPathTail =
-ConstNameTail = ( @ConstArgs )
-ConstArgs = @ConstExpr @ConstSecondArg
-ConstNameTail =
+ConstArgs = @TargetArgument @ConstExpr @ConstSecondArg
 ConstSecondArg = , @ConstExpr
 ConstSecondArg =
+
 [9]
 Decl = @Function
-Function = fn IDENT @Generics ( @Params ) -> @Type @Block
 Decl = struct @CopyOpt IDENT @Generics { @Fields }
 Decl = enum @CopyOpt IDENT @Generics { @Variants }
 Decl = type IDENT @Generics = @Type ;
 Decl = const IDENT : @Type = @ConstExpr ;
 Decl = mod IDENT ;
-Decl = IMPORT_WORD IDENT @ImportTail ;
+Decl = @Import
 Decl = trait IDENT { @TraitMembers }
 Decl = impl @ImplHeader { @ImplMembers }
+Function = fn IDENT @Generics ( @Params ) -> @Type @Block
 TraitMembers = @Attrs fn IDENT ( @Params ) -> @Type ; @TraitMembers
 TraitMembers =
 ImplMembers = @Attrs @Visibility @Function @ImplMembers
@@ -461,13 +451,13 @@ BoundName = @TypePath
 MoreBounds = + @BoundName @MoreBounds
 MoreBounds =
 TypeParamTail = , @GenericParamsOpt
+TypeParamTail =
 GenericParamsOpt = @GenericParams
 GenericParamsOpt =
-TypeParamTail =
 CapParamTail = , @CapParamAfterComma
+CapParamTail =
 CapParamAfterComma = cap IDENT @CapParamTail
 CapParamAfterComma =
-CapParamTail =
 Type = u8
 Type = PRIMITIVE
 Type = IDENT @TypeNameTail
@@ -482,8 +472,6 @@ TypeNameTail = @TypeArgsOpt
 TypeArgsOpt = @TypeArgs
 TypeArgsOpt =
 TypeArgs = < @TypeArg >
-# A bare identifier is shared by both categories. A plus makes it a set;
-# resolution classifies an otherwise bare identifier and checks ordering.
 TypeArg = IDENT @NamedArg
 TypeArg = u8 @MoreTypeArgs
 TypeArg = PRIMITIVE @MoreTypeArgs
@@ -492,16 +480,17 @@ TypeArg = & @MutOpt @Type @MoreTypeArgs
 TypeArg = [ @Type ; @Expr ] @MoreTypeArgs
 TypeArg = @FixedCapability @CapUnion @MoreCapArgs
 TypeArg = { } @MoreCapArgs
+# Resolution classifies a bare argument. A plus identifies a capability set.
 NamedArg = + @Capability @CapUnion @MoreCapArgs
 NamedArg = @TypeNameTail @MoreTypeArgs
 MoreTypeArgs = , @TypeArgOpt
+MoreTypeArgs =
 TypeArgOpt = @TypeArg
 TypeArgOpt =
-MoreTypeArgs =
 MoreCapArgs = , @CapArgOpt
+MoreCapArgs =
 CapArgOpt = @CapArg
 CapArgOpt =
-MoreCapArgs =
 CapArg = @Capability @CapUnion @MoreCapArgs
 CapArg = { } @MoreCapArgs
 CapUnion = + @Capability @CapUnion
@@ -522,8 +511,6 @@ FixedCapability = Console
 FixedCapability = Process
 FixedCapability = Unsafe
 FixedCapability = Entropy
-PathTail = :: @QualifiedTail
-PathTail =
 QualifiedTail = IDENT @PathTail
 QualifiedTail = @TypeArgs @AppliedPathTail
 AppliedPathTail = :: IDENT @PathTail
@@ -537,8 +524,9 @@ Body = @Loop @Body
 Body = @AttributePrefix @AttributedBody
 Body = break @LabelOpt ; @Body
 Body = continue @LabelOpt ; @Body
-Body = defer @Path ( @Args ) ; @Body
+Body = defer @Path @NameCall ; @Body
 Body =
+
 [10]
 Decl = @Function
 Decl = spec fn IDENT @Generics ( @Params ) -> @Type = @ProofExpr ;
@@ -547,10 +535,9 @@ Decl = enum @CopyOpt IDENT @Generics { @Variants }
 Decl = type IDENT @Generics = @Type ;
 Decl = const IDENT : @Type = @ConstExpr ;
 Decl = mod IDENT ;
-Decl = IMPORT_WORD IDENT @ImportTail ;
+Decl = @Import
 Decl = trait IDENT { @TraitMembers }
 Decl = impl @ImplHeader { @ImplMembers }
-Function = fn IDENT @Generics ( @Params ) -> @Type @Block
 Body = let @LetHead = @Expr ; @Body
 Body = return @ReturnValue ; @Body
 Body = @BodyExpr @ExprEnd
@@ -560,15 +547,16 @@ Body = @Loop @Body
 Body = @AttributePrefix @AttributedBody
 Body = break @LabelOpt ; @Body
 Body = continue @LabelOpt ; @Body
-Body = defer @Path ( @Args ) ; @Body
+Body = defer @Path @NameCall ; @Body
 Body = ghost let IDENT : @Type = @Expr ; @Body
 Body = assert ( @ProofExpr ) @By ; @Body
 Body = assume @ProofExpr ; @Body
+Body =
 ProofExpr = @Expr
 By = by @Path ( @ProofArgs )
-ProofArgs = @Args
 By =
-Body =
+ProofArgs = @Args
+
 [11]
 AttributeArgs = @Args
 TraitMembers = @Attrs fn IDENT ( @Params ) @With -> @Type ; @TraitMembers
@@ -583,5 +571,4 @@ CommonAtom = true
 CommonAtom = false
 CommonAtom = move IDENT
 CommonAtom = @GroupAtom
-CommonAtom = @ExactArithmetic
 CommonAtom = [ @Expr @ArrayTail ]

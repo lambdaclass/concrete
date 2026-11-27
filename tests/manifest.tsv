@@ -62,7 +62,7 @@ source_malformed_if	con:tests/slice0/malformed_if.con	pending-refusal 1 syntax	s
 source_multiply	con:tests/slice0/multiply.con	pending-refusal 1 unsupported_form	slice0
 source_conditional	con:tests/slice0/conditional.con	pending-refusal 1 unsupported_form	slice0
 source_mutable	con:tests/slice0/mutable.con	pending-refusal 1 unsupported_form	slice0
-source_contextual_multiply	con:tests/slice0/contextual_multiply.con	pending-refusal 1 unsupported_form	slice0
+source_contextual_multiply	con:tests/slice0/contextual_multiply.con	pending-refusal 1 syntax	slice0
 source_shadow_destroy	con:tests/slice0/shadow_destroy.con	pending-refusal 1 checker	slice0
 source_shadow_discard	con:tests/slice0/shadow_discard.con	pending-refusal 1 checker	slice0
 source_shadow_alloc	con:tests/slice0/shadow_alloc.con	pending-refusal 1 checker	slice0

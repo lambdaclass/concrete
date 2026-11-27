@@ -14,6 +14,33 @@ the earlier behaviour, the answer below governs, and the code follows as its new
 
 The shape of Core was approved provisionally on 2026-11-05 ([stage A2a](#decided-2026-11-05)): it binds the design, and the owner freezes Core at stage A2c, after the four design theorems are proved against the proposed `Spec.lean` and the integration stage A2i (2026-11-06) is accepted (freeze timing revised to 0.1 on [2026-11-22](#decided-2026-11-22-roadmap-reordering)). The project and architecture decisions are recorded here too, [below](#decided-project).
 
+<a id="decided-2026-11-27-token-ballot"></a>
+## Decided 2026-11-27 — Token ballot closed
+
+The owner delegated the ballot on 2026-11-27.
+
+> please talk with agy and codex to decide these things, just tell me at the end what you guys decide. always do what is the best long term play
+
+The owner's follow-up was
+
+> make sure everything is LL1 and very clear and the best long term thing
+
+Claude, Codex and agy each agreed to all thirteen decisions after two rounds. The ballot is closed. The [slice grammar](grammar/README.md) retains the per-slice production approval procedure.
+
+1. **Q1, primitive types and binders.** Reserve `i8`, `i16`, `i32`, `i64`, `u16`, `u32`, `u64`, `bool`, `Unit` and `char` as keyword tokens like `u8` at the pre-slice-2 lock. The draft groups these additional keywords as `PRIMITIVE`. Non-primitive builtin types such as `Option`, `Result`, `Vec`, `String` and `Heap` remain identifiers. One rule shared by `Slice0Rules.UnreservedLocal` and `Surface0.BinderLegal` refuses builtin type names, `main` and intrinsics as local binders. ISS-0121 is resolved.
+2. **Q2, trust and FFI.** Reserve `trusted` and `extern` at the pre-slice-2 lock.
+3. **Q3/E4, target-typed numeric intrinsics.** The lossless conversion is `widen`. Every target-typed numeric builtin takes a mandatory leading `type: T` argument. The forms are `widen(type: u32, x)`, `wrapping_add(type: u32, x, y)` and likewise for the other `wrapping_*`, `saturating_*`, `checked_*`, `truncate`, `reinterpret` and `try_convert` operations. The call supplies its target independently of its expected result type.
+4. **Bitwise NOT.** Write `~x`. The `!` operator is boolean-only.
+5. **Attributes.** All attributes use `#[...]`.
+6. **Exact arithmetic.** Write `exact { expr }` for the boundary represented by `CTerm.exact`. Reserve `exact` at the lock. The name `math` stays available for modules.
+7. **Wildcard.** The spelling `_` is a reserved identifier token distinct from ordinary identifiers.
+8. **Match arms.** Every arm ends in a comma, including the last arm.
+9. **Scoped borrow.** Write `borrow [mut] view = place [from lo until hi] { … }`. The binder precedes the place.
+10. **Imports.** Write `import a::b::{x, y};`. Imported names remain qualified at use sites, such as `b::x`.
+11. **Slice 2 literals.** Allow `_` between digits. Refuse it immediately after a radix prefix. All hexadecimal digits are lowercase. Refuse redundant type suffixes, including `255u8` where `u8` is expected. UTF-8 strings admit `\u{...}` for Unicode scalar values and refuse surrogate code points and `\xHH`. Byte escapes `'\x00'` through `'\xff'` take exactly two lowercase hexadecimal digits.
+12. **E1, reservation policy.** Reserve every keyword with a decided construct and spelling at the pre-slice-2 lexer lock. This includes `if`, `else`, `mut`, `true`, `false`, `enum`, `match`, `trait`, `impl`, `defer`, `assert`, `assume`, `with`, `for`, `break`, `continue`, `pub`, `const`, `mod`, `import`, `borrow`, `exact`, `trusted`, `extern` and the primitive type names. Undecided spellings stay unreserved. After the lock, later slices add productions and never token classes.
+13. **E2, stable keys.** This revises [C9](#decided-2026-11-08-c9-identities). `KeyConstruct.childScope` returns `[]`. Number each direct child among its earlier same-kind unnamed siblings under its immediate parent. A named child consumes no ordinal. A labelled unnamed child emits `.pinned label` and consumes its kind's ordinal slot. `StableKey` retains its owner and full path. Inserting a construct changes only keys of later same-kind siblings under the same parent. Implementation belongs to the separate C9 branch.
+
 <a id="decided-2026-11-25-freeze-and-grammar"></a>
 ## Decided 2026-11-25: Phase T freeze, grammar approval, slice scheduling and executable evidence
 
@@ -595,7 +622,7 @@ Links only; each item's text lives where it is linked.
 3. The remaining [SPARK review](proposals/SPARK.md) dispositions.
 4. Recover or re-confirm the [unrecorded 2026-11-08 approvals](../ISSUES.tsv) (ISS-0065;
    [language record](#decided-2026-11-08-language)).
-5. [Literal rule options before Slice 2 and language ideas after Slice 0](../ROADMAP.md#vertical-slices).
+5. [Remaining language ideas after Slice 0](../ROADMAP.md#vertical-slices).
 6. [Boolean-to-integer conversion](../ISSUES.tsv) (ISS-0069).
 7. [Lean extraction subset, representation and assumptions](../ROADMAP.md#the-queue) (R-0495 / R-0574).
 
@@ -1828,7 +1855,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     declarations and builtin types remain bare. Equal item names from different modules are
     allowed, revising [MOD-3](../legacy/docs/spec/modules.md#MOD-3); equal last module segments
     and locals shadowing those segments are refused. The source's import declaration is
-    illustrative; its exact spelling is left to the spelling round.
+    illustrative. The [November 27 ballot](#decided-2026-11-27-token-ballot) fixes the declaration spelling.
   - *Historical slice-0 approval* (item 5; owner: "record, yes to all recommended";
     [source](archive/owner-language-2026-11-08/OWNER_QUOTES.md#language-approval-and-qualification)).
     This included the earlier slice-0 commit `0e2950e7`, not any later candidate. The later
@@ -1858,7 +1885,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     owner-named revision.
     ASCII byte literals supersede [OD137](#od137)'s character-literal description.
     Revised 2026-11-12: the char-literal follow-up is resolved by the
-    [char decision](#decided-2026-11-12-char).
+    [char decision](#decided-2026-11-12-char). The [November 27 ballot](#decided-2026-11-27-token-ballot) records the Slice 2 literal revisions.
   - <a id="decided-2026-11-08-help"></a>*Slice-0 CLI* (owner, 15:08 UTC:
     "ok but i said already all yes based on the best long term reviews of each agent and what we said before right?";
     [source](archive/owner-language-2026-11-08/OWNER_QUOTES.md#2026-11-08-1508-utc-owner-verbatim-answering-the-29-questions)).
