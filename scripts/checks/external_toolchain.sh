@@ -14,7 +14,7 @@ mkdir -p "$TMP/source" "$TMP/bin" "$TMP/project/scripts/checks/lib" "$TMP/projec
 cp "$ROOT/scripts/proofs/"{external.sh,external.pins,lake_tool.sh,lib.sh,theorems.lean,export_inventory.py} "$TMP/project/scripts/proofs/"
 cp "$ROOT/scripts/checks/lib/"{gate_env.sh,git_sandbox.sh,has_match.sh,limits.sh} "$TMP/project/scripts/checks/lib/"
 printf '%s\n' leanprover/lean4:v4.35.0 > "$TMP/project/lean-toolchain"
-# lib.sh's project build and orphan-pruning prerequisites remain real code.
+# The driver compares the enumerated modules with the fixture's source inventory.
 touch "$TMP/project/ConcreteSpecEvidence.lean" "$TMP/project/ConcreteSpec.lean" "$TMP/project/Concrete.lean"
 mkdir "$TMP/project/ConcreteSpecEvidence" "$TMP/project/ConcreteSpec" "$TMP/project/Concrete"
 touch "$TMP/project/ConcreteSpec/SpecificationOnly.lean"
@@ -124,9 +124,20 @@ set -eu
 [ "${LEAN_PATH+x}" != x ]
 mkdir -p "$FIXTURE_TOOLS"
 flock -n "$FIXTURE_TOOLS/.lock" true || { echo 'CONTROL: caller lock held' >&2; exit 95; }
-case "$*" in
-  'build ConcreteSpec ConcreteSpecEvidence Concrete') echo project >> "$PHASE_LOG" ;;
-  'env lean '*)
+case "${0##*/} $*" in
+  'lake build ConcreteSpec ConcreteSpecEvidence Concrete') echo project >> "$PHASE_LOG" ;;
+  'lake setup-file '*)
+    [ "$#" = 2 ]
+    [ -f "$2" ]
+    # Stand in for the resolved imports with a setup specific to this source.
+    printf '%s\n' "$2" ;;
+  'lake env env '*)
+    shift
+    LEAN_PATH=/fixture/lake/search/path exec "$@" ;;
+  'lean --setup='*)
+    [ "$#" = 2 ]
+    [ "$1" = "--setup=$PROOF_SETUP" ]
+    [ "$(cat "$PROOF_SETUP")" = "$2" ]
     echo "population-$PROOF_MODE" >> "$PHASE_LOG"
     if [ "${FIXTURE_EMPTY_SELECTION:-0}" = 1 ] && [ "$PROOF_PKG" = SpecAndEvidence ]; then
       case "$PROOF_MODE" in theorems|encoded) exit 0 ;; esac
@@ -153,7 +164,7 @@ case "$*" in
         for i in $(seq 0 99); do printf 'ConcreteSpec.theorem%03d\t\n' "$i"; done
         if [ "${FIXTURE_OMIT_EVIDENCE:-0}" = 0 ]; then printf 'ConcreteSpec.theorem100\t\n'; fi ;;
       encoded)
-        if [[ "$3" == */control-* ]]; then
+        if [[ "$2" == */control-* ]]; then
           printf '%s\n' 'ConcreteSpecControl.«a.b»	s19:ConcreteSpecControls3:a.b' 'ConcreteSpecControl.a.b	s19:ConcreteSpecControls1:as1:b' 'ConcreteSpecControl.«λ»	s19:ConcreteSpecControls2:λ'
         else
           if [ "$PROOF_PKG" != ConcreteSpecEvidence ]; then
@@ -166,11 +177,11 @@ case "$*" in
         fi ;;
       decls) python3 scripts/proofs/export_inventory.py decls "$FIXTURE_STREAM" > "$PROOF_OUT" ;;
       heads)
-        if [[ "$3" == */control-* ]]; then echo 'control character' >&2; exit 1; fi
+        if [[ "$2" == */control-* ]]; then echo 'control character' >&2; exit 1; fi
         printf 's12:ConcreteSpecs10:theorem000\tA\ns12:ConcreteSpecs10:theorem001\tB\n' ;;
       *) exit 91 ;;
     esac ;;
-  env*/lean4export*) shift; exec "$@" ;;
+  'lake env '*/lean4export*) shift; exec "$@" ;;
   *) echo 'FAIL: ambient lake used for an external tool' >&2; exit 91 ;;
 esac
 CONTROL

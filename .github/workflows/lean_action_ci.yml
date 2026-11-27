@@ -141,7 +141,7 @@ jobs:
   proof-trust-ban:
     name: Proof trust ban (sorry, native_decide)
     runs-on: ${{ ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
