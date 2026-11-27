@@ -92,10 +92,23 @@ concrete diff origin/main HEAD
 
 ---
 
+## <a id="4-per-dependency-capability-pinning"></a>4. Per-Dependency Capability & Trust Pinning (Zero-Trust Package Firewall)
+
+In mainstream ecosystems (Cargo, npm, PyPI), a routine patch update to a pure utility package (e.g., a JSON or UTF-8 parser) can silently add `unsafe`, read local files, or open network sockets because package manifests declare only version ranges—never authority bounds.
+
+Because Concrete's `InterfaceSummary` (`R-0735`, `R-0556`) already records the exact transitive `capabilities` (`with(...)`), `trusted`/raw-pointer surface, foreign `extern fn` calls, and allocation facts per declaration, multi-package builds (`R-0383`) and `Concrete.toml` `[policy]` (`R-0576`) can enforce **per-dependency capability and trust ceilings statically at compile time**:
+
+- **Manifest ceilings (provisional spelling, settled under `R-0383`/`R-0589`):** A consumer package pins the maximum authority each direct dependency (and its transitive closure) may exercise—for example allowing zero operational capabilities, forbidding `trusted` and `extern fn`, and permitting or forbidding `Alloc`.
+- **Fail-closed checking over `InterfaceSummary`:** Before compiling or linking, the driver checks every dependency's exported transitive `InterfaceSummary` facts against its pinned ceiling. Unknown or unestablished facts fail closed (consistent with [Rule 12](../../PHILOSOPHY.md#the-rules) and `R-0576`).
+- **Transitive monotonicity:** A dependency cannot widen its own ceiling or delegate an unpinned capability through a sub-dependency; any upgrade that introduces a new `with(Network)`, `with(Fs)`, `with(Unsafe)`, `trusted fn`, or `extern fn` is refused with the exact offending declaration `StableKey` and `FileSpan`.
+- **Zero OS sandboxing required:** Works purely via compiler-checked authority summaries (aligned with [OS sandboxing exclusion](../../decisions.md#decided-project-os-sandboxing)) while remaining composable with OS sandboxes if a user adds them.
+
+---
+
 ## Why This Will Work
 
 - **Already aligned with Concrete's rules:** Concrete forbids macros, forbids mutable globals, enforces declaration-only dependence ([AT 5](../../PHILOSOPHY.md#admission-test)), owns stable semantic identities (`C9` `StableKey`, Rule 13), and already implements canonical encoding + SHA-256 in `Concrete/Artifact/`.
-- **Clean composition with `R-0582` and `R-0734`:** `InterfaceSummary` is the exact interface object that per-module certificates (`R-0582`) and compositional linking (`R-0734` / `R-0705`) bind to—one structure serving incremental compilation, separate verification, and PR auditing ([Rule 5: every fact once](../../PHILOSOPHY.md#the-rules)).
+- **Clean composition with `R-0582`, `R-0734`, and `R-0383`:** `InterfaceSummary` is the exact interface object that per-module certificates (`R-0582`), compositional linking (`R-0734` / `R-0705`), and per-dependency capability pinning (`R-0383`) bind to—one structure serving incremental compilation, separate verification, PR auditing, and supply-chain authority enforcement ([Rule 5: every fact once](../../PHILOSOPHY.md#the-rules)).
 
 ## Slice Staging & Acceptance Gates
 
@@ -103,6 +116,6 @@ concrete diff origin/main HEAD
 |---|---|---|---|
 | **1. Single-function `InterfaceSummary` + `concrete diff` v0** | `B1` / Slice 3 (optional early) or Slice 8 | Canonical `InterfaceSummary` encoder & SHA-256 hash over existing `concrete facts`; minimal `concrete diff` comparing two `.con` files | Formatting/comment/local-renaming invariance test (identical `interface_hash`), planted capability/abort/stack regression caught |
 | **2. Module-level `InterfaceSummary` & body-independence** | Slice 8 (`R-0556`) | Bodyless module interfaces emitting `interface_hash` + `body_hash`; proof that caller checking reads only callee `InterfaceSummary` | Body-only edit leaves downstream `interface_hash` invariant; signature/contract edit invalidates dependents |
-| **3. Full `QueryDB` incremental build & audit dossier** | Slice 10 (`R-0201`) & Phase G (`R-0149`) | Memoized `QueryDB` cache with explicit `body_hash` tracking for inlining/monomorphization + `R-0697` mandatory kernel replay | Clean-vs-incremental equivalence matrix (`R-0149`), planted stale-inlined-body and corrupted-cache refusal controls |
+| **3. Full `QueryDB` incremental build, audit dossier & per-dep capability pinning** | Slice 10 (`R-0201`) & Phase G (`R-0149`, `R-0383`) | Memoized `QueryDB` cache with explicit `body_hash` tracking for inlining/monomorphization + `R-0697` mandatory kernel replay; per-dependency capability/trust ceilings in `Concrete.toml` checked fail-closed against `InterfaceSummary` | Clean-vs-incremental equivalence matrix (`R-0149`), planted stale-inlined-body / corrupted-cache refusal controls, and planted dependency-upgrade privilege-escalation refusal control (`R-0383`) |
 
-**Spec impact:** None. Purely inside `Concrete/` and driver/audit tooling. No owner decision required to implement `R-0735`.
+**Spec impact:** None. Purely inside `Concrete/` and driver/package/audit tooling (exact `Concrete.toml` per-dependency policy spelling settled under `R-0383`/`R-0589`).
