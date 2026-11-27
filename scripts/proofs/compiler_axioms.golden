@@ -1373,6 +1373,7 @@ Concrete.ImageTheorem.instDecidableEqToolInvocation.decEq._proof_4
 Concrete.ImageTheorem.instDecidableEqToolInvocation.decEq._proof_5	
 Concrete.ImageTheorem.instDecidableEqToolRole._proof_1	
 Concrete.ImageTheorem.instDecidableEqToolRole._proof_2	
+Concrete.ImageTheorem.unchecked_handoffs_of_run	Classical.choice Quot.sound propext
 Concrete.IntegratedCore.elaborate.eq_1	Quot.sound propext
 Concrete.IntegratedCore.lcb_return_word	Quot.sound propext
 Concrete.IntegratedCore.lcb_return_word._proof_1_1	Quot.sound propext
@@ -1380,6 +1381,10 @@ Concrete.IntegratedCore.lcb_trap_word	Quot.sound propext
 Concrete.IntegratedCore.lcb_trap_word._proof_1_1	Quot.sound propext
 Concrete.IntegratedCore.lcb_trap_word._proof_1_2	Quot.sound propext
 Concrete.IntegratedCore.validated	Classical.choice Quot.sound propext
+Concrete.Interfaces.AdmissionEntry.mk.inj	Quot.sound propext
+Concrete.Interfaces.AdmissionEntry.mk.injEq	Quot.sound propext
+Concrete.Interfaces.AdmissionEntry.mk.sizeOf_spec	Quot.sound propext
+Concrete.Interfaces.AdmissionEntry.rejectsMismatch	Quot.sound propext
 Concrete.Interfaces.Args.brecOn.eq	
 Concrete.Interfaces.Args.cons.inj	
 Concrete.Interfaces.Args.cons.injEq	propext
@@ -1593,6 +1598,7 @@ Concrete.Interfaces.Observation.trapped.sizeOf_spec
 Concrete.Interfaces.OperationCheck.mk.inj	
 Concrete.Interfaces.OperationCheck.mk.injEq	propext
 Concrete.Interfaces.OperationCheck.mk.sizeOf_spec	
+Concrete.Interfaces.PassFunctions.admissionEntry._proof_1	Quot.sound propext
 Concrete.Interfaces.PassFunctions.mk.inj	Quot.sound propext
 Concrete.Interfaces.PassFunctions.mk.injEq	Quot.sound propext
 Concrete.Interfaces.PassFunctions.mk.sizeOf_spec	Quot.sound propext
@@ -2237,6 +2243,7 @@ Concrete.Stages.compile_project	Classical.choice Quot.sound propext
 Concrete.Stages.compile_ssa_correct	Classical.choice Quot.sound propext
 Concrete.Stages.prepareLCB.eq_1	Classical.choice Quot.sound propext
 Concrete.Stages.prepareLCB_of_edges	Classical.choice Quot.sound propext
+Concrete.Stages.unchecked.eq_1	Classical.choice Quot.sound propext
 Concrete.instDecidableEqManifestRefusal.decEq._proof_1	
 Concrete.instDecidableEqManifestRefusal.decEq._proof_10	
 Concrete.instDecidableEqManifestRefusal.decEq._proof_11	

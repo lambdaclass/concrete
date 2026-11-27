@@ -548,6 +548,16 @@ inductive Purpose where
   | eligibility | admission
   deriving DecidableEq
 
+/-- An explicit u8 suffix still describes a representable unchecked operand. -/
+def Purpose.AllowsSuffix (purpose : Purpose) (suffix : Option IntTy) : Prop :=
+  match purpose with
+  | .admission => Slice0Rules.ExpectedTypeLiteral suffix
+  | .eligibility => suffix = none ∨ suffix = some .u8
+
+instance (purpose : Purpose) (suffix : Option IntTy) : Decidable (purpose.AllowsSuffix suffix) := by
+  cases purpose <;> unfold Purpose.AllowsSuffix <;> try unfold Slice0Rules.ExpectedTypeLiteral
+  all_goals infer_instance
+
 private structure State where
   next : Nat := 0
   bindings : List LocatedBinding := []
@@ -570,6 +580,11 @@ private def Rhs.bind (rhs : Rhs) (s : State)
     | .add l r site => ⟨⟨x, .add l.atom r.atom⟩, site, decl.getD site, l.span, r.span⟩
   ((x, b.operationSpan), ⟨s.next + 1, b :: s.bindings⟩)
 
+private theorem Rhs.bind_fresh (rhs : Rhs) (s : State) (decl : Option Surface0.Span)
+    (x : Var) (below : x.id < s.next) : (rhs.bind s decl).1.1 ≠ x := by
+  intro same
+  exact (Nat.ne_of_lt below) (congrArg Var.id same).symm
+
 private def Rhs.asAtom (rhs : Rhs) (s : State) : LocatedAtom × State :=
   match rhs with
   | .atom a => (a, s)
@@ -580,9 +595,7 @@ private def Rhs.asAtom (rhs : Rhs) (s : State) : LocatedAtom × State :=
 private def expr (purpose : Purpose) (scope : Scope) :
     Surface0.Expr → State → Except Surface0Issue (Rhs × State)
   | .integer n suffix span, s =>
-    -- Slice 0 Core can represent only u8. Admission also checks the
-    -- expected-type rule on an explicit u8 suffix.
-    if suffix.any (· != .u8) || (purpose == .admission && suffix.isSome) then
+    if ¬ purpose.AllowsSuffix suffix then
       .error (.integerSuffix span)
     else .ok (.atom ⟨.lit n, span⟩, s)
   | .local name span, s =>
@@ -1031,14 +1044,40 @@ theorem AdmissionInput.preparedSlice {language} (input : AdmissionInput language
       split at h <;> cases h
       rfl
 
+/-- Surface preparation constructs the canonical early fragment in either mode.
+This holds independently of source locations and parser readiness. -/
+theorem AdmissionInput.pending_inFragment {language slice} (project : Project)
+    (source : SourceForm slice) (eq : language = sliceLanguage slice) {purpose output}
+    (prepared : (AdmissionInput.pending project source eq).prepare purpose = .ok output) :
+    output.InFragment := by
+  cases source with
+  | zero ast =>
+    change (match SurfacePreparation.prepareSurface0 ast purpose with
+      | .error issue => Except.error issue.render
+      | .ok body => .ok (CoreInput.mk project slice0 (.straightLine (.zero body) eq))) = .ok output at prepared
+    split at prepared
+    · contradiction
+    · cases prepared
+      exact ⟨_, rfl, eq, rfl⟩
+
 def AdmissionInput.Ready {language} (input : AdmissionInput language) (slice : Slice) : Prop :=
-  input.slice = slice ∧ ∀ purpose, match input.prepare purpose with
-    | .ok prepared => prepared.WF ∧ prepared.InFragment
-    | .error refusal => match input with
-      | .pending project .. =>
+  input.slice = slice ∧ match input with
+    | .core i => i.WF ∧ i.InFragment
+    | pending@(.pending project ..) => ∀ purpose, match pending.prepare purpose with
+      | .ok prepared => prepared.WF
+      | .error refusal =>
         (∃ span, refusal.primary.Binds project span) ∧
         ∀ related ∈ refusal.related, ∃ span, related.2.Binds project span
-      | .core _ => False
+
+theorem AdmissionInput.Ready.prepared {language slice purpose output} {input : AdmissionInput language}
+    (ready : input.Ready slice) (ran : input.prepare purpose = .ok output) :
+    output.WF ∧ output.InFragment := by
+  cases input with
+  | core i => cases ran; exact ready.2
+  | pending project source eq =>
+    have locations := ready.2 purpose
+    rw [ran] at locations
+    exact ⟨locations, pending_inFragment project source eq ran⟩
 
 def AdmissionInput.CheckerRefuses {language} (input : AdmissionInput language) (r : CheckerRefusal) : Prop :=
   match input.prepare with

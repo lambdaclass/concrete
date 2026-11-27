@@ -277,6 +277,14 @@ example :
     ¬ (registry (fragmentPasses slice2)).admission.inputInvariant (.core abortOnly) := by
   refine ⟨rfl, rfl, rfl, ?_, ?_⟩ <;> intro h <;> cases h.1
 
+-- A direct typing call also rejects an off-slice Core before invoking typeCore.
+example :
+    let typing := (registry (fragmentPasses slice0)).typing
+    let failure := StageFailure.invalidInput ⟨``CoreInput.slice, 1⟩
+    typing.run abortOnly = .error failure ∧ typing.refusal abortOnly failure ∧
+    ¬ typing.outputInvariant abortOnly := by
+  exact ⟨rfl, rfl, fun h => by cases h.1⟩
+
 example :
     ({abortOnly with slice := slice0}).decode = .error .outsideFragment ∧
     ({abortOnly with payload := .integrated abortOnly.machineProgram}).decode = .error .outsideFragment ∧
@@ -319,7 +327,7 @@ private def parseSource (text : String) := (Lex.lex text.toUTF8).bind Parse.pars
 
 example :
     ((parseSource r"fn main() -> u8 { return 42; let _: u8 = 1; }").bind
-      (fun ast => Admission.prepareParsed ast)) =
+      (Admission.prepareParsed .admission)) =
       .error (.checker "unreachable code (STMT-14) at 1:30, bytes 29..43") := by
   with_unfolding_all rfl
 

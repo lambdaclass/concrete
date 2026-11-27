@@ -354,7 +354,7 @@ private structure FixtureEntries (profile : Profile) where
 
 private def fixtureEntries {profile : Profile} (parser : Parser grammar)
     (passes : PassFunctions grammar testLanguage testLowering profile) : FixtureEntries profile :=
-  ⟨passes.lexer, parserEntry parser.engine, passes.admissionEntry early, passes.lowerUncheckedEntry,
+  ⟨passes.lexer, parserEntry parser.engine, (passes.admissionEntry early).toStage, passes.lowerUncheckedEntry,
     passes.emitLLVMEntry, passes.emitLCBEntry⟩
 
 private abbrev r {profile : Profile} (_m : LoweringModels testLanguage testLowering profile)
@@ -653,7 +653,7 @@ private theorem parsedReturnDomain : Parsed.ElaborationDomain slice0 parsedRetur
   subst payload
   refine ⟨rfl, ?_⟩
   intro purpose
-  cases purpose <;> exact ⟨returnedCoreWF 42, _, representsReturn 42⟩
+  cases purpose <;> exact returnedCoreWF 42
 
 private theorem firstTokenConsumes {count : Nat} {g : SharedGrammar count} {slice : Slice}
     {rhs tokens args steps} (parsed : DerivesArgs g slice rhs tokens args steps) :
@@ -703,7 +703,7 @@ example :
     registered.elaborator.Compatible registered.eligibility ∧
     registered.eligibility.Compatible registered.typing ∧
     registered.typing.Compatible registered.lowerUnchecked := by
-  refine ⟨fun _ h => h, ?_, fun _ h => h, fun _ h => h, fun _ h => h⟩
+  refine ⟨fun _ h => h, ?_, fun _ h => h, fun _ h => h, fun _ h => h.2⟩
   rintro ⟨_, _, _, ⟨result, matching⟩, _⟩
   obtain ⟨_, impossible, _⟩ := matching
   cases impossible
@@ -712,7 +712,7 @@ set_option maxRecDepth 4096 in
 example :
     let registered := registry (returnPasses fixtureElaborate)
     registered.typing.outputInvariant (elaboratedReturn 42) := by
-  exact ⟨returnedCoreWF 42, typedReturn⟩
+  exact ⟨rfl, returnedCoreWF 42, typedReturn⟩
 
 set_option maxRecDepth 4096 in
 private theorem return256IllTyped : ¬ (elaboratedReturn 256).StaticallyTyped := by
@@ -1993,7 +1993,7 @@ example :
     edge.inputInvariant (.core core) ∧
       ∃ failure, edge.run (.core core) = .error failure ∧ edge.refusal (.core core) failure := by
   let reason := ConcreteSpec.Admission.Refusal.atPosition 0 (.literalOutOfRange .u8 256)
-  refine ⟨⟨rfl, fun _ => ⟨returnedCoreWF 256, _, representsReturn 256⟩⟩, _, rfl, rfl, ?_, _, reason, representsReturn 256, rfl, rfl⟩
+  refine ⟨⟨rfl, returnedCoreWF 256, _, representsReturn 256⟩, _, rfl, rfl, ?_, _, reason, representsReturn 256, rfl, rfl⟩
   rintro ⟨v, represented, accepted⟩
   cases v.unique represented (representsReturn 256)
   exact Bool.noConfusion ((ConcreteSpec.check_iff _).mpr accepted)
@@ -3020,7 +3020,7 @@ example (unchecked : Bool) :
       parsedReturn, by with_unfolding_all rfl, parsedReturnDomain, parse, trivial,
       pendingReturn, rfl, parsedReturnDomain.2.2.2.2 _ elaborates, elaborates, trivial,
       literalCore, rfl, ⟨rfl, returnedCoreWF 42, fragment⟩, ⟨rfl, rfl⟩, trivial,
-      literalCore, by with_unfolding_all rfl, ⟨returnedCoreWF 42, typed⟩, rfl, trivial,
+      literalCore, by with_unfolding_all rfl, ⟨rfl, returnedCoreWF 42, typed⟩, rfl, trivial,
       literalMIR, rfl, literalHandoff, literalUnchecked, trivial,
       literalMemory, rfl, literalHandoff, ⟨literalMemoryContract, rfl⟩, trivial,
       literalSSA, by with_unfolding_all rfl, by with_unfolding_all exact literalHandoff, ⟨literalSSAContract, rfl⟩, trivial, back⟩

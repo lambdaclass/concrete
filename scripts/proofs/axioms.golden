@@ -4515,6 +4515,7 @@ ConcreteSpec.StageInterface.AdmissionFailure.refused.inj
 ConcreteSpec.StageInterface.AdmissionFailure.refused.injEq	propext
 ConcreteSpec.StageInterface.AdmissionFailure.refused.sizeOf_spec	
 ConcreteSpec.StageInterface.AdmissionFailure.unmappedEvidence.sizeOf_spec	
+ConcreteSpec.StageInterface.AdmissionInput.Ready.prepared	Quot.sound propext
 ConcreteSpec.StageInterface.AdmissionInput.core.inj	Quot.sound propext
 ConcreteSpec.StageInterface.AdmissionInput.core.injEq	Quot.sound propext
 ConcreteSpec.StageInterface.AdmissionInput.core.sizeOf_spec	Quot.sound propext
@@ -4522,6 +4523,7 @@ ConcreteSpec.StageInterface.AdmissionInput.pending.congr_simp	Quot.sound propext
 ConcreteSpec.StageInterface.AdmissionInput.pending.inj	Quot.sound propext
 ConcreteSpec.StageInterface.AdmissionInput.pending.injEq	Quot.sound propext
 ConcreteSpec.StageInterface.AdmissionInput.pending.sizeOf_spec	Quot.sound propext
+ConcreteSpec.StageInterface.AdmissionInput.pending_inFragment	Quot.sound propext
 ConcreteSpec.StageInterface.AdmissionInput.preparedSlice	Quot.sound propext
 ConcreteSpec.StageInterface.AdmissionView.one.inj	
 ConcreteSpec.StageInterface.AdmissionView.one.injEq	propext
@@ -7190,6 +7192,7 @@ _private.ConcreteSpec.StageInterface.0.ConcreteSpec.StageInterface.SurfacePrepar
 _private.ConcreteSpec.StageInterface.0.ConcreteSpec.StageInterface.SurfacePreparation.Rhs.atom.inj	
 _private.ConcreteSpec.StageInterface.0.ConcreteSpec.StageInterface.SurfacePreparation.Rhs.atom.injEq	propext
 _private.ConcreteSpec.StageInterface.0.ConcreteSpec.StageInterface.SurfacePreparation.Rhs.atom.sizeOf_spec	
+_private.ConcreteSpec.StageInterface.0.ConcreteSpec.StageInterface.SurfacePreparation.Rhs.bind_fresh	
 _private.ConcreteSpec.StageInterface.0.ConcreteSpec.StageInterface.SurfacePreparation.State.mk.inj	
 _private.ConcreteSpec.StageInterface.0.ConcreteSpec.StageInterface.SurfacePreparation.State.mk.injEq	propext
 _private.ConcreteSpec.StageInterface.0.ConcreteSpec.StageInterface.SurfacePreparation.State.mk.sizeOf_spec	

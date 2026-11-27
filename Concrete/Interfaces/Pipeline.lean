@@ -81,14 +81,12 @@ theorem eligibilityEntry_validated (language : CoreLanguage) (slice : Slice) :
     change (if input.slice = slice then
       (input.prepare .eligibility).mapError (fun _ => StageFailure.unpreparable) else .error .unpreparable) = .ok output at ran
     rw [ite_eq_left ready.1] at ran
-    have domain := ready.2 .eligibility
     cases prepared : input.prepare .eligibility with
     | error reason => simp [prepared, Except.mapError] at ran
     | ok i =>
       simp only [prepared, Except.mapError, Except.ok.injEq] at ran
       subst output
-      rw [prepared] at domain
-      exact ⟨⟨(input.preparedSlice prepared).trans ready.1, domain⟩, ready.1, prepared⟩
+      exact ⟨⟨(input.preparedSlice prepared).trans ready.1, ready.prepared prepared⟩, ready.1, prepared⟩
   · intro input failure ready ran
     change (if input.slice = slice then
       (input.prepare .eligibility).mapError (fun _ => StageFailure.unpreparable) else .error .unpreparable) = .error failure at ran
@@ -98,19 +96,29 @@ theorem eligibilityEntry_validated (language : CoreLanguage) (slice : Slice) :
 
 def PassFunctions.typingEntry (passes : PassFunctions grammar language lang profile) (slice : Slice) :
     Stage (CoreInput language) StageFailure (CoreInput language) where
-  run input := (passes.typeCore input).map fun _ => input
+  run input := if input.slice = slice then (passes.typeCore input).map fun _ => input
+    else .error (.invalidInput ⟨``CoreInput.slice, 1⟩)
   kind := .directProof
   inputInvariant input := input.slice = slice ∧ input.WF ∧ input.InFragment
-  outputInvariant input := input.WF ∧ input.StaticallyTyped
+  outputInvariant input := input.slice = slice ∧ input.WF ∧ input.StaticallyTyped
   success input output := input = output
-  refusal input failure := failure = .invalidInput ⟨``CoreInput.StaticallyTyped, 1⟩ ∧ ¬ input.StaticallyTyped
+  refusal input failure := if input.slice = slice then
+      failure = .invalidInput ⟨``CoreInput.StaticallyTyped, 1⟩ ∧ ¬ input.StaticallyTyped
+    else failure = .invalidInput ⟨``CoreInput.slice, 1⟩
+
+/-- Registration requires rejection of every input tagged for a different slice,
+including off-domain inputs passed directly to the stage. -/
+structure AdmissionEntry (language : CoreLanguage) (slice : Slice) extends
+    Stage (AdmissionInput language) AdmissionFailure (Admitted language) where
+  rejectsMismatch : ∀ input, input.slice ≠ slice →
+    toStage.run input = .error (.fragment (.sliceMismatch slice input.slice))
 
 def PassFunctions.admissionEntry (passes : PassFunctions grammar language lang profile) (slice : Slice) :
-    Stage (AdmissionInput language) AdmissionFailure (Admitted language) where
-  run input := do
-    unless input.slice = slice do throw (.fragment (.sliceMismatch slice input.slice))
-    let prepared ← input.prepare.mapError AdmissionFailure.refused
-    (passes.checkCore prepared).map fun discharges => ⟨prepared, discharges⟩
+    AdmissionEntry language slice where
+  run input := if input.slice = slice then do
+      let prepared ← input.prepare.mapError AdmissionFailure.refused
+      (passes.checkCore prepared).map fun discharges => ⟨prepared, discharges⟩
+    else .error (.fragment (.sliceMismatch slice input.slice))
   kind := .directProof
   inputInvariant input := input.Ready slice
   outputInvariant := Admitted.Valid
@@ -119,6 +127,7 @@ def PassFunctions.admissionEntry (passes : PassFunctions grammar language lang p
     | .refused diagnostic => input.slice = slice ∧ input.CheckerRefuses diagnostic
     | .fragment (.sliceMismatch expected actual) => expected = slice ∧ actual = input.slice ∧ actual ≠ expected
     | _ => False
+  rejectsMismatch input wrong := by simp [wrong]
 
 def Memory.HandoffWF {Ty : Type} {lowering : LoweringLanguage Ty}
     (memory : Memory lowering profile) : Prop :=
@@ -226,7 +235,7 @@ structure Registry (slice : Slice) (profile : Profile) where
   elaborator : Stage (Parsed ((sliceGrammar slice).value (sliceGrammar slice).start)) ElabRefusal (AdmissionInput (sliceLanguage slice))
   eligibility : Stage (AdmissionInput (sliceLanguage slice)) StageFailure (CoreInput (sliceLanguage slice))
   typing : Stage (CoreInput (sliceLanguage slice)) StageFailure (CoreInput (sliceLanguage slice))
-  admission : Stage (AdmissionInput (sliceLanguage slice)) AdmissionFailure (Admitted (sliceLanguage slice))
+  admission : AdmissionEntry (sliceLanguage slice) slice
   lowerCore : Stage (Admitted (sliceLanguage slice)) StageFailure (MIR (sliceLoweringLanguage slice) profile)
   lowerUnchecked : Stage (CoreInput (sliceLanguage slice)) StageFailure (MIR (sliceLoweringLanguage slice) profile)
   lowerMemory : Stage (MIR (sliceLoweringLanguage slice) profile) StageFailure (Memory (sliceLoweringLanguage slice) profile)
@@ -278,6 +287,12 @@ def registry {slice : Slice} (passes : Passes slice profile) : Registry slice pr
   emitLLVM := passes.emitLLVMEntry
   emitLCB := passes.emitLCBEntry
 
+-- The same pass bundle typechecks at the selected slice. Substituting Slice 1
+-- for Slice 3 in the admission field must fail during elaboration.
+example {profile} (passes : Passes ⟨⟨3, by decide⟩⟩ profile) : Registry ⟨⟨3, by decide⟩⟩ profile := by
+  fail_if_success exact {registry passes with admission := passes.admissionEntry sliceOne}
+  exact {registry passes with admission := passes.admissionEntry ⟨⟨3, by decide⟩⟩}
+
 inductive Edge where
   | lexer | parser | elaborator | eligibility | typing | admission | lowerCore | lowerUnchecked
   | lowerMemory | buildSSA | buildBIR | emitLLVM | emitLCB
@@ -304,7 +319,7 @@ private def Registry.chain {slice : Slice} {Output : Type} (r : Registry slice p
   let lowering := Pipeline.next r.lowerMemory <| .next r.buildSSA <| .next r.buildBIR <|
     .next backend .done
   let core := if unchecked then Pipeline.next r.eligibility (.next r.typing (.next r.lowerUnchecked lowering))
-    else .next r.admission (.next r.lowerCore lowering)
+    else .next r.admission.toStage (.next r.lowerCore lowering)
   .next r.lexer (.next r.parser (.next r.elaborator core))
 
 def Registry.llvmPipeline {slice : Slice} (r : Registry slice profile) (unchecked : Bool) :
