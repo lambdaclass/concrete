@@ -87,7 +87,7 @@ evidence and compares both native observations.
 
 ## Scope
 
-This document describes **the compiler**: its stages, IRs, proof strategy, premises and gates. Language rules are not restated here. They live in `ConcreteSpec`, and this document links to them:
+This document describes **the Slice-0 compiler prototype**: its stages, IRs, proof strategy, premises and gates. For the frozen slice-indexed stage-interface contracts replacing these provisional Slice-0 carriers at cutover, see [docs/compiler/STAGE_INTERFACES.md](../docs/compiler/STAGE_INTERFACES.md). For the frontier compiler architecture research series (`R-0730`–`R-0742`—including the cutover's closed per-IR pass slots and split optimizing-pass provenance rule, multi-obligation BIR/LCB validators, private proved-convertible `LayoutPlan` synthesis, non-vacuous cost preservation, safe open modules, `QueryDB`, and Stage-0 day-one foundations), see [docs/proposals/compiler-architecture/README.md](../docs/proposals/compiler-architecture/README.md). Language rules are not restated here. They live in `ConcreteSpec`, and this document links to them:
 - the one Core (syntax and semantics) and the slice fragments, each a pair of decidable predicates `Fragment.surface` and `Fragment.core` (planned `ConcreteSpec/Spec/Fragments.lean`, A2i item I3); until those land, the current slice-0 file [`ConcreteSpec/Spec/Slice0.lean`](../ConcreteSpec/Spec/Slice0.lean);
 - its behaviour theorems: [`ConcreteSpec/Proofs/Slice0.lean`](../ConcreteSpec/Proofs/Slice0.lean);
 - what the parent process observes, including the trap status and the trap line: [`ConcreteSpec/Spec/Observation.lean`](../ConcreteSpec/Spec/Observation.lean);
