@@ -16,13 +16,9 @@
 #      imports, module by module (the mode that names the module at fault).
 #
 # THE MODULE LIST COMES FROM THE SOURCES (ISS-0016). Given a prefix, leanchecker replays every .olean
-# on its search path under that prefix. The build directory also holds .olean files of modules whose
-# source was deleted or renamed (the CI lake cache restores an older build through a restore-key
-# prefix), so trusting it replays modules that no longer exist: CI run 42424028055 failed on
-# ConcreteSpec.Spec.Ownership after its rename to Slice1Ownership. Both legs therefore run on a staged
-# library holding the .olean files of exactly the modules the sources declare (spec_modules), with the
-# package's build directory replaced by the stage in LEAN_PATH, and M checks that the replayed set is
-# exactly that list. scripts/proofs/lib.sh also prunes orphaned build files before building.
+# on its search path under that prefix. CI run 42424028055 replayed ConcreteSpec.Spec.Ownership
+# after its rename to Slice1Ownership. Both legs run on a staged library holding exactly the
+# modules the sources declare, and M checks the replayed set against that list.
 #
 # NEGATIVE CONTROL: a throwaway package of this toolchain with two modules. ReplayGood proves a true
 # statement honestly; ReplayBad adds `ReplayBad.forged : False` with `debug.skipKernelTC` and proves
@@ -153,23 +149,6 @@ if (cd "$C" && "$LAKE" build ReplayGood ReplayBad > build.out 2>&1); then
     && [ ! -e "$OS/ConcreteSpec/Spec/OrphanControl.olean" ] \
     && ok "control: the staged replay of the same directory ignores the orphan and replays exactly the source modules" \
     || no "control: staged replay with a planted orphan: rc=$r2 $out $(replay_problems "$TMP/modules.txt" "$TMP/o2.out" | tr '\n' ' ')"
-  PB="$TMP/prune-build"; mkdir -p "$PB/lib" "$PB/ir/ConcreteSpec/Spec"; cp -a "$PKG_LIB" "$PB/lib/lean"
-  for x in olean ilean trace olean.hash; do echo x > "$PB/lib/lean/ConcreteSpec/Spec/OrphanControl.$x"; done
-  echo x > "$PB/ir/ConcreteSpec/Spec/OrphanControl.c"
-  pout="$(prune_orphans "$PB")"
-  left="$(find "$PB" -name '*Orphan*' | tr '\n' ' ')"
-  kept="$(stage_lib "$PB/lib/lean" "$TMP/prune-kept" < "$TMP/modules.txt")"
-  [ -z "$left" ] && [ -z "$kept" ] && [ "$(grep -c '^pruned orphan' <<< "$pout")" = 5 ] \
-    && ok "control: prune_orphans removes the 5 planted orphan files and keeps every source module's .olean" \
-    || no "control: prune_orphans left '$left', lost '$kept', said: $(echo $pout)"
-  PF="$TMP/prune-failclosed"; mkdir -p "$PF/lib"; cp -a "$PKG_LIB" "$PF/lib/lean"
-  before="$(find "$PF" -type f | wc -l)"
-  for bad in 'echo ConcreteSpec.Spec.Basics' 'printf "ConcreteSpec\nConcreteSpec.Spec.NoSource\n"' 'false'; do
-    ( spec_modules() { eval "$bad"; }; prune_orphans "$PF" ) > /dev/null 2>&1; rp=$?
-    [ "$rp" != 0 ] && [ "$(find "$PF" -type f | wc -l)" = "$before" ] \
-      && ok "control: prune_orphans refuses a bad source list ($bad) and deletes nothing" \
-      || no "control: prune_orphans with a bad source list ($bad): rc=$rp, files $before -> $(find "$PF" -type f | wc -l)"
-  done
   { cat "$TMP/modules.txt"; echo ConcreteSpec.Spec.NoSuchModule; } | sort > "$TMP/modules-plus.txt"
   out="$(stage_lib "$PKG_LIB" "$TMP/missing-stage" < "$TMP/modules-plus.txt")"
   has_match -F "no .olean for source module ConcreteSpec.Spec.NoSuchModule" <<< "$out" \

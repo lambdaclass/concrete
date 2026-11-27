@@ -98,6 +98,18 @@ example :
       Project.parseManifest text = .error (.invalid (.malformed ⟨37, 38⟩)) := by
   cbv <;> decide
 
+-- Every quoted key starts at the first delimiter, including an empty key.
+-- At ordinary depth the first two quotes can still be completed with =0.
+example :
+    let header := "[a.b.c.d.e.f.g.h.i.j.k.l.m.n.o.p]\n"
+    let exceeded : Except Concrete.ManifestRefusal Unit := .error (.invalid (.depth ⟨34, 35⟩))
+    Project.parseManifest (header ++ "\"") = exceeded ∧
+    Project.parseManifest (header ++ "\"\"") = exceeded ∧
+    Project.parseManifest (header ++ "\"\"\"") = exceeded ∧
+    Project.parseManifest "\"\"=0" = .ok () ∧
+    Project.parseManifest "\"\"\"" = .error (.invalid (.malformed ⟨2, 3⟩)) := by
+  cbv <;> decide
+
 -- Nested arrays reach the actual lookahead, including EOF and an invalid comment byte.
 example : Project.parseManifest "a=[[[[[0]]]]]" = .ok () ∧
     Project.parseManifest "a=[[[[[" = .error (.invalid (.malformed ⟨7, 7⟩)) ∧

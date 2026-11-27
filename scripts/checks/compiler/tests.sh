@@ -36,6 +36,7 @@ if [[ ${CONCRETE_TEST_EMIT_ONLY:-0} != 1 ]]; then
   for encoding_env in utc pacific; do
     encoding_dir="$work/artifact-$encoding_env"
     mkdir -p "$encoding_dir/tmp"
+    cp "$root/lean-toolchain" "$encoding_dir/"
     if [[ $encoding_env == utc ]]; then
       encoding_tz=UTC0
     else
@@ -50,10 +51,63 @@ if [[ ${CONCRETE_TEST_EMIT_ONLY:-0} != 1 ]]; then
   cmp "$work/artifact-utc/vectors" "$work/artifact-pacific/vectors"
   echo "ok   canonical artifact bytes and SHA-256 goldens in two environments, payload substitutions"
   bash scripts/checks/compiler/f31_census.sh
-  # The kernel checks the full cross-stage controls in this compilation unit.
-  # At two Lean threads this can exceed the standard build budget.
+  # Lake reuses each topic's checked olean. Allow for a cold native runner.
+  stage_controls=(python3 -I "$root/scripts/checks/compiler/stage_controls.py")
   build stage-interface-controls "$work/stage-interface-controls.log" bounded 360 \
-    lake lean scripts/checks/compiler/stage_interfaces.lean -- -DwarningAsError=true -DautoImplicit=false
+    "${stage_controls[@]}"
+  # Use the real configuration for both the developer build and this CI gate.
+  probe="$work/stage-interface-plant"
+  mkdir -p "$probe/ConcreteChecks/StageInterfaces/Frontend" "$probe/.lake"
+  cp lakefile.toml lake-manifest.json lean-toolchain "$probe/"
+  ln -s "$root/.lake/packages" "$probe/.lake/packages"
+  (
+    cd "$probe"
+    touch Concrete.lean ConcreteSpec.lean
+    root_module=ConcreteChecks/StageInterfaces.lean
+    good='example : (0 : Nat) = 0 := rfl'
+    echo "$good" >"$root_module"
+    nested=ConcreteChecks/StageInterfaces/Frontend/Planted
+    placements=("$root_module" "$nested.lean" ConcreteChecks/Unlisted.lean)
+    if [[ -f "$root/ConcreteChecks.lean" ]]; then
+      echo "$good" >ConcreteChecks.lean
+      placements+=(ConcreteChecks.lean)
+    fi
+    build stage-interface-plant-baseline "$work/plant-baseline.log" bounded 60 "${stage_controls[@]}"
+    reject_false_control() {
+      local module=$1
+      local rc=0
+      shift
+      bounded 60 "$@" >"$work/plant.log" 2>&1 || rc=$?
+      if [[ $rc != 1 ]] || ! has_match -F "$module:1:" <"$work/plant.log" ||
+          ! has_match -F '0 = 1' <"$work/plant.log"; then
+        cat "$work/plant.log" >&2
+        echo "FAIL $*: expected a false equality in $module" >&2
+        exit 1
+      fi
+    }
+    # Change the cached root, then add fresh, unimported sources at two depths.
+    for module in "${placements[@]}"; do
+      echo 'example : (0 : Nat) = 1 := rfl' >"$module"
+      reject_false_control "$module" lake build
+      reject_false_control "$module" "${stage_controls[@]}"
+      echo "$good" >"$module"
+    done
+    build stage-interface-plant-repaired "$work/plant-repaired.log" bounded 60 "${stage_controls[@]}"
+    # Restore the old glob. The live root and sibling are still cached.
+    test -s .lake/build/lib/lean/ConcreteChecks/StageInterfaces.olean
+    test -s .lake/build/lib/lean/ConcreteChecks/Unlisted.olean
+    sed -i 's/"ConcreteChecks\.+"/"ConcreteChecks.StageInterfaces.+"/' lakefile.toml
+    rc=0
+    bounded 60 "${stage_controls[@]}" >"$work/plant.log" 2>&1 || rc=$?
+    if [[ $rc != 1 ]] || ! has_match -Fx "missing from ConcreteChecks.StageInterfaces: $root_module" <"$work/plant.log" ||
+        ! has_match -Fx 'missing from ConcreteChecks.StageInterfaces: ConcreteChecks/Unlisted.lean' <"$work/plant.log"; then
+      cat "$work/plant.log" >&2
+      echo "FAIL stage-interface inventory: expected the old glob to omit the root and sibling" >&2
+      exit 1
+    fi
+  )
+  echo "ok   default and native builds reject false stage controls in the root, a new nested file and a sibling"
+  echo "ok   stage-interface inventory detects omissions with a warm cache"
   build stage-end-to-end-audit "$work/stage-end-to-end-audit.log" bounded 60 \
     lake lean scripts/checks/compiler/stage_end_to_end_audit.lean -- -DwarningAsError=true -DautoImplicit=false
   build refusal-mutations "$work/refusal-mutations.log" bounded 300 \
@@ -496,7 +550,8 @@ if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" != 1 ]; then
   mkdir -p "$project_dir"
   printf 'fn main() -> u8 { return 42; }\n' >"$project_dir/answer.con"
   cli=(bash -c 'cd "$1" && shift && exec "$@"' _ "$project_dir" "$root/.lake/build/bin/concrete")
-  for manifest_case in schema malformed comment quote_after_key quote_value array_eof array_depth array_comment depth size encoding directory symlink; do
+  for manifest_case in schema malformed comment quote_after_key quote_value triple_key array_eof array_depth array_comment \
+      depth 'depth:"' 'depth:""' 'depth:"""' size encoding directory symlink; do
     project_file="$project_dir/Concrete.toml"
     case "$manifest_case" in
       schema)
@@ -514,6 +569,9 @@ if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" != 1 ]; then
       quote_value)
         printf 'a = "oops' >"$project_file"
         expected='Concrete.toml is malformed' ;;
+      triple_key)
+        printf '"""' >"$project_file"
+        expected='Concrete.toml is malformed' ;;
       array_eof)
         printf 'a=[[[[[' >"$project_file"
         expected='Concrete.toml is malformed' ;;
@@ -525,6 +583,9 @@ if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" != 1 ]; then
         expected='Concrete.toml exceeds the nesting limit of 16' ;;
       depth)
         printf '[a.b.c.d.e.f.g.h.i.j.k.l.m.n.o.p]\nx = true\n' >"$project_file"
+        expected='Concrete.toml exceeds the nesting limit of 16' ;;
+      depth:*)
+        printf '[a.b.c.d.e.f.g.h.i.j.k.l.m.n.o.p]\n%s' "${manifest_case#depth:}" >"$project_file"
         expected='Concrete.toml exceeds the nesting limit of 16' ;;
       size)
         printf '%65537s' '' >"$project_file"
@@ -545,20 +606,20 @@ if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" != 1 ]; then
     case "$manifest_case" in
       malformed) span=9..10; rule=SyntaxAccepted ;;
       comment) span=37..38; rule=SyntaxAccepted ;;
-      quote_after_key) span=2..3; rule=SyntaxAccepted ;;
+      quote_after_key|triple_key) span=2..3; rule=SyntaxAccepted ;;
       quote_value) span=9..9; rule=SyntaxAccepted ;;
       array_eof) span=7..7; rule=SyntaxAccepted ;;
       array_comment) span=23..24; rule=SyntaxAccepted ;;
       array_depth) span=17..18; rule=DepthAccepted; revision=2 ;;
-      depth) span=34..35; rule=DepthAccepted; revision=2 ;;
+      depth|depth:*) span=34..35; rule=DepthAccepted; revision=2 ;;
       size) span=65536..65537; rule=SizeAccepted ;;
       encoding) span=2..3; rule=EncodingAccepted ;;
     esac
     if [ -n "$rule" ]; then expected+=" [rule ConcreteSpec.Project.Manifest.$rule@$revision, Concrete.toml, bytes $span]"; fi
     case "$manifest_case" in
       directory|symlink) code=READ ;;
-      array_depth) code=DEPTH ;;
-      malformed|comment|quote_after_key|quote_value|array_eof|array_comment) code=SYNTAX ;;
+      array_depth|depth:*) code=DEPTH ;;
+      malformed|comment|quote_after_key|quote_value|triple_key|array_eof|array_comment) code=SYNTAX ;;
       *) code=${manifest_case^^} ;;
     esac
     rc=0

@@ -214,9 +214,8 @@ already handles, and what the host has to handle.
 
 - **Workspace.** `actions/checkout@v4` (default `clean: true`) runs `git clean -ffdx` and
   `git reset --hard` on the existing checkout. That removes `.lake/`, `.mutation-evidence/`,
-  leftovers of a cancelled mutation shard and any tracked file a gate mutated, before the cache
-  restores `.lake/build`. The proof replay's "no build caches" property holds for the same
-  reason.
+  leftovers of a cancelled mutation shard and any tracked file a gate mutated. The active gates
+  build the project and its pinned dependencies from this clean checkout on both runner types.
 - **`$RUNNER_TEMP`** is emptied by the runner for every job. The workflow's own temporary files
   live there: the LL(1) checker binaries, the trust-gate log, the thesis-demo reports, the example
   outputs, the checker acceptance evidence and the mutation shard records.
@@ -285,11 +284,11 @@ HOME and refuse ancestor Cargo configuration. See the isolation contract in
 
 ## Build cache (R-0546)
 
-Every job, worktree and agent used to build the compiler from nothing. Two caches now start that
-build warm. **Neither one skips it.** `lake build` still runs and re-checks every module's trace,
-and the BuildIdentity freshness gate still runs.
+The active CI workflow disables Lake build caches, including lean-action's default restore on
+the first attempt and retry. Within a job, Lake reuses modules built from that checkout. The
+external re-check caches its pinned checker tools separately.
 
-### Lean: `.lake/build` seeds
+### Historical Lean build seeds for the frozen compiler
 
 `scripts/dev/seed-lake.sh` copies an existing `.lake/build` into a checkout that has none. It
 **refuses** (exit 3, nothing copied) unless the source matches on the **seed key**:
@@ -309,7 +308,7 @@ Sources and `lakefile.toml` are not in the key. A seed from other sources is the
 lake mixes each module's sources and options into its trace. A source hash only chooses between
 cache entries.
 
-| Where | Seed source | How |
+| Legacy runner or checkout | Seed source | How it was used |
 |---|---|---|
 | Self-hosted CI runner | `/var/cache/concrete-lake/<key>/{<srchash>,latest}` | workflow step `Seed .lake from the server build cache (self-hosted only)` |
 | GitHub-hosted runner | `actions/cache` (`.lake/build`, exact source key) and lean-action's `.lake` cache (previous commit) | unchanged |

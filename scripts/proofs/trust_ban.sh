@@ -169,13 +169,13 @@ $B:9: example : 2 + 2 = 4 := by decide (config := ⟨false, true, true, false⟩
 # the headline theorem registry. The compiler root must import every source module.
 "$LAKE" build Concrete > "$TMP/compiler-build.log" 2>&1 \
   || { cat "$TMP/compiler-build.log" >&2; no "compiler build failed"; finish; }
-PROOF_PKG=Concrete PROOF_MODE=constants "$LAKE" env lean "$ENUMERATOR" > "$TMP/compiler-consts.tsv" \
+PROOF_PKG=Concrete population constants > "$TMP/compiler-consts.tsv" \
   || { no "compiler constant enumeration failed"; finish; }
 B=$(banned "$TMP/compiler-consts.tsv"); A=$(declared "$TMP/compiler-consts.tsv")
 [ -s "$TMP/compiler-consts.tsv" ] && [ -z "$B$A" ] \
   && ok "all compiler constants obey the axiom ban" \
   || no "compiler banned dependencies: $B; declared axioms: $A"
-PROOF_PKG=Concrete PROOF_MODE=imported "$LAKE" env lean "$ENUMERATOR" > "$TMP/compiler-imported.txt" \
+PROOF_PKG=Concrete population imported > "$TMP/compiler-imported.txt" \
   || { no "compiler import enumeration failed"; finish; }
 { echo Concrete.lean; find Concrete -name '*.lean'; } | sed -E 's#\.lean$##; s#/#.#g' | sort -u > "$TMP/compiler-modules.txt"
 GAP=$(comm -23 "$TMP/compiler-modules.txt" <(sort -u "$TMP/compiler-imported.txt"))
@@ -184,8 +184,8 @@ GAP=$(comm -23 "$TMP/compiler-modules.txt" <(sort -u "$TMP/compiler-imported.txt
 
 # lake_options LAKEFILE → empty when the specification library builds from ConcreteSpec.lean and
 # ConcreteSpec/ (Lake's defaults: no srcDir, roots or globs) with warningAsError, and nothing can turn
-# it off. All three libraries use the same key allow-list. The fixed compiler executable is checked
-# separately. The compiler's backend dependency must be a git URL pinned to a full commit and
+# it off. The stage-control library builds every module under its fixed glob. The compiler
+# executable is checked separately. Its backend dependency must be a git URL pinned to a full commit and
 # recorded with the same URL and commit in lake-manifest.json. The specification and evidence
 # import directions are checked in the source scan.
 lake_options() {
@@ -225,6 +225,14 @@ if reqs:
         if not p or p.get("type") != "git" or p.get("url") != r["git"] or p.get("rev") != r["rev"] or p.get("inputRev") != r["rev"]:
             bad.append(f"lake-manifest.json does not record the require {n} at {r['git']} {r['rev']}")
 libs = cfg.get("lean_lib", [])
+controls = "ConcreteChecks.StageInterfaces"
+stage_library = {"name": controls, "globs": ["ConcreteChecks.+"],
+                 "leanOptions": {"warningAsError": True, "autoImplicit": False}}
+if [l for l in libs if l.get("name") == controls] != [stage_library]:
+    bad.append("the stage-interface controls library configuration differs")
+if controls not in cfg.get("defaultTargets", []):
+    bad.append("the default build omits the stage-interface controls")
+libs = [l for l in libs if l.get("name") != controls]
 if [l.get("name") for l in libs] != ["ConcreteSpec", "ConcreteSpecEvidence", "Concrete"]: bad.append(f"libraries {[l.get('name') for l in libs]}")
 for l in libs:
     extra = set(l) - {"name", "leanOptions"}
@@ -253,14 +261,13 @@ echo "=== X: the examples, in the kernel's terms ==="
 # linters that anonymous examples do not; warnings remain errors in the original library.
 EX="$TMP/ex"; mkdir -p "$EX"
 cp lakefile.toml lean-toolchain lake-manifest.json "$EX"/ || { no "could not copy the Lake files"; finish; }
-[ -d .lake/build ] && mkdir -p "$EX/.lake" && cp -r .lake/build "$EX/.lake/"
 sed -i 's/^warningAsError = true$/warningAsError = false/' "$EX/lakefile.toml"
 cp "$ENUMERATOR" "$TMP/examples-enumerator.lean"
 NEX=$(python3 "$PROOFS_DIR/lean_lex.py" examples . "$EX" "${SRC[@]}" "${EVIDENCE_SRC[@]}" "${COMPILER_SRC[@]}") \
   || { no "the examples could not be rewritten: $NEX"; finish; }
 (cd "$EX" && "$LAKE" build ConcreteSpec ConcreteSpecEvidence Concrete) > "$TMP/ex-build.log" 2>&1 \
   || { no "the library with its examples as declarations does not build: $(grep -m3 error "$TMP/ex-build.log" | tr '\n' ' ')"; finish; }
-(cd "$EX" && PROOF_MODE=examples "$LAKE" env lean "$TMP/examples-enumerator.lean") > "$TMP/examples.out" 2> "$TMP/examples.err" \
+(cd "$EX" && PROOF_MODE=examples run_enumerator "$TMP/examples-enumerator.lean") > "$TMP/examples.out" 2> "$TMP/examples.err" \
   || { no "PROOF_MODE=examples failed: $(head -2 "$TMP/examples.err" | tr '\n' ' ')"; finish; }
 grep -P '\t' "$TMP/examples.out" > "$TMP/examples.tsv"
 # nonstandard FILE → `<name> (<axiom>)` for every row whose axioms are not among the standard three
@@ -284,8 +291,8 @@ awk 'FNR == NR { if ($0 ~ /^import ConcreteSpecEvidence[.]/) imports = imports $
      $0 == "import ConcreteSpecEvidence" { printf "%s", imports; next }
      $0 != "import Concrete" { print }' ConcreteSpecEvidence.lean "$ENUMERATOR" > "$TMP/no-umbrella.lean"
 sed '/^import ConcreteSpec$/d' "$TMP/no-umbrella.lean" > "$TMP/no-spec-root.lean"
-if PROOF_PKG=ConcreteSpec PROOF_MODE=environment "$LAKE" env lean "$TMP/no-umbrella.lean" > "$TMP/no-umbrella.txt" &&
-   PROOF_PKG=ConcreteSpec PROOF_MODE=environment "$LAKE" env lean "$TMP/no-spec-root.lean" > "$TMP/no-spec-root.txt" &&
+if PROOF_PKG=ConcreteSpec PROOF_MODE=environment run_enumerator "$TMP/no-umbrella.lean" > "$TMP/no-umbrella.txt" &&
+   PROOF_PKG=ConcreteSpec PROOF_MODE=environment run_enumerator "$TMP/no-spec-root.lean" > "$TMP/no-spec-root.txt" &&
    whole=$(closure_gap "$TMP/no-umbrella.txt" ConcreteSpec) && [ -z "$whole" ] &&
    missing=$(closure_gap "$TMP/no-spec-root.txt" ConcreteSpec) && grep -qxF ConcreteSpec <<<"$missing"; then
   ok "control: the direct spec import keeps the constant environment complete without the evidence umbrella"
@@ -299,26 +306,6 @@ for body in 'import Std' 'import Lean.DoesNotExist' 'import ConcreteSpecEvidence
   [ "$RC" = 0 ] && [[ "$W" == *"$body"* ]] \
     && ok "control: compiler scan reports $body" || no "compiler scan missed $body (rc=$RC): $W"
 done
-# A private synthetic build tests deletion and preservation for the library roots and IR.
-ORPHAN="$TMP/orphan-build"
-for dir in lib/lean ir; do
-  for pkg in ConcreteSpec ConcreteSpecEvidence Concrete; do
-    mkdir -p "$ORPHAN/$dir/$pkg"
-    for ext in olean ilean trace olean.hash c; do
-      touch "$ORPHAN/$dir/$pkg/Gone.$ext" "$ORPHAN/$dir/$pkg.$ext"
-    done
-  done
-  mkdir -p "$ORPHAN/$dir/Concrete/Lex" "$ORPHAN/$dir/Other"
-  touch "$ORPHAN/$dir/Concrete/Lex.olean" "$ORPHAN/$dir/Other/Gone.olean"
-done
-prune_orphans "$ORPHAN" > "$TMP/pruned.log"; RC=$?
-REMAIN=$(find "$ORPHAN" -type f -path '*/Concrete*/Gone.*')
-[ "$RC" = 0 ] && [ -z "$REMAIN" ] \
-  && [ -f "$ORPHAN/lib/lean/ConcreteSpecEvidence.olean" ] && [ -f "$ORPHAN/lib/lean/Concrete.olean" ] && [ -f "$ORPHAN/ir/ConcreteSpec.c" ] \
-  && [ -f "$ORPHAN/lib/lean/Concrete/Lex.olean" ] && [ -f "$ORPHAN/ir/Other/Gone.olean" ] \
-  && ok "control: orphan spec/compiler artifacts are pruned, live and foreign artifacts retained" \
-  || no "orphan pruning control (rc=$RC): remaining $REMAIN"
-
 # control NAME BODY AXIOM-ERE WHAT: the declarations in BODY must be refused at ${PROOF_PKG}Control.NAME
 control() {
   printf '%s\n' "$2" > "$TMP/c-$1.lean"
@@ -430,7 +417,10 @@ lake_variant drift 'import json; p="lake-manifest.json"; m=json.load(open(p)); m
 lake_variant subdir 'p="lakefile.toml"; s=open(p).read(); open(p,"w").write(s.replace("[[require]]\n", "[[require]]\nsubDir = \"x\"\n", 1))'
 lake_variant extralib 'p="lakefile.toml"; s=open(p).read(); open(p,"w").write(s + "\n[[lean_lib]]\nname = \"Other\"\n")'
 lake_variant extraexe 'p="lakefile.toml"; s=open(p).read(); open(p,"w").write(s + "\n[[lean_exe]]\nname = \"Other\"\n")'
-for v in short:"not pinned to a full commit" branch:"not pinned to a full commit" drift:"does not record the require" subdir:"sets ['subDir']" extralib:"libraries ['ConcreteSpec', 'ConcreteSpecEvidence', 'Concrete', 'Other']" extraexe:"the executable configuration differs"; do
+lake_variant stageglob 'p="lakefile.toml"; s=open(p).read(); open(p,"w").write(s.replace("ConcreteChecks.+", "ConcreteChecks.StageInterfaces.+"))'
+lake_variant stagedefault 'p="lakefile.toml"; s=open(p).read(); open(p,"w").write(s.replace(", \"ConcreteChecks.StageInterfaces\"]", "]"))'
+for v in short:"not pinned to a full commit" branch:"not pinned to a full commit" drift:"does not record the require" subdir:"sets ['subDir']" extralib:"libraries ['ConcreteSpec', 'ConcreteSpecEvidence', 'Concrete', 'Other']" extraexe:"the executable configuration differs" \
+         stageglob:"the stage-interface controls library configuration differs" stagedefault:"the default build omits the stage-interface controls"; do
   L=$(lake_options "$TMP/lk/${v%%:*}/lakefile.toml")
   case "$L" in *"${v#*:}"*) ok "control: a lakefile whose dependency or library set is changed (${v%%:*}) is refused ($L)" ;;
     *) no "control: the ${v%%:*} lakefile was not refused for '${v#*:}': '$L'" ;; esac

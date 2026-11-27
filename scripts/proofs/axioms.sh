@@ -105,6 +105,34 @@ audit_library Concrete "$COMPILER_GOLDEN" "${1:-}"
 if [ "${1:-}" = --update ] || [ "$FAIL" != 0 ]; then finish; fi
 
 echo "=== negative controls ==="
+# A retired library still resolves through raw Lean when its old output is on
+# the search path. Exercise the same audit and exit status used by this gate.
+(
+  set -e
+  TMP="$TMP/renamed-import"
+  mkdir "$TMP"
+  cp "$ROOT_DIR/lean-toolchain" "$TMP/"
+  cd "$TMP"
+  echo 'def rowProbe := true' > RetiredRowHelper.lean
+  "$LAKE" -d "$ROOT_DIR" env lean -R . -o RetiredRowHelper.olean RetiredRowHelper.lean
+  mv RetiredRowHelper.lean RenamedRowHelper.lean
+  sed '/^import Lean$/a import RetiredRowHelper' "$ENUMERATOR" > broken-import.lean
+  export LEAN_PATH="$TMP"
+  cd "$ROOT_DIR"
+  ENUMERATOR="$TMP/broken-import.lean"
+  PROOF_MODE=modules "$LAKE" env lean "$ENUMERATOR" > "$TMP/raw-import.log"
+  PASS=0; FAIL=0
+  audit_library ConcreteSpec "$GOLDEN"
+  finish
+) > "$TMP/broken-import.log" 2>&1; rc=$?
+if [ "$rc" = 1 ] && grep -Fq "unknown module prefix 'RetiredRowHelper'" "$TMP/broken-import.log" &&
+   grep -Fxq 'PROOF-AXIOMS: PASS=0 FAIL=1' "$TMP/broken-import.log"; then
+  ok "control: the axiom audit rejects the renamed enumerator import despite its loadable .olean"
+else
+  cat "$TMP/broken-import.log" >&2
+  no "control: expected the missing RetiredRowHelper import to fail the axiom audit (rc=$rc)"
+fi
+
 axiom_controls() {
   local PROOF_PKG=$1
   export PROOF_PKG

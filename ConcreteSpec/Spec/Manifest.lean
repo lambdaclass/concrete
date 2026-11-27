@@ -143,7 +143,7 @@ private def bareKeyChar (c : Char) : Bool :=
 -- an invalid scalar in skipped comment text cannot open another segment.
 private def pathLimitError (tok : Token) : Error :=
   match tok.kind with
-  | .quoted false _ => .depth tok.span
+  | .quoted .. => .depth tok.span
   | .bare text =>
     let first := text.front
     let span := ⟨tok.span.start, tok.span.start + first.utf8Size⟩
@@ -153,6 +153,8 @@ private def pathLimitError (tok : Token) : Error :=
 private def key (tok : Token) : Except Error String :=
   match tok.kind with
   | .quoted false contents => contents.mapError Error.malformed
+  -- The first two ASCII delimiters form a valid empty key. The third is unexpected.
+  | .quoted true _ => .error (.malformed ⟨tok.span.start + 2, tok.span.start + 3⟩)
   | .bare value =>
     match invalid tok.span.start value.toList with
     | none => .ok value
