@@ -181,8 +181,8 @@ private def completion : PieceId → Completion
     evidence `ConcreteSpec.Spec.Ident `ConcreteSpec.Core [
       `example_LoadedModules_findCollision_loadedA_loadedB_isNone,
       `example_collision_refuses_entire_load_and_retains, `example_OD44_refuses_one_top_level_module,
-      `example_Ordinals_are_per_kind_named_siblings, `example_Entering_named_construct_resets_scope_but,
-      `example_Descendant_assignment_retains_pinned_ancestor_and,
+      `example_Ordinals_are_per_kind_named_siblings, `example_block_children_start_at_zero,
+      `example_pinned_block_children_start_at_zero, `example_early_call_preserves_nested_key,
       `example_Assigned_tables_attach_every_key_in, `example_Equal_specialization_requests_at_different_sites,
       `example_Known_premise_categories_round_trip_unknown, `example_Two_declarations_named_Pair_in_different,
       `example_same_module_path_in_two_packages, `example_field_belongs_its_owner_Pair_is,
@@ -302,6 +302,7 @@ private def completion : PieceId → Completion
       `ConcreteSpec.Core.EncodedPremise.read_encode,
       `ConcreteSpec.Core.EncodedPremise.read_iff,
       `ConcreteSpec.Core.EncodedPremise.read_unknown,
+      `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_insert_locality,
       `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_lookup,
       `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_named_scope,
       `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_occurrences,

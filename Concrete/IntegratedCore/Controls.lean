@@ -25,6 +25,16 @@ private def expected : CoreInput (sliceLanguage slice0) :=
   ⟨source.project, slice0, earlyPayload (sliceEarlyCore slice0)
     ⟨[], .lit 42, ⟨25, 27, 1, 26, ⟨0⟩⟩⟩⟩
 
+-- Operation IDs locate these bindings. C9 ordinals follow sibling order even when the IDs differ.
+example :
+    let span : ConcreteSpec.Surface0.Span := ⟨25, 27, 1, 26, ⟨0⟩⟩
+    let program : EarlyProgram := ⟨[(⟨⟨9⟩, .atom (.lit 1)⟩, span),
+      (⟨⟨4⟩, .atom (.lit 2)⟩, span)], .var ⟨4⟩, span⟩
+    (AList.map Origin.evidenceKey (earlyPayload (sliceEarlyCore slice0) program).origins) =
+      [(⟨9⟩, ⟨.function earlyEntry, ⟨[⟨.binding, .ordinal 0⟩]⟩⟩),
+       (⟨4⟩, ⟨.function earlyEntry, ⟨[⟨.binding, .ordinal 1⟩]⟩⟩),
+       (⟨2⟩, ⟨.function earlyEntry, ⟨[⟨.return, .ordinal 0⟩]⟩⟩)] := by decide
+
 private def parseAndElaborate (tokens : ParserView) : Option (CoreInput (sliceLanguage slice0)) := do
   let parsed ← ((sliceParser slice0).run tokens).2
   let ast ← parsed.toOption

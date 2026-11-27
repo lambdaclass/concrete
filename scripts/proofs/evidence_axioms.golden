@@ -2040,8 +2040,6 @@ _private.ConcreteSpecEvidence.Ident.0.ConcreteSpec.Core.SourcePath.reservedStemW
 _private.ConcreteSpecEvidence.Ident.0.ConcreteSpec.Core.Vacuity.shallowCollect.match_1._arg_pusher	
 _private.ConcreteSpecEvidence.Ident.0.ConcreteSpec.Core.Vacuity.shallowCollect.match_1.eq_1	
 _private.ConcreteSpecEvidence.Ident.0.ConcreteSpec.Core.Vacuity.shallowCollect.match_1.eq_2	
-_private.ConcreteSpecEvidence.Ident.0.ConcreteSpec.Core.instReprConstructName.repr.match_1.eq_1	
-_private.ConcreteSpecEvidence.Ident.0.ConcreteSpec.Core.instReprConstructName.repr.match_1.eq_2	
 _private.ConcreteSpecEvidence.Ident.0.List.decidableBAll.match_5.eq_1	
 _private.ConcreteSpecEvidence.Ident.0.List.decidableBAll.match_5.eq_2	
 _private.ConcreteSpecEvidence.Ident.0.List.filter.match_1.eq_1	

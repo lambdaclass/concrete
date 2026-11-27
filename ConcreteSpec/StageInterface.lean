@@ -482,9 +482,11 @@ private def earlyExpression : ConcreteSpec.Slice0.Expr → EarlyExpr
   | .add left right => .add .u8 (earlyOperand left) (earlyOperand right)
 
 private def earlyOrigin (entry : FnId) (site : SiteId) (kind : ConstructKind)
-    (ordinal : Nat) (span : ConcreteSpec.Surface0.Span) : SiteId × Origin :=
+    (precedingBindings : Nat) (span : ConcreteSpec.Surface0.Span) : SiteId × Origin :=
+  let binding : KeyConstruct := ⟨.binding, .unnamed none, []⟩
+  let construct : KeyConstruct := ⟨kind, .unnamed none, []⟩
   (site, ⟨site, ⟨span.fileId, span.start, span.stop, span.line, span.column⟩,
-    ⟨.function entry, ⟨[⟨kind, .ordinal ordinal⟩]⟩⟩⟩)
+    ⟨.function entry, construct.keyAfterCopies binding precedingBindings⟩⟩)
 
 /-- The standalone Slice 0 program has one internal function identity. -/
 def earlyEntry : FnId :=
@@ -502,10 +504,10 @@ def earlyPayload {language : CoreLanguage} (early : EarlyCore language)
     out.bindings.foldr (fun (bind, _) rest =>
       .seq (.bind bind.x (early.expressions.symm ▸ Sum.inl (earlyExpression bind.e)) ⟨bind.x.id⟩) rest)
       (.ret (early.expressions.symm ▸ Sum.inl (EarlyExpr.read (earlyOperand out.ret))) retSite)
-  let origins := out.bindings.map fun (bind, span) =>
-    earlyOrigin entry ⟨bind.x.id⟩ .binding bind.x.id span
+  let origins := out.bindings.mapIdx fun index (bind, span) =>
+    earlyOrigin entry ⟨bind.x.id⟩ .binding index span
   ⟨ownership, ⟨[(entry, ⟨[], early.types.symm ▸ Sum.inl (EarlyTy.scalar scalar), ⟨0⟩, body⟩)]⟩,
-    entry, origins ++ [earlyOrigin entry retSite .return 0 out.returnSpan], []⟩
+    entry, origins ++ [earlyOrigin entry retSite .return out.bindings.length out.returnSpan], []⟩
 
 abbrev Payload.machine {language : CoreLanguage} (payload : Payload language) : Exec.Operands :=
   language.instrumented payload.ownership

@@ -1880,6 +1880,18 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     requires a decided row, the schema is versioned, unknown categories are refused, and there
     is no open-string escape hatch. Existing work: [R-0615](../ROADMAP.md#r-0615).
     The source's Codex login approval is operational permission, not a language decision.
+    <a id="decided-2026-11-27-c9-siblings"></a>**Revision, 2026-11-27.** The owner delegated
+    this revision with “please talk with agy and codex to decide these things, just tell me at the end what you guys decide. always do what is the best long term play”
+    and added “make sure everything is LL1 and very clear and the best long term thing”.
+    Claude, Codex and agy unanimously chose numbering per immediate parent. Each path segment
+    carries its construct kind. A named child emits its name and consumes no ordinal. An unnamed
+    child consumes one slot among its parent's unnamed children of that kind, starting at zero.
+    A pinned child emits its label in place of the ordinal. The stable key carries the owner and
+    every segment. Inserting a child can therefore increment only later unpinned sibling ordinals
+    of that kind. Descendants retain the path below their sibling's segment. This revises the
+    November 8 ordinal scope. In the Slice 0 AST-to-Core handoff, `earlyPayload` now issues
+    evidence keys by this rule while retaining the operation ID for lexical lookup. This is
+    the C9 revision to the frozen [stage interface](compiler/STAGE_INTERFACES.md).
   - <a id="decided-2026-11-08-spelling-round"></a>*The spelling round* (owner: "i like 3";
     the accompanying record says "Exact spelling in the spelling round";
     [source](archive/owner-language-2026-11-08/OWNER_QUOTES.md#language-approval-and-qualification)).
