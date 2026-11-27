@@ -1543,9 +1543,12 @@ Concrete.Interfaces.Memory.BeginExhausted.nonemptyLayout	Quot.sound propext
 Concrete.Interfaces.Memory.BeginExhausted.unavailable	Quot.sound propext
 Concrete.Interfaces.Memory.EndLocals.brecOn	Quot.sound propext
 Concrete.Interfaces.Memory.HandoffWF.eq_1	Quot.sound propext
+Concrete.Interfaces.Memory.InstructionStep.eq_1	Quot.sound propext
+Concrete.Interfaces.Memory.ParamOutcome.empty	Quot.sound propext
 Concrete.Interfaces.Memory.SignatureMatches._sparseCasesOn_1.else_eq	propext
 Concrete.Interfaces.Memory.SignatureMatches._sparseCasesOn_4.else_eq	propext
 Concrete.Interfaces.Memory.SignatureMatches.eq_1	Quot.sound propext
+Concrete.Interfaces.Memory.Step.exists_outcome	Quot.sound propext
 Concrete.Interfaces.Memory.Step.normal	Quot.sound propext
 Concrete.Interfaces.Memory.StepOutcome.instructionAt	Quot.sound propext
 Concrete.Interfaces.Memory.StepOutcome.terminatorAt	Quot.sound propext
@@ -2157,6 +2160,7 @@ Concrete.ManifestRefusal.read.injEq	propext
 Concrete.ManifestRefusal.read.sizeOf_spec	
 Concrete.ManifestRefusal.schemaPending.sizeOf_spec	
 Concrete.ManifestRefusal.size.sizeOf_spec	
+Concrete.Memory.BindReturn.bounded_refinement_42	Classical.choice Quot.sound propext
 Concrete.Memory.BindReturn.checked_add_returns	Classical.choice Quot.sound propext
 Concrete.Memory.BindReturn.checked_add_traps	Classical.choice Quot.sound propext
 Concrete.Memory.BindReturn.declared_add_traps	Classical.choice Quot.sound propext
@@ -2223,6 +2227,10 @@ Concrete.Memory.Slot.mk.sizeOf_spec
 Concrete.Memory.Store.mk.inj	
 Concrete.Memory.Store.mk.injEq	propext
 Concrete.Memory.Store.mk.sizeOf_spec	
+Concrete.Memory.TransferControl.bir_exhaustion	Quot.sound propext
+Concrete.Memory.TransferControl.fitting_transfer	Quot.sound propext
+Concrete.Memory.TransferControl.rollback_after_write	Quot.sound propext
+Concrete.Memory.TransferControl.ssa_exhaustion	Quot.sound propext
 Concrete.Memory.Traversal.backward	
 Concrete.Memory.Traversal.forward	
 Concrete.Memory.Traversal.keys	
@@ -3401,6 +3409,19 @@ _private.Concrete.Memory.Refinement.0.Concrete.Memory.run_finite
 _private.Concrete.Memory.Refinement.0.Concrete.Memory.run_trace_mono	propext
 _private.Concrete.Memory.Refinement.0.Concrete.Memory.trace_at_result	Quot.sound propext
 _private.Concrete.Memory.Refinement.0.Concrete.Memory.trace_on_run	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.begin_byte	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.blocked_transfer	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.fits_together	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.fragmented	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.fragmented._proof_1_1	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.fragmented._proof_1_2	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.handoff	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.jump_outcome	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.origin._proof_1	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.origin._proof_2	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.origin._proof_3	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.reach_jump	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.write_byte	Quot.sound propext
 _private.Concrete.Origins.0.Concrete.Origins.validateLocation.match_1.eq_1	Quot.sound propext
 _private.Concrete.Origins.0.Concrete.Origins.validateLocation.match_1.eq_2	Quot.sound propext
 _private.Concrete.Parse.0.Concrete.Parse.Task.read.inj	

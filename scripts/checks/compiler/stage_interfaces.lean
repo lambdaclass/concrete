@@ -3645,7 +3645,7 @@ example (project : Project) :
   · with_unfolding_all
       exact ⟨rfl, ⟨_, rfl, rfl, [], _, _, _, rfl, rfl, rfl, rfl, .nil _⟩, [], rfl⟩
   · intro q execution
-    obtain ⟨_, ⟨block, fetched, tick⟩, _⟩ := execution
+    obtain ⟨_, _, block, fetched, tick⟩ := Memory.Step.exists_outcome execution.2.1
     have eq : some physical = some block := by with_unfolding_all exact fetched
     obtain rfl := Option.some.inj eq
     exact tick.2
@@ -4226,7 +4226,7 @@ example (project : Project) :
     ∀ next, ¬ (SSA.Execution (language := twoFieldLanguage)).step
       (splitSSA project true) splitBefore next := by
   intro next execution
-  obtain ⟨_, ⟨block, fetch, tick⟩, _⟩ := execution
+  obtain ⟨_, _, block, fetch, tick⟩ := Memory.Step.exists_outcome execution.2.1
   let expected : MemoryBlock testLowering := ⟨⟨0⟩, [],
     [⟨testOrigin, .destructure storePlace [(splitField, ⟨(), fieldRegister 1⟩)]⟩], .ret none, []⟩
   have exactBlock : some expected = some block := by with_unfolding_all exact fetch
@@ -4515,8 +4515,8 @@ private theorem callAtEntry (kind : TrapKind) :
   with_unfolding_all
     exact ⟨rfl, ⟨_, rfl, rfl, [], _, _, _, rfl, rfl, rfl, rfl, .nil _⟩, _, rfl⟩
 
-private theorem callOutcomeUnique (kind : TrapKind) (q : memoryExecution.State) (mode : Bool)
-    (raw : ((callingSSA kind).memoryView (language := testLanguage)).StepOutcome storeInitial q mode) :
+private theorem callOutcomeUnique {startDefinitions : Bool} (kind : TrapKind) (q : memoryExecution.State) (mode : Bool)
+    (raw : ((callingSSA kind).memoryView (language := testLanguage)).StepOutcome storeInitial q mode startDefinitions) :
     q = helperState ∧ mode = false := by
   obtain ⟨block, found, call⟩ := raw
   let entry : MemoryBlock testLowering := ⟨⟨0⟩, [], [⟨testOrigin, .call callee none []⟩],
@@ -4535,13 +4535,12 @@ private theorem callOutcomeUnique (kind : TrapKind) (q : memoryExecution.State) 
   have found' : some helper = some calleeEntry := by with_unfolding_all exact blockFound
   have sameEntry := Option.some.inj found'
   subst calleeEntry
-  cases params
-  exact ⟨rfl, rfl⟩
+  with_unfolding_all exact Memory.ParamOutcome.empty params
 
-private theorem callAtEntryUnique (kind : TrapKind) (q : memoryExecution.State)
-    (tick : memoryExecution.step ((callingSSA kind).memoryView (language := testLanguage)) storeInitial q) :
+private theorem callAtEntryUnique {startDefinitions : Bool} (kind : TrapKind) (q : memoryExecution.State)
+    (tick : ((callingSSA kind).memoryView (language := testLanguage)).Step storeInitial q startDefinitions) :
     q = helperState := by
-  exact (callOutcomeUnique kind _ _ (Memory.Step.normal tick.2.1 fun _ h => Bool.noConfusion (callOutcomeUnique kind _ _ h).2)).1
+  exact (callOutcomeUnique kind _ _ (Memory.Step.normal tick fun _ h => Bool.noConfusion (callOutcomeUnique kind _ _ h).2)).1
 
 -- The mutation changes only the reached helper's trap. All metadata is retained.
 set_option maxRecDepth 4096 in
@@ -4560,7 +4559,7 @@ example :
     cases path with
     | nil => exact .inl rfl
     | cons tick rest =>
-      obtain rfl := callAtEntryUnique .divisionByZero _ tick
+      obtain rfl := callAtEntryUnique .divisionByZero _ tick.2.1
       cases rest with
       | nil => exact .inr rfl
       | cons next _ => exact (memoryExecution.terminal _ _ _ terminal _ next).elim
@@ -6478,12 +6477,7 @@ example :
     with_unfolding_all exact ⟨rfl, ⟨_, rfl, rfl, [], _, _, _, rfl, rfl, rfl, rfl, .nil _⟩, _, rfl⟩
   have targetOnly (q : ssaExecution.State) (tick : ssaExecution.step ssa storeInitial q) :
       q = helperState := by
-    obtain ⟨_, ⟨block, found, executes⟩, _⟩ := tick
-    let entry : MemoryBlock testLowering := ⟨⟨0⟩, [], [⟨testOrigin, .call callee none []⟩],
-      .ret (some ⟨(), .literal ⟨[0]⟩⟩), []⟩
-    have fetched : some entry = some block := by with_unfolding_all exact found
-    obtain rfl := (Option.some.inj fetched).symm
-    exact (callOutcomeUnique .divisionByZero q false ⟨entry, by with_unfolding_all rfl, executes⟩).1
+    exact callAtEntryUnique (startDefinitions := true) .divisionByZero q tick.2.1
   have terminal : ssaExecution.result ssa helperState outcome := by with_unfolding_all rfl
   have reachable (q : ssaExecution.State) (finite : ssaExecution.finite ssa q) :
       q = storeInitial ∨ q = helperState := by

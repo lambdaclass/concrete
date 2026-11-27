@@ -56,9 +56,11 @@ independently requires a matching source execution for any target divergence.
 A fresh nonempty materialized lifetime can end execution with the typed
 `resourceExhausted` observation when no target space and base can hold its layout.
 This rule covers explicit begins and the parameter writes inside calls, returns,
-edge transfers and destructuring. The failed instruction retains its original PC,
-effects and ownership checkpoint. `LowersMemory` matches ordinary terminal results
-and their traces, reflects divergence, and requires progress on a safe MIR input.
+edge transfers and destructuring. A compound transfer exhausts only if a reservation
+fails and every placement sequence for the whole parameter list fails to complete.
+Memory, SSA and BIR retain the original PC, bytes, effects and ownership on exhaustion.
+`LowersMemory` matches ordinary terminal results and their traces, reflects divergence,
+and requires progress on a safe MIR input.
 The separate `Concrete.toml` memory-bound proof must exclude reachable exhaustion
 to recover strict matching of every terminal result.
 
@@ -147,10 +149,10 @@ a pinned linked semantics and a proof of behavior preservation. The
 
 An execution starts in a program's designated initial configuration and follows
 small steps. A program is safe when no reachable state lacks both a successor
-and a terminal result. A terminal result records return, trap or startup
-refusal, with exact stderr and diagnostic sites where applicable. A language
-trap is a defined outcome. Interpreter failure to take a step or report a
-terminal result is going wrong.
+and a terminal result. A terminal result records return, trap, startup
+refusal or physical resource exhaustion, with exact stderr and diagnostic sites
+where applicable. A language trap is a defined outcome. Interpreter failure to
+take a step or report a terminal result is going wrong.
 
 `BehaviorRefinement` states safe-source backward inclusion directly. If the
 source is safe, every target termination has a reachable source termination

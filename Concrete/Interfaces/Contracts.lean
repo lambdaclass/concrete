@@ -767,8 +767,8 @@ def readOperands (memory : Memory lang profile) :
     let (values, next) ← memory.readOperands rest afterRead
     return (value :: values, next)
 
-/-- A parameter list finishes normally or reaches its first unavailable reservation
-after a sequence of authorized writes. Only normal completion can commit the list. -/
+/-- One placement sequence for a parameter list. The flag records whether this
+sequence encountered an unavailable reservation after its authorized writes. -/
 inductive WriteParams (memory : Memory lang profile) :
     List (Sigma (MemoryPlace language.operands.Ty)) → List language.operands.Val →
       MemoryRegisters language profile → MemoryRegisters language profile → (exhausting : optParam Bool false) → Prop
@@ -782,6 +782,16 @@ inductive WriteParams (memory : Memory lang profile) :
   | exhausted {ty} {place : MemoryPlace _ ty} {params value values state} :
       memory.BeginExhausted state place.logical.root →
       WriteParams memory (⟨ty, place⟩ :: params) (value :: values) state state true
+
+/-- A compound transfer exhausts only if a reservation actually fails and no
+placement sequence can complete the entire list from the original checkpoint. -/
+def ParamOutcome (memory : Memory lang profile)
+    (params : List (Sigma (MemoryPlace language.operands.Ty))) (values : List language.operands.Val)
+    (state next : MemoryRegisters language profile) (exhausting : Bool) : Prop :=
+  if exhausting then
+    memory.WriteParams params values state next true ∧
+      ¬ ∃ completed, memory.WriteParams params values state completed false
+  else memory.WriteParams params values state next false
 
 inductive EndLocals (memory : Memory lang profile) :
     List PlaceId → MemoryRegisters language profile → MemoryRegisters language profile → Prop
@@ -798,7 +808,7 @@ def Call (memory : Memory lang profile) (callee : FnId)
     memory.readOperands args state = some (values, afterRead) ∧
     memory.graphAt callee = some graph ∧ graph.blocks.find? (·.id == graph.entry) = some entry ∧
     args.map Sigma.fst = entry.params.map Sigma.fst ∧
-    memory.WriteParams entry.params values
+    memory.ParamOutcome entry.params values
       { toMemoryFrame := ⟨callee, graph.entry, 0, [], [], [], [], [], [], []⟩
         bytes := afterRead.bytes
         ownership := afterRead.ownership
@@ -813,7 +823,7 @@ def Return (memory : Memory lang profile) (operand : Option (Sigma (MemoryRead _
     memory.readOperands operand.toList state = some (values, afterRead) ∧
     memory.EndLocals afterRead.live afterRead ended ∧
     operand.toList.map Sigma.fst = caller.destination.toList.map Sigma.fst ∧
-    memory.WriteParams caller.destination.toList values
+    memory.ParamOutcome caller.destination.toList values
       { toMemoryFrame := caller.caller, bytes := ended.bytes, callers := rest, effects := ended.effects, ownership := ended.ownership, nextAddressId := ended.nextAddressId } next exhausting
 
 def Transfer (memory : Memory lang profile) (edge : CFGEdge (Sigma (MemoryRead _ lang.literal)))
@@ -822,7 +832,7 @@ def Transfer (memory : Memory lang profile) (edge : CFGEdge (Sigma (MemoryRead _
     memory.readOperands edge.arguments state = some (values, afterRead) ∧
     memory.blockAt {state with block := edge.target} = some block ∧
     edge.arguments.map Sigma.fst = block.params.map Sigma.fst ∧
-    memory.WriteParams block.params values {afterRead with block := edge.target, instruction := 0} next exhausting
+    memory.ParamOutcome block.params values {afterRead with block := edge.target, instruction := 0} next exhausting
 
 /-- Splitting a value transfers each bound field once. An omitted active field
 must be Copy, and every destination has the declared type of its field. -/
@@ -925,7 +935,7 @@ def InstructionStepWith (memory : Memory lang profile)
     (exhausting : Bool := false) : Prop := match instruction with
   | .bind dst src =>
     ∃ value afterRead stored, memory.readValue state src = some (value, afterRead) ∧
-      (if logical || startDefinitions then memory.WriteParams [⟨_, dst⟩] [value] afterRead stored exhausting
+      (if logical || startDefinitions then memory.ParamOutcome [⟨_, dst⟩] [value] afterRead stored exhausting
         else if exhausting then False else memory.Writes afterRead dst value stored) ∧ next = stored.advance
   | .assign dst src => if exhausting then False else
     ∃ value afterRead stored, memory.readValue state src = some (value, afterRead) ∧
@@ -939,7 +949,7 @@ def InstructionStepWith (memory : Memory lang profile)
       language.operation opcode types ty values profile.memoryTarget operands before result effects changed ∧
       List.map Prod.fst changed.addressedValues = List.map Prod.fst before.addressedValues ∧
       let afterOperation := applyOperation ready logical changed
-      (if logical || startDefinitions then memory.WriteParams [⟨_, dst⟩] [result] afterOperation stored exhausting
+      (if logical || startDefinitions then memory.ParamOutcome [⟨_, dst⟩] [result] afterOperation stored exhausting
         else if exhausting then False else memory.Writes afterOperation dst result stored) ∧
       next = {stored.advance with effects := stored.effects ++ effects}
   | .beginLifetime place => if exhausting then memory.BeginExhausted state place else
@@ -952,7 +962,7 @@ def InstructionStepWith (memory : Memory lang profile)
         some (value, afterRead) ∧
       DestructureFields language ty value (bindings.map fun (field, dst) => (field, dst.1)) ∧
       bindings.mapM (fun binding => language.field value [binding.1]) = some fields ∧
-      memory.WriteParams (bindings.map Prod.snd) fields afterRead stored exhausting ∧ next = stored.advance
+      memory.ParamOutcome (bindings.map Prod.snd) fields afterRead stored exhausting ∧ next = stored.advance
   | .call callee dst args checks =>
     memory.instructionTrap state (.call callee dst args checks) = none ∧
       memory.Call callee dst args state next exhausting
@@ -976,19 +986,20 @@ def ControlStep (memory : Memory lang profile)
 /-- Both outcomes share instruction fetch and all guards preceding a reservation.
 Only a normal outcome supplies the successor registers to commit. -/
 def StepOutcome (memory : Memory lang profile)
-    (state next : MemoryRegisters language profile) (exhausting : Bool) : Prop :=
+    (state next : MemoryRegisters language profile) (exhausting : Bool) (startDefinitions : Bool := false) : Prop :=
   ∃ block, memory.blockAt state = some block ∧
     match block.body[state.instruction]? with
-    | some op => memory.InstructionStep state next false op.instruction exhausting
+    | some op => memory.InstructionStepWith state next false startDefinitions op.instruction exhausting
     | none => state.instruction = block.body.length ∧ memory.ControlStep state next block.ending exhausting
 
 /-- An instruction commits its ordinary successor or aborts at its original PC.
 A failed reservation inside a compound transfer commits no partial writes or effects. -/
-def Step (memory : Memory lang profile) (state next : MemoryRegisters language profile) : Prop :=
+def Step (memory : Memory lang profile) (state next : MemoryRegisters language profile)
+    (startDefinitions : Bool := false) : Prop :=
   if state.resourceExhausted then False else if next.resourceExhausted then
     next = {state with resourceExhausted := true} ∧
-      ∃ partialState, memory.StepOutcome state partialState true
-  else memory.StepOutcome state next false
+      ∃ partialState, memory.StepOutcome state partialState true startDefinitions
+  else memory.StepOutcome state next false startDefinitions
 
 def Initial (memory : Memory lang profile) (state : MemoryRegisters language profile) : Prop :=
   state.frame = memory.entry ∧ state.callers = [] ∧
@@ -1244,7 +1255,7 @@ def MIR.Execution : Semantics (MIR lang profile) language.operands.Event :=
     (fun mir => hostedResultFor mir.logicalView)
 
 def Memory.Execution : Semantics (Memory lang profile) language.operands.Event :=
-  graphExecution Memory.Step (fun memory => entryStateFor memory) hostedResultFor
+  graphExecution (fun memory state next => memory.Step state next) (fun memory => entryStateFor memory) hostedResultFor
 
 /-- Ordinary hosted results carry the MIR matching obligation. A failed physical
 reservation has its own typed observation in Execution. -/
@@ -1493,10 +1504,7 @@ def entryState (bir : BIR lang profile) : MemoryRegisters language profile :=
   entryStateFor (bir.memoryView (language := language))
 
 private def stepFor (memory : Memory lang profile) (state next : MemoryRegisters language profile) : Prop :=
-  ∃ block, memory.blockAt state = some block ∧
-    match block.body[state.instruction]? with
-    | some op => memory.InstructionStepWith state next false true op.instruction
-    | none => state.instruction = block.body.length ∧ memory.ControlStep state next block.ending
+  memory.Step state next (startDefinitions := true)
 
 def step (bir : BIR lang profile) (state next : MemoryRegisters language profile) : Prop :=
   stepFor (bir.memoryView (language := language)) state next

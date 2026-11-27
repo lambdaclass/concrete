@@ -302,6 +302,27 @@ theorem refines_42 :
     cases lowered.symm.trans got
     exact obs
 
+/-- Every reachable result of the lowered fixture matches a reachable MIR result
+and trace. The two nonterminal PCs have successors and the last one returns 42,
+which discharges the bound premise for strict refinement. -/
+theorem bounded_refinement_42 :
+    (∀ q o, target.finite memory q → target.result memory q o →
+      ∃ p, source.finite mir p ∧ source.result mir p o ∧ source.trace mir p = target.trace memory q) ∧
+    BehaviorRefinement source target source.result target.result mir memory := by
+  obtain ⟨m, got, safe, contract, _⟩ := refines_42
+  cases lowered.symm.trans got
+  have bound : ¬ target.observes memory .resourceExhausted := by
+    rintro ⟨q, reached, observed⟩
+    rcases target_cases reached with rfl | rfl | rfl
+    · exact target.terminal _ _ _ observed _ opens
+    · exact target.terminal _ _ _ observed _ binds
+    · cases Option.some.inj (done_target.symm.trans observed)
+  refine ⟨?_, LowersMemory.refines_of_bound contract bound⟩
+  intro q o reached observed
+  rcases LowersMemory.result_or_exhausted contract safe reached observed with matched | rfl
+  · exact matched
+  · exact (bound ⟨q, reached, observed⟩).elim
+
 private def physicalLoop : Nat → State
   | 0 => start
   | 1 => opened.advance
@@ -328,8 +349,7 @@ private theorem empty_transfer {m : M} {s q : State} {mode : Bool} {label : Bloc
   cases eq
   cases Option.some.inj (found.symm.trans lookup)
   rw [params] at writes
-  cases writes
-  exact ⟨rfl, rfl⟩
+  exact writes.empty
 
 private theorem loop_jump_only {s q : State} (hs : s = finalM ∨ s = loopState)
     (h : target.step loopMemory s q) : q = loopState := by
