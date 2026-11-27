@@ -88,7 +88,7 @@ private def rootLayouts (mir : MIR lang profile) (fn : FnId) (locals : LocalType
     match storageClass (language := language) mir fn root ty with
     | .virtual => pure none
     | .materialized =>
-      match language.layout profile.memoryTarget ty with
+      match language.layout mir.declarations profile.memoryTarget ty with
       | some layout => pure (some (root, layout))
       | none => throw ⟨fn, root, ty⟩
 
@@ -212,11 +212,17 @@ private def nominalRootControl : MIR (sliceLoweringLanguage slice1) profileContr
   functions := [(controlFn, [(⟨0⟩, .inl (.nominal controlDecl))],
     ⟨⟨0⟩, #[⟨⟨0⟩, [], [], .ret none, []⟩]⟩)]
 
-example : (sliceLanguage slice1).layout profileControl.memoryTarget
+example : (sliceLanguage slice1).layout [] profileControl.memoryTarget
     (.inl (.nominal controlDecl)) = none := rfl
 
 example : prepareGraph (language := sliceLanguage slice1) nominalRootControl =
     .error ⟨controlFn, ⟨0⟩, .inl (.nominal controlDecl)⟩ := by with_unfolding_all rfl
+
+private def declaredEmpty : Declarations := [(controlDecl, ⟨controlDecl.name, false, []⟩)]
+
+example : (prepareGraph (language := sliceLanguage slice1) (profile := profileControl)
+    {nominalRootControl with declarations := declaredEmpty}).toOption.map (·.layouts) =
+      some [(controlFn, [(⟨0⟩, ⟨0, 1⟩)])] := by with_unfolding_all rfl
 
 private abbrev controlLang := sliceLoweringLanguage slice1
 private abbrev u8Ty : (sliceLanguage slice1).operands.Ty := .inl (.scalar (.int .u8))
@@ -279,8 +285,7 @@ example :
       .ok (some (.virtual, [.materialized])) := by
   with_unfolding_all rfl
 
-/-- A declared nominal root cannot be retained by a valid lowering while the
-frozen spec layout is absent. Promotion cannot supply a virtual fallback. -/
+/-- A nominal identity missing its declaration cannot be materialized or promoted. -/
 theorem nominal_root_blocks_layout
     (memory : Interfaces.Memory (sliceLoweringLanguage slice1) profileControl)
     (lowered : LowersMemory (language := sliceLanguage slice1) nominalRootControl memory)
@@ -302,7 +307,8 @@ theorem nominal_root_blocks_layout
   rw [classification, materialized] at valid
   rcases valid with impossible | ⟨_, _, _, _, _, existsLayout⟩
   · contradiction
-  · contradiction
+  · rw [lowered.2.2.2.2.1.2] at existsLayout
+    contradiction
 
 /-- The physical bind rule cannot initialize a fresh destination in one step.
 The MIR bind rule uses WriteParams, which can start its lifetime. -/
@@ -315,8 +321,8 @@ theorem physical_bind_requires_live {language : CoreLanguage}
   rintro ⟨value, afterRead, stored, read, writes, _⟩
   have same : afterRead = state := by
     simp only [Interfaces.Memory.readValue] at read
-    split at read <;> rename_i he <;> simp only [bind, Option.bind] at read
-    all_goals split at read <;> simp_all
+    cases h : language.literal ty literal.encoding <;> simp [h] at read
+    exact read.2.symm
   subst afterRead
   have store := writes.2.2.1
   simp [Interfaces.Memory.writeValue, fresh] at store

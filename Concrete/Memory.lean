@@ -6,7 +6,7 @@ import ConcreteSpec.Proofs.Basics
 namespace Concrete.Memory
 
 private def u8LayoutQuery : Option ConcreteSpec.StageInterface.Layout :=
-  (ConcreteSpec.StageInterface.sliceLanguage ConcreteSpec.StageInterface.slice0).layout
+  (ConcreteSpec.StageInterface.sliceLanguage ConcreteSpec.StageInterface.slice0).layout []
     ConcreteSpec.Core.linuxX8664 (.inl (.scalar (.int .u8)))
 
 private theorem u8LayoutQuery_succeeds : u8LayoutQuery.isSome := by decide
@@ -15,7 +15,7 @@ def u8Layout : ConcreteSpec.StageInterface.Layout :=
   u8LayoutQuery.get u8LayoutQuery_succeeds
 
 example :
-    (ConcreteSpec.StageInterface.sliceLanguage ConcreteSpec.StageInterface.slice0).layout
+    (ConcreteSpec.StageInterface.sliceLanguage ConcreteSpec.StageInterface.slice0).layout []
       ConcreteSpec.Core.linuxX8664 (.inl (.scalar (.int .u8))) = some u8Layout := by
   with_unfolding_all rfl
 

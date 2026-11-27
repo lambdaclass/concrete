@@ -5,37 +5,39 @@ import LeanCompilerBackend.Verified.BuildIdentity
 namespace Concrete.ImageTheorem
 
 open Contracts Backend
+open ConcreteSpec.StageInterface.SurfacePreparation (Purpose Scope)
 open LeanCompilerBackend.Verified
 open ConcreteSpec.Surface0 (Token Derives Lexes Program Expr Span Binding BinderLegal checkBody)
 
 /-- Independent, name-parametric elaboration of operands and operations. The relation
 records the origin of each introduced operation and permits any fresh binder IDs. -/
-inductive ElaboratesExpr (scope : Elab.Scope) :
+inductive ElaboratesExpr (purpose : Purpose) (scope : Scope) :
     Expr → Core.Atom → List Core.Stmt → List Elab.SourceSite → Prop where
-  | integer (n span) : ElaboratesExpr scope (.integer n none span) (.lit n) [] []
+  | integer (n span) {suffix} : ConcreteSpec.Core.Slice0Rules.ExpectedTypeLiteral suffix →
+      ElaboratesExpr purpose scope (.integer n suffix span) (.lit n) [] []
   | local {name span x} : scope.lookup name = some x →
-      ElaboratesExpr scope (.local name span) (.var x) [] []
+      ElaboratesExpr purpose scope (.local name span) (.var x) [] []
   | add {lhs rhs site x a b left right ls rs} :
-      ElaboratesExpr scope lhs a left ls → ElaboratesExpr scope rhs b right rs →
-      ElaboratesExpr scope (.add lhs rhs site) (.var x)
+      ElaboratesExpr purpose scope lhs a left ls → ElaboratesExpr purpose scope rhs b right rs →
+      ElaboratesExpr purpose scope (.add lhs rhs site) (.var x)
         (left ++ right ++ [⟨x, .add a b⟩]) (ls ++ rs ++ [⟨x, site⟩])
 
-inductive ElaboratesBindings :
-    Elab.Scope → List Binding → Elab.Scope → List Core.Stmt → List Elab.SourceSite → Prop where
-  | nil (scope) : ElaboratesBindings scope [] scope [] []
+inductive ElaboratesBindings (purpose : Purpose) :
+    Scope → List Binding → Scope → List Core.Stmt → List Elab.SourceSite → Prop where
+  | nil (scope) : ElaboratesBindings purpose scope [] scope [] []
   | atom {scope binding rest final x a body sites} :
       BinderLegal (scope.map Prod.fst) binding.name →
-      ElaboratesExpr scope binding.rhs a [] [] →
-      ElaboratesBindings ((binding.name, x) :: scope) rest final body sites →
-      ElaboratesBindings scope (binding :: rest) final (⟨x, .atom a⟩ :: body) sites
+      ElaboratesExpr purpose scope binding.rhs a [] [] →
+      ElaboratesBindings purpose ((binding.name, x) :: scope) rest final body sites →
+      ElaboratesBindings purpose scope (binding :: rest) final (⟨x, .atom a⟩ :: body) sites
   | operation {scope binding rest final x head tail hs ts} :
       BinderLegal (scope.map Prod.fst) binding.name →
-      ElaboratesExpr scope binding.rhs (.var x) head hs → head ≠ [] →
-      ElaboratesBindings ((binding.name, x) :: scope) rest final tail ts →
-      ElaboratesBindings scope (binding :: rest) final (head ++ tail) (hs ++ ts)
+      ElaboratesExpr purpose scope binding.rhs (.var x) head hs → head ≠ [] →
+      ElaboratesBindings purpose ((binding.name, x) :: scope) rest final tail ts →
+      ElaboratesBindings purpose scope (binding :: rest) final (head ++ tail) (hs ++ ts)
 
-theorem ElaboratesBindings.headLegal {scope : Elab.Scope} {binding : Binding}
-    {rest final body sites} (h : ElaboratesBindings scope (binding :: rest) final body sites) :
+theorem ElaboratesBindings.headLegal {purpose} {scope : Scope} {binding : Binding}
+    {rest final body sites} (h : ElaboratesBindings purpose scope (binding :: rest) final body sites) :
     BinderLegal (scope.map Prod.fst) binding.name := by
   cases h with
   | atom legal _ _ => exact legal
@@ -54,17 +56,17 @@ private theorem additionBinders_append (left right : List Core.Stmt) :
 def OriginWellFormed (core : Elab.Output) : Prop :=
   (core.program.body.map (·.x)).Nodup ∧ core.sites.map (·.binding) = additionBinders core.program.body
 
-private theorem elaboratesExpr_origins {scope : Elab.Scope} {expr : Expr} {ret : Core.Atom}
+private theorem elaboratesExpr_origins {purpose} {scope : Scope} {expr : Expr} {ret : Core.Atom}
     {body : List Core.Stmt} {sites : List Elab.SourceSite}
-    (h : ElaboratesExpr scope expr ret body sites) :
+    (h : ElaboratesExpr purpose scope expr ret body sites) :
     sites.map (·.binding) = additionBinders body := by
   induction h with
   | integer | «local» => rfl
   | add _ _ ih₁ ih₂ => simp [List.map_append, additionBinders_append, ih₁, ih₂]; rfl
 
-private theorem elaboratesBindings_origins {scope final : Elab.Scope} {bindings : List Binding}
+private theorem elaboratesBindings_origins {purpose} {scope final : Scope} {bindings : List Binding}
     {body : List Core.Stmt} {sites : List Elab.SourceSite}
-    (h : ElaboratesBindings scope bindings final body sites) :
+    (h : ElaboratesBindings purpose scope bindings final body sites) :
     sites.map (·.binding) = additionBinders body := by
   induction h with
   | nil => rfl
@@ -74,38 +76,24 @@ private theorem elaboratesBindings_origins {scope final : Elab.Scope} {bindings 
     rw [elaboratesExpr_origins h, ih]
 
 /-- Fresh IDs are checked across the whole elaboration, including temporary bindings. -/
-def Elaborates (ast : Program) (core : Elab.Output) : Prop :=
+def Elaborates (purpose : Purpose) (ast : Program) (core : Elab.Output) : Prop :=
   ast.name = "main" ∧ (core.program.body.map (·.x)).Nodup ∧
   ∃ bindings expr scope body tail sites origins,
     checkBody ast.body = .ok (bindings, expr) ∧
-    ElaboratesBindings [] bindings scope body sites ∧
-    ElaboratesExpr scope expr core.program.ret tail origins ∧
+    ElaboratesBindings purpose [] bindings scope body sites ∧
+    ElaboratesExpr purpose scope expr core.program.ret tail origins ∧
     core.program.body = body ++ tail ∧ core.sites = sites ++ origins
 
-theorem Elaborates.originWellFormed {ast : Program} {core : Elab.Output}
-    (h : Elaborates ast core) : OriginWellFormed core := by
+theorem Elaborates.originWellFormed {purpose} {ast : Program} {core : Elab.Output}
+    (h : Elaborates purpose ast core) : OriginWellFormed core := by
   obtain ⟨_, fresh, _, _, _, _, _, _, _, _, bindings, expr, body, sites⟩ := h
   refine ⟨fresh, ?_⟩
   rw [body, sites, List.map_append, additionBinders_append]
   rw [elaboratesBindings_origins bindings, elaboratesExpr_origins expr]
 
-private def atomFits (scope : List ConcreteSpec.Var) : Core.Atom → Prop
-  | .lit n => n < 256
-  | .var x => x ∈ scope
-
-private def bodyFits (scope : List ConcreteSpec.Var) (result : Core.Atom) :
-    List Core.Stmt → Prop
-  | [] => atomFits scope result
-  | stmt :: rest =>
-    (match stmt.e with
-      | .atom a => atomFits scope a
-      | .add a b => atomFits scope a ∧ atomFits scope b) ∧
-    bodyFits (stmt.x :: scope) result rest
-
-/-- Slice-0 static typing and scope for the empty-evidence path. Checked addition need
-only have typed operands here, so an overflowing operation remains eligible. -/
+/-- Conformance uses the same static checker as the registered Core entry. -/
 def ConformanceStatic (core : Elab.Output) : Prop :=
-  bodyFits [] core.program.ret core.program.body
+  (ConcreteSpec.checkProgramWith .runtime (Core.toCore core.program)).isOk = true
 
 /-- A lexical operation is found by binder. The selected residual layout determines its
 runtime index. The empty-evidence Core execution uses every origin in the layout. -/
@@ -208,17 +196,17 @@ def LexerContract : EdgeContract
   outputInvariant := fun tokens => ∃ bytes fileId, Lexes bytes tokens fileId
   correspondence := fun (bytes, fileId) tokens => Lexes bytes tokens fileId
 
-def ParserContract : EdgeContract (Graph Parse.parse) where
+def ParserContract : EdgeContract (fun tokens ast => ∃ eof, Graph (Parse.parse eof) tokens ast) where
   kind := .namedPremise "P_parse"
   inputInvariant := LexerContract.outputInvariant
   outputInvariant := fun ast => ∃ tokens, Derives tokens ast
   correspondence := Derives
 
-def ElaborationContract : EdgeContract (Graph Elab.elaborate) where
+def ElaborationContract (purpose : Purpose) : EdgeContract (Graph (Admission.prepareParsed purpose)) where
   kind := .namedPremise "P_elab"
   inputInvariant := ParserContract.outputInvariant
   outputInvariant := OriginWellFormed
-  correspondence := Elaborates
+  correspondence := Elaborates purpose
 
 def AdmissionContract : EdgeContract (Graph Admission.check) where
   kind := .directProof
@@ -266,16 +254,16 @@ preservation. Evaluator adequacy also compares finite prefixes and arbitrary fue
 structure SharedSound {target : LCB.Target} (m : SharedModels target) : Prop where
   lexer : LexerContract.sound
   parser : ParserContract.sound
-  elaboration : ElaborationContract.sound
+  elaboration : ∀ purpose, (ElaborationContract purpose).sound
   admission : AdmissionContract.sound
   admittedMIR : (AdmittedMIRContract m).sound
   uncheckedMIR : (UncheckedMIRContract m).sound
   memory : (MemoryContract m).sound
   ssa : (SSAContract m).sound
   lexParse : Compatible LexerContract ParserContract
-  parseElab : Compatible ParserContract ElaborationContract
-  elabAdmit : Compatible ElaborationContract AdmissionContract
-  elabUnchecked : ∀ core, ElaborationContract.outputInvariant core → ConformanceStatic core →
+  parseElab : ∀ purpose, Compatible ParserContract (ElaborationContract purpose)
+  elabAdmit : Compatible (ElaborationContract .admission) AdmissionContract
+  elabUnchecked : ∀ core, (ElaborationContract .eligibility).outputInvariant core → ConformanceStatic core →
     ∀ path, (UncheckedMIRContract m).inputInvariant (path, core)
   admitMIR : ∀ admitted, AdmissionContract.outputInvariant admitted →
     ∀ path, (AdmittedMIRContract m).inputInvariant (path, admitted)
@@ -302,14 +290,14 @@ structure SharedSound {target : LCB.Target} (m : SharedModels target) : Prop whe
 /-- Exact source-to-admitted-Core derivation recorded in the production output. -/
 def Frontend (input : Stages.Input) (out : Stages.Output) : Prop :=
   Lexes input.source out.tokens input.fileId ∧ Derives out.tokens out.ast ∧
-  Elaborates out.ast out.core ∧
+  Elaborates .admission out.ast out.core ∧
   ∃ admitted, Admission.check out.core = .ok admitted ∧ admitted.core = out.core ∧
     admitted.tokens = out.evidence ∧ Core.Checked (Core.toCore out.core.program)
 
 /-- Successful production exposes the exact intermediate results of the functions it invokes. -/
 def SharedHandoffs (input : Stages.Input) (out : Stages.Output) : Prop :=
-  Lex.lex input.source input.fileId = .ok out.tokens ∧ Parse.parse out.tokens = .ok out.ast ∧
-  Elab.elaborate out.ast = .ok out.core ∧
+  Lex.lex input.source input.fileId = .ok out.tokens ∧ Parse.parse input.eof out.tokens = .ok out.ast ∧
+  Admission.prepareParsed .admission out.ast = .ok out.core ∧
   (∃ admitted, Admission.check out.core = .ok admitted ∧ admitted.tokens = out.evidence ∧
     MIR.lower admitted = .ok out.mir) ∧
   Memory.lower out.mir = out.memory ∧ SSA.lower input.path out.memory = .ok out.bir
@@ -664,13 +652,25 @@ def LCBCorrect {Env : Type} {profile : Profile}
     Compiled input out ∧ ImageCorrect n admittedCoreSemantics input.path out.core build.image
 
 def UncheckedHandoffs (input : Stages.Input) (core : Elab.Output) : Prop :=
-  ∃ tokens ast, Lex.lex input.source input.fileId = .ok tokens ∧ Parse.parse tokens = .ok ast ∧
-    Elab.elaborate ast = .ok core
+  ∃ tokens ast, Lex.lex input.source input.fileId = .ok tokens ∧ Parse.parse input.eof tokens = .ok ast ∧
+    Admission.prepareParsed .eligibility ast = .ok core
+
+/-- Every successful unchecked run exposes the frontend handoff used by the
+correctness obligation, including operations guarded at runtime. -/
+theorem unchecked_handoffs_of_run {input : Stages.Input} {bir : BIR.Program}
+    (ran : Stages.unchecked input = .ok bir) : ∃ core, UncheckedHandoffs input core := by
+  simp only [Stages.unchecked, bind, Except.bind] at ran
+  split at ran <;> try contradiction
+  next tokens lexed =>
+    split at ran <;> try contradiction
+    next ast parsed =>
+      split at ran <;> try contradiction
+      next core prepared => exact ⟨core, tokens, ast, lexed, Parse.parseForDriver_ok.mp parsed, prepared⟩
 
 def UncheckedFrontend (input : Stages.Input) (core : Elab.Output) : Prop :=
-  ∃ tokens ast, Lex.lex input.source input.fileId = .ok tokens ∧ Parse.parse tokens = .ok ast ∧
-    Elab.elaborate ast = .ok core ∧ Lexes input.source tokens input.fileId ∧ Derives tokens ast ∧
-    Elaborates ast core
+  ∃ tokens ast, Lex.lex input.source input.fileId = .ok tokens ∧ Parse.parse input.eof tokens = .ok ast ∧
+    Admission.prepareParsed .eligibility ast = .ok core ∧ Lexes input.source tokens input.fileId ∧ Derives tokens ast ∧
+    Elaborates .eligibility ast core
 
 def UncheckedOrigins (input : Stages.Input) (core : Elab.Output) (bir : BIR.Program) : Prop :=
   ∃ mir, MIR.lowerUnchecked core = .ok mir ∧
@@ -805,11 +805,11 @@ theorem answerCompiles : Stages.compile answerInput = .ok answerOutput := by
 private def bindingSpan : Span := ⟨0, 1, 1, 1, ⟨0⟩⟩
 
 private def parseBinderExample (source : String) : Except Refusal Program := do
-  Parse.parse (← Lex.lex source.toUTF8)
+  Parse.parseForDriver (Parse.eofSpan source.toUTF8) (← Lex.lex source.toUTF8)
 
 private theorem refusesFirstBinder {ast : Program} {bindings : List Binding} {binding : Binding}
     {result : Expr} (shape : checkBody ast.body = .ok (binding :: bindings, result))
-    (illegal : ¬ BinderLegal [] binding.name) (core : Elab.Output) : ¬ Elaborates ast core := by
+    (illegal : ¬ BinderLegal [] binding.name) (core : Elab.Output) : ¬ Elaborates .admission ast core := by
   intro h
   obtain ⟨_, _, _, _, _, _, _, _, _, checked, lowered, _⟩ := h
   cases Except.ok.inj (shape.symm.trans checked)
@@ -830,35 +830,68 @@ private def builtinTypeBinderParse :=
 private def duplicateBinderParse :=
   parseBinderExample r#"fn main() -> u8 { let x: u8 = 1; let x: u8 = 20 + 22; return x; }"#
 
-example : wildcardParse = .error (.unsupported "program uses a form outside the slice-0 fragment") := by rfl
+private def keywordBinderParse :=
+  parseBinderExample r#"fn main() -> u8 { let i8: u8 = 42; return i8; }"#
 
-example : parseBinderExample r#"fn main() -> u8 { let i8: u8 = 42; return i8; }"# =
-    .error (.syntaxError "unexpected token at byte 22") := by rfl
+private def cites (result : Except Refusal Program) (rule : ConcreteSpec.Core.RuleId) : Bool :=
+  match result with
+  | .error e => (e.diagnosticAt rule).isSome
+  | .ok _ => false
 
+open ConcreteSpec.Core in
+example : keywordBinderParse = .error (.parser ⟨.unexpectedToken, ⟨22, 24, 1, 23, ⟨0⟩⟩⟩) ∧
+    cites keywordBinderParse ⟨``Slice0Rules.Parsed, 1⟩ = true ∧
+    cites keywordBinderParse ⟨``Slice0Rules.Lexed, 2⟩ = false := ⟨rfl, rfl, rfl⟩
+
+open ConcreteSpec.Core in
+example : wildcardParse = .error (.parser ⟨.outsideProduction, ⟨22, 23, 1, 23, ⟨0⟩⟩⟩) ∧
+    cites wildcardParse ⟨``Slice0Rules.AdmittedProduction, 2⟩ = true ∧
+    cites wildcardParse ⟨``Slice0Rules.EntryName, 1⟩ = false := ⟨rfl, rfl, rfl⟩
+
+-- A later malformed expression takes priority over a syntactically complete wildcard binder.
 example : parseBinderExample r#"fn main() -> u8 { let _: u8 = 42; return _; }"# =
-    .error (.syntaxError "unexpected token at byte 41") := by rfl
+    .error (.parser ⟨.unexpectedToken, ⟨41, 42, 1, 42, ⟨0⟩⟩⟩) := rfl
+
+open ConcreteSpec.Core in
+example :
+    let result := parseBinderExample r#"fn main() -> u8 { return 0xff; }"#
+    result = .error (.parser ⟨.nonDecimal, ⟨25, 29, 1, 26, ⟨0⟩⟩⟩) ∧
+      cites result ⟨``Slice0Rules.DecimalLiteral, 1⟩ = true ∧
+      cites result ⟨``Slice0Rules.AdmittedProduction, 2⟩ = false := ⟨rfl, rfl, rfl⟩
+
+-- The complete refusal parse selects the first violation when both rules apply.
+example : parseBinderExample r#"fn main() -> u8 { return 0xff * 1; }"# =
+    .error (.parser ⟨.nonDecimal, ⟨25, 29, 1, 26, ⟨0⟩⟩⟩) ∧
+    parseBinderExample r#"fn main() -> u8 { return 1 * 0xff; }"# =
+    .error (.parser ⟨.outsideProduction, ⟨27, 28, 1, 28, ⟨0⟩⟩⟩) := ⟨rfl, rfl⟩
+
+example : parseBinderExample r#"fn main() -> u8 { return 42; } 42"# =
+    .error (.parser ⟨.trailingTokens, ⟨31, 33, 1, 32, ⟨0⟩⟩⟩) := rfl
+
+example : parseBinderExample (r"fn main() -> u8 {" ++ "\r\n  ") =
+    .error (.parser ⟨.unexpectedEnd, ⟨21, 21, 2, 3, ⟨0⟩⟩⟩) := rfl
 
 example : ∃ ast, mainBinderParse = .ok ast ∧
-    Elab.elaborate ast = .error (.checker "binding shadows 'main' at byte 22") ∧
-    ∀ core, ¬ Elaborates ast core := by
+    Admission.prepareParsed .admission ast = .error (.checker "binding shadows 'main' at byte 22") ∧
+    ∀ core, ¬ Elaborates .admission ast core := by
   refine ⟨_, rfl, rfl, ?_⟩
   exact refusesFirstBinder rfl (by decide)
 
 example : ∃ ast, intrinsicBinderParse = .ok ast ∧
-    Elab.elaborate ast = .error (.checker "binding shadows 'discard' at byte 22") ∧
-    ∀ core, ¬ Elaborates ast core := by
+    Admission.prepareParsed .admission ast = .error (.checker "binding shadows 'discard' at byte 22") ∧
+    ∀ core, ¬ Elaborates .admission ast core := by
   refine ⟨_, rfl, rfl, ?_⟩
   exact refusesFirstBinder rfl (by decide)
 
 example : ∃ ast, builtinTypeBinderParse = .ok ast ∧
-    Elab.elaborate ast = .error (.checker "binding shadows 'Option' at byte 22") ∧
-    ∀ core, ¬ Elaborates ast core := by
+    Admission.prepareParsed .admission ast = .error (.checker "binding shadows 'Option' at byte 22") ∧
+    ∀ core, ¬ Elaborates .admission ast core := by
   refine ⟨_, rfl, rfl, ?_⟩
   exact refusesFirstBinder rfl (by decide)
 
 example : ∃ ast, duplicateBinderParse = .ok ast ∧
-    Elab.elaborate ast = .error (.checker "binding shadows 'x' at byte 37") ∧
-    ∀ core, ¬ Elaborates ast core := by
+    Admission.prepareParsed .admission ast = .error (.checker "binding shadows 'x' at byte 37") ∧
+    ∀ core, ¬ Elaborates .admission ast core := by
   refine ⟨_, rfl, rfl, ?_⟩
   intro core h
   obtain ⟨_, _, _, _, _, _, _, _, _, checked, lowered, _⟩ := h
@@ -874,9 +907,9 @@ example : ∃ ast, duplicateBinderParse = .ok ast ∧
   | operation _ _ _ rest => exact rest.headLegal.2.2 member
 
 example :
-    ElaboratesBindings [] [⟨"x", bindingSpan, .integer 1 none bindingSpan⟩]
+    ElaboratesBindings .admission [] [⟨"x", bindingSpan, .integer 1 none bindingSpan⟩]
       [("x", ⟨0⟩)] [⟨⟨0⟩, .atom (.lit 1)⟩] [] :=
-  .atom (by decide) (.integer 1 _) (.nil _)
+  .atom (show BinderLegal [] "x" by decide) (.integer 1 _ rfl) (.nil _)
 
 def exit42 : Observation := .returned 42 ByteArray.empty
 
@@ -898,9 +931,20 @@ example : ∃ out, Stages.compile answerInput = .ok out ∧
     exact returnAtTwo rfl rfl rfl
 
 example : ¬ ConformanceStatic ⟨⟨[], .lit 256⟩, []⟩ := by
-  with_unfolding_all
-    change ¬ (256 < 256)
-    decide
+  exact Bool.noConfusion
+
+-- Source binder rules must be enforced before the spelling disappears from Core.
+example :
+    let input := (Stages.Input.load "main.con"
+      r"fn main() -> u8 { let main: u8 = 42; return main; }".toUTF8).toOption.get (by rfl)
+    Stages.unchecked input = .error (.checker "binding shadows 'main' at byte 22") := by
+  with_unfolding_all rfl
+
+example :
+    let input := (Stages.Input.load "main.con"
+      r"fn main() -> u8 { let x: u8 = 42; return 0; }".toUTF8).toOption.get (by rfl)
+    Stages.unchecked input = .error (.checker "Core check rejected the program") := by
+  with_unfolding_all rfl
 
 private def overflowInput (comment : String) : Stages.Input :=
   (Stages.Input.load "src/a.con"
@@ -917,7 +961,7 @@ example : ∃ core bir,
     coreSemantics.observes ("src/b.con", core) (overflowObservation "src/b.con") := by
   with_unfolding_all
     refine ⟨_, _, ⟨_, _, rfl, rfl, rfl⟩, ?_, rfl, ?_, ?_⟩
-    · exact ⟨⟨by change 200 < 256; decide, by change 56 < 256; decide⟩, List.Mem.head _⟩
+    · rfl
     · exact returnAtOne rfl rfl
     · exact returnAtOne rfl rfl
 
@@ -1169,7 +1213,8 @@ theorem answerFrontend : Frontend answerInput answerOutput := by
     · exact .main _ _ _ _ _ _ _ _
         (.ret _ _ (.expr (.integer 20 none _) (.more (.integer 22 none _) (.nil _))) .nil)
     · refine ⟨rfl, by decide, [], _, [], [], _, [], _, rfl, .nil [], ?_, rfl, rfl⟩
-      exact .add (.integer 20 _) (.integer 22 _)
+      exact .add (.integer (purpose := .admission) 20 _ (suffix := none) rfl)
+        (.integer (purpose := .admission) 22 _ (suffix := none) rfl)
     · have admitted : ∃ a, Admission.check answerOutput.core = .ok a := ⟨_, rfl⟩
       obtain ⟨a, h⟩ := admitted
       obtain ⟨same, tokens⟩ := Admission.check_evidence h
@@ -1276,7 +1321,7 @@ theorem answerTerminates : SourceTerminates answerInput.path answerOutput.core a
 private def trapInput := overflowInput "// x"
 
 private def trapCore : Elab.Output :=
-  (do Elab.elaborate (← Parse.parse (← Lex.lex trapInput.source trapInput.fileId)) :
+  (do Admission.prepareParsed .eligibility (← Parse.parseForDriver trapInput.eof (← Lex.lex trapInput.source trapInput.fileId)) :
     Except Refusal Elab.Output).toOption.get (by rfl)
 
 private def trapBIR : BIR.Program :=
@@ -1286,7 +1331,7 @@ private def trapBIR : BIR.Program :=
 
 private theorem trapStatic : ConformanceStatic trapCore := by
   with_unfolding_all
-    exact ⟨⟨by change 200 < 256; decide, by change 56 < 256; decide⟩, List.Mem.head _⟩
+    rfl
 
 private theorem trapTerminates : SourceTerminates trapInput.path trapCore :=
   coreTerminates _ _ (overflowObservation trapInput.path) 1 rfl (returnAtOne rfl rfl)

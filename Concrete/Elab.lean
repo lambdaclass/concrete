@@ -12,15 +12,14 @@ structure Output where
   program : ConcreteSpec.Slice0.Program
   sites : List SourceSite
 
+abbrev LocatedOutput := ConcreteSpec.StageInterface.EarlyProgram
+
 def LocatedOutput.erase (out : LocatedOutput) : Output :=
   let sites := out.bindings.filterMap fun binding =>
     match binding.statement.e with
     | .atom _ => none
     | .add .. => some (⟨binding.statement.x, binding.operationSpan⟩ : SourceSite)
-  ⟨⟨out.bindings.map (·.statement), out.ret⟩, sites⟩
-
-def elaborate (ast : Program) : Except Refusal Output :=
-  ((elaborateLocated ast).map LocatedOutput.erase).mapError Failure.diagnostic
+  ⟨out.eraseLocations, sites⟩
 
 private def evalExpr (env : List (String × Int)) : Expr → Except ConcreteSpec.Outcome Int
   | .integer value _ _ => .ok value

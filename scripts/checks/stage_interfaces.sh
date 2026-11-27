@@ -13,8 +13,12 @@ digest() (
   cd "$1"
   sha256sum "${files[@]}"
 )
-expected=$(cat "$manifest")
 actual=$(digest .)
+if [[ ${1:-} == --update ]]; then
+  expected=$actual
+else
+  expected=$(cat "$manifest")
+fi
 if [[ "$actual" != "$expected" ]]; then
   echo "FAIL stage interfaces changed. Open an interface round before updating $manifest." >&2
   diff -u "$manifest" <(printf '%s\n' "$actual") >&2 || true
@@ -32,5 +36,8 @@ sed 's/\$_exit(w 134)/$_exit(w 135)/' "$runtime" >"$work/$runtime"
 if cmp -s "$runtime" "$work/$runtime" || [[ "$(digest "$work")" == "$expected" ]]; then
   echo "FAIL stage interface digest control did not detect a changed QBE trap exit." >&2
   exit 1
+fi
+if [[ ${1:-} == --update ]]; then
+  printf '%s\n' "$actual" >"$manifest"
 fi
 echo "PASS frozen stage interfaces and QBE trap exit mutation control"

@@ -121,13 +121,13 @@ def LexRefuses (source : Source) (failure : LexRefusal) : Prop :=
 
 /-- Each slice contributes a repository rule over that member of the AST and Core
 families. Slice 0 uses the canonical injections of the shared carriers. -/
-def SliceElaboration (slice : Slice) (ast : SurfaceAST ConcreteSpec.StageGrammar.sliceASTExtra slice)
-    (result : Except ElabRefusal (Payload (sliceLanguage slice))) : Prop :=
-  if slice = slice0 then
+def SliceElaboration (slice : Slice) (project : Project)
+    (ast : SurfaceAST ConcreteSpec.StageGrammar.sliceASTExtra slice)
+    (result : Except ElabRefusal (AdmissionInput (sliceLanguage slice))) : Prop :=
+  if h : slice = slice0 then
     match ast with
     | .inl tree => ∃ program, Concrete.Elab.surfaceProgram tree = some program ∧
-        ((Concrete.Elab.elaborateLocated program).map (earlyPayload (sliceEarlyCore slice))).mapError
-          ElabRefusal.slice0 = result
+        .ok (.pending project (.zero program) (congrArg sliceLanguage h)) = result
     | .inr _ => False
   else result = .error (.unsupportedSlice slice)
 
@@ -189,14 +189,14 @@ def ConsumesEvidence {language : CoreLanguage} {lang : LoweringLanguage language
     {profile : Profile} (core : CoreInput language) (discharges : Discharges language)
     (mir : MIR lang profile) : Prop :=
   ((mir.operations.map fun op => (op.fn, op.block, op.index)).Nodup) ∧
-  (∀ site opcode conditions, core.payload.ConditionsAt site opcode conditions → conditions ≠ [] →
+  (∀ site opcode conditions, core.machineProgram.ConditionsAt site opcode conditions → conditions ≠ [] →
     ∃ op ∈ mir.operations, op.origin.operation = site ∧ op.opcode = opcode) ∧
   (∀ op ∈ mir.operations,
-    ∃ conditions, core.payload.ConditionsAt op.origin.operation op.opcode conditions ∧
+    ∃ conditions, core.machineProgram.ConditionsAt op.origin.operation op.opcode conditions ∧
       (op.checks.map OperationCheck.discriminator).Nodup ∧
       conditions = op.checks.map (fun check => ⟨check.discriminator, check.trap, op.operands⟩) ∧
       (∀ callee, op.opcode = .call callee →
-        ∃ args, (op.origin.operation, .call callee args) ∈ core.payload.operations ∧
+        ∃ args, (op.origin.operation, .call callee args) ∈ core.machineProgram.operations ∧
           args.mapM language.argumentRead = some op.operands) ∧
       ∀ check ∈ op.checks, check.disposition = .discharged →
         ∃ d, discharges.Contains op.origin.operation d ∧ op.Justifies check d) ∧
@@ -238,11 +238,11 @@ def LayoutsMatch {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
           (AList.lookup classes place = some .materialized ∧
             ∃ slots description, AList.lookup memory.layouts fn = some slots ∧
               AList.lookup slots place = some description ∧
-              layout profile.memoryTarget ty = some description))) ∧
+              layout memory.declarations profile.memoryTarget ty = some description))) ∧
   ∀ fn slots place description, (fn, slots) ∈ memory.layouts → (place, description) ∈ slots →
     ∃ locals graph ty classes, (fn, locals, graph) ∈ memory.functions ∧ (place, ty) ∈ locals ∧
       AList.lookup memory.storage fn = some classes ∧
-      AList.lookup classes place = some .materialized ∧ layout profile.memoryTarget ty = some description
+      AList.lookup classes place = some .materialized ∧ layout memory.declarations profile.memoryTarget ty = some description
 
 def MIR.Escapes {language : CoreLanguage} {lang : LoweringLanguage language.operands.Ty}
     {profile : Profile} (mir : MIR lang profile) (fn : FnId) (place : PlaceId) : Prop :=
@@ -398,6 +398,21 @@ private def commitOwner (state : MemoryRegisters language profile) (root : Place
       if slot.place == id then {slot with status := ((Own.slot owners id).map (·.status)).getD slot.status}
       else slot}
 
+/-- Read the projected byte range of a nonempty materialized place at the
+resolved target. This also covers spec targets without a hosted backend. -/
+def loadMaterialized (memory : Memory lang profile) (state : MemoryRegisters language profile)
+    {ty : language.operands.Ty} (place : MemoryPlace _ ty) (target : Target) :
+    Option language.operands.Val := do
+  let range ← memory.rangeAt state place.logical
+  let bytes ← state.bytes.load target range.ptr range.extent range.align
+  match language.scalarType ty with
+  | some scalar =>
+    let value ← Hybrid.decode target scalar bytes
+    return language.valueShape.symm ▸ CoreValue.scalar value
+  | none =>
+    let value ← language.decodeOther target ty bytes
+    return language.valueShape.symm ▸ CoreValue.other value
+
 private def loadBacking (memory : Memory lang profile)
     (state : MemoryRegisters language profile) {ty : language.operands.Ty}
     (place : MemoryPlace _ ty) : Option language.operands.Val := do
@@ -412,15 +427,7 @@ private def loadBacking (memory : Memory lang profile)
       let root ← AList.lookup state.zeroValues place.logical.root
       if place.logical.path.isEmpty then some root else language.field root place.logical.path
     else do
-      let range ← memory.rangeAt state place.logical
-      let bytes ← state.bytes.load profile.memoryTarget range.ptr range.extent range.align
-      match language.scalarType ty with
-      | some scalar =>
-        let value ← Hybrid.decode profile.memoryTarget scalar bytes
-        return language.valueShape.symm ▸ CoreValue.scalar value
-      | none =>
-        let value ← language.decodeOther profile.memoryTarget ty bytes
-        return language.valueShape.symm ▸ CoreValue.other value
+      memory.loadMaterialized state place profile.memoryTarget
 
 def loadValue (memory : Memory lang profile)
     (state : MemoryRegisters language profile) {ty : language.operands.Ty}
@@ -450,7 +457,7 @@ private def StoresValue (memory : Memory lang profile)
           bytes.length 1 = some bytes)
 
 /-- Ignore moved subtrees when checking for live linear fields at lifetime end or replacement. -/
-private def canDiscard (language : CoreLanguage) (allowCopy : Bool := true) :
+private def canDiscard (language : CoreLanguage) (env : Declarations) (allowCopy : Bool := true) :
     Nat → language.operands.Ty → language.operands.Val → List (List FieldId) → Bool
   | fuel, ty, value, moved =>
     if moved.contains [] then true
@@ -458,14 +465,14 @@ private def canDiscard (language : CoreLanguage) (allowCopy : Bool := true) :
     else match fuel with
       | 0 => false
       | n + 1 =>
-        (language.activeFields ty value).any fun fields =>
+        (language.activeFields env ty value).any fun fields =>
           fields.all fun field =>
             let below := moved.filterMap fun path =>
               match path with
               | first :: rest => if first == field then some rest else none
               | [] => none
             match language.fieldType ty field, language.field value [field] with
-            | some fieldTy, some fieldValue => canDiscard language allowCopy n fieldTy fieldValue below
+            | some fieldTy, some fieldValue => canDiscard language env allowCopy n fieldTy fieldValue below
             | _, _ => false
 
 private def movedBelow (state : MemoryRegisters language profile)
@@ -478,7 +485,7 @@ private def discardRemainder (memory : Memory lang profile)
     (place : MemoryPlace _ ty) (allowCopy : Bool) : Bool :=
   let moved := movedBelow state place.logical.root place.logical.path
   !moved.isEmpty && (memory.loadBacking state place).any fun value =>
-    canDiscard language allowCopy (moved.foldl (fun depth suffix => max depth suffix.length) 0)
+    canDiscard language memory.declarations allowCopy (moved.foldl (fun depth suffix => max depth suffix.length) 0)
       ty value moved
 
 def mayInitialize (memory : Memory lang profile)
@@ -556,12 +563,7 @@ def readValue (memory : Memory lang profile)
     Option (language.operands.Val × MemoryRegisters language profile) := do
   match read with
   | .literal value => do
-    let decoded ← match language.scalarType ty with
-      | some (.int intTy) =>
-        (Hybrid.decode profile.memoryTarget (.int intTy)
-          (value.encoding.map fun byte => .init byte.toFin none)).map
-          (fun scalar => language.valueShape.symm ▸ CoreValue.scalar scalar)
-      | _ => language.literal ty value.encoding
+    let decoded ← language.literal ty value.encoding
     return (decoded, state)
   | .copy place => do
     let root := place.logical.root
@@ -581,6 +583,14 @@ def readValue (memory : Memory lang profile)
       virtualValues := AList.erase state.virtualValues root
       zeroValues := AList.erase state.zeroValues root}
     return (value, moved)
+
+/-- Literal operands always use the Core value codec, including in physical
+execution. Only a load from live backing storage interprets target byte order. -/
+theorem readLiteral_eq (memory : Memory lang profile) (state : MemoryRegisters language profile)
+    {ty : language.operands.Ty} (value : lang.literal ty) :
+    memory.readValue state (.literal value) =
+      (language.literal ty value.encoding).map (fun decoded => (decoded, state)) := by
+  cases h : language.literal ty value.encoding <;> simp [readValue, h]
 
 theorem copyRead_iff (memory : Memory lang profile) (state : MemoryRegisters language profile)
     {ty : language.operands.Ty} (place : MemoryPlace _ ty) (value : language.operands.Val)
@@ -708,7 +718,7 @@ def endOwnerView (memory : Memory lang profile) (state : MemoryRegisters languag
       (!moved.isEmpty &&
         (memory.classAt state.frame place).any fun storage =>
           (memory.loadBacking state (ty := ty) ⟨⟨place, []⟩, storage⟩).any fun value =>
-            canDiscard language true (moved.foldl (fun depth path => max depth path.length) 0) ty value moved)
+            canDiscard language memory.declarations true (moved.foldl (fun depth path => max depth path.length) 0) ty value moved)
     memory.ownerView state place ty (if discharged then .moved else .owned)
 
 def canEnd (memory : Memory lang profile) (state : MemoryRegisters language profile)
@@ -810,10 +820,10 @@ def Transfer (memory : Memory lang profile) (edge : CFGEdge (Sigma (MemoryRead _
 
 /-- Splitting a value transfers each bound field once. An omitted active field
 must be Copy, and every destination has the declared type of its field. -/
-def DestructureFields (language : CoreLanguage) (ty : language.operands.Ty)
+def DestructureFields (language : CoreLanguage) (env : Declarations) (ty : language.operands.Ty)
     (value : language.operands.Val) (bindings : List (FieldId × language.operands.Ty)) : Prop :=
   (bindings.map Prod.fst).Nodup ∧
-  ∃ fields, language.activeFields ty value = some fields ∧
+  ∃ fields, language.activeFields env ty value = some fields ∧
     (∀ binding ∈ bindings,
       binding.1 ∈ fields ∧ language.fieldType ty binding.1 = some binding.2) ∧
     ∀ field ∈ fields, field ∉ bindings.map Prod.fst →
@@ -919,7 +929,7 @@ def InstructionStepWith (memory : Memory lang profile)
       addresses.mapM (memory.resolveAddress (prepareAddresses afterReads addresses) logical) = some operands ∧
       let ready := prepareAddresses afterReads addresses
       let before := operationStore ready logical
-      language.operation opcode types ty values profile.memoryTarget operands before result effects changed ∧
+      language.operation memory.declarations opcode types ty values profile.memoryTarget operands before result effects changed ∧
       List.map Prod.fst changed.addressedValues = List.map Prod.fst before.addressedValues ∧
       let afterOperation := applyOperation ready logical changed
       (if logical || startDefinitions then memory.WriteParams [⟨_, dst⟩] [result] afterOperation stored
@@ -931,7 +941,7 @@ def InstructionStepWith (memory : Memory lang profile)
     ∃ value afterRead fields stored,
       memory.readValue state (if language.operands.isCopy ty then .copy src else .move src) =
         some (value, afterRead) ∧
-      DestructureFields language ty value (bindings.map fun (field, dst) => (field, dst.1)) ∧
+      DestructureFields language memory.declarations ty value (bindings.map fun (field, dst) => (field, dst.1)) ∧
       bindings.mapM (fun binding => language.field value [binding.1]) = some fields ∧
       memory.WriteParams (bindings.map Prod.snd) fields afterRead stored ∧ next = stored.advance
   | .call callee dst args checks =>
@@ -983,7 +993,7 @@ def trapDiagnostic (project : Project) (kind : TrapKind) (site : SiteId)
 
 def coreTrapDiagnostic {language : CoreLanguage} (core : CoreInput language)
     (kind : TrapKind) (site : SiteId) : ByteArray :=
-  match AList.lookup core.payload.origins site with
+  match AList.lookup core.machineProgram.origins site with
   | some origin => trapDiagnostic core.project kind site origin.lexical
   | none => ByteArray.empty
 
@@ -1059,6 +1069,7 @@ private def logicalTerminator : Terminator (Sigma (Read _ lang.literal)) (Read _
 /-- The logical evaluator shares CFG and operand rules with Memory. All MIR
 roots hold logical values, even when their physical representation needs bytes. -/
 def logicalView (mir : MIR lang profile) : Memory lang profile where
+  declarations := mir.declarations
   project := mir.project
   entry := mir.entry
   signatures := mir.signatures
@@ -1177,35 +1188,113 @@ private def graphExecution {A : Type}
   hostedExecution (fun state => state.effects) step start observe
 
 private abbrev CoreState (language : CoreLanguage) :=
-  (Σ ownership : AList ConcreteSpec.Var Own.Descriptor, Exec.Config (language.instrumented ownership)) ×
+  (Σ env : AList ConcreteSpec.Var Own.Descriptor × Declarations, Exec.Config (language.instrumented env.1 env.2)) ×
     List language.operands.Event
 
-private def coreHostedResult (core : CoreInput language) (state : CoreState language) :
-    Option Concrete.Contracts.Observation := do
-  let outcome ← state.1.2.final?
-  match ← language.hostedResult outcome with
-  | .returned status => return .returned status ByteArray.empty
-  | .trapped status kind site =>
-    let origin ← AList.lookup core.payload.origins site
+/-- Render a Core result using the source location on the executing input. -/
+def CoreInput.observeHosted (core : CoreInput language) : HostedResult → Option Concrete.Contracts.Observation
+  | .returned status => some <| .returned status ByteArray.empty
+  | .trapped status kind site => do
+    let origin ← AList.lookup core.machineProgram.origins site
     let file ← core.project.files[origin.lexical.file.index]?
     return .trapped status kind ⟨⟨site.id⟩,
       ⟨file.path.render.text, origin.lexical.line, origin.lexical.col⟩⟩
       (coreTrapDiagnostic core kind site)
 
+private def coreHostedResult (core : CoreInput language) (state : CoreState language) :
+    Option Concrete.Contracts.Observation := do
+  let outcome ← state.1.2.final?
+  CoreInput.observeHosted core (← language.hostedResult outcome)
+
 private def coreStep (core : CoreInput language) (state next : CoreState language) : Prop :=
-  ∃ p q label, state.1 = ⟨core.payload.ownership, p⟩ ∧
-    next.1 = ⟨core.payload.ownership, q⟩ ∧ Exec.Step core.payload.body p label q ∧
+  ∃ p q label, state.1 = ⟨(core.machineProgram.ownership, core.machineProgram.declarations), p⟩ ∧
+    next.1 = ⟨(core.machineProgram.ownership, core.machineProgram.declarations), q⟩ ∧ Exec.Step core.machineProgram.body p label q ∧
     next.2 = state.2 ++ label.events
 
 def CoreInput.Execution : Semantics (CoreInput language) language.operands.Event :=
   { hostedExecution Prod.snd coreStep
-      (fun core => (⟨core.payload.ownership, core.payload.initial⟩, [])) coreHostedResult with
+      (fun core => (⟨(core.machineProgram.ownership, core.machineProgram.declarations), core.machineProgram.initial⟩, [])) coreHostedResult with
     permitted := fun core event =>
-      ∃ state events, Exec.Steps core.payload.body core.payload.initial events state ∧
-        (event ∈ ((coreHostedResult core (⟨core.payload.ownership, state⟩, events)).map
+      ∃ state events, Exec.Steps core.machineProgram.body core.machineProgram.initial events state ∧
+        (event ∈ ((coreHostedResult core (⟨(core.machineProgram.ownership, core.machineProgram.declarations), state⟩, events)).map
           fun result => result.stderr.data.toList.map ProcessEvent.stderr).getD [] ∨
-        ∃ label next, Exec.Step core.payload.body state label next ∧
+        ∃ label next, Exec.Step core.machineProgram.body state label next ∧
           event ∈ label.events.map ProcessEvent.effect) }
+
+private abbrev coreStateAt (core : CoreInput language) (q : Exec.Config core.machineProgram.machine) :
+    CoreState language := (⟨(core.machineProgram.ownership, core.machineProgram.declarations), q⟩, [])
+
+private theorem silent_progress {core : CoreInput language} {p q : Exec.Config core.machineProgram.machine}
+    (tick : Exec.step core.machineProgram.body p = some (.next q)) :
+    CoreInput.Execution.step core (coreStateAt core p) (coreStateAt core q) ∧
+    ∀ r, CoreInput.Execution.step core (coreStateAt core p) r → r = coreStateAt core q := by
+  have unfinished : p.final? = none := by
+    unfold Exec.Config.final?
+    split <;> first | rfl | contradiction | (simp [Exec.step, Exec.stepExit] at tick)
+  have unseen : coreHostedResult core (coreStateAt core p) = none := by simp [coreHostedResult, unfinished, coreStateAt]
+  constructor
+  · exact ⟨unseen, ⟨p, q, .silent, rfl, rfl, .silent tick, rfl⟩,
+      by simp [Concrete.Contracts.TracePrefix, traceFor, unseen, coreStateAt]⟩
+  · rintro r ⟨_, ⟨before, after, label, start, stop, step, effects⟩, _⟩
+    have eq : p = before := by simpa using start
+    subst before
+    cases step with
+    | silent h =>
+      rw [tick] at h
+      cases Exec.Out.next.inj (Option.some.inj h)
+      exact Prod.ext stop effects
+    | prim h => rw [tick] at h; cases h
+
+/-- A finite path of deterministic dispatcher steps to a hosted result supplies
+progress at every reachable state and fixes the unique process observation. -/
+theorem CoreInput.safe_of_silent_path {core : CoreInput language} {q : Exec.Config core.machineProgram.machine}
+    (path : Steps (fun p q => Exec.step core.machineProgram.body p = some (.next q)) core.machineProgram.initial q)
+    {f hosted result} (final : q.final? = some f) (host : language.hostedResult f = some hosted)
+    (render : CoreInput.observeHosted core hosted = some result) :
+    ProgramSafe CoreInput.Execution core ∧
+    ∀ o, CoreInput.Execution.observes core o ↔ o = result := by
+  let S := CoreInput.Execution (language := language)
+  have last : S.result core (coreStateAt core q) result := by
+    change coreHostedResult _ _ = _
+    simp [coreHostedResult, coreStateAt, final, host, render]
+  have lift {p r} (h : Steps (fun p r => Exec.step core.machineProgram.body p = some (.next r)) p r) :
+      Steps (S.step core) (coreStateAt core p) (coreStateAt core r) := by
+    induction h with
+    | nil => exact .nil _
+    | cons tick _ ih => exact .cons (silent_progress tick).1 ih
+  have progress {p r} (h : Steps (fun p r => Exec.step core.machineProgram.body p = some (.next r)) p r)
+      (done : S.result core (coreStateAt core r) result) {s}
+      (reached : Steps (S.step core) (coreStateAt core p) s) :
+      S.result core s result ∨ ∃ next, S.step core s next := by
+    induction h generalizing s with
+    | nil =>
+      cases reached with
+      | nil => exact .inl done
+      | cons tick _ => exact (S.terminal _ _ _ done _ tick).elim
+    | cons tick _ ih =>
+      obtain ⟨go, unique⟩ := silent_progress tick
+      cases reached with
+      | nil => exact .inr ⟨_, go⟩
+      | cons first rest => exact ih done ((unique _ first) ▸ rest)
+  have allStates {s} (finite : S.finite core s) :
+      S.result core s result ∨ ∃ next, S.step core s next := by
+    obtain ⟨start, init, steps⟩ := finite
+    change start = coreStateAt core core.machineProgram.initial at init
+    rw [init] at steps
+    exact progress path last steps
+  constructor
+  · rintro s ⟨finite, noStep, noResult⟩
+    rcases allStates finite with observed | ⟨next, tick⟩
+    · exact noResult _ observed
+    · exact noStep _ tick
+  · intro o
+    constructor
+    · rintro ⟨s, finite, observed⟩
+      rcases allStates finite with same | ⟨next, tick⟩
+      · exact Option.some.inj (observed.symm.trans same)
+      · exact (S.terminal _ _ _ observed _ tick).elim
+    · rintro rfl
+      exact ⟨_, ⟨_, rfl, lift path⟩, last⟩
 
 def MIR.Execution : Semantics (MIR lang profile) language.operands.Event :=
   graphExecution MIR.Step (fun mir => entryStateFor mir.logicalView)
@@ -1224,8 +1313,8 @@ private def bindsOwner {O : Exec.Operands} (owner : ConcreteSpec.Var) : Exec.Stm
 
 private def sourceMutable (core : CoreInput language) (fn : FnId) (root : PlaceId) : Bool :=
   let owner : ConcreteSpec.Var := ⟨root.id⟩
-  ((AList.lookup core.payload.ownership owner).any (·.mutable)) &&
-    (AList.lookup core.payload.body.fns fn).any (fun function =>
+  ((AList.lookup core.machineProgram.ownership owner).any (·.mutable)) &&
+    (AList.lookup core.machineProgram.body.fns fn).any (fun function =>
       function.params.any (fun parameter => parameter.1 == owner) || bindsOwner owner function.body)
 
 /-- Retained bindings keep their fresh Core identity as the MIR root number.
@@ -1241,21 +1330,16 @@ def PreservesOwnerMutability (core : CoreInput language) (mir : MIR lang profile
 
 def LowersCore
     (input : Admitted language) (mir : MIR lang profile) : Prop :=
-  mir.project = input.core.project ∧ mir.entry = input.core.payload.entry ∧
-  PreservesOrigins (List.map Prod.snd input.core.payload.origins) mir.origins ∧
+  mir.project = input.core.project ∧ mir.entry = input.core.machineProgram.entry ∧
+  PreservesOrigins (List.map Prod.snd input.core.machineProgram.origins) mir.origins ∧
   ConsumesEvidence input.core input.discharges mir ∧
-  PreservesOwnerMutability input.core mir ∧
+  (PreservesOwnerMutability input.core mir ∧ mir.declarations = input.core.machineProgram.declarations) ∧
   BehaviorRefinement CoreInput.Execution (MIR.Execution (language := language))
     CoreInput.Execution.result (MIR.Execution (language := language)).result input.core mir
 
 def LowersUnchecked
     (input : CoreInput language) (mir : MIR lang profile) : Prop :=
-  mir.project = input.project ∧ mir.entry = input.payload.entry ∧
-  PreservesOrigins (List.map Prod.snd input.payload.origins) mir.origins ∧
-  ConsumesEvidence input [] mir ∧
-  PreservesOwnerMutability input mir ∧
-  BehaviorRefinement CoreInput.Execution (MIR.Execution (language := language))
-    CoreInput.Execution.result (MIR.Execution (language := language)).result input mir
+  input.UncheckedWF ∧ LowersCore (language := language) ⟨input, []⟩ mir
 
 def Memory.RepresentsActivation (memory : Memory lang profile)
     (logical physical : MemoryFrame language.operands.Val) (bytes : Mem.Memory)
@@ -1291,7 +1375,7 @@ def Memory.RepresentsCheckpoint (memory : Memory lang profile)
 def LowersMemory (mir : MIR lang profile) (memory : Memory lang profile) : Prop :=
   memory.project = mir.project ∧ memory.entry = mir.entry ∧
   PreservesOrigins mir.origins memory.origins ∧ LayoutsMatch language.layout memory ∧
-  memory.signatures = mir.signatures ∧ PromotionSound (language := language) mir memory ∧
+  (memory.signatures = mir.signatures ∧ memory.declarations = mir.declarations) ∧ PromotionSound (language := language) mir memory ∧
   memory.TablesWF ∧ mir.logicalView.TablesWF ∧
   let source := MIR.Execution (language := language)
   let target := Memory.Execution (language := language)
@@ -1403,7 +1487,7 @@ private def registerView {T : Type} (project : Project) (entry : FnId)
     (functions : AList FnId (LocalTypes language.operands.Ty ×
       CFG (Sigma (SSAValue language.operands.Ty)) (LocatedOp (SSAInst lang)) T))
     (layouts : AList FnId (AList PlaceId Layout)) (mutableLocals : AList FnId (List PlaceId))
-    (lowerTerm : Nat → T → MemoryTerm lang) :
+    (declarations : Declarations) (lowerTerm : Nat → T → MemoryTerm lang) :
     Memory lang profile :=
   let views := List.map (fun (fn, locals, graph) =>
     let declaredLimit := List.foldl (fun limit (root, _) => max limit (root.id + 1)) 0 locals
@@ -1429,11 +1513,11 @@ private def registerView {T : Type} (project : Project) (entry : FnId)
   let mutableLocals := views.foldl (fun table (_, _, fn, registers) =>
     if registers.isEmpty then table
     else (fn, registers ++ (AList.lookup table fn).getD []) :: AList.erase table fn) mutableLocals
-  ⟨project, entry, signatures, views.map Prod.fst, layouts, views.map (·.2.1), mutableLocals⟩
+  ⟨project, entry, signatures, views.map Prod.fst, layouts, views.map (·.2.1), mutableLocals, declarations⟩
 
 
 def memoryView (bir : BIR lang profile) : Memory lang profile :=
-  registerView bir.project bir.entry bir.signatures bir.functions bir.layouts bir.mutableLocals (terminator bir)
+  registerView bir.project bir.entry bir.signatures bir.functions bir.layouts bir.mutableLocals bir.declarations (terminator bir)
 
 def entryState (bir : BIR lang profile) : MemoryRegisters language profile :=
   entryStateFor (bir.memoryView (language := language))
@@ -1467,7 +1551,7 @@ def LLVMMetadataMatches {Ty : Type} {lang : LoweringLanguage Ty}
   output.dataLayout = profile.llvmDataLayout ∧ output.sites = bir.sites
 
 def SSA.memoryView (ssa : SSA lang profile) : Memory lang profile :=
-  BIR.registerView ssa.project ssa.entry ssa.signatures ssa.functions ssa.layouts ssa.mutableLocals fun base ending =>
+  BIR.registerView ssa.project ssa.entry ssa.signatures ssa.functions ssa.layouts ssa.mutableLocals ssa.declarations fun base ending =>
     match ending with
     | .ret value => .ret (value.map (BIR.operand base))
     | .jump edge => .jump ⟨edge.target, edge.arguments.map (BIR.operand base)⟩
@@ -1483,7 +1567,7 @@ def SSA.Execution : Semantics (SSA lang profile) language.operands.Event :=
 def BuildsSSA
     (memory : Memory lang profile) (ssa : SSA lang profile) : Prop :=
   ssa.project = memory.project ∧ ssa.entry = memory.entry ∧ ssa.layouts = memory.layouts ∧
-  ssa.signatures = memory.signatures ∧ PreservesOrigins memory.origins ssa.origins ∧
+  (ssa.signatures = memory.signatures ∧ ssa.declarations = memory.declarations) ∧ PreservesOrigins memory.origins ssa.origins ∧
   BehaviorRefinement (Memory.Execution (language := language)) (SSA.Execution (language := language))
     (Memory.Execution (language := language)).result (SSA.Execution (language := language)).result memory ssa
 
@@ -1494,7 +1578,7 @@ def BIR.PreservesProgram (ssa : SSA lang profile) (bir : BIR lang profile) : Pro
     (SSA.Execution (language := language)).result (BIR.Execution (language := language)).result ssa bir
 
 def BIR.EntryMatches (ssa : SSA lang profile) (bir : BIR lang profile) : Prop :=
-  bir.entry = ssa.entry ∧
+  bir.entry = ssa.entry ∧ bir.declarations = ssa.declarations ∧
   (ssa.memoryView (language := language)).graphAt ssa.entry =
     (bir.memoryView (language := language)).graphAt bir.entry
 
