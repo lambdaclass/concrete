@@ -98,13 +98,18 @@ private def bridgeControl (filePath : SourcePath) : IO Unit := do
   let .error (.malformed "unexpected character at byte 9") :=
     Lex.lexStream {input with project := malformed, entryFile := ⟨0⟩}
     | throw (IO.userError "scanner failure lost its location or precedence")
-  for prefixText in ["return ident", "return -", "return \"é"] do
-    let prefixBytes := prefixText.toUTF8.data.toList
-    let invalid ← project [filePath] (.ofBytes (prefixBytes ++ [0]))
+  let returnPrefix := "fn main() -> u8 { return "
+  let nulContexts := ["f", "fn ma", "return ident", "return -", "return \"é"] ++
+    ["'a", "/", "0x1", "1u8"].map (returnPrefix ++ ·)
+  let invalidSources := nulContexts.map (fun before => (before, [0], Lex.DecodeReason.nul)) ++
+    [("fn ma", [0xef, 0xbb, 0xbf] ++ "in() -> u8 { return 0; }".toUTF8.data.toList, .bom)]
+  for (before, bytes, reason) in invalidSources do
+    let prefixBytes := before.toUTF8.data.toList
+    let invalid ← project [filePath] (.ofBytes (prefixBytes ++ bytes))
     let .error (.malformed diagnostic) := Lex.lexStream {input with project := invalid, entryFile := ⟨0⟩}
-      | throw (IO.userError "accepted NUL")
-    unless diagnostic.startsWith s!"invalid source at byte {prefixBytes.length}: " do
-      throw (IO.userError s!"wrong NUL offset: {diagnostic}")
+      | throw (IO.userError s!"accepted {repr reason} after {before}")
+    unless diagnostic == s!"invalid source at byte {prefixBytes.length}: {repr reason}" do
+      throw (IO.userError s!"wrong {repr reason} diagnostic after {before}: {diagnostic}")
   let large ← project [filePath] (.ofBytes (" " ++ String.ofList (List.replicate (Lex.integerDigitLimit+1) '9')).toUTF8.data.toList)
   let .error (.digitLimit 1 limit) := Lex.lexStream {input with project := large, entryFile := ⟨0⟩}
     | throw (IO.userError "digit limit became a syntax error")

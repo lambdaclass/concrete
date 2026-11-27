@@ -1,3 +1,4 @@
+import Concrete.Lex
 import ConcreteSpec.Spec.GrammarData
 import ConcreteSpec.Spec.Surface0
 import Std.Data.HashMap
@@ -478,13 +479,16 @@ partial def validateNamedSuffixes (slice : Nat) (previous : Token × Token) (tre
     | _, _ => pure ()
     children.foldlM (validateNamedSuffixes slice) previous
 
-def parseSource (slice : Nat) (g : DraftGrammar) (table : PredictionTable)
-    (source : String) : Option Tree := do
-  let input := draftTokens slice source
+private def parseTokens (g : DraftGrammar) (table : PredictionTable) (splitClosers : Bool)
+    (input : List Token) : Option Tree := do
   let some ([tree], []) :=
-    parseSymbols table (slice >= 9) false ((input.length + 1) * (g.prods.length + 1)) [.n g.start] input
+    parseSymbols table splitClosers false ((input.length + 1) * (g.prods.length + 1)) [.n g.start] input
     | none
   return tree
+
+def parseSource (slice : Nat) (g : DraftGrammar) (table : PredictionTable)
+    (source : String) : Option Tree :=
+  parseTokens g table (slice >= 9) (draftTokens slice source)
 
 private partial def Tree.collectNodes {α : Type}
     (select : String → List Tree → List α) : Tree → List α
@@ -1136,15 +1140,16 @@ private def checkBallotSlices : IO Unit := do
     let fields := line.splitOn "|"
     let some first := fields[1]? | continue
     let some words := fields[2]? | continue
-    let label := ((first.trimAscii.toString.splitOn " ").head!).splitOn "–"
-    let some lo := label.head!.toNat? | continue
-    let some hi := label.getLast!.toNat? | throw (IO.userError "invalid slice range")
+    if first.trimAscii == "---" then continue
+    let some expected := first.trimAscii.toString.toNat?
+      | throw (IO.userError s!"expected one exact first consumer in ballot row: {line}")
     for (name,i) in (words.splitOn "`").zipIdx do
       if i % 2 == 1 then
         let t := ConcreteSpec.Surface0.word name
         let some actual := ConcreteSpec.GrammarData.terminalSlices[t.ctorIdx]?
           | throw (IO.userError s!"missing terminal slice for {name}")
-        unless lo ≤ actual && actual ≤ hi do throw (IO.userError s!"wrong terminal slice for {name}")
+        unless actual == expected do
+          throw (IO.userError s!"{name}: expected slice {expected} from ballot, got {actual}")
         seen := name :: seen
   unless seen.mergeSort == (wordTokens.map Prod.fst).mergeSort do
     throw (IO.userError "ballot first-consumer table differs from the word catalog")
@@ -1155,11 +1160,30 @@ private def checkPositionTags : IO Unit := do
   for (first, names) in primitiveConsumers do
     for name in names do
       let t := ConcreteSpec.Surface0.word name
-      for (lhs, threshold) in [(Nonterminal.localType, first),
-          (.returnType, if t == .u8 then 0 else max 5 first)] do
+      for lhs in [Nonterminal.localType, .returnType] do
         let alternatives := productionIds.filter fun id => id.row.lhs == lhs && id.row.rhs == [.t t]
-        unless alternatives.map (·.row.firstSlice) == [threshold] do
-          throw (IO.userError s!"expected one {lhs.spelling} row for {name} at slice {threshold}")
+        unless alternatives.map (·.row.firstSlice) == [first] do
+          throw (IO.userError s!"expected one {lhs.spelling} row for {name} at slice {first}")
+
+open ConcreteSpec.GrammarData in
+private def checkProvenance : IO Unit := do
+  let decisions ← IO.FS.readFile "docs/decisions.md"
+  let ballot ← IO.FS.readFile "docs/grammar/TOKEN-BALLOT.md"
+  for id in productionIds do
+    let authority := id.row.authority
+    if authority.references.isEmpty then throw (IO.userError s!"missing authority for {repr id}")
+    for ref in authority.references do
+      let found := match ref.splitOn "#" with
+        | ["docs/decisions.md", anchor] => decisions.contains ("<a id=\"" ++ anchor ++ "\">")
+        | ["docs/grammar/TOKEN-BALLOT.md", anchor] =>
+          (ballot.splitOn "\n").any fun line => line.startsWith "## " &&
+            (line.drop 3).toString.toLower.replace " " "-" == anchor
+        | _ => false
+      unless found do throw (IO.userError s!"{repr id}: missing approved decision at {ref}")
+    let pending := id.row.lhs == .returnType && id != .retU8
+    unless authority.pendingDecision.isSome == pending &&
+        authority.pendingDecision.all (·.startsWith "pending decision: ") do
+      throw (IO.userError s!"{repr id}: wrong result-position approval status")
 
 private def checkStringRequirements : IO Unit := do
   unless ConcreteSpec.Surface0.terminalFirstSlice .stringLiteral == 4 &&
@@ -1177,9 +1201,109 @@ private def checkArithmeticAuthority : IO Unit := do
   for id in [ProductionId.times, .divide, .remainder, .minus, .headTimes, .headDivide,
       .headRemainder, .headMinus] do
     let some (.t op) := id.row.rhs.head? | throw (IO.userError s!"missing operator for {repr id}")
-    unless id.row.authority.reference == "docs/grammar/TOKEN-BALLOT.md#other-punctuation-and-boundaries" &&
+    unless id.row.authority.references.contains "docs/grammar/TOKEN-BALLOT.md#other-punctuation-and-boundaries" &&
         numeric.contains ("`" ++ terminalSpelling op ++ "`") do
       throw (IO.userError s!"missing ballot authority for {repr id}")
+
+open ConcreteSpec.GrammarData
+
+/-- Independent boundary expectations for the catalog controls. The exhaustive
+match requires a decision basis for each new production. Result rows use the
+recognition prerequisites documented in their provenance. -/
+private def expectedFirst : ProductionId → Nat
+  | .program | .endDecls | .retU8 | .localU8 | .binding | .retStmt | .endBody
+  | .named | .annotated | .expr | .plus | .endSum | .product | .endProduct
+  | .integer | .name | .group | .endName => 0
+  | .emptyStruct | .localNamed | .callStmt | .wildcard | .destructure | .move | .literal => 1
+  | .retI8 | .retI16 | .retI32 | .retI64 | .retU16 | .retU32 | .retU64
+  | .localI8 | .localI16 | .localI32 | .localI64 | .localU16 | .localU32 | .localU64
+  | .minus | .times | .divide | .remainder | .byte => 2
+  | .retBool | .retUnit | .localBool | .localUnit | .ifStmt | .mutable | .conditional
+  | .otherwise | .endIf | .elseBlock | .elseIf | .trueLit | .falseLit | .headExpr
+  | .headPlus | .headMinus | .headEndSum | .headProduct | .headTimes | .headDivide
+  | .headRemainder | .headEndProduct | .headInteger | .headName | .headGroup
+  | .headMove | .headByte | .headTrueLit | .headFalseLit => 3
+  | .retNamed => 5
+  | .retChar | .localChar | .stringLit | .headStringLit => 11
+
+private def terminalInput : String → String
+  | "IDENT" => "x" | "INTEGER" => "2" | "BYTE" => "'b'" | "STRING" => "\"s\""
+  | "WILDCARD" => "_" | fixed => fixed
+
+private def yieldOf (samples : Std.HashMap String (List String)) (rhs : List (Sym String String)) :
+    Option (List String) := do
+  return (← rhs.mapM fun
+    | .t t => some [terminalInput t]
+    | .n n => samples[n]?).flatten
+
+/-- First find a finite yield for each nonterminal. Then propagate a Program
+prefix and suffix to each reachable nonterminal, filling its siblings with
+those yields. Inserting each alternative in its LHS context gives a complete
+source witness, including for empty and recursive alternatives. -/
+private def programWitnesses (ids : List ProductionId) : IO (List (ProductionId × String)) := do
+  let g := grammar (ids.map ProductionId.render)
+  let mut samples : Std.HashMap String (List String) := {}
+  for _ in [:Nonterminal.count] do
+    let before := samples.size
+    for (lhs, rhs) in g.prods do
+      if !samples.contains lhs then
+        if let some sample := yieldOf samples rhs then samples := samples.insert lhs sample
+    if samples.size == before then break
+  let mut contexts : Std.HashMap String (List String × List String) := {}
+  contexts := contexts.insert g.start ([], [])
+  for _ in [:Nonterminal.count] do
+    let before := contexts.size
+    for (lhs, rhs) in g.prods do
+      let some (left, right) := contexts[lhs]? | continue
+      for (sym, i) in rhs.zipIdx do
+        let .n child := sym | continue
+        if contexts.contains child then continue
+        let some pre := yieldOf samples (rhs.take i) | continue
+        let some post := yieldOf samples (rhs.drop (i+1)) | continue
+        contexts := contexts.insert child (left ++ pre, post ++ right)
+    if contexts.size == before then break
+  (ids.zip g.prods).mapM fun (id, lhs, rhs) => do
+    let some (left, right) := contexts[lhs]? | throw (IO.userError s!"unreachable {repr id}")
+    let some sample := yieldOf samples rhs | throw (IO.userError s!"unproductive {repr id}")
+    return (id, String.intercalate " " (left ++ sample ++ right))
+
+private def Tree.usedRules (tree : Tree) : List Rule :=
+  tree.collectNodes fun name children => [(name, children.map fun
+    | .node n _ => "@" ++ n
+    | .leaf t => t.kind)]
+
+private def checkCatalogBoundaries (targets : List ProductionId) : IO Unit := do
+  let mut checked := []
+  let mut predecessors := 0
+  for first in (targets.map expectedFirst).eraseDups do
+    let expected := productionIds.filter (expectedFirst · ≤ first)
+    let witnesses ← programWitnesses expected
+    let (g, table) ← requireProjection s!"catalog slice {first}" (renderGrammarForSlice first)
+    let previous ← match first with
+      | 0 => pure none
+      | s+1 => some <$> requireProjection s!"catalog slice {s}" (renderGrammarForSlice s)
+    for (id, source) in witnesses do
+      unless expectedFirst id == first && targets.contains id do continue
+      let bytes := source.toUTF8
+      let .ok tokens := Concrete.Lex.lex bytes | throw (IO.userError s!"cannot lex {source}")
+      let input ← tokens.mapM fun t => do
+        let some spelling := String.fromUTF8? (bytes.extract t.span.start t.span.stop)
+          | throw (IO.userError s!"invalid token span in {source}")
+        return ({ kind := terminalSpelling t.value.kind, spelling } : Token)
+      unless (parseTokens g table false input).any (·.usedRules.contains id.render) do
+        throw (IO.userError s!"{repr id} must parse with its own rule at slice {first}: {source}")
+      if let some (prior, priorTable) := previous then
+        if (parseTokens prior priorTable false input).isSome then
+          throw (IO.userError s!"{repr id} admitted at slice {first-1}: {source}")
+        predecessors := predecessors + 1
+      -- An earlier tag can be invisible even in this program when its enclosing
+      -- construct is still unavailable (for instance a tail in an if head).
+      unless id.row.firstSlice == first do
+        throw (IO.userError s!"{repr id}: expected tag {first}, got {id.row.firstSlice}: {source}")
+      checked := id :: checked
+  unless checked.length == targets.length && targets.all checked.contains do
+    throw (IO.userError "catalog boundary coverage is incomplete")
+  IO.println s!"pass: {checked.length} productions parsed at first admission, {predecessors} predecessor refusals"
 
 def main (args : List String) : IO Unit := do
   let path := "docs/grammar/slices-0-11.grammar"
@@ -1204,7 +1328,9 @@ def main (args : List String) : IO Unit := do
     throw (IO.userError "word catalog requires one spelling per fixed terminal")
   checkWordIdentities
   checkBallotSlices
+  checkCatalogBoundaries productionIds
   checkPositionTags
+  checkProvenance
   checkStringRequirements
   checkArithmeticAuthority
   checkDriftControls
