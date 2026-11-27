@@ -37,7 +37,8 @@ def main():
     with tempfile.TemporaryDirectory() as temporary:
         package = Path(temporary)
         shutil.copytree("Concrete", package / "Concrete")
-        for name in ("lakefile.toml", "lake-manifest.json", "lean-toolchain",
+        shutil.copyfile(root / "lean-toolchain", package / "lean-toolchain")
+        for name in ("lakefile.toml", "lake-manifest.json",
                      "Concrete.lean", "ConcreteSpec", "ConcreteSpec.lean",
                      "ConcreteSpecEvidence", "ConcreteSpecEvidence.lean"):
             (package / name).symlink_to(root / name)

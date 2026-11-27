@@ -14,6 +14,11 @@ on:
 permissions:
   contents: read
 
+# Each gate builds this checkout and its pinned dependencies from source.
+env:
+  LAKE_NO_CACHE: 'true'
+  LAKE_ARTIFACT_CACHE: 'false'
+
 concurrency:
   group: ci-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
@@ -65,8 +70,10 @@ jobs:
         # blip from failing (and hiding) the whole run.
         continue-on-error: true
         uses: leanprover/lean-action@v1
-        with:
+        with: &lean_build
           build-args: "--log-level=warning"
+          use-github-cache: 'false'
+          use-mathlib-cache: 'false'
 
       - name: Wait before retrying the Lean install
         if: steps.lean_install.outcome == 'failure'
@@ -75,8 +82,7 @@ jobs:
       - name: Install Lean (via lean-action) (retry)
         if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
-        with:
-          build-args: "--log-level=warning"
+        with: *lean_build
 
       - name: Build the specification, warnings refused
         run: |
@@ -118,8 +124,7 @@ jobs:
         id: lean_install
         continue-on-error: true
         uses: leanprover/lean-action@v1
-        with:
-          build-args: "--log-level=warning"
+        with: *lean_build
 
       - name: Wait before retrying the Lean install
         if: steps.lean_install.outcome == 'failure'
@@ -128,16 +133,30 @@ jobs:
       - name: Install Lean and build the specification (via lean-action) (retry)
         if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
-        with:
-          build-args: "--log-level=warning"
+        with: *lean_build
 
-      - name: Proof axioms (scripts/proofs/axioms.sh)
-        run: bash scripts/proofs/axioms.sh
+      - name: Proof axioms without an elan default (scripts/proofs/axioms.sh)
+        run: |
+          unset ELAN_TOOLCHAIN
+          prefix=$(lean --print-prefix)
+          control=$(mktemp -d "$RUNNER_TEMP/axioms.XXXXXX")
+          trap 'rm -rf "$control"' EXIT
+          export ELAN_HOME="$control/elan"
+          elan toolchain link "$(cat lean-toolchain)" "$prefix"
+          ln -s "$(command -v elan)" "$control/lake"
+          ln -s "$(command -v elan)" "$control/lean"
+          export PATH="$control:$PATH"
+          export TMPDIR="$control"
+          if (cd "$control" && elan which lake) >/dev/null 2>&1; then
+            echo "Expected an unpinned directory to have no toolchain" >&2
+            exit 1
+          fi
+          bash scripts/proofs/axioms.sh
 
   proof-trust-ban:
     name: Proof trust ban (sorry, native_decide)
     runs-on: ${{ ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -152,8 +171,7 @@ jobs:
         id: lean_install
         continue-on-error: true
         uses: leanprover/lean-action@v1
-        with:
-          build-args: "--log-level=warning"
+        with: *lean_build
 
       - name: Wait before retrying the Lean install
         if: steps.lean_install.outcome == 'failure'
@@ -162,8 +180,7 @@ jobs:
       - name: Install Lean and build the specification (via lean-action) (retry)
         if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
-        with:
-          build-args: "--log-level=warning"
+        with: *lean_build
 
       - name: Proof trust ban (sorry, native_decide) (scripts/proofs/trust_ban.sh)
         run: bash scripts/proofs/trust_ban.sh
@@ -186,8 +203,7 @@ jobs:
         id: lean_install
         continue-on-error: true
         uses: leanprover/lean-action@v1
-        with:
-          build-args: "--log-level=warning"
+        with: *lean_build
 
       - name: Wait before retrying the Lean install
         if: steps.lean_install.outcome == 'failure'
@@ -196,8 +212,7 @@ jobs:
       - name: Install Lean and build the specification (via lean-action) (retry)
         if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
-        with:
-          build-args: "--log-level=warning"
+        with: *lean_build
 
       - name: Kernel replay (leanchecker) (scripts/proofs/kernel_replay.sh)
         run: bash scripts/proofs/kernel_replay.sh
@@ -232,8 +247,7 @@ jobs:
         id: lean_install
         continue-on-error: true
         uses: leanprover/lean-action@v1
-        with:
-          build-args: "--log-level=warning"
+        with: *lean_build
 
       - name: Wait before retrying the Lean install
         if: steps.lean_install.outcome == 'failure'
@@ -242,8 +256,7 @@ jobs:
       - name: Install Lean and build the specification (via lean-action) (retry)
         if: steps.lean_install.outcome == 'failure'
         uses: leanprover/lean-action@v1
-        with:
-          build-args: "--log-level=warning"
+        with: *lean_build
 
       - name: External re-check (con-leche, nanoda) (scripts/proofs/external.sh)
         shell: "nix develop .#extcheck --command bash --noprofile --norc -eo pipefail {0}"

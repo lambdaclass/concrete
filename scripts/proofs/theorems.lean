@@ -234,7 +234,13 @@ def rowSafe : Name → Bool
           rows := rows.push s!"{n}\t{" ".intercalate (((← collectAxioms n).map toString).qsort (· < ·)).toList}"
   else if mode == "imported" || mode == "environment" then
     let root := if pkg == `SpecAndEvidence then `ConcreteSpecEvidence else pkg
-    let closure ← if mode == "imported" then importModules #[{ module := root }] {} else pure env
+    let closure ← if mode == "imported" then do
+      -- The dynamic root query uses the same resolved artifacts as the enumerator's header.
+      let arts ← match ← IO.getEnv "PROOF_SETUP" with
+        | some path => pure (← ModuleSetup.load path).importArts
+        | none => pure {}
+      importModules #[{ module := root }] {} (arts := arts)
+    else pure env
     for m in closure.header.moduleNames do
       if m.getRoot == pkg || (pkg == `SpecAndEvidence &&
           (m.getRoot == `ConcreteSpec || m.getRoot == `ConcreteSpecEvidence)) then

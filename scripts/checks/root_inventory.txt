@@ -13,6 +13,7 @@ CHANGELOG.md
 CLAUDE.md
 Concrete
 Concrete.lean
+ConcreteChecks
 ConcreteSpec
 ConcreteSpec.lean
 ConcreteSpecEvidence

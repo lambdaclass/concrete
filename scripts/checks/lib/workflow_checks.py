@@ -92,17 +92,51 @@ def expect_failure(check, diagnostic, *args):
     raise ValueError(f"control unexpectedly accepted {diagnostic}")
 
 
+def check_cache_steps(workflow, *, builds_project=False):
+    for job_id, job in workflow["jobs"].items():
+        for step in job["steps"]:
+            if builds_project:
+                env = workflow.get("env", {}) | job.get("env", {}) | step.get("env", {})
+                if env.get("LAKE_NO_CACHE") != "true" or env.get("LAKE_ARTIFACT_CACHE") != "false":
+                    raise ValueError(f"{job_id}: build Lake packages locally with artifact caching disabled")
+            action = step.get("uses", "").partition("@")[0].lower()
+            inputs = step.get("with", {})
+            if action == "actions/checkout" and inputs.get("clean", "true") != "true":
+                raise ValueError(f"{job_id}: checkout must clean the workspace")
+            if action == "leanprover/lean-action":
+                for option in ("use-github-cache", "use-mathlib-cache"):
+                    if inputs.get(option) != "false":
+                        raise ValueError(f"{job_id}: lean-action requires {option} disabled")
+            if action in {"actions/cache", "actions/cache/restore", "actions/cache/save"}:
+                # A path or glob rooted above .lake can include the entire build.
+                if inputs.get("path") != "~/.cache/concrete-ext":
+                    raise ValueError(f"{job_id}: cache paths must contain only pinned external tools")
+
+
 def check_workflows(names):
     import yaml
 
     for path in sorted(WORKFLOW.parent.iterdir()):
         if path.suffix in {".yml", ".yaml"}:
             # BaseLoader keeps the GitHub trigger key "on" as a string.
-            yaml.load(path.read_text(), Loader=yaml.BaseLoader)
+            parsed = yaml.load(path.read_text(), Loader=yaml.BaseLoader)
+            check_cache_steps(parsed, builds_project=(path == WORKFLOW))
             print(f"  ok   {path}")
 
     workflow = yaml.load(WORKFLOW.read_text(), Loader=yaml.BaseLoader)
     check_inventory(workflow, names)
+
+    retry_cache = copy.deepcopy(workflow)
+    retry = next(step for step in retry_cache["jobs"]["spec"]["steps"]
+                 if step.get("uses", "").startswith("leanprover/lean-action@") and "if" in step)
+    retry["with"] = dict(retry["with"])
+    del retry["with"]["use-github-cache"]  # The action defaults to restoring a previous build.
+    expect_failure(check_cache_steps, "use-github-cache disabled", retry_cache)
+    native_cache = copy.deepcopy(workflow)
+    native_cache["jobs"]["tests"]["steps"].insert(1, {
+        "uses": "actions/cache/restore@v4", "with": {"path": ".lake", "restore-keys": "native-"},
+    })
+    expect_failure(check_cache_steps, "cache paths", native_cache)
 
     extra_leg = copy.deepcopy(workflow)
     extra_leg["jobs"]["inventory-control"] = {
