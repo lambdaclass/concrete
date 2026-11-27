@@ -816,7 +816,7 @@ private theorem refusesFirstBinder {ast : Program} {bindings : List Binding} {bi
   exact illegal lowered.headLegal
 
 private def wildcardParse :=
-  parseBinderExample r#"fn main() -> u8 { let _: u8 = 42; return _; }"#
+  parseBinderExample r#"fn main() -> u8 { let _: u8 = 42; return 1; }"#
 
 private def mainBinderParse :=
   parseBinderExample r#"fn main() -> u8 { let main: u8 = 0; return main; }"#
@@ -825,16 +825,18 @@ private def intrinsicBinderParse :=
   parseBinderExample r#"fn main() -> u8 { let discard: u8 = 42; return discard; }"#
 
 private def builtinTypeBinderParse :=
-  parseBinderExample r#"fn main() -> u8 { let i8: u8 = 42; return i8; }"#
+  parseBinderExample r#"fn main() -> u8 { let Option: u8 = 42; return Option; }"#
 
 private def duplicateBinderParse :=
   parseBinderExample r#"fn main() -> u8 { let x: u8 = 1; let x: u8 = 20 + 22; return x; }"#
 
-example : ∃ ast, wildcardParse = .ok ast ∧
-    Elab.elaborate ast = .error (.unsupported "wildcard binding at byte 22") ∧
-    ∀ core, ¬ Elaborates ast core := by
-  refine ⟨_, rfl, rfl, ?_⟩
-  exact refusesFirstBinder rfl (by decide)
+example : wildcardParse = .error (.unsupported "program uses a form outside the slice-0 fragment") := by rfl
+
+example : parseBinderExample r#"fn main() -> u8 { let i8: u8 = 42; return i8; }"# =
+    .error (.syntaxError "unexpected token at byte 22") := by rfl
+
+example : parseBinderExample r#"fn main() -> u8 { let _: u8 = 42; return _; }"# =
+    .error (.syntaxError "unexpected token at byte 41") := by rfl
 
 example : ∃ ast, mainBinderParse = .ok ast ∧
     Elab.elaborate ast = .error (.checker "binding shadows 'main' at byte 22") ∧
@@ -849,7 +851,7 @@ example : ∃ ast, intrinsicBinderParse = .ok ast ∧
   exact refusesFirstBinder rfl (by decide)
 
 example : ∃ ast, builtinTypeBinderParse = .ok ast ∧
-    Elab.elaborate ast = .error (.checker "binding shadows 'i8' at byte 22") ∧
+    Elab.elaborate ast = .error (.checker "binding shadows 'Option' at byte 22") ∧
     ∀ core, ¬ Elaborates ast core := by
   refine ⟨_, rfl, rfl, ?_⟩
   exact refusesFirstBinder rfl (by decide)
@@ -868,8 +870,8 @@ example : ∃ ast, duplicateBinderParse = .ok ast ∧
   cases Except.ok.inj (shape.symm.trans checked)
   have member : second.name ∈ [first.name] := by rw [firstName, secondName]; exact List.Mem.head _
   cases lowered with
-  | atom _ _ rest => exact rest.headLegal.2.2.2.2 member
-  | operation _ _ _ rest => exact rest.headLegal.2.2.2.2 member
+  | atom _ _ rest => exact rest.headLegal.2.2 member
+  | operation _ _ _ rest => exact rest.headLegal.2.2 member
 
 example :
     ElaboratesBindings [] [⟨"x", bindingSpan, .integer 1 none bindingSpan⟩]

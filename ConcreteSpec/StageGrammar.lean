@@ -391,19 +391,11 @@ def Refuses {count : Nat} (g : SharedGrammar count) (input : ParserView) : Parse
 private def early := slice0
 private def later : Slice := ⟨⟨2, by decide⟩⟩
 
-private def terminals : Array Terminal :=
-  #[.fn, .let_, .return_, .ident, .integer, .reserved, .u8, .lparen, .rparen,
-    .lbrace, .rbrace, .arrow, .colon, .equal, .semi, .plus, .minus, .star,
-    .slash, .percent, .stringLiteral, .byteLiteral, .label, .mut_, .if_,
-    .else_, .struct_, .move_]
-
 private def bootstrapGrammar (production : Production (fun (_ : Fin 1) => SyntaxTree ⊕ Bool)) : SharedGrammar 1 :=
-  { terminalSlices := Array.replicate 28 early
-    terminalSliceCoverage := by intro kind; cases kind <;> decide
-    terminalSliceExact := by
-      have indices : ∀ i : Fin 28, terminals[i.val].ctorIdx = i.val := by decide
-      intro i
-      exact ⟨terminals[i.val], indices i⟩
+  { terminalSlices := Array.replicate Surface0.Terminal.count early
+    terminalSliceCoverage := Surface0.Terminal.index_lt_count
+    terminalSliceExact := fun i =>
+      ⟨Surface0.Terminal.ofNat i.val, Surface0.Terminal.index_ofNat ⟨i.val, i.isLt⟩⟩
     integerSlices := Array.replicate 9 early ++ Array.replicate 27 later
     integerSliceCoverage := by
       intro radix suffix
@@ -519,30 +511,37 @@ structure VerificationInputs {count : Nat} (grammar : SharedGrammar count) where
 private def bootstrapWords : Array UInt64 :=
   returnCells.map fun cell => cell.elim 0 (fun i => UInt64.ofNat (i + 1))
 
-/-- Certify the fixed table by comparing each row word against the canonical
-encoding. The final memory word is scratch, and rejection stops immediately. -/
+/-- With one production every canonical cell encodes either zero or one.
+Initialize both comparison words once, then check each proposed cell. -/
 private def bootstrapVerifier : Array VerifyInstruction :=
   let size := bootstrapWords.size
-  let reject := 2 * size + 1
-  (bootstrapWords.toList.zipIdx.flatMap fun (word, i) =>
-    [VerifyInstruction.constant size word, .ifEqual i size (2 * (i + 1)) reject]).toArray ++
-    #[.halt true, .halt false]
+  let checks := bootstrapWords.mapIdx fun i word =>
+    let expected := if word == 0 then size else size + 1
+    VerifyInstruction.ifEqual i expected (i + 3) (size + 3)
+  #[.constant size 0, .constant (size + 1) 1] ++ checks ++ #[.halt true, .halt false]
 
 private def bootstrapVerification : VerificationInputs (sliceGrammar slice0) where
   program := bootstrapVerifier
-  proposal := bootstrapWords.push 0
+  proposal := (bootstrapWords.push 0).push 0
   engine := ⟨bootstrapTable, 16, ⟨``ParserEngine.run, 1⟩, ⟨``SharedGrammar.required, 1⟩⟩
   spaceBound := of_decide_eq_true (by with_unfolding_all rfl)
   accepted := by with_unfolding_all rfl
   exactTable := by
     intro i
-    let wordAt (j : Fin returnCells.size) : UInt64 :=
-      bootstrapWords[j.val]'(by simp [bootstrapWords])
-    have h : ∀ j : Fin returnCells.size,
-        (bootstrapWords.push 0)[j.val]? = some (wordAt j) ∧
-          returnCells[j.val]? = some (if wordAt j == 0 then none else some ((wordAt j).toNat - 1)) := by
-      exact of_decide_eq_true (by with_unfolding_all rfl)
-    exact ⟨wordAt i, h i⟩
+    have hi : i.val < (sliceGrammar slice0).terminalColumns := by
+      simpa [bootstrapTable, returnCells, Array.set!_eq_setIfInBounds] using i.isLt
+    have entry : returnCells[i.val]? =
+        some (if terminalColumn (some .fn) = i.val then some 0 else none) := by
+      have fits : terminalColumn (some .fn) < (sliceGrammar slice0).terminalColumns := by decide
+      simp only [returnCells, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds,
+        Array.getElem?_replicate, Array.size_replicate, fits, hi, ↓reduceIte, apply_ite some]
+    have within : i.val < bootstrapWords.size := by
+      simpa only [bootstrapWords, Array.size_map] using (show i.val < returnCells.size from i.isLt)
+    have within' : i.val < (bootstrapWords.push 0).size := by simpa using Nat.lt_succ_of_lt within
+    change ∃ word, ((bootstrapWords.push 0).push 0)[i.val]? = some word ∧ returnCells[i.val]? = _
+    rw [Array.getElem?_push, ite_eq_right (Nat.ne_of_lt within'),
+      Array.getElem?_push, ite_eq_right (Nat.ne_of_lt within), bootstrapWords, Array.getElem?_map, entry]
+    split <;> first | exact ⟨1, rfl, rfl⟩ | exact ⟨0, rfl, rfl⟩
 
 def sliceVerifierInputs (slice : Slice) : VerificationInputs (sliceGrammar slice) :=
   bootstrapVerification

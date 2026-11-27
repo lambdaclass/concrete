@@ -160,19 +160,11 @@ private def later : Slice := ⟨2, by decide⟩
 private def production : Production (fun (_ : Fin 1) => SyntaxTree ⊕ Bool) :=
   ⟨0, [.t .integer], early, .constant (.inr true)⟩
 
-private def terminals : Array Terminal :=
-  #[.fn, .let_, .return_, .ident, .integer, .reserved, .u8, .lparen, .rparen,
-    .lbrace, .rbrace, .arrow, .colon, .equal, .semi, .plus, .minus, .star,
-    .slash, .percent, .stringLiteral, .byteLiteral, .label, .mut_, .if_,
-    .else_, .struct_, .move_]
-
 private def grammar : SharedGrammar 1 :=
-  { terminalSlices := Array.replicate 28 early
-    terminalSliceCoverage := by intro kind; cases kind <;> decide
-    terminalSliceExact := by
-      have indices : ∀ i : Fin 28, terminals[i.val].ctorIdx = i.val := by decide
-      intro i
-      exact ⟨terminals[i.val], indices i⟩
+  { terminalSlices := Array.replicate Surface0.Terminal.count early
+    terminalSliceCoverage := Surface0.Terminal.index_lt_count
+    terminalSliceExact := fun i =>
+      ⟨Surface0.Terminal.ofNat i.val, Surface0.Terminal.index_ofNat ⟨i.val, i.isLt⟩⟩
     integerSlices := Array.replicate 9 early ++ Array.replicate 27 later
     integerSliceCoverage := by
       intro radix suffix
@@ -366,7 +358,15 @@ private def tokenStream (radix : Surface0.Radix)
 
 private def testParser (verifier : TableVerifier grammar) (size : proposal.size = verifier.words)
     (accept : (verifier.run proposal).2 = some true) (stepsPerToken : Nat := 4) : Parser grammar :=
-  ⟨table, verifier, proposal, size, accept, by decide, stepsPerToken, rule, rule⟩
+  ⟨table, verifier, proposal, size, accept, by
+    intro i
+    have hi : i.val < grammar.terminalColumns := by
+      simpa [table, cells, Array.set!_eq_setIfInBounds] using i.isLt
+    have fits : terminalColumn (some .integer) < grammar.terminalColumns := by decide
+    change ∃ word, proposal[i.val]? = some word ∧ cells[i.val]? = _
+    simp only [proposal, cells, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds,
+      Array.getElem?_replicate, Array.size_replicate, fits, hi, ↓reduceIte]
+    split <;> first | exact ⟨1, rfl, rfl⟩ | exact ⟨0, rfl, rfl⟩, stepsPerToken, rule, rule⟩
 
 section
 variable (verifier : TableVerifier grammar) (size : proposal.size = verifier.words)
@@ -924,15 +924,14 @@ example (m : LoweringModels testLanguage testLowering testProfile) :
     (r m parser).lexer.Compatible (r m parser).parser := fun _ h => h
 
 -- Extra proposal columns cannot be counted as terminals to inflate the budget.
-example (g : SharedGrammar 1) : g.terminalColumns ≤ 29 := by
+example (g : SharedGrammar 1) : g.terminalColumns ≤ Surface0.Terminal.count + 1 := by
   apply Nat.le_of_not_gt
   intro oversized
-  have room : 28 < g.terminalSlices.size := by
-    change 29 < g.terminalSlices.size + 1 at oversized
+  have room : Surface0.Terminal.count < g.terminalSlices.size := by
+    change Surface0.Terminal.count + 1 < g.terminalSlices.size + 1 at oversized
     omega
-  obtain ⟨kind, index⟩ := g.terminalSliceExact ⟨28, room⟩
-  change kind.ctorIdx = 28 at index
-  cases kind <;> contradiction
+  obtain ⟨kind, index⟩ := g.terminalSliceExact ⟨_, room⟩
+  exact (Nat.ne_of_lt (Surface0.Terminal.index_lt_count kind)) index
 
 -- An accepting callback could hide work. Here even a loop with no changing
 -- memory reaches the limit without producing a verifier verdict.

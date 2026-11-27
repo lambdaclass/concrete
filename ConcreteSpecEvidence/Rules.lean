@@ -112,6 +112,17 @@ theorem reservedRefused : RuleRefused UnreservedLocal "abort" := by
   unfold RuleRefused UnreservedLocal
   decide
 
+theorem builtinTypeRefused : RuleRefused UnreservedLocal "Option" := by
+  unfold RuleRefused UnreservedLocal
+  decide
+
+example : ¬ UnreservedLocal "i8" ∧ ¬ UnreservedLocal "main" ∧ ¬ UnreservedLocal "widen" := by
+  unfold UnreservedLocal
+  decide
+
+example (name : String) : BinderLegal [] name ↔ name ≠ "_" ∧ UnreservedLocal name := by
+  simp [BinderLegal, UnreservedLocal]
+
 theorem namedAccepted : RuleAccepted NamedBinding "x" := by
   unfold RuleAccepted NamedBinding
   decide
@@ -941,6 +952,7 @@ def registeredRuleExamples : List RuleExample :=
    ⟨``Slice0Rules.FreshLocal, ``Slice0Rules.freshRefused⟩,
    ⟨``Slice0Rules.UnreservedLocal, ``Slice0Rules.reservedAccepted⟩,
    ⟨``Slice0Rules.UnreservedLocal, ``Slice0Rules.reservedRefused⟩,
+   ⟨``Slice0Rules.UnreservedLocal, ``Slice0Rules.builtinTypeRefused⟩,
    ⟨``Slice0Rules.NamedBinding, ``Slice0Rules.namedAccepted⟩,
    ⟨``Slice0Rules.NamedBinding, ``Slice0Rules.namedRefused⟩,
    ⟨``Slice0Rules.DecimalLiteral, ``Slice0Rules.radixAccepted⟩,
