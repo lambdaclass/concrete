@@ -50,10 +50,32 @@ if [[ ${CONCRETE_TEST_EMIT_ONLY:-0} != 1 ]]; then
   cmp "$work/artifact-utc/vectors" "$work/artifact-pacific/vectors"
   echo "ok   canonical artifact bytes and SHA-256 goldens in two environments, payload substitutions"
   bash scripts/checks/compiler/f31_census.sh
-  # The kernel checks the full cross-stage controls in this compilation unit.
-  # At two Lean threads this can exceed the standard build budget.
+  # Lake reuses each topic's checked olean. Allow for a cold native runner.
+  stage_controls=(lake build ConcreteChecks.StageInterfaces)
   build stage-interface-controls "$work/stage-interface-controls.log" bounded 360 \
-    lake lean scripts/checks/compiler/stage_interfaces.lean -- -DwarningAsError=true -DautoImplicit=false
+    "${stage_controls[@]}"
+  # Exercise the same library glob and exit status in a disposable Lake package.
+  # Start with a cached success so the plant also checks source invalidation.
+  probe="$work/stage-interface-plant"
+  module=ConcreteChecks/StageInterfaces/Frontend/Planted.lean
+  mkdir -p "$probe/$(dirname "$module")" "$probe/.lake"
+  cp lakefile.toml lake-manifest.json lean-toolchain "$probe/"
+  ln -s "$root/.lake/packages" "$probe/.lake/packages"
+  (
+    cd "$probe"
+    echo 'example : (0 : Nat) = 0 := rfl' >"$module"
+    build stage-interface-plant-baseline "$work/plant-baseline.log" bounded 60 "${stage_controls[@]}"
+    echo 'example : (0 : Nat) = 1 := rfl' >"$module"
+    rc=0
+    bounded 60 "${stage_controls[@]}" >"$work/plant.log" 2>&1 || rc=$?
+    if [[ $rc != 1 ]] || ! has_match -F "$module:1:" <"$work/plant.log" ||
+        ! has_match -F '0 = 1' <"$work/plant.log"; then
+      cat "$work/plant.log" >&2
+      echo "FAIL stage-interface target: expected the planted false equality to fail elaboration" >&2
+      exit 1
+    fi
+  )
+  echo "ok   cached stage-interface target rejects a planted false equality"
   build stage-end-to-end-audit "$work/stage-end-to-end-audit.log" bounded 60 \
     lake lean scripts/checks/compiler/stage_end_to_end_audit.lean -- -DwarningAsError=true -DautoImplicit=false
   missing_import="$work/missing_import.lean"

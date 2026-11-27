@@ -184,8 +184,8 @@ GAP=$(comm -23 "$TMP/compiler-modules.txt" <(sort -u "$TMP/compiler-imported.txt
 
 # lake_options LAKEFILE → empty when the specification library builds from ConcreteSpec.lean and
 # ConcreteSpec/ (Lake's defaults: no srcDir, roots or globs) with warningAsError, and nothing can turn
-# it off. All three libraries use the same key allow-list. The fixed compiler executable is checked
-# separately. The compiler's backend dependency must be a git URL pinned to a full commit and
+# it off. The stage-control library builds every module under its fixed glob. The compiler
+# executable is checked separately. Its backend dependency must be a git URL pinned to a full commit and
 # recorded with the same URL and commit in lake-manifest.json. The specification and evidence
 # import directions are checked in the source scan.
 lake_options() {
@@ -225,6 +225,12 @@ if reqs:
         if not p or p.get("type") != "git" or p.get("url") != r["git"] or p.get("rev") != r["rev"] or p.get("inputRev") != r["rev"]:
             bad.append(f"lake-manifest.json does not record the require {n} at {r['git']} {r['rev']}")
 libs = cfg.get("lean_lib", [])
+controls = "ConcreteChecks.StageInterfaces"
+stage_library = {"name": controls, "globs": [controls + ".+"],
+                 "leanOptions": {"warningAsError": True, "autoImplicit": False}}
+if [l for l in libs if l.get("name") == controls] != [stage_library]:
+    bad.append("the stage-interface controls library configuration differs")
+libs = [l for l in libs if l.get("name") != controls]
 if [l.get("name") for l in libs] != ["ConcreteSpec", "ConcreteSpecEvidence", "Concrete"]: bad.append(f"libraries {[l.get('name') for l in libs]}")
 for l in libs:
     extra = set(l) - {"name", "leanOptions"}

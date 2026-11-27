@@ -1,6 +1,6 @@
 name = "concrete"
 version = "0.2.0"
-defaultTargets = ["ConcreteSpec", "Concrete"]
+defaultTargets = ["ConcreteSpec", "Concrete", "ConcreteChecks.StageInterfaces"]
 
 # The Lean Compiler Backend (LCB), pinned: slice 0's second backend. Its verified source semantics
 # (LeanCompilerBackend.Verified.Source) is imported, never restated; core Lean only, no Mathlib.
@@ -28,6 +28,12 @@ leanOptions = { autoImplicit = false }
 [[lean_lib]]
 name = "Concrete"
 leanOptions = { autoImplicit = false }
+
+# Kernel-checked cross-stage controls. Build every topic, including new ones.
+[[lean_lib]]
+name = "ConcreteChecks.StageInterfaces"
+globs = ["ConcreteChecks.StageInterfaces.+"]
+leanOptions = { warningAsError = true, autoImplicit = false }
 
 [[lean_exe]]
 name = "concrete"

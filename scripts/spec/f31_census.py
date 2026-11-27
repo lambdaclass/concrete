@@ -20,7 +20,7 @@ LEGACY_NAMES = (
 
 def surface_role(path):
     if path in ("Concrete.lean", "ConcreteSpec.lean", "ConcreteSpecEvidence.lean") or path.startswith(
-            ("Concrete/", "ConcreteSpec/", "ConcreteSpecEvidence/")):
+            ("Concrete/", "ConcreteChecks/", "ConcreteSpec/", "ConcreteSpecEvidence/")):
         if path.endswith(".lean"):
             return "module"
     if path.startswith(("scripts/", ".githooks/")):
@@ -143,7 +143,7 @@ def run(args, source):
 
 def generate(root, source, result):
     surface = snapshot(root, source)
-    run(["lake", "build", "Concrete", "ConcreteSpec", "ConcreteSpecEvidence"], source)
+    run(["lake", "build", "Concrete", "ConcreteSpec", "ConcreteSpecEvidence", "ConcreteChecks.StageInterfaces"], source)
     records = []
     exporter = str(source / "scripts/spec/f31_census.lean")
     for row in surface:

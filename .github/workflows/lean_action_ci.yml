@@ -303,6 +303,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install Nix
         uses: cachix/install-nix-action@v31
+      - name: Cache Lake build products for the native tests
+        uses: actions/cache@v4
+        with:
+          path: .lake
+          key: native-tests-${{ matrix.arch }}-${{ hashFiles('lean-toolchain', 'flake.nix', 'flake.lock', 'lakefile.toml', 'lake-manifest.json') }}-${{ hashFiles('*.lean', 'Concrete/**/*.lean', 'ConcreteSpec/**/*.lean', 'ConcreteSpecEvidence/**/*.lean', 'ConcreteChecks/**/*.lean') }}
+          restore-keys: |
+            native-tests-${{ matrix.arch }}-${{ hashFiles('lean-toolchain', 'flake.nix', 'flake.lock', 'lakefile.toml', 'lake-manifest.json') }}-
       - name: Manifest tests (LLVM and LCB, native)
         run: nix develop --command bash scripts/checks/compiler/tests.sh
 
