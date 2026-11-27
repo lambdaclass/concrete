@@ -349,7 +349,7 @@ check_backend_limit() {
     control="$d/cli-wrong-refusal"
     mkdir -p "$control"
     rc=0
-    bounded "$native_secs" "${cli[@]}" build "./$path" -o "$control/lcb" --backend lcb \
+    bounded "$native_secs" "${cli[@]}" build "wrong-extension.txt" -o "$control/lcb" --backend lcb \
       >"$control/lcb.stdout" 2>"$control/lcb.stderr" || rc=$?
     if [ "$rc" = 3 ] && [ ! -s "$control/lcb.stdout" ] && [ ! -e "$control/lcb" ] &&
         has_match -Fx 'USAGE: expected a project-relative .con path' <"$control/lcb.stderr" &&
@@ -485,6 +485,8 @@ fi
 
 if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" != 1 ]; then
   build "concrete driver" "$work/cli-build.log" bounded 1800 lake build concrete
+  bounded 60 python3 -B scripts/checks/compiler/refusal_cli.py
+  echo "ok   CLI refusal causes, revisions and byte spans"
   project_dir="$work/project-control"
   mkdir -p "$project_dir"
   printf 'fn main() -> u8 { return 42; }\n' >"$project_dir/answer.con"
@@ -649,7 +651,7 @@ while IFS=$'\t' read -r name program expect; do
       read -r form status kind _ <<<"$expect"
       case "$form $kind" in
         "pending-refusal syntax") code=SYNTAX ;;
-        "pending-refusal unsupported_form") code=SLICE-0 ;;
+        "pending-refusal unsupported_form"|"refuse non_decimal_literal"|"refuse outside_production") code=SLICE-0 ;;
         *) code=CORE-CHECK ;;
       esac
       check_cli_diagnostic "$name" "$d/cli" "refuse $status $code" "${project_cli[@]}" \

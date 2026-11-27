@@ -75,18 +75,14 @@ private def buildNative (lib dir : System.FilePath) (backend : Option String)
     cleanup
 
 private def report (refusal : Refusal) : IO UInt32 := do
-  let message := if refusal.code == "SYNTAX" then s!"{refusal.code.toLower} error: {refusal.message}" else refusal.message
-  let message := match refusal with
-    | .source cause => s!"{message} [rule {cause.rule.name}@{cause.rule.rev}, file {cause.primary.file.index}, bytes {cause.primary.startOffset}..{cause.primary.endOffset}]"
-    | _ => message
-  match ← (writeOutput "stderr" IO.getStderr s!"{refusal.code}: {message}\n").run with
+  match ← (writeOutput "stderr" IO.getStderr (refusal.render.push '\n')).run with
   | .ok () => return refusal.exitCode
   | .error outputFailure => return outputFailure.exitCode
 
 private def build (source dir : System.FilePath) (backend : Option String) :
     ExceptT Refusal IO Unit := do
-  let loc : BIR.Loc := ⟨source.toString, 1, 1⟩
-  unless loc.wf && source.extension == some "con" do
+  let sourcePath ← liftExcept (Stages.Input.parsePath source.toString)
+  unless source.extension == some "con" do
     throw (.usageError "expected a project-relative .con path")
   let path ← toolIO "resolve source path" (IO.FS.realPath source)
   let root ← toolIO "resolve project root" (IO.FS.realPath ".")
@@ -95,7 +91,7 @@ private def build (source dir : System.FilePath) (backend : Option String) :
   let version ← liftExcept <| (← Driver.Project.checkInvocation (root / "Concrete.toml")).mapError
     Refusal.manifest
   let bytes ← toolIO "read source" (IO.FS.readBinFile path)
-  let input ← liftExcept (Stages.Input.load source.toString bytes)
+  let input ← liftExcept (Stages.Input.ofPath sourcePath bytes)
   let out ← liftExcept (Stages.compile input)
   let executable ← toolIO "resolve compiler installation" (IO.appPath >>= IO.FS.realPath)
   let some installation := executable.parent >>= (·.parent) >>= (·.parent) >>= (·.parent)

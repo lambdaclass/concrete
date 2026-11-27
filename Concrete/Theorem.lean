@@ -665,7 +665,7 @@ theorem unchecked_handoffs_of_run {input : Stages.Input} {bir : BIR.Program}
     split at ran <;> try contradiction
     next ast parsed =>
       split at ran <;> try contradiction
-      next core prepared => exact ⟨core, tokens, ast, lexed, Parse.parseForEntry_ok.mp parsed, prepared⟩
+      next core prepared => exact ⟨core, tokens, ast, Parse.lexForEntry_ok.mp lexed, Parse.parseForEntry_ok.mp parsed, prepared⟩
 
 def UncheckedFrontend (input : Stages.Input) (core : Elab.Output) : Prop :=
   ∃ tokens ast, Lex.lex input.source input.fileId = .ok tokens ∧ Parse.parse input.eof tokens = .ok ast ∧
@@ -848,9 +848,9 @@ example : wildcardParse = .error (.source (.parser .outsideProduction ⟨22, 23,
     cites wildcardParse ⟨``Slice0Rules.AdmittedProduction, 2⟩ = true ∧
     cites wildcardParse ⟨``Slice0Rules.EntryName, 1⟩ = false := ⟨rfl, rfl, rfl⟩
 
--- A later malformed expression takes priority over a syntactically complete wildcard binder.
+-- A malformed expression cannot hide an earlier unsupported binder.
 example : parseBinderExample r#"fn main() -> u8 { let _: u8 = 42; return _; }"# =
-    .error (.source (.parser .unexpectedToken ⟨41, 42, 1, 42, ⟨0⟩⟩)) := rfl
+    .error (.source (.parser .outsideProduction ⟨22, 23, 1, 23, ⟨0⟩⟩)) := rfl
 
 open ConcreteSpec.Core in
 example :
@@ -885,7 +885,7 @@ example : ExactRefusal r"fn main() -> u8 { let _: u8 = 1; abort(); }"
 
 open ConcreteSpec.Core in
 example : ExactRefusal r"fn main() -> u8 { let _: u8 = 1; abort(; }"
-    ⟨``Slice0Rules.Parsed, 1⟩ ⟨39, 40, 1, 40, ⟨0⟩⟩ := by
+    ⟨``Slice0Rules.AdmittedProduction, 2⟩ ⟨22, 23, 1, 23, ⟨0⟩⟩ := by
   with_unfolding_all exact ⟨_, rfl, rfl, Refusal.source_diagnosticAt_iff _⟩
 
 open ConcreteSpec.Core in
@@ -932,6 +932,37 @@ open ConcreteSpec.Core in
 example : ExactRefusal r"fn main() -> u8 { return 256 + (255 + 1); }"
     ⟨``Slice0Rules.LiteralTyped, 1⟩ ⟨25, 28, 1, 26, ⟨0⟩⟩ := by
   with_unfolding_all exact ⟨_, rfl, rfl, Refusal.source_diagnosticAt_iff _⟩
+
+/-- Pin transport through both compiler entries and the parser entry that owns
+the boundary between lexical and syntactic recognition. -/
+private def bothEntriesRefuse (text : String) (cause : ConcreteSpec.StageInterface.RefusalCause)
+    (rule : ConcreteSpec.Core.RuleId) : Prop :=
+  let bytes := text.toUTF8
+  let parsed := (Parse.lexForEntry .admission bytes ⟨0⟩).bind (Parse.parseForDriver (Parse.eofSpan bytes))
+  parsed = .error (.source cause) ∧
+    ((Stages.Input.load "main.con" bytes).bind Stages.compile) = .error (.source cause) ∧
+    ((Stages.Input.load "main.con" bytes).bind Stages.unchecked) = .error (.source cause) ∧
+    cause.rule = rule
+
+open ConcreteSpec.Core in
+example : bothEntriesRefuse r"fn main() -> u8 { return ; @ }"
+    (.parser .unexpectedToken ⟨25, 26, 1, 26, ⟨0⟩⟩) ⟨``Slice0Rules.Parsed, 1⟩ := by
+  with_unfolding_all exact ⟨rfl, rfl, rfl, rfl⟩
+
+open ConcreteSpec.Core in
+example : bothEntriesRefuse r"fn main() -> u8 { let Option: u8 = 0; return ; }"
+    (.surface (.reservedBinder "Option" ⟨22, 28, 1, 23, ⟨0⟩⟩)) ⟨``Slice0Rules.UnreservedLocal, 2⟩ := by
+  with_unfolding_all exact ⟨rfl, rfl, rfl, rfl⟩
+
+open ConcreteSpec.Core in
+example : bothEntriesRefuse r"fn main() -> u8 { let x: u8 = 1; let x {} = x; return 0; }"
+    (.parser .outsideProduction ⟨39, 40, 1, 40, ⟨0⟩⟩) ⟨``Slice0Rules.AdmittedProduction, 2⟩ := by
+  with_unfolding_all exact ⟨rfl, rfl, rfl, rfl⟩
+
+open ConcreteSpec.Core in
+example : bothEntriesRefuse r"fn main() -> u8 { let Option {} = 1; return 0; }"
+    (.parser .outsideProduction ⟨29, 30, 1, 30, ⟨0⟩⟩) ⟨``Slice0Rules.AdmittedProduction, 2⟩ := by
+  with_unfolding_all exact ⟨rfl, rfl, rfl, rfl⟩
 
 -- Unchecked arithmetic can continue through this prefix to the later call.
 example :

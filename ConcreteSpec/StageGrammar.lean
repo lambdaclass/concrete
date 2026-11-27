@@ -1,4 +1,4 @@
-import ConcreteSpec.StageInterface
+import ConcreteSpec.SurfacePrefix
 
 namespace ConcreteSpec.StageGrammar
 
@@ -70,6 +70,10 @@ structure SharedGrammar (count : Nat) where
   extraAst : Type
   startShape : value start = SurfaceAST (fun _ => extraAst) slice0
   productions : Array (Production value)
+  /-- The source language owns the judgment on a recognized prefix. Small
+  standalone grammars with only grammatical constraints use the cursor cause. -/
+  diagnose : SurfacePreparation.Purpose → ParserView → FileSpan → RefusalCause → Nat × RefusalCause :=
+    fun _ _ _ cause => (0, cause)
 
 def SharedGrammar.grammar {count : Nat} (g : SharedGrammar count) : Grammar Terminal (Fin count) :=
   ⟨g.start, g.productions.toList.map fun p => (p.lhs, p.rhs)⟩
@@ -348,24 +352,46 @@ structure ParserEngine {count : Nat} (g : SharedGrammar count) where
   table : CheckedTable g
   stepsPerToken : Nat
 
-def ParserEngine.run {count : Nat} {g : SharedGrammar count} (parser : ParserEngine g) (input : ParserView) :
+private def ParserEngine.recognize {count : Nat} {g : SharedGrammar count} (parser : ParserEngine g) (input : ParserView) (eof : FileSpan) :
     Nat × Option (Except ParseRefusal (Parsed (g.value g.start))) := Id.run do
+  let (c, value) := parseSymbol parser.table input.tokens g.start
+    ⟨0, slice0, eof, input.source.slice, none, 0⟩ (parser.stepsPerToken * (input.tokens.size + 1))
+  let token := input.tokens[c.offset]?
+  let span := (token.map Located.span).getD eof
+  match value with
+  | .error .exhausted => return (c.steps + 1, none)
+  | .error .malformed =>
+    let issue : ParserIssue := if token.isSome then .unexpectedToken else .unexpectedEnd
+    return (c.steps + 1, some (.error (.malformed (c.firstViolation.getD (.parser issue span.surface)))))
+  | .ok ast =>
+    if c.offset != input.tokens.size then
+      return (c.steps + 1, some (.error (.malformed (c.firstViolation.getD (.parser .trailingTokens span.surface)))))
+    if let some cause := c.firstViolation then
+      return (c.steps + 1, some (.error (.unsupported cause c.required)))
+    return (c.steps + 1, some (.ok ⟨input.source, ast⟩))
+
+private def ParseRefusal.diagnose {count} (g : SharedGrammar count) (input : ParserView)
+    (eof : FileSpan) (purpose : SurfacePreparation.Purpose) : ParseRefusal → Nat × ParseRefusal
+  | .unsupported cause required =>
+    let (work, first) := g.diagnose purpose input eof cause
+    (work, .unsupported first required)
+  | .malformed cause =>
+    let (work, first) := g.diagnose purpose input eof cause
+    (work, .malformed first)
+  | .invalidStream span => (0, .invalidStream span)
+
+def ParserEngine.run {count : Nat} {g : SharedGrammar count} (parser : ParserEngine g) (input : ParserView)
+    (purpose : SurfacePreparation.Purpose := .admission) :
+    Nat × Option (Except ParseRefusal (Parsed (g.value g.start))) :=
   match input.validateCoordinates with
-  | .error span => return (1, some (.error (.invalidStream span)))
+  | .error span => (1, some (.error (.invalidStream span)))
   | .ok eof =>
-    let (c, value) := parseSymbol parser.table input.tokens g.start
-      ⟨0, slice0, eof, input.source.slice, none, 0⟩ (parser.stepsPerToken * (input.tokens.size + 1))
-    let token := input.tokens[c.offset]?
-    let span := (token.map Located.span).getD eof
-    match value with
-    | .error .exhausted => return (c.steps + 1, none)
-    | .error .malformed => return (c.steps + 1, some (.error (.malformed (.parser (if token.isSome then .unexpectedToken else .unexpectedEnd) span.surface))))
-    | .ok ast =>
-      if c.offset != input.tokens.size then
-        return (c.steps + 1, some (.error (.malformed (.parser .trailingTokens span.surface))))
-      if let some cause := c.firstViolation then
-        return (c.steps + 1, some (.error (.unsupported cause c.required)))
-      return (c.steps + 1, some (.ok ⟨input.source, ast⟩))
+    let (steps, result) := parser.recognize input eof
+    match result with
+    | some (.error raw) =>
+      let (work, refusal) := ParseRefusal.diagnose g input eof purpose raw
+      (steps + work, some (.error refusal))
+    | other => (steps, other)
 
 def ParsesWith {count : Nat} {g : SharedGrammar count} (parser : ParserEngine g) (input : ParserView)
     (output : Parsed (g.value g.start)) : Prop :=
@@ -383,15 +409,44 @@ def Parser.run {count : Nat} {g : SharedGrammar count} (parser : Parser g) :=
 def Parses {count : Nat} {g : SharedGrammar count} (parser : Parser g) :=
   ParsesWith parser.engine
 
-def Refuses {count : Nat} (g : SharedGrammar count) (input : ParserView) : ParseRefusal → Prop
+/-- Grammar recognition establishes the least required slice or malformation.
+The language judgment independently fixes the reported cause and location. -/
+def Refuses {count : Nat} {g : SharedGrammar count} (parser : ParserEngine g)
+    (input : ParserView) (failure : ParseRefusal) (purpose : SurfacePreparation.Purpose := .admission) : Prop :=
+  let diagnosed := ∃ eof raw, input.validateCoordinates = .ok eof ∧
+    (parser.recognize input eof).2 = some (.error raw) ∧
+    failure = (ParseRefusal.diagnose g input eof purpose raw).2
+  match failure with
   | .invalidStream span => input.invalidSpan = some span
-  | .unsupported _ required =>
+  | .unsupported _ required => diagnosed ∧
     input.source.slice.val < required.val ∧
     (∃ tree steps, Derives g required g.start input.tokens.toList tree steps) ∧
     ∀ earlier, earlier.val < required.val →
       ¬ ∃ tree steps, Derives g earlier g.start input.tokens.toList tree steps
-  | .malformed _ =>
+  | .malformed _ => diagnosed ∧
     ¬ ∃ tree required steps, Derives g required g.start input.tokens.toList tree steps
+
+theorem Refuses.unsupported_run {count : Nat} {g : SharedGrammar count} {parser : ParserEngine g}
+    {input : ParserView} {cause required purpose}
+    (h : Refuses parser input (.unsupported cause required) purpose) :
+    (parser.run input purpose).2 = some (.error (.unsupported cause required)) := by
+  obtain ⟨⟨eof, raw, coords, recognized, reported⟩, _⟩ := h
+  simp only [ParserEngine.run, coords, recognized, ← reported]
+
+private def SurfaceToken.toSurface (t : SurfaceToken) : Surface0.Token :=
+  let value : Surface0.TokenValue := match t.value with
+    | .fixed kind proof => .fixed kind (by constructor <;> intro h <;> subst kind <;> cases proof)
+    | .name name => .name name
+    | .integer n radix suffix => .integer n radix suffix
+    | .stringLiteral _ => .fixed .stringLiteral
+    | .byteLiteral _ => .fixed .byteLiteral
+    | .label _ => .fixed .label
+  ⟨value, t.span.surface⟩
+
+private def surfaceDiagnosis (purpose : SurfacePreparation.Purpose) (input : ParserView) (eof : FileSpan) (boundary : RefusalCause) : Nat × RefusalCause :=
+  if input.source.slice = slice0 then
+    SurfacePrefix.diagnoseCounted eof.surface (input.tokens.toList.map SurfaceToken.toSurface) purpose (.parser .unexpectedEnd eof.surface) boundary
+  else (0, boundary)
 
 private def early := slice0
 private def later : Slice := ⟨⟨2, by decide⟩⟩
@@ -415,7 +470,8 @@ private def bootstrapGrammar (production : Production (fun (_ : Fin 1) => Syntax
     value := fun _ => SyntaxTree ⊕ Bool
     extraAst := Bool
     startShape := rfl
-    productions := #[production] }
+    productions := #[production]
+    diagnose := surfaceDiagnosis }
 
 private def returnRhs : List (Sym Terminal (Fin 1)) :=
   [.t .fn, .t .ident, .t .lparen, .t .rparen, .t .arrow, .t .u8,
@@ -528,7 +584,8 @@ private def bootstrapVerifier : Array VerifyInstruction :=
 private def bootstrapVerification : VerificationInputs (sliceGrammar slice0) where
   program := bootstrapVerifier
   proposal := (bootstrapWords.push 0).push 0
-  engine := ⟨bootstrapTable, 16⟩
+  -- Include both the typed constructor actions and the shared prefix machine on refusal.
+  engine := ⟨bootstrapTable, 64⟩
   spaceBound := of_decide_eq_true (by with_unfolding_all rfl)
   accepted := by with_unfolding_all rfl
   exactTable := by

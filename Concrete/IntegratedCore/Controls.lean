@@ -24,6 +24,24 @@ private def returnTokens : ParserView :=
     token 25 27 (.integer 42 .decimal none), token 27 28 (.fixed .semi rfl),
     token 29 30 (.fixed .rbrace rfl)]⟩
 
+private def declarationFailure (names : List (ConcreteSpec.Name × ConcreteSpec.Surface0.Span)) :
+    Option (RuleId × FileSpan) := do
+  let view := AdmissionView.one ⟨names, [], .abort, ⟨40, 48, 1, 41, ⟨0⟩⟩⟩
+  let .error refusal := ConcreteSpec.checkProgram view.program | none
+  let cause ← view.render refusal
+  return (cause.rule, cause.primary)
+
+-- The check owns the declaration index. The second T is the first duplicate,
+-- and a reserved name earlier in the sequence takes precedence over both Ts.
+example :
+    let name := fun (n : String) (a b : Nat) =>
+      ((⟨n⟩, ⟨a, b, 1, a + 1, ⟨0⟩⟩) : ConcreteSpec.Name × ConcreteSpec.Surface0.Span)
+    let rule : RuleId := ⟨``ConcreteSpec.ProgramPermitted, 1⟩
+    declarationFailure [name "main" 7 11, name "T" 20 21, name "T" 31 32] =
+      some (rule, ⟨⟨0⟩, 7, 11, 1, 8⟩) ∧
+    declarationFailure [name "A" 7 8, name "T" 20 21, name "T" 31 32] =
+      some (rule, ⟨⟨0⟩, 31, 32, 1, 32⟩) := ⟨rfl, rfl⟩
+
 private def expected : CoreInput (sliceLanguage slice0) :=
   ⟨source.project, slice0, .straightLine (.zero ⟨[], .lit 42, ⟨18, 28, 1, 19, ⟨0⟩⟩, ⟨25, 27, 1, 26, ⟨0⟩⟩⟩) rfl⟩
 
@@ -111,7 +129,7 @@ private def profile : Profile := ⟨.lcb, .x86_64Linux, 3, 4096⟩
 
 -- Keep the real elaborator and checker, and the shared static traversal.
 private def fragmentPasses (slice : Slice) : Passes slice profile where
-  lex input := .error (.missingFile input.entryFile)
+  lex _ input := .error (.missingFile input.entryFile)
   elaborate := elaborate slice
   checkCore := ConcreteSpec.Admission.checkInput
   lowerCore _ := .error (.invalidInput ⟨``elaborate, 1⟩)

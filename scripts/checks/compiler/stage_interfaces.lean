@@ -324,7 +324,7 @@ private def unsafeDischarges : Discharges testLanguage := [(testSite, [unsafeDis
 
 private def testPasses {profile : Profile} (checks : List OperationCheck) :
     PassFunctions grammar testLanguage testLowering profile where
-  lex _ := .error (.source (.lexical .integer span.surface))
+  lex _ _ := .error (.source (.lexical (.integer .leadingZero) span.surface))
   elaborate _ := .error (.source (.parser .unexpectedToken span.surface))
   checkCore _ := .ok unsafeDischarges
   lowerCore input := .ok (testMIR input.core.project checks)
@@ -400,7 +400,7 @@ private def spacedStream : TokenStream :=
 example :
     let dropped := {spacedStream with trivia := #[#[], #[]]}
     let mutant := ({testPasses (profile := testProfile) [] with
-      lex := fun _ => .ok dropped}).lexer
+      lex := fun _ _ => .ok dropped}).lexer
     dropped.parserView = spacedStream.parserView ∧
     mutant.success spacedStream.source spacedStream ∧
     ¬ mutant.Validated := by
@@ -419,7 +419,7 @@ example :
     let wrong := {spacedStream with tokens :=
       #[⟨⟨{span with endOffset := 2}, .integer 43 .decimal none⟩, "42".toUTF8⟩]}
     let mutant := ({testPasses (profile := testProfile) [] with
-      lex := fun _ => .ok wrong}).lexer
+      lex := fun _ _ => .ok wrong}).lexer
     reconstruct wrong.source.entryFile wrong.tokens wrong.trivia =
       reconstruct spacedStream.source.entryFile spacedStream.tokens spacedStream.trivia ∧
     wrong.parserView.WF ∧ ¬ mutant.Validated := by
@@ -463,7 +463,7 @@ example (m : LoweringModels testLanguage testLowering testProfile) :
 
 example (m : LoweringModels testLanguage testLowering testProfile) :
     (r m parser).parser.refusal (tokenStream .hexadecimal) (.unsupported (.parser .nonDecimal span.surface) later) := by
-  refine ⟨rfl, ⟨by change 0 < 2; decide, ⟨.inr true, 3, Derives.apply (g := grammar) production _ _
+  refine ⟨rfl, ⟨⟨_, _, rfl, rfl, rfl⟩, by change 0 < 2; decide, ⟨.inr true, 3, Derives.apply (g := grammar) production _ _
     (List.mem_cons_self ..) (by decide) (.token rfl (by change 2 ≤ 2; decide) .nil)⟩, ?_⟩, by change 5 ≤ 8; decide⟩
   intro earlier tooEarly
   rintro ⟨tree, steps, derives⟩
@@ -610,9 +610,7 @@ private def returnView (n : Nat := 42) : ParserView :=
     tok 16 17 (.fixed .lbrace rfl), tok 18 24 (.fixed .return_ rfl), tok 25 stop (.integer n .decimal none),
     tok stop (stop + 1) (.fixed .semi rfl), tok (stop + 2) (stop + 3) (.fixed .rbrace rfl)]⟩
 
-private def returnStream (n : Nat := 42) : TokenStream :=
-  let view := returnView n
-  let bytes := (literalSourceText n).toUTF8
+private def retainView (view : ParserView) (bytes : ByteArray) : TokenStream :=
   let tokens := view.tokens.map fun decoded =>
     (⟨decoded, bytes.extract decoded.span.startOffset decoded.span.endOffset⟩ : RetainedToken)
   let trivia := view.tokens.toList.zipIdx.map fun (token, i) =>
@@ -622,6 +620,53 @@ private def returnStream (n : Nat := 42) : TokenStream :=
     if start = stop then #[] else
       #[⟨⟨⟨0⟩, start, stop, 1, start + 1⟩, bytes.extract start stop⟩]
   ⟨view.source, tokens, trivia.toArray.push #[]⟩
+
+private def returnStream (n : Nat := 42) : TokenStream :=
+  retainView (returnView n) (literalSourceText n).toUTF8
+
+-- The registered lexer diagnoses the same retained prefix in each mode.
+-- Checked arithmetic fails at the addition. Runtime arithmetic reaches the
+-- scanner's own boundary after the completed binding.
+example :
+    let bytes := r"fn main() -> u8 { let x: u8 = 255 + 1; @ }".toUTF8
+    let source : Source := ⟨Project.singleton mainSourcePath (SourceText.ofBytes bytes.data.toList), ⟨0⟩, early⟩
+    let overflow := RefusalCause.core .slice0 ⟨⟨0⟩, 34, 35, 1, 35⟩ [] (.atPosition 0 .additionOverflowUnproven)
+    let invalid := RefusalCause.lexical .character ⟨39, 40, 1, 40, ⟨0⟩⟩
+    LexRefuses .admission source (.source overflow) ∧ overflow.rule = ⟨``Slice0Rules.AdditionFits, 1⟩ ∧
+      LexRefuses .eligibility source (.source invalid) ∧ invalid.rule = ⟨``Slice0Rules.Lexed, 2⟩ := by
+  with_unfolding_all exact ⟨rfl, rfl, rfl, rfl⟩
+
+private def mixedSource := r"fn oops() -> u8 { return 0xff; }"
+
+private def mixedStream : TokenStream :=
+  let bytes := mixedSource.toUTF8
+  let source : Source := ⟨Project.singleton mainSourcePath (SourceText.ofBytes bytes.data.toList), ⟨0⟩, early⟩
+  let tokens := (returnView 1234).tokens.modify 1 (fun t => {t with value := .name "oops"})
+    |>.modify 8 fun t => {t with value := .integer 255 .hexadecimal none}
+  retainView ⟨source, tokens⟩ bytes
+
+-- Both the real retained stream and the driver's token projection see the same
+-- entry name before the non-decimal literal. The declarative predicate excludes
+-- the later literal even though it determines the required grammar slice.
+set_option maxRecDepth 8192 in
+example :
+    let engine := sliceParser slice0
+    let cause := RefusalCause.surface (.unexpectedEntry ⟨3, 7, 1, 4, ⟨0⟩⟩)
+    let wrong := RefusalCause.parser .nonDecimal ⟨25, 29, 1, 26, ⟨0⟩⟩
+    Lexes mixedStream.source mixedStream ∧
+      (parserEntry engine).run mixedStream = .error (.unsupported cause later) ∧
+      cause.rule = ⟨``Slice0Rules.EntryName, 1⟩ ∧
+      ¬ Refuses engine mixedStream.parserView (.unsupported wrong later) := by
+  have ran : ((sliceParser slice0).run mixedStream.parserView).2 = some (.error
+      (.unsupported (.surface (.unexpectedEntry ⟨3, 7, 1, 4, ⟨0⟩⟩)) later)) := by with_unfolding_all rfl
+  refine ⟨⟨rfl, ?_, _, rfl, mixedSource.toUTF8, ?_, rfl, _, rfl, ?_⟩, ?_, rfl, ?_⟩
+  · with_unfolding_all rfl
+  · with_unfolding_all rfl
+  · with_unfolding_all rfl
+  · simp only [parserEntry, ran]
+  · intro wrong
+    have eq := Except.error.inj (Option.some.inj (wrong.unsupported_run.symm.trans ran))
+    cases eq
 
 -- The verifier accepts the fixed proposal and rejects a changed prediction row.
 set_option maxRecDepth 4096 in
@@ -635,7 +680,7 @@ example :
 
 private def returnPasses (elaborate : Parsed (SyntaxTree ⊕ Bool) → Except ElabRefusal (AdmissionInput earlyFixtureLanguage)) :
     Passes slice0 testProfile where
-  lex _ := .ok returnStream
+  lex _ _ := .ok returnStream
   elaborate := elaborate
   checkCore := ConcreteSpec.Admission.checkInput
   lowerCore _ := .error (.invalidInput rule)
@@ -690,7 +735,8 @@ example :
   dsimp only
   let failure : ParseRefusal := .malformed (.parser .unexpectedEnd ⟨30, 30, 1, 31, ⟨0⟩⟩)
   refine ⟨⟨by with_unfolding_all rfl, rfl⟩, failure, by with_unfolding_all rfl,
-    by with_unfolding_all rfl, ?_, by with_unfolding_all decide⟩
+    by with_unfolding_all rfl, ⟨?_, ?_⟩, by with_unfolding_all decide⟩
+  · exact ⟨_, _, by with_unfolding_all rfl, by with_unfolding_all rfl, by with_unfolding_all rfl⟩
   rintro ⟨tree, slice, steps, derives⟩
   have first (p : Production (sliceGrammar slice0).value)
       (member : p ∈ (sliceGrammar slice0).productions.toList) :
@@ -747,7 +793,7 @@ set_option maxRecDepth 4096 in
 example :
     let failure : StageFailure := .admission (.refused (.core .slice0 ⟨⟨0⟩, 25, 28, 1, 26⟩ []
       (.atPosition 0 (.literalOutOfRange .u8 256))))
-    let passes := {returnPasses fixtureElaborate with lex := fun _ => .ok (returnStream 256)}
+    let passes := {returnPasses fixtureElaborate with lex := fun _ _ => .ok (returnStream 256)}
     ((registry passes).lcbPipeline true).run (literalSource 256) = .error ⟨StageFailure, failure⟩ := by
   with_unfolding_all rfl
 
@@ -789,8 +835,8 @@ private theorem returnLexerContract :
   all_goals with_unfolding_all rfl
 
 set_option maxRecDepth 4096 in
-private theorem returnParserContract :
-    (registry (returnPasses fixtureElaborate)).parser.success returnStream parsedReturn := by
+private theorem returnParserContract (purpose : SurfacePreparation.Purpose) :
+    ((registry (returnPasses fixtureElaborate)).parser purpose).success returnStream parsedReturn := by
   let g := sliceGrammar slice0
   let p := g.productions[0]'(by with_unfolding_all decide)
   let ts := returnView.tokens
@@ -800,7 +846,7 @@ private theorem returnParserContract :
       ts[8]'(by decide), ts[9]'(by decide), ts[10]'(by decide), ()⟩
   let steps := 11 + 1 + (p.action.eval args).1
   refine ⟨by with_unfolding_all rfl, ⟨rfl, steps, ?_, ?_, by with_unfolding_all decide,
-    returnLexerContract.2.1⟩, by with_unfolding_all decide⟩
+    returnLexerContract.2.1⟩, by with_unfolding_all exact of_decide_eq_true rfl⟩
   · with_unfolding_all
       exact Derives.apply p ts.toList args (List.mem_singleton_self _) (by decide)
         (.token rfl (by decide) (.token rfl (by decide) (.token rfl (by decide)
@@ -2990,7 +3036,7 @@ example (unchecked : Bool) :
     ⟨literalBIRContract.2.1, by decide, .cons nofun .nil, List.mem_singleton_self _, nofun, by with_unfolding_all exact literalTables⟩
   have ready : Source.WF elaborationSource ∧ elaborationSource.slice = slice0 := ⟨parsedReturnDomain.1, rfl⟩
   have front := returnLexerContract
-  have parse := returnParserContract
+  have parse := returnParserContract (if unchecked then .eligibility else .admission)
   have lowerCore : LowersCore (language := earlyFixtureLanguage) ⟨literalCore, []⟩ literalMIR := literalUnchecked.2
   have back :
       ∃ bir, Concrete.Contracts.Graph (registry literalReturnPasses).buildBIR.run literalSSA bir ∧

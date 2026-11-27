@@ -1,5 +1,5 @@
 import ConcreteSpec.Spec.Slice0Layout
-import Concrete.Refusal
+import Concrete.Stages
 
 open Concrete ConcreteSpec.Core
 open ConcreteSpec.Project
@@ -74,3 +74,15 @@ example : storageFacts smallProfile .u32 = some (4, 2, .big) := rfl
 example : query smallProfile (.integer .u64) = none := rfl
 example : query smallProfile .logical = some .logical := rfl
 example : (query smallProfile .logical).map Layout.byteSize = some 0 := rfl
+
+-- The location belongs to the original path bytes, including an empty boundary.
+private def pathWitness (path : String) (rule : RuleId) : Option (Nat × Nat × Bool) := do
+  let .error (failure@(.path r)) := Concrete.Stages.Input.parsePath path | none
+  let loc := r.violation.location
+  return (loc.offset, loc.stop, (failure.diagnosticAt rule).isSome)
+
+example : pathWitness "a b.con" ⟨``SourcePath.NoSpaces, 1⟩ = some (1, 7, true) ∧
+    pathWitness "a b.con" ⟨``SourcePath.NoReservedStem, 1⟩ = some (1, 7, false) ∧
+    pathWitness "con.con" ⟨``SourcePath.NoReservedStem, 1⟩ = some (0, 7, true) ∧
+    pathWitness "" ⟨``SourcePath.Nonempty, 1⟩ = some (0, 0, true) := by
+  with_unfolding_all exact ⟨rfl, rfl, rfl, rfl⟩

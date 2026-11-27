@@ -1,5 +1,5 @@
 import Concrete.Interfaces.Carriers
-import Concrete.Lex
+import Concrete.Parse
 import Concrete.Interfaces.Behavior
 import Concrete.Backend.Observation
 import Concrete.Interfaces.SurfaceElaboration
@@ -107,14 +107,17 @@ def Lexes (source : Source) (stream : TokenStream) : Prop :=
       ∃ reference, Concrete.Lex.lexLossless bytes source.entryFile = .ok reference ∧
         reference.pieces.mapM referencePiece = some (retainedPieces stream)
 
-def LexRefuses (source : Source) (failure : LexRefusal) : Prop :=
+def LexRefuses (purpose : SurfacePreparation.Purpose) (source : Source) (failure : LexRefusal) : Prop :=
   match source.project.fileAt source.entryFile with
   | none => failure = .missingFile source.entryFile
   | some file =>
     let bytes : ByteArray := ⟨file.source.toBytes.toArray⟩
     match failure with
     | .missingFile _ => False
-    | .source cause => Concrete.Lex.lexLossless bytes source.entryFile = .error (.source cause)
+    | .source cause =>
+      if source.slice = slice0 then
+        Concrete.Parse.lexForEntry purpose bytes source.entryFile = .error (.source cause)
+      else Concrete.Lex.lexLossless bytes source.entryFile = .error (.source cause)
 
 /-- Each slice contributes a repository rule over that member of the AST and Core
 families. Slice 0 uses the canonical injections of the shared carriers. -/

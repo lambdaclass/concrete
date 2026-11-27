@@ -14,7 +14,7 @@ variable {count : Nat} {grammar : SharedGrammar count} {language : CoreLanguage}
 The registry below builds its graphs from these values. -/
 structure PassFunctions {count : Nat} (grammar : SharedGrammar count) (language : CoreLanguage)
     (lang : LoweringLanguage language.operands.Ty) (profile : Profile) where
-  lex : Source → Except LexRefusal TokenStream
+  lex : SurfacePreparation.Purpose → Source → Except LexRefusal TokenStream
   elaborate : Parsed (grammar.value grammar.start) → Except ElabRefusal (AdmissionInput language)
   checkCore : CoreInput language → Except AdmissionFailure (Discharges language)
   lowerCore : Admitted language → Except StageFailure (MIR lang profile)
@@ -28,17 +28,18 @@ structure PassFunctions {count : Nat} (grammar : SharedGrammar count) (language 
 def Source.WF (source : Source) : Prop :=
   (source.project.fileAt source.entryFile).isSome = true
 
-def PassFunctions.lexer (passes : PassFunctions grammar language lang profile) : Stage Source LexRefusal TokenStream where
-  run := passes.lex
+def PassFunctions.lexer (passes : PassFunctions grammar language lang profile)
+    (purpose : SurfacePreparation.Purpose := .admission) : Stage Source LexRefusal TokenStream where
+  run := passes.lex purpose
   kind := .directProof
   inputInvariant := Source.WF
   outputInvariant stream := stream.parserView.WF
   success := Lexes
-  refusal := LexRefuses
+  refusal := LexRefuses purpose
 
-def parserEntry (parser : ParserEngine grammar) :
+def parserEntry (parser : ParserEngine grammar) (purpose : SurfacePreparation.Purpose := .admission) :
     Stage TokenStream ParseRefusal (Parsed (grammar.value grammar.start)) where
-  run stream := match (parser.run stream.parserView).2 with
+  run stream := match (parser.run stream.parserView purpose).2 with
     | some result => result
     | none => match stream.parserView.validateCoordinates with
       | .error span => .error (.invalidStream span)
@@ -46,12 +47,12 @@ def parserEntry (parser : ParserEngine grammar) :
   kind := .directProof
   inputInvariant stream := stream.parserView.WF
   outputInvariant ast := Source.WF ast.source
-  success stream output := (parser.run stream.parserView).2 = some (.ok output) ∧
+  success stream output := (parser.run stream.parserView purpose).2 = some (.ok output) ∧
     ParsesWith parser stream.parserView output ∧
-    (parser.run stream.parserView).1 ≤ parser.stepsPerToken * (stream.parserView.tokens.size + 1)
-  refusal stream failure := (parser.run stream.parserView).2 = some (.error failure) ∧
-    Refuses grammar stream.parserView failure ∧
-    (parser.run stream.parserView).1 ≤ parser.stepsPerToken * (stream.parserView.tokens.size + 1)
+    (parser.run stream.parserView purpose).1 ≤ parser.stepsPerToken * (stream.parserView.tokens.size + 1)
+  refusal stream failure := (parser.run stream.parserView purpose).2 = some (.error failure) ∧
+    Refuses parser stream.parserView failure purpose ∧
+    (parser.run stream.parserView purpose).1 ≤ parser.stepsPerToken * (stream.parserView.tokens.size + 1)
 
 /-- The fixed grammar supplies a surface tree. Any successful canonical
 elaboration must retain locations valid in the issuing project. -/
@@ -259,8 +260,8 @@ abbrev Passes (slice : Slice) (profile : Profile) :=
   confined to the registry definition, which installs each fixed contract. -/
 structure Registry (slice : Slice) (profile : Profile) where
   private mk ::
-  lexer : Stage Source LexRefusal TokenStream
-  parser : Stage TokenStream ParseRefusal (Parsed ((sliceGrammar slice).value (sliceGrammar slice).start))
+  lexer (purpose : SurfacePreparation.Purpose := .admission) : Stage Source LexRefusal TokenStream
+  parser (purpose : SurfacePreparation.Purpose := .admission) : Stage TokenStream ParseRefusal (Parsed ((sliceGrammar slice).value (sliceGrammar slice).start))
   elaborator : Stage (Parsed ((sliceGrammar slice).value (sliceGrammar slice).start)) ElabRefusal (AdmissionInput (sliceLanguage slice))
   eligibility : Stage (AdmissionInput (sliceLanguage slice)) StageFailure (CoreInput (sliceLanguage slice))
   typing : Stage (CoreInput (sliceLanguage slice)) StageFailure (CoreInput (sliceLanguage slice))
@@ -274,10 +275,10 @@ structure Registry (slice : Slice) (profile : Profile) where
   emitLCB : Stage (BIR (sliceLoweringLanguage slice) profile) StageFailure (LCBInput profile)
 
 def registry {slice : Slice} (passes : Passes slice profile) : Registry slice profile where
-  lexer := { passes.lexer with
+  lexer purpose := { passes.lexer purpose with
     inputInvariant := fun input => Source.WF input ∧ input.slice = slice
     outputInvariant := fun stream => stream.parserView.WF ∧ stream.source.slice = slice }
-  parser := { parserEntry (sliceParser slice) with
+  parser purpose := { parserEntry (sliceParser slice) purpose with
     inputInvariant := fun stream => stream.parserView.WF ∧ stream.source.slice = slice
     outputInvariant := Parsed.ElaborationDomain slice }
   elaborator :=
@@ -349,7 +350,8 @@ private def Registry.chain {slice : Slice} {Output : Type} (r : Registry slice p
     .next backend .done
   let core := if unchecked then Pipeline.next r.eligibility (.next r.typing (.next r.lowerUnchecked lowering))
     else .next r.admission.toStage (.next r.lowerCore lowering)
-  .next r.lexer (.next r.parser (.next r.elaborator core))
+  let purpose := if unchecked then SurfacePreparation.Purpose.eligibility else .admission
+  .next (r.lexer purpose) (.next (r.parser purpose) (.next r.elaborator core))
 
 def Registry.llvmPipeline {slice : Slice} (r : Registry slice profile) (unchecked : Bool) :
     Pipeline Source (LLVMInput profile) :=

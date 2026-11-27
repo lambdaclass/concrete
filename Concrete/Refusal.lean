@@ -59,9 +59,15 @@ private def RefusalCause.message : RefusalCause → String
   | .lexical (.digitLimit limit) span => s!"integer digit run at byte {span.start} exceeds limit {limit}"
   | .lexical issue span =>
     let detail := match issue with
-      | .integer => "malformed integer"
-      | .string => "malformed string"
-      | .byte => "malformed byte literal"
+      | .integer .leadingZero => "leading zero in decimal integer"
+      | .integer (.invalidSuffix suffix) => s!"invalid integer suffix '{ConcreteSpec.Surface0.scalarText suffix}'"
+      | .integer (.missingDigits radix) => s!"missing digits in {repr radix} integer"
+      | .string .unterminated => "unterminated string"
+      | .string (.invalidEscape c) => s!"invalid string escape ({c})"
+      | .string (.rawForbidden c) => s!"forbidden string character ({c})"
+      | .byte .unterminated => "unterminated byte literal"
+      | .byte (.invalidEscape c) => s!"invalid byte escape ({c})"
+      | .byte (.invalidRaw c) => s!"forbidden byte character ({c})"
       | .comment => "forbidden comment character"
       | _ => "unexpected character"
     s!"{detail} at byte {span.start}"
@@ -87,7 +93,7 @@ instance : Repr RefusalCause where
 
 inductive Refusal where
   | source (cause : RefusalCause)
-  | path (reason : ConcreteSpec.Core.SourcePath.Reason) (offset : Nat)
+  | path (failure : SourcePath.Refusal)
   | missingLocation (reason : ConcreteSpec.Admission.Refusal)
   | backendResource (backend resource : String) (measured limit : Nat)
   | backendProfile (backend reason : String)
@@ -124,10 +130,7 @@ def Refusal.message : Refusal → String
     s!"incomplete ({backend} backend: {resource}: {measured} exceeds limit {limit})"
   | .backendProfile backend reason => s!"incomplete ({backend} backend: {reason})"
   | .toolFailure reason => s!"incomplete ({reason})"
-  | .manifest refusal =>
-    match refusal.ruleId with
-    | none => refusal.message
-    | some rule => s!"{refusal.message} [rule {rule.name}@{rule.rev}]"
+  | .manifest refusal => refusal.message
   | .usageError msg => msg
   | .internal msg => "compiler failure: " ++ msg
 
@@ -140,16 +143,36 @@ structure Diagnostic where
 instance : Repr Refusal where
   reprPrec refusal prec := reprPrec refusal.message prec
 
-private def Refusal.citation : Refusal → Option RuleId
-  | .source cause => some cause.rule
-  | .manifest detail => detail.ruleId
-  | .path reason _ => some reason.ruleId
-  | _ => none
+private inductive DiagnosticLocation where
+  | file (span : ConcreteSpec.StageInterface.FileSpan)
+  | path (start stop : Nat)
+
+private def Refusal.reference : Refusal → Option (RegisteredRule × Option DiagnosticLocation)
+  | .source cause => some (cause.citation, some (.file cause.primary))
+  | .path failure =>
+    let reason := failure.violation.reason
+    let loc := failure.violation.location
+    let rule : RegisteredRule := ⟨reason.ruleId, by cases reason <;> decide⟩
+    some (rule, some (.path loc.offset (min (loc.offset + 1) loc.stop)))
+  | .manifest detail => detail.registeredRule.map (·, none)
+  | .missingLocation _ | .backendResource .. | .backendProfile .. | .toolFailure _
+  | .usageError _ | .internal _ => none
+
+/-- The public renderer consumes the same citation as diagnostic validation. -/
+def Refusal.render (r : Refusal) : String := Id.run do
+  let detail := if r.code == "SYNTAX" then s!"{r.code.toLower} error: {r.message}" else r.message
+  let base := s!"{r.code}: {detail}"
+  let some (rule, location) := r.reference | return base
+  let whereAt := match location with
+    | some (.file s) => s!", file {s.file.index}, bytes {s.startOffset}..{s.endOffset}"
+    | some (.path start stop) => s!", path, bytes {start}..{stop}"
+    | none => ""
+  return s!"{base} [rule {rule.val.name}@{rule.val.rev}{whereAt}]"
 
 /-- A transported citation must equal the producer's exact rule and revision. -/
 def Refusal.diagnosticAt (refusal : Refusal) (rule : RuleId) : Option Diagnostic := do
-  let registered ← validateRule rule
-  if refusal.citation = some rule then return ⟨refusal, registered⟩ else none
+  let (registered, _) ← refusal.reference
+  if registered.val = rule then return ⟨refusal, registered⟩ else none
 
 def Refusal.diagnostic (refusal : Refusal) (name : Lean.Name) : Option Diagnostic := do
   let registered ← referenceRule name
@@ -157,11 +180,12 @@ def Refusal.diagnostic (refusal : Refusal) (name : Lean.Name) : Option Diagnosti
 
 theorem Refusal.source_diagnosticAt_iff (cause : RefusalCause) (rule : RuleId) :
     ((Refusal.source cause).diagnosticAt rule).isSome = true ↔ rule = cause.rule := by
-  by_cases h : rule = cause.rule
-  · subst rule
-    simp [diagnosticAt, validateRule, cause.citation.property, ConcreteSpec.StageInterface.RefusalCause.rule,
-      citation, bind, Option.bind]
-  · simp [diagnosticAt, validateRule, citation, Ne.symm h, h, bind, Option.bind]
-    split <;> rfl
+  change (if cause.rule = rule then some ⟨.source cause, cause.citation⟩ else (none : Option Diagnostic)).isSome =
+    true ↔ rule = cause.rule
+  by_cases same : cause.rule = rule
+  · rw [ite_eq_left same]
+    exact ⟨fun _ => same.symm, fun _ => rfl⟩
+  · rw [ite_eq_right same]
+    exact ⟨nofun, fun h => (same h.symm).elim⟩
 
 end Concrete

@@ -53,14 +53,14 @@ source_syntax	con:tests/slice0/syntax_error.con	pending-refusal 1 syntax	slice0
 source_unsupported	con:tests/slice0/unsupported.con	pending-refusal 1 unsupported_form	slice0
 source_bindings	con:tests/slice0/bindings.con	exit 42 -	slice0
 source_unannotated	con:tests/slice0/unannotated.con	pending-refusal 1 syntax	slice0
-source_suffix	con:tests/slice0/suffix.con	pending-refusal 1 checker	slice0
+source_suffix	con:tests/slice0/suffix.con	refuse 1 integer_suffix ExpectedTypeLiteral@1 25:29:1:26 -	slice0
 source_boundary	con:tests/slice0/boundary.con	exit 255 -	slice0
 source_reserved	con:tests/slice0/reserved.con	pending-refusal 1 syntax	slice0
 source_reserved_move	con:tests/slice0/reserved_move.con	pending-refusal 1 syntax	slice0
 source_reserved_struct	con:tests/slice0/reserved_struct.con	pending-refusal 1 syntax	slice0
 source_intrinsic_shadow	con:tests/slice0/intrinsic_shadow.con	pending-refusal 1 checker	slice0
-source_radix_missing_semi	con:tests/slice0/radix_missing_semi.con	pending-refusal 1 syntax	slice0
-source_malformed_if	con:tests/slice0/malformed_if.con	pending-refusal 1 syntax	slice0
+source_radix_missing_semi	con:tests/slice0/radix_missing_semi.con	refuse 1 non_decimal_literal DecimalLiteral@1 25:29:1:26 -	slice0
+source_malformed_if	con:tests/slice0/malformed_if.con	refuse 1 outside_production AdmittedProduction@2 18:20:1:19 -	slice0
 source_multiply	con:tests/slice0/multiply.con	pending-refusal 1 unsupported_form	slice0
 source_conditional	con:tests/slice0/conditional.con	pending-refusal 1 unsupported_form	slice0
 source_mutable	con:tests/slice0/mutable.con	pending-refusal 1 unsupported_form	slice0
@@ -84,7 +84,7 @@ source_shadow_checked_add	con:tests/slice0/shadow_checked_add.con	pending-refusa
 source_shadow_try_convert	con:tests/slice0/shadow_try_convert.con	pending-refusal 1 checker	slice0
 source_lcb_value_limit	con:tests/slice0/lcb_value_limit.con	llvm exit 42 lcb resource values 488 1924	slice0
 cli_invalid_backend	cli:invalid-backend	diagnostic 3 USAGE usage: concrete build SOURCE.con -o OUTPUT-DIRECTORY [--backend llvm|lcb] | concrete help	slice0
-cli_invalid_path	cli:invalid-path	diagnostic 3 USAGE expected a project-relative .con path	slice0
+cli_invalid_path	cli:invalid-path	diagnostic 1 SYNTAX syntax error: expected a canonical project-relative source path [rule ConcreteSpec.Core.SourcePath.NoSingleDot@1, path, bytes 0..1]	slice0
 cli_unknown_target	cli:unknown-target	diagnostic 4 INTERNAL compiler failure: native helper returned an unknown target: invalid-target	slice0
 cli_native_helper_failure	cli:native-helper-failure	diagnostic 2 TOOL-FAILURE incomplete (native build helper exited with status 17: native helper control)	slice0
 cli_build_input_write_failure	cli:build-input-write-failure	diagnostic 2 TOOL-FAILURE	slice0

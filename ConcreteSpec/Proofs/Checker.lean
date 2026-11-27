@@ -28,10 +28,13 @@ private theorem bind_unit_ok_iff {ε α : Type} {r : Except ε Unit} {s : Except
 
 private theorem firstRepeated_eq_none {α : Type} [DecidableEq α] (xs : List α) :
     firstRepeated? xs = none ↔ xs.Nodup := by
+  suffices h : ∀ seen, firstRepeated? xs seen = none ↔ xs.Nodup ∧ ∀ x ∈ xs, x ∉ seen by
+    simpa using h []
   induction xs with
   | nil => simp [firstRepeated?]
   | cons x rest ih =>
-    by_cases h : x ∈ rest <;> simp [firstRepeated?, h, List.nodup_cons, ih]
+    intro seen
+    by_cases h : x ∈ seen <;> simp [firstRepeated?, h, List.nodup_cons, ih] <;> grind
 
 private theorem rejectFound_ok_iff {α ε : Type} (found : Option α) (reason : α → ε) :
     rejectFound found reason = .ok () ↔ found = none := by
@@ -387,18 +390,18 @@ theorem checkBodyWith_iff {policy : ArithmeticPolicy} {Δ : Decls} {Γ : Ctx} {s
 theorem checkBody_iff {Δ : Decls} {Γ : Ctx} {ss : List Stmt} {r : Terminator} (position : Nat) :
     (∃ ds, checkCoreBody Δ Γ position ss r = .ok ds) ↔ BodyOk Δ Γ ss r := checkBodyWith_iff (policy := .static) position
 
-private theorem checkDeclFields_iff (Δ : Decls) :
-    checkDeclFields Δ = .ok () ↔
-      (∀ d ∈ Δ, d.name ≠ ⟨"main"⟩ ∧ (d.fields.map Prod.fst).Nodup) := by
-  induction Δ with
-  | nil => simp [checkDeclFields]
+private theorem checkDeclsFrom_iff (Δ : Decls) (seen : List Name) (index : Nat) :
+    checkDeclsFrom seen index Δ = .ok () ↔ DeclsOk Δ ∧ ∀ d ∈ Δ, d.name ∉ seen := by
+  induction Δ generalizing seen index with
+  | nil => simp [checkDeclsFrom, DeclsOk]
   | cons d rest ih =>
-    by_cases hn : d.name = ⟨"main"⟩ <;>
-      simp [checkDeclFields, hn, ih, bind_unit_ok_iff, rejectFound_ok_iff, firstRepeated_eq_none]
+    by_cases dup : d.name ∈ seen <;> by_cases reserved : d.name = ⟨"main"⟩ <;>
+      simp only [checkDeclsFrom, dup, reserved, ↓reduceIte] <;>
+      simp_all [DeclsOk, bind_unit_ok_iff, rejectFound_ok_iff,
+        firstRepeated_eq_none, List.mem_map] <;> grind
 
 theorem checkDecls_iff (Δ : Decls) : checkDecls Δ = .ok () ↔ DeclsOk Δ := by
-  simp [checkDecls, DeclsOk, bind_unit_ok_iff, rejectFound_ok_iff, firstRepeated_eq_none,
-    checkDeclFields_iff]
+  simp [checkDecls, checkDeclsFrom_iff]
 
 theorem checkProgramWith_iff (policy : ArithmeticPolicy) (p : Program) :
     (∃ ds, checkProgramWith policy p = .ok ds) ↔

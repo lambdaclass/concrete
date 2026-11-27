@@ -191,9 +191,24 @@ inductive DecodeReason where
   | truncated | invalidContinuation | overlong | surrogate | tooLarge | unexpectedContinuation | nul | bom
   deriving DecidableEq, Repr
 
+inductive StringError where
+  | unterminated | invalidEscape (escaped : Nat) | rawForbidden (c : Nat)
+  deriving DecidableEq, Repr
+
+inductive ByteError where
+  | invalidRaw (c : Nat) | invalidEscape (escaped : Nat) | unterminated
+  deriving DecidableEq, Repr
+
+inductive IntegerError where
+  | missingDigits (radix : Surface0.Radix) | leadingZero | invalidSuffix (suffix : List Nat)
+  deriving DecidableEq, Repr
+
 inductive LexIssue where
   | encoding (reason : DecodeReason)
-  | integer | string | byte | character | comment
+  | integer (reason : IntegerError)
+  | string (reason : StringError)
+  | byte (reason : ByteError)
+  | character | comment
   | digitLimit (limit : Nat)
   deriving DecidableEq
 
@@ -1006,8 +1021,8 @@ def AdmissionView.render (v : AdmissionView) (r : Admission.Refusal) : Option Re
         pure [(⟨"binding"⟩, surfaceFileSpan span)]
       | _ => pure []
     return .core v.context primary related r
-  | .duplicateStructName name | .reservedStructName name | .duplicateDeclaredField name _ =>
-    let (_, span) ← v.located.declarations.find? (fun d => d.1 == name)
+  | .duplicateStructName index _ | .reservedStructName index _ | .duplicateDeclaredField index _ _ =>
+    let (_, span) ← v.located.declarations[index]?
     return .core v.context (surfaceFileSpan span) [] r
 
 namespace SurfacePreparation
@@ -1034,11 +1049,11 @@ private def Purpose.policy : Purpose → ArithmeticPolicy
   | .admission => .static
   | .eligibility => .runtime
 
-private def State.refuse {α : Type} (s : State) (cause : RefusalCause) : Except RefusalCause α :=
-  .error (visit [] 0 s.visited.reverse)
+private def State.firstFailure (s : State) (finish : Ctx → Nat → RefusalCause) : RefusalCause :=
+  visit [] 0 s.visited.reverse
 where
   visit (ctx : Ctx) (pos : Nat) : List PrefixStep → RefusalCause
-    | [] => cause
+    | [] => finish ctx pos
     | .integer n span :: rest =>
       match inferAtomType ctx.tys (.int .u8 n) with
       | .error (.outOfRange ty value) =>
@@ -1051,6 +1066,9 @@ where
         -- Every integer read was already checked at its token. Remaining statement
         -- conditions belong to the operation, including its arithmetic evidence.
         .core .slice0 (surfaceFileSpan b.operationSpan) [] (.atPosition pos reason)
+
+private def State.refuse {α : Type} (s : State) (cause : RefusalCause) : Except RefusalCause α :=
+  .error (s.firstFailure fun _ _ => cause)
 
 abbrev Scope := List (String × ConcreteSpec.Var)
 
@@ -1122,16 +1140,16 @@ private def expr : Surface0.Expr → ExprAction
 
 structure BodyAction where
   first : Option Surface0.Span
-  run : Scope → State → Surface0.Span → Except RefusalCause EarlyProgram
+  run : Scope → State → Surface0.Span → Option RefusalCause → Except RefusalCause EarlyProgram
 
 def endBody : BodyAction :=
-  ⟨none, fun _ s last => s.refuse (.surface (.fallthrough last))⟩
+  ⟨none, fun _ s last _ => s.refuse (.surface (.fallthrough last))⟩
 
 def blockedBody (cause : RefusalCause) (start : Surface0.Span) : BodyAction :=
-  ⟨some start, fun _ s _ => s.refuse cause⟩
+  ⟨some start, fun _ s _ _ => s.refuse cause⟩
 
 def bindBody (name : String) (binder span : Surface0.Span) (value : ExprAction) (rest : BodyAction) :
-    BodyAction := ⟨some span, fun scope s _ => do
+    BodyAction := ⟨some span, fun scope s _ boundary => do
   letI : Decidable (Slice0Rules.NamedBinding name) := inferInstanceAs (Decidable (name ≠ "_"))
   unless Slice0Rules.NamedBinding name do s.refuse (.surface (.wildcard binder))
   if name ∈ scope.map Prod.fst then s.refuse (.surface (.duplicateBinder name binder))
@@ -1139,25 +1157,33 @@ def bindBody (name : String) (binder span : Surface0.Span) (value : ExprAction) 
   unless Slice0Rules.UnreservedLocal name do s.refuse (.surface (.reservedBinder name binder))
   let (rhs, s) ← value scope s
   let ((x, _), s) := rhs.bind s (some binder) (.named ⟨name⟩)
-  rest.run ((name, x) :: scope) s span⟩
+  rest.run ((name, x) :: scope) s span boundary⟩
 
 def returnBody (value : ExprAction) (span : Surface0.Span) (rest : BodyAction) : BodyAction :=
-  ⟨some span, fun scope s _ => do
+  ⟨some span, fun scope s _ boundary => do
     let (rhs, s) ← value scope s
     let (ret, s) := rhs.asAtom s
     let program : EarlyProgram := ⟨s.bindings.reverse, ret.atom, span, ret.span⟩
-    if let some next := rest.first then
-      let view := AdmissionView.zero program
-      if let .error reason := checkProgramWith s.purpose.policy view.program then
-        if let some cause := view.render reason then throw cause
-      throw (.surface (.unreachable next))
+    if let some later := (rest.first.map fun next => RefusalCause.surface (.unreachable next)) <|> boundary then
+      -- The prefix carries a location for every operation, including this
+      -- terminator. Report a checker failure directly at the operation visited.
+      throw (s.firstFailure fun ctx pos =>
+        match checkEnd [] ctx (.ret ret.atom.toCore) with
+        | .ok _ => later
+        | .error reason =>
+          let related := match reason with
+            | .unusedBinding x | .liveLinearBinding x =>
+              ((AdmissionView.zero program).bindingAt x).toList.map fun loc => (⟨"binding"⟩, surfaceFileSpan loc)
+            | _ => []
+          let primary := if (rejectedLiteral reason).isSome then ret.span else span
+          .core .slice0 (surfaceFileSpan primary) related (.atPosition pos reason))
     return program⟩
 
-def entry (purpose : Purpose) (name : String) (span : Surface0.Span) (body : BodyAction) :
-    Except RefusalCause EarlyProgram := do
+def entry (purpose : Purpose) (name : String) (span : Surface0.Span) (body : BodyAction)
+    (boundary : Option RefusalCause := none) : Except RefusalCause EarlyProgram := do
   letI : Decidable (Slice0Rules.EntryName name) := inferInstanceAs (Decidable (name = "main"))
   unless Slice0Rules.EntryName name do throw (.surface (.unexpectedEntry span))
-  body.run [] {purpose} span
+  body.run [] {purpose} span boundary
 
 def prepareSurface0 (ast : Surface0.Program) (purpose : Purpose := .admission) :
     Except RefusalCause EarlyProgram :=

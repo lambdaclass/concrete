@@ -298,10 +298,16 @@ def checkSourceRefusal (input : Concrete.Stages.Input) (expected : RefusalExpect
     (actual : Concrete.Refusal) :
     IO UInt32 := do
   let .source cause := actual | return 13
-  let some name := (match expected.kind, expected.rule with
-    | "reserved_binder", "UnreservedLocal" => some ``ConcreteSpec.Core.Slice0Rules.UnreservedLocal
-    | "unreachable_statement", "STMT-14" => some ``ConcreteSpec.Core.Slice0Rules.ReachableBody
-    | _, _ => none) | return 13
+  let kindMatches := match expected.kind, cause with
+    | "reserved_binder", .surface (.reservedBinder ..)
+    | "unreachable_statement", .surface (.unreachable _)
+    | "integer_suffix", .surface (.integerSuffix _)
+    | "non_decimal_literal", .parser .nonDecimal _
+    | "outside_production", .parser .outsideProduction _ => true
+    | _, _ => false
+  unless kindMatches do return 13
+  let name := if expected.rule == "STMT-14" then ``ConcreteSpec.Core.Slice0Rules.ReachableBody
+    else Lean.Name.str `ConcreteSpec.Core.Slice0Rules expected.rule
   unless (actual.diagnosticAt ⟨name, expected.revision⟩).isSome do return 13
   let .error unchecked := Concrete.Stages.unchecked input | return 13
   if unchecked != actual then return 18
