@@ -894,8 +894,8 @@ example : verifyRun #[.ifEqual 0 0 0 0] ⟨0, #[0]⟩ 8 = (8, none) := rfl
 -- The branch goes directly to a raw operation. An operation in a different block cannot cover it.
 example (project : Project) (m : LoweringModels testLanguage testLowering testProfile) :
     ¬ (r m parser).lowerUnchecked.success (testCore project) (testMIR project []) := by
-  intro success
-  have consumes := success.2.2.2.1
+  rintro ⟨_, lowered⟩
+  have consumes := lowered.2.2.2.1
   have covers := consumes.2.2.1
   let op : MIR.Occurrence Unit := ⟨Exec.Demo.mainF, ⟨1⟩, 0, testOrigin, .operator (.arithmetic (.plain .div)), [((), .literal [0])], []⟩
   obtain ⟨conditions, ⟨sourceOp, member, _, _, fromSource⟩, _, fromMIR, _⟩ :=
@@ -912,11 +912,11 @@ private def residual : OperationCheck := ⟨0, .divisionByZero, .residual⟩
 example (project : Project) (m : LoweringModels testLanguage testLowering testProfile) :
     ¬ (r m parser).lowerUnchecked.success (testCore project)
       (testMIR project [residual] (.arithmetic (.plain .sub))) := by
-  intro success
+  rintro ⟨_, lowered⟩
   let op : MIR.Occurrence Unit := ⟨Exec.Demo.mainF, ⟨1⟩, 0, testOrigin,
     .operator (.arithmetic (.plain .sub)), [((), .literal [0])], [residual]⟩
   obtain ⟨_, ⟨sourceOp, member, _, opcode, _⟩, _⟩ :=
-    success.2.2.2.1.2.2.1 op (List.mem_cons_self ..)
+    lowered.2.2.2.1.2.2.1 op (List.mem_cons_self ..)
   have eq : sourceOp = .expression () := by
     simpa [op, testOrigin, testCore, CoreInput.machineProgram, Payload.execution, MachineProgram.operations, stmtOperations] using member
   subst sourceOp
@@ -927,13 +927,13 @@ example (project : Project) (m : LoweringModels testLanguage testLowering testPr
     ¬ (r m parser).lowerUnchecked.success
       (testCore project (.call none Exec.Demo.mainF [()] testSite))
       (testMIR project [residual] (.arithmetic (.plain .div)) true) := by
-  intro success
+  rintro ⟨_, lowered⟩
   let call : MIR.Occurrence Unit := ⟨Exec.Demo.mainF, ⟨1⟩, 1, testOrigin,
     .call Exec.Demo.mainF, [((), .literal [0])], []⟩
   have mem : call ∈ (testMIR project [residual] (.arithmetic (.plain .div)) true
     (profile := testProfile)).operations := List.mem_cons_of_mem _ (List.mem_cons_self ..)
   obtain ⟨_, ⟨sourceOp, member, _, _, fromSource⟩, _, fromMIR, _⟩ :=
-    success.2.2.2.1.2.2.1 call mem
+    lowered.2.2.2.1.2.2.1 call mem
   have eq : sourceOp = .call Exec.Demo.mainF [()] := by
     simpa [call, testOrigin, testCore, CoreInput.machineProgram, Payload.execution, MachineProgram.operations, stmtOperations] using member
   subst sourceOp
@@ -1904,7 +1904,7 @@ example :
   ⟨retainedOwnerAccepted, substitutedOriginsPreserved, substitutedOwnerAssigns,
     (ownerFixtureObservations true).1.trans (ownerFixtureObservations false).1.symm,
     (ownerFixtureObservations true).2.trans (ownerFixtureObservations false).2.symm,
-    fun h => substitutedOwnerRefused h.2.2.2.2.1.1, fun h => substitutedOwnerRefused h.2.2.2.2.1.1⟩
+    fun ⟨_, lowered⟩ => substitutedOwnerRefused lowered.2.2.2.2.1.1, fun h => substitutedOwnerRefused h.2.2.2.2.1.1⟩
 
 -- The residual trap takes place at the same operation in both IRs, with
 -- no synthetic boolean local. Deleting the check loses the observation.
@@ -2893,7 +2893,7 @@ private theorem literalUnchecked :
     LowersUnchecked (language := earlyFixtureLanguage) literalCore literalMIR := by
   with_unfolding_all
     obtain ⟨reached, finite, result, trace⟩ := literalCoreReaches
-    refine ⟨rfl, rfl, ⟨fun _ h => h, fun _ h => h⟩, literalConsumes, ⟨⟨?_, nofun⟩, rfl⟩, ?_⟩
+    refine ⟨rfl, rfl, rfl, ⟨fun _ h => h, fun _ h => h⟩, literalConsumes, ⟨⟨?_, nofun⟩, rfl⟩, ?_⟩
     · intro fn locals graph present
       cases List.mem_singleton.mp present
       exact nofun
@@ -2999,7 +2999,7 @@ example (unchecked : Bool) :
   have ready : Source.WF elaborationSource ∧ elaborationSource.slice = slice0 := ⟨parsedReturnDomain.1, rfl⟩
   have front := returnLexerContract
   have parse := returnParserContract
-  have lowerCore : LowersCore (language := earlyFixtureLanguage) ⟨literalCore, []⟩ literalMIR := literalUnchecked
+  have lowerCore : LowersCore (language := earlyFixtureLanguage) ⟨literalCore, []⟩ literalMIR := literalUnchecked.2
   have back :
       ∃ bir, Concrete.Contracts.Graph (registry literalReturnPasses).buildBIR.run literalSSA bir ∧
         (registry literalReturnPasses).buildBIR.outputInvariant bir ∧
@@ -4533,7 +4533,7 @@ private def wrongCoreMIR : MIR testLowering testProfile :=
   {(returningMIR tabProject) with functions := [(Exec.Demo.mainF, [], ⟨⟨0⟩, #[block]⟩)]}
 
 private theorem coreWrongBody : ¬ LowersUnchecked (language := testLanguage) abortingCore wrongCoreMIR := by
-  intro lowered
+  rintro ⟨_, lowered⟩
   have terminal : coreExecution.result abortingCore coreTrapped (helperTrap .abort) := by
     with_unfolding_all rfl
   have reached : ∀ q, coreExecution.finite abortingCore q → q = coreStart ∨ q = coreTrapped := by
@@ -4575,7 +4575,7 @@ private abbrev mirExecution := MIR.Execution (language := testLanguage)
 
 private theorem abortLowering :
     LowersUnchecked (language := testLanguage) abortingCore (abortMIR .abort) := by
-  refine ⟨rfl, rfl, ⟨fun _ h => h, fun _ h => h⟩, ?_, ⟨⟨?_, nofun⟩, rfl⟩, ?_⟩
+  refine ⟨rfl, rfl, rfl, ⟨fun _ h => h, fun _ h => h⟩, ?_, ⟨⟨?_, nofun⟩, rfl⟩, ?_⟩
   · refine ⟨List.nodup_nil, ?_, nofun, ?_, ?_⟩
     · rintro site _ _ ⟨op, present, notAbort, _, _⟩ _
       have member : (testSite, CoreOperation.abort) = (site, op) := by
@@ -4617,9 +4617,9 @@ private theorem abortLowering :
 example :
     LowersCore (language := testLanguage) ⟨abortingCore, []⟩ (abortMIR .abort) ∧
     ¬ LowersCore (language := testLanguage) ⟨abortingCore, []⟩ wrongCoreMIR := by
-  refine ⟨abortLowering, ?_⟩
+  refine ⟨abortLowering.2, ?_⟩
   intro lowered
-  exact coreWrongBody lowered
+  exact coreWrongBody ⟨rfl, lowered⟩
 
 private def unsafeMIR : MIR testLowering testProfile :=
   let block : Block _ _ _ := ⟨⟨0⟩, [], [], .invalid, []⟩

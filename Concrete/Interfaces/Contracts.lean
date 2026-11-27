@@ -1261,12 +1261,7 @@ def LowersCore
 
 def LowersUnchecked
     (input : CoreInput language) (mir : MIR lang profile) : Prop :=
-  mir.project = input.project ∧ mir.entry = input.machineProgram.entry ∧
-  PreservesOrigins (List.map Prod.snd input.machineProgram.origins) mir.origins ∧
-  ConsumesEvidence input [] mir ∧
-  (PreservesOwnerMutability input mir ∧ mir.declarations = input.machineProgram.declarations) ∧
-  BehaviorRefinement CoreInput.Execution (MIR.Execution (language := language))
-    CoreInput.Execution.result (MIR.Execution (language := language)).result input mir
+  input.wildcardsCopy = true ∧ LowersCore (language := language) ⟨input, []⟩ mir
 
 def Memory.RepresentsActivation (memory : Memory lang profile)
     (logical physical : MemoryFrame language.operands.Val) (bytes : Mem.Memory)

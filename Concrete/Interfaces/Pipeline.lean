@@ -196,10 +196,14 @@ def PassFunctions.emitSingleLCB (passes : PassFunctions grammar language lang pr
     return output
 
 def PassFunctions.lowerUncheckedEntry (passes : PassFunctions grammar language lang profile) :
-    Stage (CoreInput language) StageFailure (MIR lang profile) :=
-  ⟨passes.lowerUnchecked, .directProof,
-    fun input => input.WF ∧ input.StaticallyTyped,
-    fun mir => mir.logicalView.HandoffWF, LowersUnchecked (language := language), fun _ _ => False, fun _ _ => True⟩
+    Stage (CoreInput language) StageFailure (MIR lang profile) where
+  run input := if input.wildcardsCopy then passes.lowerUnchecked input
+    else .error (.invalidInput ⟨``CoreInput.wildcardsCopy, 1⟩)
+  kind := .directProof
+  inputInvariant input := input.WF ∧ input.StaticallyTyped
+  outputInvariant mir := mir.logicalView.HandoffWF
+  success := LowersUnchecked (language := language)
+  refusal input failure := input.wildcardsCopy = false ∧ failure = .invalidInput ⟨``CoreInput.wildcardsCopy, 1⟩
 
 def PassFunctions.emitLLVMEntry (passes : PassFunctions grammar language lang profile) :
     Stage (BIR lang profile) StageFailure (LLVMInput profile) :=

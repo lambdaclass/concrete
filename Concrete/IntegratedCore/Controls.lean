@@ -129,35 +129,80 @@ private def introToken : LocatedStraightBinding :=
   ⟨.bind (.name ⟨0⟩) (.nominal tokenName) (.construct tokenName), useSpan, binderSpan⟩
 private def takeToken : LocatedStraightBinding :=
   ⟨.destructure tokenName (.move ⟨0⟩), useSpan, useSpan⟩
-private def tokenView (tail : List LocatedStraightBinding) : AdmissionView :=
-  .one ⟨[(tokenName, binderSpan)], introToken :: tail, .ret (.lit 42), useSpan⟩
-private def tokenInput (tail : List LocatedStraightBinding) : CoreInput (sliceLanguage sliceOne) :=
-  ⟨source.project, sliceOne, .straightLine (tokenView tail) rfl⟩
+private def tokenView (bindings : List LocatedStraightBinding) : AdmissionView :=
+  .one ⟨[(tokenName, binderSpan)], bindings, .ret (.lit 42), useSpan⟩
+private def tokenInput (bindings : List LocatedStraightBinding) : CoreInput (sliceLanguage sliceOne) :=
+  ⟨source.project, sliceOne, .straightLine (tokenView bindings) rfl⟩
 
 -- Normal execution constructs and consumes the logical owner. A second
 -- destructure fails in both the checker and the instrumented machine.
-private def runTokens (tail : List LocatedStraightBinding) :=
-  let payload := (tokenInput tail).machineProgram
+private def runTokens (bindings : List LocatedStraightBinding) :=
+  let payload := (tokenInput bindings).machineProgram
   Exec.run payload.body (fun _ p => nomatch p) 32 payload.initial
 
-example : (ConcreteSpec.Admission.admitInput (tokenInput [takeToken])).isOk = true ∧
-    (runTokens [takeToken]).ending = .final (.returned (.scalar (.int .u8 42))) ∧
-    ConcreteSpec.checkProgram (tokenView [takeToken, takeToken]).program =
+example : (ConcreteSpec.Admission.admitInput (tokenInput [introToken, takeToken])).isOk = true ∧
+    (runTokens [introToken, takeToken]).ending = .final (.returned (.scalar (.int .u8 42))) ∧
+    ConcreteSpec.checkProgram (tokenView [introToken, takeToken, takeToken]).program =
       .error (.atPosition 2 (.movedBinding ⟨0⟩)) ∧
-    (runTokens [takeToken, takeToken]).ending = .stuck := by
+    (runTokens [introToken, takeToken, takeToken]).ending = .stuck := by
   with_unfolding_all exact ⟨rfl, rfl, rfl, rfl⟩
+
+private def wildToken : LocatedStraightBinding :=
+  ⟨.bind .wild (.nominal tokenName) (.construct tokenName), useSpan, binderSpan⟩
+
+private def wildByte : LocatedStraightBinding :=
+  ⟨.bind .wild .u8 (.scalar (.atom (.lit 1))), useSpan, binderSpan⟩
+
+-- Retain the source declarations and both operation origins in a one-block
+-- candidate whose only executable operation returns the chosen byte.
+private def wildcardMIR (status : UInt8) : MIR (sliceLoweringLanguage sliceOne) profile :=
+  let core := tokenInput [wildToken]
+  let u8 : (sliceLanguage sliceOne).operands.Ty := .inl (.scalar (.int .u8))
+  let block : Block _ _ _ := ⟨⟨0⟩, [], [], .ret (some ⟨u8, .literal ⟨[status]⟩⟩),
+    List.map Prod.snd core.machineProgram.origins⟩
+  ⟨core.project, earlyEntry, [(earlyEntry, ⟨[], some u8⟩)],
+    [(earlyEntry, [], ⟨⟨0⟩, #[block]⟩)], [], core.machineProgram.declarations⟩
+
+-- Independent typing succeeds. The stage refuses the discard even with an
+-- always-successful lowerer, and every candidate fails the lowering relation.
+example (candidate : MIR (sliceLoweringLanguage sliceOne) profile) :
+    let core := tokenInput [wildToken]
+    let edge := (registry {fragmentPasses sliceOne with lowerUnchecked := fun _ => .ok candidate}).lowerUnchecked
+    let failure := StageFailure.invalidInput ⟨``CoreInput.wildcardsCopy, 1⟩
+    core.StaticallyTyped ∧ edge.run core = .error failure ∧ edge.refusal core failure ∧
+      ¬ LowersUnchecked core candidate := by
+  refine ⟨⟨tokenView [wildToken], ⟨rfl, rfl, rfl⟩, by decide, .letWild ?_ (.ret (.int rfl))⟩,
+    rfl, ⟨rfl, rfl⟩, fun success => Bool.noConfusion success.1⟩
+  exact .mk rfl ⟨.nil, nofun, fun _ _ => nofun⟩
+
+example :
+    let mir := wildcardMIR 7
+    let entry : MemoryRegisters (sliceLanguage sliceOne) profile :=
+      {frame := earlyEntry, block := ⟨0⟩, instruction := 0, virtualValues := [], materialized := [],
+        live := [], initialized := [], bytes := Mem.Memory.empty}
+    mir.terminalObservation entry = some (.returned 7 ByteArray.empty) ∧
+      ¬ (registry (fragmentPasses sliceOne)).lowerUnchecked.success (tokenInput [wildToken]) mir :=
+  ⟨by with_unfolding_all rfl, fun success => Bool.noConfusion success.1⟩
+
+-- A Copy wildcard still reaches the lowerer and both executions return 42.
+example (candidate : MIR (sliceLoweringLanguage sliceOne) profile) :
+    let core := tokenInput [wildByte]
+    let edge := (registry {fragmentPasses sliceOne with lowerUnchecked := fun _ => .ok candidate}).lowerUnchecked
+    edge.run core = .ok candidate ∧ ConcreteSpec.run (tokenView [wildByte]).program 10 = .exit 42 ∧
+      (runTokens [wildByte]).ending = .final (.returned (.scalar (.int .u8 42))) := by
+  with_unfolding_all exact ⟨rfl, rfl, rfl⟩
 
 -- The terminator and the variable's declaration have distinct coordinates.
 example :
     let why := ConcreteSpec.Admission.Refusal.atPosition 1 (.liveLinearBinding ⟨0⟩)
-    ConcreteSpec.checkProgram (tokenView []).program = .error why ∧
-    (tokenView []).render why = some ⟨⟨``ConcreteSpec.ProgramPermitted, 1⟩,
+    ConcreteSpec.checkProgram (tokenView [introToken]).program = .error why ∧
+    (tokenView [introToken]).render why = some ⟨⟨``ConcreteSpec.ProgramPermitted, 1⟩,
       surfaceFileSpan useSpan, [(⟨"binding"⟩, surfaceFileSpan binderSpan)], none, .core why⟩ :=
   ⟨rfl, rfl⟩
 
 example :
     let later : Slice := ⟨⟨2, by decide⟩⟩
-    ({tokenInput [] with slice := later}).decode = .error (.unsupportedSlice later) := rfl
+    ({tokenInput [introToken] with slice := later}).decode = .error (.unsupportedSlice later) := rfl
 
 private def sourceReturn (e : ConcreteSpec.Surface0.Expr) : AdmissionInput (sliceLanguage slice0) :=
   .pending source.project (.zero ⟨"main", binderSpan, [.ret e useSpan]⟩) rfl
@@ -224,7 +269,7 @@ private def memory : Memory (sliceLoweringLanguage sliceOne) profile :=
     functions := [(earlyEntry, [(root.logical.root, nominalTy)], ⟨⟨0⟩, #[]⟩)]
     layouts := [(earlyEntry, [(root.logical.root, ⟨0, 1⟩)])]
     storage := [(earlyEntry, [(root.logical.root, .materialized)])]
-    declarations := (tokenInput []).machineProgram.declarations }
+    declarations := (tokenInput [introToken]).machineProgram.declarations }
 
 private def started : MemoryRegisters nominalLang profile :=
   { frame := earlyEntry, block := ⟨0⟩, instruction := 0, virtualValues := [], materialized := [],

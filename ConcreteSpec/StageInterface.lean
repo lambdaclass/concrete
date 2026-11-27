@@ -857,6 +857,18 @@ structure CoreInput (language : CoreLanguage) where
 
 def CoreInput.machineProgram {language} (input : CoreInput language) := input.payload.execution
 
+/-- OWN-5 at the unchecked lowering boundary. Check the wildcard's annotated
+type against the declarations before translation gives it a synthetic owner.
+Slice 0 and integrated machine syntax have no wildcard binder. -/
+def CoreInput.wildcardsCopy {language} (input : CoreInput language) : Bool :=
+  match input.payload with
+  | .straightLine (.one p) _ =>
+    let program := (AdmissionView.one p).program
+    program.body.all fun
+      | .let_ .wild ty _ => ty.isCopy program.decls
+      | .let_ (.name _) .. | .letStruct .. => true
+  | .straightLine (.zero _) _ | .integrated _ => true
+
 def CoreInput.ArgumentsWF {language : CoreLanguage} (input : CoreInput language) : Prop :=
   ∀ site op, (site, op) ∈ input.machineProgram.operations →
     match op with
