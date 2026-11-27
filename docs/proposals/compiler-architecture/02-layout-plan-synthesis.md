@@ -23,23 +23,21 @@ Look closely at `R-0502` and `R-0609` in [ROADMAP.md](../../../ROADMAP.md#a-core
 - `R-0502` currently states: *"the default struct layout is declaration order, natural alignment defined exactly per target, size rounded up to the alignment, zero-sized fields taking no bytes, with no C ABI promise."*
 - `R-0609` currently states: *"`i32` enum tags, no niches."*
 
-**Why this matters before Slice 6 and Core freeze (`A2c` at Slice 11):**
-If `ConcreteSpec` (`C3`) makes declaration-order offsets and `i32` non-niche tags **observable invariants** of ordinary internal structs/enums, then Concrete permanently gives up automatic packing, niche optimization, hot/cold splitting, and AoS↔SoA unless a later Core revision reopens `C3`.
+**Codex's recommended split (for owner decision before Slice 6):**
+1. **Keep the current predictable default layouts (`R-0502`/`R-0609`):** Ordinary types keep their simple, deterministic default layout at public, ABI, `#[repr(C)]`, `ByteSafe` (`R-0714`), FFI, and raw-memory boundaries—no silent layout surprises.
+2. **Allow private optimized layouts ONLY with an exact conversion/refinement proof:** Internal, non-escaping, non-ABI-exposed aggregates and arrays may adopt an optimized `LayoutPlan` inside `Memory` *only* when accompanied by a kernel-checked proof that the private representation converts back exactly to the spec's logical value model (`decode ∘ encode = id` / representation refinement), leaving all observable behavior unchanged.
+3. **Decide compact / niche enum tags separately:** Compact 1-byte enum tags and niche encodings (e.g. `Option<bool>`, `Option<Heap<T, A>>`) touch `R-0609`'s explicit "`i32` enum tags, no niches" rule and must be decided by the owner separately from private struct/array layout optimization.
 
-**Proposed `LayoutPolicy` distinction (for owner decision before Slice 6):**
-- **Fixed-layout types (`LayoutPolicy.fixed`):** Any type annotated `#[repr(C)]`, `#[repr(transparent)]`, `ByteSafe` (`R-0714`), exported across FFI (`extern fn`, Slice 17), or materialized to raw bytes via `trusted`/`with(Unsafe)` uses a **single deterministic, spec-fixed layout algorithm** (exact offsets, exact `rep_roundtrip`, zero surprises).
-- **Compiler-chosen internal types (`LayoutPolicy.free`):** Ordinary safe Concrete structs, enums, and fixed-size arrays whose address is never exposed to raw pointers or FFI have **abstract observational layout**: safe code can observe field values, equality, and `ByteSafe`/wire conversions, **never** internal field byte offsets or padding bytes.
-
-Under this split, safe code remains 100% deterministic and auditable (and `concrete facts` still reports the exact concrete layout chosen by the compiler for every type!), while `Memory.lean` gains full legal freedom to synthesize optimal layouts.
+Under this split, predictable default layouts stay intact, `concrete facts` reports the exact realized `LayoutPlan` for every type, and private layout optimization stays strictly proof-gated (and comes at Slice 6+, **not** in the Stage-0 cutover).
 
 ---
 
 ## 2. Architecture: `LayoutPolicy` + `LayoutPlan` + Parametric Lowering
 
 ### Current Architecture on `main`
-In [Concrete/Memory.lean](../../../Concrete/Memory.lean), layout is a single hardcoded query (`u8LayoutQuery`), tying the lowering proof to one fixed layout algorithm.
+In the Slice-0 prototype ([Concrete/Memory.lean](../../../Concrete/Memory.lean)), layout is a single hardcoded query (`u8LayoutQuery`), while [Concrete/Interfaces/Carriers.lean](../../../Concrete/Interfaces/Carriers.lean) defines the slice-indexed `Memory lang profile` carrier (`MemoryPlace`, `MemoryInst`, `StorageClass`, `MemoryState`). Layout search is intentionally deferred until Slice 6 (structs/enums) rather than complicating Slice 0.
 
-### Proposed 3-Part Architecture in `Concrete/Memory.lean`
+### Proposed 3-Part Architecture in `Memory` (Slice 6+)
 
 ```
                ┌──────────────────────────────┐
@@ -50,9 +48,9 @@ In [Concrete/Memory.lean](../../../Concrete/Memory.lean), layout is a single har
                               ▼
                ┌──────────────────────────────┐
                │  Decidable `LayoutPlan.valid` │  (proved in Lean: respects
-               │   (fixed ABI preserved, all   │   LayoutPolicy.fixed, disjoint
-               │    fields in-bounds, aligned, │   field ranges, valid tags/niches,
-               │    bijective representation)  │   stack/size caps)
+               │   fixed/default ABI, sibling  │   LayoutPolicy, spatial/
+               │   disjointness, injective     │   temporal/encoding validity,
+               │   tag/niche codec, size caps) │   exact conversion to spec)
                └──────────────┬───────────────┘
                               │ `hValid : plan.valid policy = true`
                               ▼
@@ -64,38 +62,45 @@ In [Concrete/Memory.lean](../../../Concrete/Memory.lean), layout is a single har
 ```
 
 #### What `LayoutPlan` Encodes
-1. **Per-struct physical field map:** `(fieldId ↦ (bankId, byteOffset, align))` — supporting:
+1. **Per-struct private field map:** `(fieldId ↦ (bankId, byteOffset, align))` — supporting:
    - **Field reordering & padding elimination** (sorting fields by alignment / grouping small fields, single bank `0`).
    - **Hot/cold field splitting** (assigning hot fields to bank `0` and cold fields to bank `1` when accessed in separate phases).
-2. **Per-enum tag & niche map:** `(variantId ↦ TagEncoding)` — supporting compact 1-byte tags and niche encodings (e.g., `Option<bool>`, `Option<NonZeroU64>`, `Option<Heap<T, A>>` at zero overhead) proved injective by `LayoutPlan.valid`.
+2. **Per-enum tag & niche map (separately owner-gated):** `(variantId ↦ TagEncoding)` — supporting compact tags and niche encodings only if approved under `R-0609`.
 3. **Per-array / collection storage strategy (`StorageShape`):**
    - `aos` (contiguous struct elements), or
    - `soa` (parallel field arrays: `[S; N]` lowered to `(Field₀[N], Field₁[N], ...)` whenever no whole-element raw address is taken and every access is indexed field projection `arr[i].f` or whole-element value copy/move).
 4. **Destination-passing / copy-elision annotations (`SlotReuse`):**
-   - Marks value-returning calls and struct literals that write directly into the caller's destination slot (generalizing `&out T` under the hood for internal calls without requiring user annotations).
+   - Marks value-returning calls and struct literals that write directly into the caller's destination slot across disjoint lifetimes.
 
 ---
 
-## 3. Why the Proof Stays Small and Tractable
+## 3. Why the Proof Stays Small — Without a False "All Paths Disjoint" Lemma
 
-Proving each layout optimization ad hoc in Lean would be painful. **Parameterizing `Memory.lower` by `LayoutPlan`** turns all four optimizations into **instances of one single refinement theorem**:
+A naive "all distinct paths have disjoint byte ranges" lemma (`p₁ ≠ p₂ → Disjoint (plan.range p₁) (plan.range p₂)`) is **mathematically false** for three distinct reasons:
+1. **Parent/child overlap:** A struct path `p` necessarily **overlaps its own field paths** `p.f`.
+2. **Tag/niche bit-sharing:** Niche-encoded enum tags **share bits/bytes with the payload** (they are disjoint only in the *value domain*, not as raw byte ranges).
+3. **Temporal slot reuse:** Destination-passing and `SlotReuse` intentionally **share the exact same bytes** across sequentially disjoint lifetimes.
 
-- **Abstract state (`MIR`):** Each logical local/aggregate is a structured tree of typed values (fields, variants, array indices).
-- **Concrete state (`Memory`):** A map of byte blocks `(blockId, offset) ↦ Byte`.
-- **Simulation relation (`RefinesPlan plan`):** For every live logical value at logical path `p`, decoding the bytes at `plan.locate(p)` yields `MIR`'s logical value, and `plan.valid` guarantees **non-overlapping byte ranges for distinct logical paths** (`p₁ ≠ p₂ → Disjoint (plan.range p₁) (plan.range p₂)`).
-- **Frame lemma (proved once):** Writing to `plan.range p₁` preserves `decode (plan.range p₂)` for every `p₂ ≠ p₁`.
-  - Whether `plan` puts `a.x` before `a.y`, packs a discriminant into a niche bit, splits hot/cold fields into two blocks, or stripes `arr[i].x` into a separate SoA array, **the exact same non-overlap proof discharges the frame lemma!**
+Therefore, `LayoutPlan.valid` and the parametric refinement theorem separate the three invariants cleanly:
 
-Because `LayoutPlan.valid` is a small decidable Boolean check in Lean, **any** future synthesizer (simple alignment sort in Slice 6, profile-guided hot/cold splitter, or MAP-Elites layout search in Phase E under `R-0727`) plugs in with **zero new lowering proofs**.
+1. **Spatial disjointness of incomparable sibling paths (within one live value):**
+   - Only **incomparable (non-prefix)** field/element paths inside the same live aggregate (`¬ Prefix p₁ p₂ ∧ ¬ Prefix p₂ p₁`) occupy disjoint byte ranges (`Disjoint (plan.range p₁) (plan.range p₂)`). A parent path's range is the union of its children's ranges (plus any tag/padding).
+   - This discharges the **spatial frame lemma** for field writes (`p.f₁ := v` leaves `p.f₂` untouched whenever `f₁ ≠ f₂`, whether laid out as reordered AoS, hot/cold banks, or SoA arrays).
+2. **Exact value-representation round-trip (for tags & niches):**
+   - Rather than claiming disjoint byte ranges for niche tags, each aggregate/enum `LayoutPlan` provides an explicit `encode`/`decode` pair proved injective on valid spec values (`∀ v, ValidVal v → decode (encode v) = some v`), and proves variant encodings have disjoint encoded bit-pattern images even when sharing bytes with payload fields.
+3. **Temporal non-overlap (for `SlotReuse` / destination passing):**
+   - Two distinct logical locals share a physical slot `(blockId, offset)` **only** when the MIR liveness/linearity analysis proves their live intervals do not overlap (the old linear owner is dead/consumed before the new write begins).
+
+Because `LayoutPlan.valid` checks these three separate conditions decidably in Lean, **any** future layout synthesizer (simple alignment sort in Slice 6, hot/cold splitter, or MAP-Elites layout search in Phase E under `R-0727`) plugs into the same parametric `Memory.lower_correct` proof with **zero new lowering proofs**.
 
 ---
 
 ## 4. Auditability & Transparency (Philosophy Rules 3, 5, 14)
 
-Does compiler-chosen layout violate Concrete's transparency philosophy? **No, as long as layout is visible and explicit at boundaries:**
-- Every FFI, wire-format (`ByteSafe`), or `#[repr(C)]` type is `LayoutPolicy.fixed` and deterministic across compilers.
-- `concrete facts` reports the **exact realized `LayoutPlan`** (size, alignment, field offsets, bank/SoA shape, niche encoding) for every type in the program, bound to the artifact digest.
-- No hidden runtime representation: `LayoutPlan` is static, deterministic per build inputs, and inspectable in the audit dossier (`R-0201`).
+Does private optimized layout violate Concrete's transparency philosophy? **No, as long as boundaries stay explicit and predictable:**
+- Predictable default layouts (`R-0502`/`R-0609`) remain unchanged, and every FFI, wire-format (`ByteSafe`), or `#[repr(C)]` type is strictly `LayoutPolicy.fixed`.
+- Private optimized layouts are admitted **only** with a kernel-checked conversion/refinement proof back to the spec's value model.
+- `concrete facts` reports the **exact realized `LayoutPlan`** (size, alignment, field offsets, bank/SoA shape, tag encoding) for every type in the program, bound to the artifact digest.
 
 ---
 
@@ -103,10 +108,11 @@ Does compiler-chosen layout violate Concrete's transparency philosophy? **No, as
 
 | Increment | Slice | Deliverable | Gate |
 |---|---|---|---|
-| **0. Owner decision** | Pre-Slice 6 (`Batch 2`) | Decide `LayoutPolicy` split (`fixed` vs `free` internal structs/enums/arrays) revising `R-0502`/`R-0609` | Decision recorded in `docs/decisions.md` |
-| **1. Parametric `Memory.lean` + packing + copy elision** | Slice 6 (structs & enums) | `LayoutPlan`, decidable `LayoutPlan.valid`, parametric `Memory.lower_correct`; automatic field reordering, compact/niche enum tags, destination-passing copy elision | Parametric refinement theorem (zero `sorry`), negative control rejecting an overlapping `LayoutPlan`, ABI-fixed control proving `#[repr(C)]` is never reordered |
-| **2. Proved AoS↔SoA & hot/cold splitting** | Slices 7 & 13 (arrays / `HeapArray`) | Multi-bank / SoA `StorageShape` in `LayoutPlan` + disjointness check for indexed array/slice projections | Refinement proof + cross-backend differential match (`aos` vs `soa` identical observations) + benchmark evidence (`R-0424`) |
+| **0. Owner decisions** | Pre-Slice 6 (`Batch 2`) | (a) Keep predictable defaults while allowing private optimized layouts backed by exact conversion proofs; (b) separately decide compact/niche enum tags (`R-0609`) | Decisions recorded in `docs/decisions.md` |
+| **1. Parametric `Memory` + private packing + copy elision** | Slice 6 (structs & enums) | `LayoutPlan`, decidable 3-part `LayoutPlan.valid` (incomparable-sibling spatial disjointness, injective tag/niche codec, temporal slot-reuse non-overlap), parametric `Memory.lower_correct` | Parametric refinement theorem (zero `sorry`), negative controls rejecting (a) overlapping sibling fields, (b) colliding niche encodings, (c) live-overlap slot reuse, and (d) mutated `#[repr(C)]`/default-boundary layout |
+| **2. Proved AoS↔SoA & hot/cold splitting** | Slices 7 & 13 (arrays / `HeapArray`) | Multi-bank / SoA `StorageShape` in `LayoutPlan` + incomparable-path disjointness for indexed array/slice projections | Refinement proof + cross-backend differential match (`aos` vs `soa` identical observations) + benchmark evidence (`R-0424`) |
 
 ### Owner Questions Required Before Implementation
-1. **Default layout freedom (`R-0502` / `R-0609`):** May ordinary safe structs/enums (not `#[repr(C)]`, not `ByteSafe`, not address-exposed to raw pointers) use compiler-chosen `LayoutPlan` (reordering, compact/niche tags, splitting, AoS↔SoA), while `#[repr(C)]` and `ByteSafe` remain spec-fixed?
-2. **Determinism rule:** Should the default `LayoutPlan` synthesizer be strictly deterministic from source + target profile (preserving reproducible builds `R-0577`), with PGO/search-driven plans requiring an explicit checked plan file in build inputs? (Recommendation: **Yes** — keeps builds reproducible and auditable.)
+1. **Private optimized layouts (`R-0502` / `R-0609`):** Keep the current predictable default layouts, and allow private optimized layouts (reordering, splitting, copy elision, AoS↔SoA) for non-ABI/non-`ByteSafe`/non-raw-exposed internal types **only** with a kernel-checked proof they convert back exactly to the spec's value model?
+2. **Compact / niche enum tags (separate decision):** Independently of private struct/array layouts, should `R-0609`'s "`i32` enum tags, no niches" rule be relaxed for non-`#[repr(C)]` enums (e.g. smallest tag width and/or proved niche encodings)?
+3. **Determinism rule:** Should the default `LayoutPlan` synthesizer be strictly deterministic from source + target profile (preserving reproducible builds `R-0577`), with search/PGO-driven plans requiring an explicit checked plan file in build inputs? (Recommendation: **Yes**.)

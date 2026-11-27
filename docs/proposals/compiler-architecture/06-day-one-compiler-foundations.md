@@ -14,13 +14,14 @@ Today, [Concrete/Artifact/Encoding.lean](../../../Concrete/Artifact/Encoding.lea
 At Slice 0, each IR (`Core`, `MIR`, `Memory`, `BIR`) has only a handful of constructors—writing `print : IR → String` and `parse : String → Except ParseError IR` (plus canonical `Artifact.encode`) takes ~100–200 lines total. Every future slice then adds 3–5 lines per new constructor instead of retrofitting a parser over 11 slices of IR.
 
 ### Design
-- For each IR `X ∈ {Core, MIR, Memory, BIR}`:
-  - Total deterministic `X.print : X.Program → String` (preserving typed IDs, spans/origins, and `FactTable` annotations).
-  - Total `X.parse : String → Except Refusal X.Program`.
+Target the current slice-indexed IR carriers in [Concrete/Interfaces/Carriers.lean](../../../Concrete/Interfaces/Carriers.lean) (`MIR lang profile`, `Memory lang profile`, `SSA lang profile`, `BIR lang profile`) alongside Core:
+- For each IR `X ∈ {Core, Interfaces.MIR, Interfaces.Memory, Interfaces.SSA, Interfaces.BIR}`:
+  - Total deterministic `X.print : X → String` (preserving typed IDs, spans/origins, `OperationCheck`/`TrapEntry` metadata, and `FactTable` annotations).
+  - Total `X.parse : String → Except Refusal X`.
   - Kernel-checked (or tested-plus-proved) **round-trip law**: `X.WF p → X.parse (X.print p) = .ok p`.
-- CLI entry points (`--emit-ir=core|mir|memory|bir`, `--from-ir=bir`):
-  - **Pass-isolated unit & golden tests:** test `MIR → Memory`, `SSA`, `BIR → LCB`, and `ValidatedPass` ([Doc 01](01-validated-passes-and-ub-free-opt.md)) directly without going through the frontend.
-  - **Direct middle/backend fuzzing:** generate valid `BIR` / `MIR` directly to stress lowering, LCB, and validators (`R-0272`, `R-0732`).
+- CLI entry points (`--emit-ir=core|mir|memory|ssa|bir`, `--from-ir=bir`):
+  - **Pass-isolated unit & golden tests:** test `MIR → Memory`, `Memory → SSA`, `SSA → BIR`, `BIR → LCB`, and `ValidatedPass` ([Doc 01](01-validated-passes-and-ub-free-opt.md)) directly without going through the frontend.
+  - **Direct middle/backend fuzzing:** generate valid `Interfaces.BIR` / `Interfaces.MIR` directly to stress lowering, LCB, and validators (`R-0272`, `R-0732`).
   - **LLM & human inspectability:** every intermediate IR is readable, diffable, and copy-pasteable into minimal regression files.
 
 ---
@@ -28,7 +29,7 @@ At Slice 0, each IR (`Core`, `MIR`, `Memory`, `BIR`) has only a handful of const
 ## <a id="2-dense-arrays-and-proof-stability"></a>2. Dense `Array`-Indexed Tables & Modular Proof-Stability Discipline (`R-0737`)
 
 ### Problem 1 — The `AList` / `List.lookup` Scaling Cliff
-On `main`, [Concrete/MIR.lean](../../../Concrete/MIR.lean), [Concrete/Memory.lean](../../../Concrete/Memory.lean), and [Concrete/BIR.lean](../../../Concrete/BIR.lean) store pass environments and tables in association lists (`AList`, `List.lookup`, `List.find?`). Every lookup inside a pass loop is $O(n)$, making passes $O(n^2)$—already surfacing in `R-0723` (`BIR.enter`, `LCB`, `LL1`) and the deterministic span scaling gate (`R-0550`).
+On `main`, both the Slice-0 prototypes ([Concrete/MIR.lean](../../../Concrete/MIR.lean), [Concrete/Memory.lean](../../../Concrete/Memory.lean), [Concrete/BIR.lean](../../../Concrete/BIR.lean)) and list-backed lookup tables in pass implementations use association lists (`AList`, `List.lookup`, `List.find?`). Every lookup inside a pass loop is $O(n)$, making passes $O(n^2)$—already surfacing in `R-0723` (`BIR.enter`, `LCB`, `LL1`) and the deterministic span scaling gate (`R-0550`).
 
 Migrating `List` → dense `Array` indexed by typed IDs (`BlockId`, `RegId`, `PlaceId`, `SiteId`) takes days over Slice 0/1's small proof base and *months* once Slices 2–11 add 50,000 lines of proofs.
 
