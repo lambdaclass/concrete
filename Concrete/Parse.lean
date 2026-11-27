@@ -105,22 +105,6 @@ private def syntaxError (input : List Token) : Refusal :=
   | tok :: _ => .syntaxError s!"unexpected token at byte {tok.span.start}"
   | [] => .syntaxError "unexpected end of file"
 
--- Contextual markers only for refusal recognition. The slice parser still sees the original
--- identifier tokens. In particular, `let mut: u8` is a binding named `mut`.
-private def refusalTokens : List Token → List Token
-  | keyword :: marker :: binder :: rest =>
-    if keyword.value.kind == .let_ && marker.value == .name "mut" &&
-        binder.value.kind == .ident then
-      keyword :: { marker with value := .fixed .mut_ } :: refusalTokens (binder :: rest)
-    else contextual keyword :: refusalTokens (marker :: binder :: rest)
-  | tail => tail.map contextual
-where
-  contextual (tok : Token) : Token :=
-    match tok.value with
-    | .name "if" => { tok with value := .fixed .if_ }
-    | .name "else" => { tok with value := .fixed .else_ }
-    | _ => tok
-
 private def refusalTable : CheckedTable Terminal Nonterminal :=
   ⟨checkedRefusalGrammar, makeTable checkedRefusalGrammar.grammar, rfl⟩
 
@@ -141,11 +125,12 @@ private def recognizeProduction (lhs : Nonterminal) (rhs : List (Sym Terminal No
 private def recognizeDecided (input : List Token) : Except Refusal Bool :=
   run refusalTable (·.value.kind) (fun tok => .ok (nonDecimal tok))
     recognizeProduction (fun _ tokens _ => syntaxError tokens)
-    (32 * (input.length + 1)) (refusalTokens input)
+    (32 * (input.length + 1)) input
 
 def parse (input : List Token) : Except Refusal Program := do
-  -- Classify a form as unsupported only after consuming its entire syntax. Both grammars
-  -- require an identifier in a binder position, so a reserved keyword there is SYNTAX.
+  -- Classify a form as unsupported only after consuming its entire syntax.
+  -- Slice 0 requires an identifier as a let binder. The refusal grammar also
+  -- recognizes the wildcard and `mut` followed by an identifier.
   match run table0 (·.value.kind) (fun tok => .ok (.tok tok)) (fun lhs _ => reduce lhs)
       (fun _ tokens _ => syntaxError tokens)
       (16 * (input.length + 1)) input with

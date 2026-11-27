@@ -225,7 +225,9 @@ def scan(pattern, paths, header=HEADER):
     word, rc = re.compile(pattern, re.M), 0
     for path in paths:
         try:
-            text = lex(Path(path).read_text(encoding="utf-8"))
+            source = Path(path).read_text(encoding="utf-8")
+            text = lex(source)
+            code_lines = lex(source, literals=False).split("\n")
         except (OSError, UnicodeDecodeError, LexError) as e:
             print(f"error: {path}: {e}", file=sys.stderr); rc = 3; continue
         lines = text.split("\n")
@@ -236,8 +238,8 @@ def scan(pattern, paths, header=HEADER):
         if k < len(lines) and not FIRST_COMMAND.match(lines[k]):
             print(f"{path}:{k + 1}: {lines[k].strip()} (the import header must end in a command at column 0)")
         hits = {text.count("\n", 0, m.start()) + 1 for m in word.finditer(text)}
-        hits |= {j for j, line in enumerate(lines, 1)
-                 if re.search(r"\bimport\b", line) and not (j <= k and header.match(line))}
+        # Banned trust words include literal payloads. Imports are Lean code tokens.
+        hits |= {j for j, line in enumerate(code_lines[k:], k + 1) if re.search(r"\bimport\b", line)}
         for j in sorted(hits):
             print(f"{path}:{j}: {lines[j - 1].strip()}")
     return rc

@@ -1262,8 +1262,8 @@ Concrete.Elab.SourceSite.mk.sizeOf_spec
 Concrete.FrontendPremises.elaborate	propext
 Concrete.FrontendPremises.parse	propext
 Concrete.ImageTheorem.Elaborates.originWellFormed	propext
-Concrete.ImageTheorem.ElaboratesBindings.brecOn	
-Concrete.ImageTheorem.ElaboratesBindings.headLegal	
+Concrete.ImageTheorem.ElaboratesBindings.brecOn	propext
+Concrete.ImageTheorem.ElaboratesBindings.headLegal	propext
 Concrete.ImageTheorem.ElaboratesExpr.brecOn	
 Concrete.ImageTheorem.ExecutionPolicy.mk.inj	
 Concrete.ImageTheorem.ExecutionPolicy.mk.injEq	propext
@@ -2958,34 +2958,6 @@ _private.Concrete.Lex.0.ConcreteSpec.Surface0.intTySpelling.match_1.eq_5
 _private.Concrete.Lex.0.ConcreteSpec.Surface0.intTySpelling.match_1.eq_6	
 _private.Concrete.Lex.0.ConcreteSpec.Surface0.intTySpelling.match_1.eq_7	
 _private.Concrete.Lex.0.ConcreteSpec.Surface0.intTySpelling.match_1.eq_8	
-_private.Concrete.Lex.0.ConcreteSpec.Surface0.word.match_1.eq_1	
-_private.Concrete.Lex.0.ConcreteSpec.Surface0.word.match_1.eq_10	
-_private.Concrete.Lex.0.ConcreteSpec.Surface0.word.match_1.eq_11	
-_private.Concrete.Lex.0.ConcreteSpec.Surface0.word.match_1.eq_12	
-_private.Concrete.Lex.0.ConcreteSpec.Surface0.word.match_1.eq_13	
-_private.Concrete.Lex.0.ConcreteSpec.Surface0.word.match_1.eq_14	
-_private.Concrete.Lex.0.ConcreteSpec.Surface0.word.match_1.eq_15	
-_private.Concrete.Lex.0.ConcreteSpec.Surface0.word.match_1.eq_16	
-_private.Concrete.Lex.0.ConcreteSpec.Surface0.word.match_1.eq_17	
-_private.Concrete.Lex.0.ConcreteSpec.Surface0.word.match_1.eq_18	
-_private.Concrete.Lex.0.ConcreteSpec.Surface0.word.match_1.eq_19	
-_private.Concrete.Lex.0.ConcreteSpec.Surface0.word.match_1.eq_2	
-_private.Concrete.Lex.0.ConcreteSpec.Surface0.word.match_1.eq_20	
-_private.Concrete.Lex.0.ConcreteSpec.Surface0.word.match_1.eq_21	
-_private.Concrete.Lex.0.ConcreteSpec.Surface0.word.match_1.eq_22	
-_private.Concrete.Lex.0.ConcreteSpec.Surface0.word.match_1.eq_23	
-_private.Concrete.Lex.0.ConcreteSpec.Surface0.word.match_1.eq_24	
-_private.Concrete.Lex.0.ConcreteSpec.Surface0.word.match_1.eq_25	
-_private.Concrete.Lex.0.ConcreteSpec.Surface0.word.match_1.eq_26	
-_private.Concrete.Lex.0.ConcreteSpec.Surface0.word.match_1.eq_27	
-_private.Concrete.Lex.0.ConcreteSpec.Surface0.word.match_1.eq_28	
-_private.Concrete.Lex.0.ConcreteSpec.Surface0.word.match_1.eq_3	
-_private.Concrete.Lex.0.ConcreteSpec.Surface0.word.match_1.eq_4	
-_private.Concrete.Lex.0.ConcreteSpec.Surface0.word.match_1.eq_5	
-_private.Concrete.Lex.0.ConcreteSpec.Surface0.word.match_1.eq_6	
-_private.Concrete.Lex.0.ConcreteSpec.Surface0.word.match_1.eq_7	
-_private.Concrete.Lex.0.ConcreteSpec.Surface0.word.match_1.eq_8	
-_private.Concrete.Lex.0.ConcreteSpec.Surface0.word.match_1.eq_9	
 _private.Concrete.Lex.0.Except.map.match_1.eq_1	
 _private.Concrete.Lex.0.Except.map.match_1.eq_2	
 _private.Concrete.Lex.0.PSigma.casesOn._arg_pusher	
@@ -3274,7 +3246,7 @@ _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.lcbWitness	Classical.ch
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.llvmUncheckedWitness	Classical.choice Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.llvmWitness	Classical.choice Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.overflowInput._proof_1	Quot.sound propext
-_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.refusesFirstBinder	
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.refusesFirstBinder	propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.returnAtOne	Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.testImagePremises	Classical.choice Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.testLCBAnswerMarker	propext

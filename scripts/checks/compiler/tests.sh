@@ -23,6 +23,9 @@ if [[ ${CONCRETE_TEST_EMIT_ONLY:-0} != 1 ]]; then
   build rule-registry "$work/rule-registry.log" bounded 1800 \
     lake lean scripts/checks/compiler/rule_registry.lean
   echo "ok   slice-0 rule references and layout controls"
+  build local-binders "$work/local-binders.log" bounded 120 \
+    lake lean scripts/checks/compiler/local_binders.lean -- --run scripts/checks/compiler/local_binders.lean
+  echo "ok   builtin type and trait binder refusals through lexing, parsing and elaboration"
   # Exercise one golden in independent process environments, with distinct cwd and TMPDIR.
   encoding_control="$root/scripts/checks/compiler/artifact_encoding.lean"
   for encoding_env in utc pacific; do

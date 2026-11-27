@@ -51,35 +51,16 @@ def ExpectedTypeLiteral (suffix : Option ConcreteSpec.IntTy) : Prop := suffix = 
 docs/decisions.md#decided-2026-11-25-freeze-and-grammar. -/
 def LocalBound (input : String × List String) : Prop := input.1 ∈ input.2
 
-/-- The builtin spellings reserved by OD153 and checked for local shadowing under OD67.
-Item recovered-59-32 defines a single catalog with no aliases. The spellings remain lexer identifiers.
-
-* `abort`: decided-project-no-hidden-traps (Q1).
-* `alloc`: decided-2026-11-02-allocation. `destroy`: OD59 and Q2.7. `discard`: OD28 and OD62.
-* `sizeof` and `alignof`: OD126 (FFI-7). `read_owned`: OD13.
-* `get_args`: OD156 as revised by decided-2026-11-02-filesystem.
-* `byte_at`: Q4.6, revised by decided-project-no-hidden-traps.
-* `string_concat`, `string_slice`, `string_substr`, `string_trim`, `int_to_string`,
-  `bool_to_string`, `float_to_string`, `string_push_char`, `string_append`, `string_append_int`,
-  `string_append_bool`, and `string_reserve`: OD154 and decided-2026-11-02-allocation.
-* `wrapping_add`, `wrapping_sub`, `wrapping_mul`, `saturating_add`, `saturating_sub`, and
-  `saturating_mul`: OD10 and OD145 (ARITH-4).
-* `checked_add`, `checked_sub`, `checked_mul`, `checked_div`, `checked_rem`, `checked_shl`,
-  `checked_shr`, and `checked_neg`: decided-project-no-hidden-traps, spelling 1.
-* `try_convert`, `truncate`, `reinterpret`, `trunc`, `round`, `floor`, and `ceil`: OD99.
-
-Legacy-only spellings such as `alloc_array`, `free_array`, `realloc_array`, `vec_pop`,
-`string_length`, `string_len`, and `String_len` remain ordinary identifiers
-(decided-2026-11-23-slice0-and-roadmap-answers, answer 2a, and the 2026-11-24 owner
-clarification on builtin name reservation). -/
+/-- Reserved intrinsic names, including the lossless conversion `widen`. The shared
+surface catalog records each spelling and its decision. -/
 abbrev intrinsicNames : List String := ConcreteSpec.Surface0.intrinsicNames
 
 /-- A binding may not reuse a local already in scope. Decision: OD67 (SCOPE-1). -/
 def FreshLocal (input : String × List String) : Prop := input.1 ∉ input.2
 
-/-- A local may not shadow the entry function or an intrinsic. Decision: OD67, OD153,
-docs/decisions.md#recovered-59-32. -/
-def UnreservedLocal (name : String) : Prop := name ≠ "main" ∧ name ∉ intrinsicNames
+/-- A local may not shadow the entry function, a builtin type or an intrinsic. Decision: OD67, OD153,
+docs/decisions.md#decided-2026-11-27-token-ballot. -/
+def UnreservedLocal (name : String) : Prop := UnreservedLocalName name
 
 /-- Slice 0 binds a name rather than a wildcard. Decision: OD62, Q8.3,
 docs/decisions.md#decided-slice0-surface-2026-11-06. -/
