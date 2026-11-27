@@ -259,8 +259,9 @@ echo "=== X: the examples, in the kernel's terms ==="
 # collected as E collects a theorem's. Each example becomes a noncomputable abbreviation.
 # warningAsError stays off in this axiom-only copy: named abbreviations can trigger declaration
 # linters that anonymous examples do not; warnings remain errors in the original library.
-EX="$TMP/ex"; mkdir -p "$EX"
+EX="$TMP/ex"; mkdir -p "$EX/.lake"
 cp lakefile.toml lean-toolchain lake-manifest.json "$EX"/ || { no "could not copy the Lake files"; finish; }
+[ ! -d "$ROOT_DIR/.lake/packages" ] || ln -s "$ROOT_DIR/.lake/packages" "$EX/.lake/packages"
 sed -i 's/^warningAsError = true$/warningAsError = false/' "$EX/lakefile.toml"
 cp "$ENUMERATOR" "$TMP/examples-enumerator.lean"
 NEX=$(python3 "$PROOFS_DIR/lean_lex.py" examples . "$EX" "${SRC[@]}" "${EVIDENCE_SRC[@]}" "${COMPILER_SRC[@]}") \
