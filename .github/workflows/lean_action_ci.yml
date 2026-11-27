@@ -135,8 +135,23 @@ jobs:
         uses: leanprover/lean-action@v1
         with: *lean_build
 
-      - name: Proof axioms (scripts/proofs/axioms.sh)
-        run: bash scripts/proofs/axioms.sh
+      - name: Proof axioms without an elan default (scripts/proofs/axioms.sh)
+        run: |
+          unset ELAN_TOOLCHAIN
+          prefix=$(lean --print-prefix)
+          control=$(mktemp -d "$RUNNER_TEMP/axioms.XXXXXX")
+          trap 'rm -rf "$control"' EXIT
+          export ELAN_HOME="$control/elan"
+          elan toolchain link "$(cat lean-toolchain)" "$prefix"
+          ln -s "$(command -v elan)" "$control/lake"
+          ln -s "$(command -v elan)" "$control/lean"
+          export PATH="$control:$PATH"
+          export TMPDIR="$control"
+          if (cd "$control" && elan which lake) >/dev/null 2>&1; then
+            echo "Expected an unpinned directory to have no toolchain" >&2
+            exit 1
+          fi
+          bash scripts/proofs/axioms.sh
 
   proof-trust-ban:
     name: Proof trust ban (sorry, native_decide)

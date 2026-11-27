@@ -36,6 +36,7 @@ if [[ ${CONCRETE_TEST_EMIT_ONLY:-0} != 1 ]]; then
   for encoding_env in utc pacific; do
     encoding_dir="$work/artifact-$encoding_env"
     mkdir -p "$encoding_dir/tmp"
+    cp "$root/lean-toolchain" "$encoding_dir/"
     if [[ $encoding_env == utc ]]; then
       encoding_tz=UTC0
     else

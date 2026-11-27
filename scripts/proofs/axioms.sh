@@ -111,6 +111,7 @@ echo "=== negative controls ==="
   set -e
   TMP="$TMP/renamed-import"
   mkdir "$TMP"
+  cp "$ROOT_DIR/lean-toolchain" "$TMP/"
   cd "$TMP"
   echo 'def rowProbe := true' > RetiredRowHelper.lean
   "$LAKE" -d "$ROOT_DIR" env lean -R . -o RetiredRowHelper.olean RetiredRowHelper.lean

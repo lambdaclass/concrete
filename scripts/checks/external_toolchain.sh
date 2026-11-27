@@ -13,7 +13,7 @@ source "$ROOT/scripts/checks/lib/bounded.sh"
 mkdir -p "$TMP/source" "$TMP/bin" "$TMP/project/scripts/checks/lib" "$TMP/project/scripts/proofs"
 cp "$ROOT/scripts/proofs/"{external.sh,external.pins,lake_tool.sh,lib.sh,theorems.lean,export_inventory.py} "$TMP/project/scripts/proofs/"
 cp "$ROOT/scripts/checks/lib/"{gate_env.sh,git_sandbox.sh,has_match.sh,limits.sh} "$TMP/project/scripts/checks/lib/"
-printf '%s\n' leanprover/lean4:v4.35.0 > "$TMP/project/lean-toolchain"
+cp "$ROOT/lean-toolchain" "$TMP/project/"
 # The driver compares the enumerated modules with the fixture's source inventory.
 touch "$TMP/project/ConcreteSpecEvidence.lean" "$TMP/project/ConcreteSpec.lean" "$TMP/project/Concrete.lean"
 mkdir "$TMP/project/ConcreteSpecEvidence" "$TMP/project/ConcreteSpec" "$TMP/project/Concrete"
