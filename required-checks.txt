@@ -5,6 +5,7 @@ Landing gates
 Root checks
 # Includes Lean-derived spec publication and rule-registry controls.
 Spec build
+Grammar projections
 Oracle (GitHub-hosted fetch + smoke)
 Proof axioms
 Proof trust ban (sorry, native_decide)

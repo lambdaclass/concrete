@@ -1,6 +1,6 @@
 # Concrete 0.1 grammar compatibility draft
 
-This is the non-normative R-0728 draft for slices 0–11. The [production
+Sections 0 and 1 are generated from the factored Lean production catalog. Sections 2–11 are the R-0728 compatibility draft. The [production
 table](slices-0-11.grammar) is cumulative. Each section replaces all preceding rules
 with the same left-hand side and otherwise adds rules. An empty right-hand side
 means epsilon. The [checker](Check.lean) loads the table and runs the same repository fixed-point computation and
@@ -8,6 +8,8 @@ closure checks as `Concrete.LL1.ll1`. Each production contributes one table entr
 due before the B1 parser, the slice 2 delta before the lexer and grammar lock, and
 each later delta before its parser. [R-0622](../../ROADMAP.md#r-0622) ·
 [R-0728](../../ROADMAP.md#r-0728)
+
+Regenerate sections 0 and 1 with `lake lean docs/grammar/Check.lean -- --run docs/grammar/Check.lean --write` inside the development shell. The normal checker compares them byte for byte. [Lean catalog](../../ConcreteSpec/Spec/GrammarData.lean)
 
 The [closed token ballot](TOKEN-BALLOT.md) lists the exact spellings, first
 consumers and reservation policy.
@@ -33,18 +35,22 @@ The table gives the recorded Lean rules for slices 0 and 1 and the authority for
 
 ## Reproduce the checks
 
-From the repository root, build the spec lexer and run the standalone
-checker. It prints the completed projections and stops on a conflict, undefined
+From the repository root, run the standalone checker with its imports. It prints the completed projections and stops on a conflict, undefined
 production, unproductive nonterminal or failed example.
 
 ```sh
-LEAN_NUM_THREADS=2 nix develop -c bash -c '
-  lake build +ConcreteSpec.Spec.Surface0 &&
-  lake env lean --run docs/grammar/Check.lean
-'
+nix develop -c env LEAN_NUM_THREADS=2 lake lean docs/grammar/Check.lean -- --run docs/grammar/Check.lean
 ```
 
-For each cumulative slice, the checker checks every written rule for definedness and productivity, then builds the prediction table from the rules reachable from `Program`. It reports the reachable production count and replays each accept and refuse example from its first slice onward. An independent list checks the terminal that the spec lexer returns for each decided word. The recognizer projects that emitted terminal to its grammar column. Reservations apply even before the corresponding construct is admitted. The checker parses a let annotation for each of the eleven primitive names in every projection, using the first slices from the ballot as expectations. Literal controls cover digit separators, lowercase hex, suffix spellings, byte and string escapes, and forbidden raw scalars including NUL and U+FEFF.
+For each cumulative slice, the checker checks every written rule for definedness and productivity, then builds the prediction table from the rules reachable from `Program`. It reports the reachable production count and replays each accept and refuse example from its first slice onward. An independent list checks the terminal that the spec lexer returns for each decided word. The recognizer projects that emitted terminal to its grammar column. Reservations apply even before the corresponding construct is admitted.
+
+The recognition catalog admits each primitive local annotation at the keyword’s first consumer and named local annotations at slice 1. The slice-0 signature returns `u8`. Every other function result first appears when both ordinary functions (slice 5) and its type are available. This places the integer widths, `bool`, `Unit` and named results at slice 5, and `char` at slice 11. [Result-position decision](../decisions.md#decided-2026-11-27-result-position) · [Keyword ballot](TOKEN-BALLOT.md#reservation-at-the-pre-slice-2-lock)
+
+A slice 4 loop permission consumes a quoted reason. In a value expression a literal has type `StaticStr` (Q4.1), whose first consumer is slice 11. [Builtin first consumers](TOKEN-BALLOT.md#builtin-names-by-first-consumer) · [Core decisions](../decisions.md#decided-2026-11-05-core)
+
+For every recognition production the checker builds a complete source program from the catalog. It fills the production’s operands and places it in a reachable context from `Program`. The production scanner and projected prediction table must consume that program and select the exact alternative at its independently expected slice. The preceding slice must refuse the program wherever a predecessor exists. The checker also compares the row tag directly, since an enclosing construct can hide an erroneously early tag. [Boundary controls](Check.lean)
+
+Literal checks exercise both sides of the Slice 2 radix boundary, including suffixed decimals. They also cover digit separators, lowercase hex, suffix spellings, byte and string escapes, and forbidden raw scalars including NUL and U+FEFF.
 
 The slice-2 type checker refuses a literal suffix whenever the literal's position already has a resolved integer type. R-0722 records the required typing cases. The draft checks OD48 directly on counted loops with two literal bounds. Exactly one bound must carry a suffix, and grouping or unary minus preserves a literal bound. [R-0722 typing controls](../../ROADMAP.md#slice-2-literal-suffixes) · [Counted bounds](../decisions.md#od48)
 

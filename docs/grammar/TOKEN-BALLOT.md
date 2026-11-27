@@ -4,7 +4,7 @@ Closed on 2026-11-27 by unanimous agreement of Claude, Codex and agy under the o
 
 ## Reservation at the pre-slice-2 lock
 
-The lexer reserves every keyword whose construct and spelling are decided. Each later slice adds productions using this vocabulary. Words with undecided spellings stay available. The first consumer determines when a keyword can appear in a production. [Shared word classifier](../../ConcreteSpec/Spec/Surface0.lean)
+The lexer reserves every keyword whose construct and spelling are decided. Each later slice adds productions using this vocabulary. Words with undecided spellings stay available. The first consumer determines when a keyword can appear in a production. [Shared word classifier](../../ConcreteSpec/Spec/GrammarVocab.lean)
 
 | First consumer | Reserved words |
 |---|---|
@@ -17,10 +17,13 @@ The lexer reserves every keyword whose construct and spelling are decided. Each 
 | 7 | `borrow` |
 | 8 | `pub`, `const`, `mod`, `import` |
 | 9 | `trait`, `impl`, `defer`, `Self`, `cap` |
-| 9 capability arguments, 11 grants | `Fs`, `Network`, `Env`, `Time`, `Alloc`, `Device`, `Console`, `Process`, `Unsafe`, `Entropy` |
+| 9 | `Fs`, `Network`, `Env`, `Time`, `Alloc`, `Device`, `Console`, `Process`, `Unsafe`, `Entropy` |
 | 10 | `spec`, `ghost`, `assert`, `assume`, `by` |
 | 11 | `with`, `char` |
-| 16–17 | `trusted`, `extern`, `kept` |
+| 16 | `trusted` |
+| 17 | `extern`, `kept` |
+
+The capability names first appear as arguments at slice 9 and in grants at slice 11. Trusted functions start at slice 16. Extern declarations and their kept parameter marker start with FFI at slice 17. [Approved slice order](../decisions.md#decided-2026-11-22-roadmap-reordering) · [Kept parameter decision](../decisions.md#core-q3-12)
 
 `PRIMITIVE` groups the Q1 keyword tokens for type and qualified-call productions. The earlier `u8` terminal also starts a qualified call. Non-primitive builtin types such as `Option`, `Result`, `Heap`, `Vec` and `String` retain their identifier tokens. Local binders may shadow neither a builtin type, `main`, nor an intrinsic. Name resolution uses the shared binder rule and intrinsic catalog. The names `math`, `self` and `as` remain available as identifiers. [Q1 and Q3](../decisions.md#decided-2026-11-27-token-ballot) · [Builtin catalog clarification](../decisions.md#decided-2026-11-24-builtin-names)
 

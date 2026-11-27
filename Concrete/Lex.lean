@@ -1,3 +1,4 @@
+import Concrete.Interfaces.Carriers
 import Concrete.Refusal
 import ConcreteSpec.Proofs.Surface0
 
@@ -2106,7 +2107,7 @@ private theorem advance_width {c : Nat} {chunk : List UInt8}
   by_cases hcr : (c == 13) = true <;> by_cases hlf : (c == 10) = true <;>
     simp [Position.advance, ConcreteSpec.Core.Position.step, hw, hcr, hlf]
 
-private theorem decoded_width {bytes : List UInt8} {cs : List Nat}
+theorem decoded_width {bytes : List UInt8} {cs : List Nat}
     (h : Utf8.Decodes bytes cs) (pos : Position) :
     (cs.foldl Position.advance pos).byte = pos.byte + bytes.length := by
   induction h generalizing pos with
@@ -2335,10 +2336,18 @@ private theorem Scanned.close {fileId : ConcreteSpec.Core.FileId} {openComment c
     simpa only [List.append_assoc, List.reverse_cons, List.singleton_append] using
       ih rfl hf (PieceStream.cons hl hm ht)
 
-private theorem PieceMeaning.span_eq {fileId : ConcreteSpec.Core.FileId} {pos openComment spelling suffix piece}
+theorem PieceMeaning.span_eq {fileId : ConcreteSpec.Core.FileId} {pos openComment spelling suffix piece}
     (h : PieceMeaning fileId pos openComment spelling suffix piece) :
     piece.span = pos.span (spelling.foldl Position.advance pos) fileId := by
   cases h <;> rfl
+
+theorem PieceMeaning.spelling_nonempty {fileId : ConcreteSpec.Core.FileId}
+    {pos openComment spelling suffix piece} (h : PieceMeaning fileId pos openComment spelling suffix piece) :
+    spelling ≠ [] := by
+  cases h with
+  | whitespace ne _ => exact ne
+  | comment => simp
+  | token _ ht _ => exact (token_split ht).2
 
 /-- One copy of the exact bytes, scoped to all ranges in this stream. -/
 structure LosslessStream where
@@ -2383,7 +2392,7 @@ def lexLossless (src : ByteArray) (fileId : ConcreteSpec.Core.FileId := ⟨0⟩)
 def lex (src : ByteArray) (fileId : ConcreteSpec.Core.FileId := ⟨0⟩) : Except Refusal (List Token) :=
   (lexLossless src fileId).map LosslessStream.parserView
 
-private theorem lexLossless_origin {src : ByteArray} {fileId : ConcreteSpec.Core.FileId}
+theorem lexLossless_origin {src : ByteArray} {fileId : ConcreteSpec.Core.FileId}
     {stream : LosslessStream} (h : lexLossless src fileId = .ok stream) :
     stream.source = src ∧ stream.fileId = fileId := by
   unfold lexLossless at h
@@ -2756,5 +2765,181 @@ example : lex "01bad".toUTF8 = .error (.syntaxError "malformed integer at byte 0
 
 example : boundedDigits .hexadecimal 2 [97, 102, 117, 56] = some ([97, 102], [117, 56]) := rfl
 example : boundedDigits .hexadecimal 2 [97, 102, 48, 117, 56] = none := rfl
+
+end Concrete.Lex
+
+namespace Concrete.Lex
+open ConcreteSpec.Surface0
+
+def scannerFailure : Refusal → Prop
+  | .syntaxError _ | .lexerDigitLimit .. => True
+  | _ => False
+
+private theorem nextToken_failure {input : List Nat} {pos : Position} {e : Refusal}
+    (h : nextToken input pos = .error e) : scannerFailure e := by
+  unfold nextToken at h
+  repeat' first | split at h | contradiction | cases h <;> trivial
+
+private theorem tokens_failure {fileId : ConcreteSpec.Core.FileId} (fuel : Nat)
+    (input : List Nat) (pos : Position) (comment : Bool) (acc : List Piece) {e : Refusal}
+    (bound : input.length ≤ fuel) (h : tokens fileId fuel input pos comment acc = .error e) :
+    scannerFailure e := by
+  induction fuel generalizing input pos comment acc with
+  | zero =>
+    have : input = [] := List.length_eq_zero_iff.mp (by omega)
+    subst input
+    contradiction
+  | succ fuel ih =>
+    cases input with
+    | nil => contradiction
+    | cons c cs =>
+      simp only [List.length_cons] at bound
+      simp only [tokens] at h
+      split at h
+      · split at h
+        · exact ih _ _ _ _ (by omega) h
+        · cases h; trivial
+      · split at h
+        · exact ih _ _ _ _ (by omega) h
+        · split at h
+          · rename_i tail eqn
+            cases eqn
+            simp only [List.length_cons] at bound
+            exact ih _ _ _ _ (by omega) h
+          · cases ht : nextToken (c :: cs) pos with
+            | error err =>
+              simp [ht, Bind.bind, Except.bind] at h
+              subst err
+              exact nextToken_failure ht
+            | ok result =>
+              obtain ⟨value, spelling, rest⟩ := result
+              have ⟨he, hn⟩ := token_split (nextToken_sound ht)
+              have lengths := congrArg List.length he
+              simp only [List.length_cons, List.length_append] at lengths
+              have positive := List.length_pos_iff.mpr hn
+              exact ih rest _ _ _ (by omega) (by simpa [ht, Bind.bind, Except.bind] using h)
+
+theorem lexLossless_failure {src : ByteArray} {fileId : ConcreteSpec.Core.FileId}
+    {e : Refusal} (h : lexLossless src fileId = .error e) : scannerFailure e := by
+  unfold lexLossless at h
+  split at h
+  · cases h; trivial
+  · split at h
+    · rename_i _ ht
+      cases h
+      exact tokens_failure _ _ _ _ _ (Nat.le_refl _) ht
+    · contradiction
+
+end Concrete.Lex
+
+namespace Concrete.Lex
+open ConcreteSpec.Surface0
+namespace Bridge
+open ConcreteSpec.StageInterface (FileSpan Source RetainedToken RawPiece)
+
+/-- The semantic lexer already distinguishes the three decoded literal classes.
+A plain fixed token is either a punctuation entry or a reserved word. -/
+private theorem fixed_plain {input spelling tail : List Nat} {kind : Terminal}
+    (ht : Tokenizes input spelling tail (.fixed kind))
+    (hp : (LosslessValue.parsed (.fixed kind)).Payload input spelling tail) :
+    ConcreteSpec.StageInterface.Terminal.HasPayload kind = false := by
+  generalize eqn : TokenValue.fixed kind = value at ht
+  cases ht with
+  | word h =>
+    simp only [wordValue] at eqn
+    split at eqn
+    · contradiction
+    · rename_i separate
+      unfold word at eqn separate
+      cases found : wordTokens.find? (fun entry => entry.1 == scalarText spelling) with
+      | none => simp [found] at separate
+      | some entry =>
+        simp [found] at eqn
+        have allowed : ∀ entry ∈ wordTokens,
+            ConcreteSpec.StageInterface.Terminal.HasPayload entry.2 = false := by decide
+        exact eqn.symm ▸ allowed entry (List.mem_of_find?_eq_some found)
+  | integer => contradiction
+  | string => cases eqn; exact False.elim (hp.1 rfl)
+  | byte => cases eqn; exact False.elim (hp.2.1 rfl)
+  | label => cases eqn; exact False.elim (hp.2.2 rfl)
+  | punct _ member =>
+    cases eqn
+    have allowed : ∀ e ∈ punctuation,
+        ConcreteSpec.StageInterface.Terminal.HasPayload e.2 = false := by decide
+    exact allowed _ member
+
+theorem fixed_in_stream {fileId pos bytes scalars pieces kind span}
+    (h : PieceStream fileId pos bytes scalars pieces)
+    (member : Piece.token (.parsed (.fixed kind)) span ∈ pieces) :
+    ConcreteSpec.StageInterface.Terminal.HasPayload kind = false := by
+  induction h with
+  | nil => contradiction
+  | cons _ meaning _ ih =>
+    rcases List.mem_cons.mp member with eqn | rest
+    · subst_vars
+      cases meaning with | token _ ht hp => exact fixed_plain ht hp
+    · exact ih rest
+
+abbrev RetainedPiece := RawPiece ⊕ RetainedToken
+
+def fileSpan (s : Span) : FileSpan := ⟨s.fileId,s.start,s.stop,s.line,s.column⟩
+
+def retainPiece (stream : LosslessStream) (piece : {p // p ∈ stream.pieces}) : RetainedPiece :=
+  let raw (s : Span) : RawPiece := ⟨fileSpan s, stream.source.extract s.start s.stop⟩
+  match eqn : piece.val with
+  | .whitespace s | .lineComment s => .inl (raw s)
+  | .token value s =>
+    let decoded : ConcreteSpec.StageInterface.TokenValue := match hv : value with
+      | .parsed (.fixed kind) => .fixed kind (by
+          obtain ⟨_, meaning⟩ := stream.meaning
+          exact fixed_in_stream meaning (by simpa only [eqn, hv] using piece.property :
+            Piece.token (.parsed (.fixed kind)) s ∈ stream.pieces))
+      | .parsed (.name name) => .name name
+      | .parsed (.integer n radix suffix) => .integer n radix suffix
+      | .stringLiteral text => .stringLiteral text.toUTF8.data.toList
+      | .byteLiteral byte => .byteLiteral byte
+      | .label name => .label ⟨name⟩
+    .inr ⟨⟨fileSpan s, decoded⟩, (raw s).value⟩
+
+/-- Each token is preceded by exactly its trivia. The final run belongs to EOF. -/
+structure Runs where
+  entries : List (List RawPiece × RetainedToken)
+  trailing : List RawPiece
+
+def Runs.prepend (p : RetainedPiece) (runs : Runs) : Runs :=
+  match p with
+  | .inr t => ⟨([],t) :: runs.entries, runs.trailing⟩
+  | .inl raw =>
+    match runs.entries with
+    | [] => ⟨[],raw :: runs.trailing⟩
+    | (before,t) :: rest => ⟨(raw :: before,t) :: rest,runs.trailing⟩
+
+def group (pieces : List RetainedPiece) : Runs := pieces.foldr Runs.prepend ⟨[],[]⟩
+
+def Runs.stream (runs : Runs) (source : Source) : ConcreteSpec.StageInterface.TokenStream :=
+  ⟨source, (runs.entries.map Prod.snd).toArray,
+    ((runs.entries.map (List.toArray ∘ Prod.fst)) ++ [runs.trailing.toArray]).toArray⟩
+
+def retain (source : Source) (stream : LosslessStream) : ConcreteSpec.StageInterface.TokenStream :=
+  (group (stream.pieces.attach.map (retainPiece stream))).stream source
+
+end Bridge
+
+/-- Resolve the exact project file and retain the scanner's located pieces in
+the registered representation. The digit-limit channel preserves its offset. -/
+def lexStream (source : ConcreteSpec.StageInterface.Source) :
+    Except Concrete.Interfaces.LexRefusal ConcreteSpec.StageInterface.TokenStream :=
+  match source.project.fileAt source.entryFile with
+  | none => .error (.missingFile source.entryFile)
+  | some file =>
+    match h : lexLossless ⟨file.source.toBytes.toArray⟩ source.entryFile with
+    | .ok stream => .ok (Bridge.retain source stream)
+    | .error e =>
+      have hf := lexLossless_failure h
+      match e with
+      | .syntaxError diagnostic => .error (.malformed diagnostic)
+      | .lexerDigitLimit offset limit => .error (.digitLimit offset limit)
+      | .internal _ | .parser _ | .unsupported _ | .checker _ | .backendResource ..
+      | .backendProfile .. | .toolFailure _ | .manifest _ | .usageError _ => False.elim hf
 
 end Concrete.Lex
