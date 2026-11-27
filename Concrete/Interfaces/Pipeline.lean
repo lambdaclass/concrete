@@ -14,9 +14,9 @@ The registry below builds its graphs from these values. -/
 structure PassFunctions {count : Nat} (grammar : SharedGrammar count) (language : CoreLanguage)
     (lang : LoweringLanguage language.operands.Ty) (profile : Profile) where
   lex : Source → Except LexRefusal TokenStream
-  elaborate : Parsed (grammar.value grammar.start) → Except ElabRefusal (CoreInput language)
+  elaborate : Parsed (grammar.value grammar.start) → Except ElabRefusal (AdmissionInput language)
   typeCore : CoreInput language → Except StageFailure Unit
-  checkCore : CoreInput language → Except CheckerRefusal (Discharges language)
+  checkCore : CoreInput language → Except AdmissionFailure (Discharges language)
   lowerCore : Admitted language → Except StageFailure (MIR lang profile)
   lowerUnchecked : CoreInput language → Except StageFailure (MIR lang profile)
   lowerMemory : MIR lang profile → Except StageFailure (Memory lang profile)
@@ -56,28 +56,36 @@ def Parsed.ElaborationDomain (slice : Slice)
     (ast : Parsed ((sliceGrammar slice).value (sliceGrammar slice).start)) : Prop :=
   Source.WF ast.source ∧ ast.source.slice = slice ∧
   (∃ stream : ParserView, stream.WF ∧ ((sliceParser slice).run stream).2 = some (.ok ast)) ∧
-  (∃ result, SliceElaboration slice (cast (sliceGrammarStartShape slice) ast.tree) result) ∧
-  ∀ payload, SliceElaboration slice (cast (sliceGrammarStartShape slice) ast.tree) (.ok payload) →
-    (CoreInput.mk ast.source.project slice payload).WF
+  (∃ result, SliceElaboration slice ast.source.project (cast (sliceGrammarStartShape slice) ast.tree) result) ∧
+  ∀ input, SliceElaboration slice ast.source.project (cast (sliceGrammarStartShape slice) ast.tree) (.ok input) →
+    input.Ready
 
 def PassFunctions.typingEntry (passes : PassFunctions grammar language lang profile) :
-    Stage (CoreInput language) StageFailure (CoreInput language) where
-  run input := (passes.typeCore input).map fun _ => input
+    Stage (AdmissionInput language) StageFailure (CoreInput language) where
+  run input := do
+    let prepared ← input.prepare.mapError (fun _ => StageFailure.unpreparable)
+    (passes.typeCore prepared).map fun _ => prepared
   kind := .directProof
-  inputInvariant input := input.WF ∧ input.InFragment
+  inputInvariant := AdmissionInput.Ready
   outputInvariant input := input.WF ∧ input.StaticallyTyped
-  success input output := input = output
-  refusal input failure :=
-    failure = .invalidInput ⟨``CoreInput.StaticallyTyped, 1⟩ ∧ ¬ input.StaticallyTyped
+  success input output := input.prepare = .ok output
+  refusal input failure := match input.prepare with
+    | .error _ => failure = .unpreparable
+    | .ok prepared =>
+      failure = .invalidInput ⟨``CoreInput.StaticallyTyped, 1⟩ ∧ ¬ prepared.StaticallyTyped
 
 def PassFunctions.admissionEntry (passes : PassFunctions grammar language lang profile) :
-    Stage (CoreInput language) CheckerRefusal (Admitted language) where
-  run input := (passes.checkCore input).map fun discharges => ⟨input, discharges⟩
+    Stage (AdmissionInput language) AdmissionFailure (Admitted language) where
+  run input := do
+    let prepared ← input.prepare.mapError AdmissionFailure.refused
+    (passes.checkCore prepared).map fun discharges => ⟨prepared, discharges⟩
   kind := .directProof
-  inputInvariant input := input.WF ∧ input.InFragment
+  inputInvariant := AdmissionInput.Ready
   outputInvariant := Admitted.Valid
-  success := Admits
-  refusal := CoreInput.CheckerRefuses
+  success input output := ∃ prepared, input.prepare = .ok prepared ∧ Admits prepared output
+  refusal input
+    | .refused diagnostic => input.CheckerRefuses diagnostic
+    | _ => False
 
 def Memory.HandoffWF {Ty : Type} {lowering : LoweringLanguage Ty}
     (memory : Memory lowering profile) : Prop :=
@@ -182,9 +190,9 @@ structure Registry (slice : Slice) (profile : Profile) where
   private mk ::
   lexer : Stage Source LexRefusal TokenStream
   parser : Stage TokenStream ParseRefusal (Parsed ((sliceGrammar slice).value (sliceGrammar slice).start))
-  elaborator : Stage (Parsed ((sliceGrammar slice).value (sliceGrammar slice).start)) ElabRefusal (CoreInput (sliceLanguage slice))
-  typing : Stage (CoreInput (sliceLanguage slice)) StageFailure (CoreInput (sliceLanguage slice))
-  admission : Stage (CoreInput (sliceLanguage slice)) CheckerRefusal (Admitted (sliceLanguage slice))
+  elaborator : Stage (Parsed ((sliceGrammar slice).value (sliceGrammar slice).start)) ElabRefusal (AdmissionInput (sliceLanguage slice))
+  typing : Stage (AdmissionInput (sliceLanguage slice)) StageFailure (CoreInput (sliceLanguage slice))
+  admission : Stage (AdmissionInput (sliceLanguage slice)) AdmissionFailure (Admitted (sliceLanguage slice))
   lowerCore : Stage (Admitted (sliceLanguage slice)) StageFailure (MIR (sliceLoweringLanguage slice) profile)
   lowerUnchecked : Stage (CoreInput (sliceLanguage slice)) StageFailure (MIR (sliceLoweringLanguage slice) profile)
   lowerMemory : Stage (MIR (sliceLoweringLanguage slice) profile) StageFailure (Memory (sliceLoweringLanguage slice) profile)
@@ -204,12 +212,11 @@ def registry {slice : Slice} (passes : Passes slice profile) : Registry slice pr
     { run := passes.elaborate
       kind := .directProof
       inputInvariant := Parsed.ElaborationDomain slice
-      outputInvariant := fun input => input.WF ∧ input.InFragment
-      success := fun ast core =>
-        core.project = ast.source.project ∧ core.slice = ast.source.slice ∧ core.WF ∧
-          SliceElaboration slice (cast (sliceGrammarStartShape slice) ast.tree) (.ok core.payload)
+      outputInvariant := AdmissionInput.Ready
+      success := fun ast input =>
+        SliceElaboration slice ast.source.project (cast (sliceGrammarStartShape slice) ast.tree) (.ok input)
       refusal := fun ast failure =>
-        SliceElaboration slice (cast (sliceGrammarStartShape slice) ast.tree) (.error failure) }
+        SliceElaboration slice ast.source.project (cast (sliceGrammarStartShape slice) ast.tree) (.error failure) }
   typing := passes.typingEntry
   admission := passes.admissionEntry
   lowerCore := ⟨passes.lowerCore, .directProof, Admitted.Valid,

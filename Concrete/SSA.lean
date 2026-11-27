@@ -731,7 +731,7 @@ private def loopControl (ending : Terminator
     Interfaces.SSA controlLanguage controlProfile :=
   let fn : FnId := ⟨⟨⟨⟨"control"⟩, ⟨⟨"0"⟩⟩⟩, [⟨"control"⟩], by decide⟩, ⟨"main"⟩⟩
   let project := Project.singleton mainSourcePath (SourceText.ofBytes [])
-  ⟨project, fn, [(fn, ⟨[], none⟩)], [(fn, [], ⟨⟨0⟩, #[⟨⟨0⟩, [], [], ending, []⟩]⟩)], [], []⟩
+  ⟨project, fn, [(fn, ⟨[], none⟩)], [(fn, [], ⟨⟨0⟩, #[⟨⟨0⟩, [], [], ending, []⟩]⟩)], [], [], []⟩
 
 example : checkHandoff (language := sliceLanguage slice0) (loopControl (.jump ⟨⟨0⟩, []⟩)) = true :=
   by with_unfolding_all rfl

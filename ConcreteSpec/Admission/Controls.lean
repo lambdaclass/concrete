@@ -8,10 +8,10 @@ private def return42 : StageInterface.EarlyProgram :=
 private def return256 : StageInterface.EarlyProgram :=
   { return42 with ret := .lit 256 }
 
-theorem return42_admitted : (admitEarly return42).isOk = true := rfl
+theorem return42_admitted : (admitView (.zero return42)).isOk = true := rfl
 
 theorem return256_refused :
-    admitEarly return256 = .error (.atPosition 0 (.literalOutOfRange .u8 256)) := rfl
+    admitView (.zero return256) = .error (.atPosition 0 (.literalOutOfRange .u8 256)) := rfl
 
 private def addition : Program :=
   ⟨[], [.let_ (.name ⟨0⟩) (.scalar (.int .u8)) (.add (.int .u8 19) (.int .u8 23))],
@@ -37,6 +37,22 @@ theorem wrong_context_refused :
       = false := by decide
 
 theorem duplicate_refused : batch.validates [issued, issued] = false := by decide
+
+-- The same batch binds exact source reads to the integrated operation and key.
+example (project : Core.SourcePathSpan.Project) :
+    let span := return42.returnSpan
+    let view := StageInterface.AdmissionView.zero
+      ⟨[⟨⟨⟨0⟩, .add (.lit 19) (.lit 23)⟩, span, span⟩], .var ⟨0⟩, span⟩
+    let input : StageInterface.CoreInput (StageInterface.sliceLanguage view.slice) :=
+      ⟨project, view.slice, .straightLine view rfl⟩
+    let exactBatch : InputBatch input := ⟨view, ⟨rfl, rfl, rfl⟩, batch⟩
+    let origin := (view.located.bindings.head?.map fun b =>
+      (StageInterface.StraightProgram.bindingOrigin b 0).2)
+    let encoded := exactBatch.encode [issued]
+    (encoded.bind List.head?).map Prod.fst = some ⟨0⟩ ∧
+    (((encoded.bind List.head?).bind fun row => row.2.head?).map (·.key)) = origin.map (·.evidenceKey) ∧
+    exactBatch.encode [] = some [] ∧ exactBatch.encode [issued, issued] = none := by
+  with_unfolding_all exact ⟨rfl, rfl, rfl, rfl⟩
 
 private def x : Var := ⟨0⟩
 private def y : Var := ⟨1⟩

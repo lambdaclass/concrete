@@ -64,6 +64,7 @@ def slice0RuleEntries : List (RuleId × RuleRefusalCategory) :=
    ⟨⟨``Slice0Rules.LocalBound, 1⟩, .checker⟩,
    ⟨⟨``Slice0Rules.FreshLocal, 1⟩, .checker⟩,
    ⟨⟨``Slice0Rules.UnreservedLocal, 1⟩, .checker⟩,
+   ⟨⟨``Slice0Rules.AvailableBinder, 1⟩, .checker⟩,
    ⟨⟨``Slice0Rules.NamedBinding, 1⟩, .unsupported⟩,
    ⟨⟨``Slice0Rules.DecimalLiteral, 1⟩, .unsupported⟩,
    ⟨⟨``Slice0Rules.AdmittedProduction, 1⟩, .unsupported⟩,

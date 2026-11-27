@@ -8,121 +8,66 @@ open Concrete.Interfaces
 open ConcreteSpec.StageGrammar
 open ConcreteSpec.StageInterface
 
-private def elaboratePayload (slice : Slice) (source : Source)
-    (tree : SurfaceAST sliceASTExtra slice) : Except ElabRefusal (Payload (sliceLanguage slice)) :=
-  if slice = slice0 then
+private def fromTree (slice : Slice) (source : Source)
+    (tree : SurfaceAST sliceASTExtra slice) : Except ElabRefusal (AdmissionInput (sliceLanguage slice)) :=
+  if h : slice = slice0 then
     match tree with
     | .inl tree =>
       match Elab.surfaceProgram tree with
       | some program =>
-        ((Elab.elaborateLocated program).map (earlyPayload (sliceEarlyCore slice))).mapError
+        ((Elab.elaborateLocated program).map fun out =>
+          AdmissionInput.pending source.project (.zero out) (congrArg sliceLanguage h)).mapError
           ElabRefusal.slice0
       | none => .error (.diagnostic ⟨``Elab.surfaceProgram, 1⟩ ⟨source.entryFile, 0, 0, 1, 1⟩ [])
     | .inr _ =>
       .error (.diagnostic ⟨``SliceElaboration, 1⟩ ⟨source.entryFile, 0, 0, 1, 1⟩ [])
   else .error (.unsupportedSlice slice)
 
-/-- Elaborate directly to the Core input selected by the registry, retaining the
-issuing project. The parser supplies the tree and location invariants. -/
 def elaborate (slice : Slice) (ast : Parsed ((sliceGrammar slice).value (sliceGrammar slice).start)) :
-    Except ElabRefusal (CoreInput (sliceLanguage slice)) :=
+    Except ElabRefusal (AdmissionInput (sliceLanguage slice)) :=
   if ast.source.slice = slice then
-    (elaboratePayload slice ast.source (cast (sliceGrammarStartShape slice) ast.tree)).map
-      (CoreInput.mk ast.source.project slice)
+    fromTree slice ast.source (cast (sliceGrammarStartShape slice) ast.tree)
   else
     .error (.diagnostic ⟨``Parsed.ElaborationDomain, 1⟩ ⟨ast.source.entryFile, 0, 0, 1, 1⟩ [])
 
-private theorem payload_corresponds (slice : Slice) (source : Source)
-    (tree : SurfaceAST sliceASTExtra slice)
-    {result : Except ElabRefusal (Payload (sliceLanguage slice))}
-    (reference : SliceElaboration slice tree result) :
-    elaboratePayload slice source tree = result := by
+private theorem fromTree_corresponds (slice : Slice) (source : Source)
+    (tree : SurfaceAST sliceASTExtra slice) {result}
+    (reference : SliceElaboration slice source.project tree result) :
+    fromTree slice source tree = result := by
   unfold SliceElaboration at reference
-  unfold elaboratePayload
-  split at reference
-  · rename_i early
-    simp only [ite_eq_left early]
+  unfold fromTree
+  split
+  · rename_i h
+    simp only [dite_eq_left h] at reference
     cases tree with
     | inr _ => exact False.elim reference
     | inl _ =>
-      obtain ⟨program, decoded, computed⟩ := reference
+      obtain ⟨_, decoded, computed⟩ := reference
       simp only [decoded]
       exact computed
-  · rename_i later
-    simp only [ite_eq_right later]
+  · rename_i h
+    simp only [dite_eq_right h] at reference
     exact reference.symm
 
-private theorem payload_inFragment (slice : Slice) (source : Source)
-    (tree : SurfaceAST sliceASTExtra slice) {payload : Payload (sliceLanguage slice)}
-    (ran : elaboratePayload slice source tree = .ok payload) :
-    (CoreInput.mk source.project slice payload).InFragment := by
-  unfold elaboratePayload at ran
-  split at ran
-  · rename_i early
-    cases tree with
-    | inr _ => cases ran
-    | inl tree =>
-      cases decoded : Elab.surfaceProgram tree with
-      | none =>
-        simp only [decoded] at ran
-        cases ran
-      | some program =>
-        cases computed : Elab.elaborateLocated program with
-        | error reason =>
-          simp only [decoded, computed] at ran
-          cases ran
-        | ok out =>
-          simp only [decoded, computed] at ran
-          have payloadEq := Except.ok.inj ran
-          exact ⟨out, early, sliceEarlyCore slice, payloadEq.symm⟩
-  · cases ran
-
-/-- On the fixed parser domain the executable result satisfies the reference
-judgment, including on refusal. -/
-private theorem corresponds (slice : Slice) (ast : Parsed ((sliceGrammar slice).value (sliceGrammar slice).start))
-    (domain : Parsed.ElaborationDomain slice ast) :
-    SliceElaboration slice (cast (sliceGrammarStartShape slice) ast.tree)
-      (elaboratePayload slice ast.source (cast (sliceGrammarStartShape slice) ast.tree)) := by
-  obtain ⟨result, reference⟩ := domain.2.2.2.1
-  rw [payload_corresponds slice ast.source _ reference]
-  exact reference
-
-/-- Any registered pass bundle using this function satisfies the full
-elaboration contract, including the invariant needed by admission and typing. -/
 theorem validated {slice : Slice} {profile : Profile} (passes : Passes slice profile)
     (implementation : passes.elaborate = elaborate slice) :
     (registry passes).elaborator.Validated := by
+  have corresponds (ast) (domain : Parsed.ElaborationDomain slice ast) :
+      SliceElaboration slice ast.source.project (cast (sliceGrammarStartShape slice) ast.tree)
+        (passes.elaborate ast) := by
+    obtain ⟨_, reference⟩ := domain.2.2.2.1
+    rw [implementation, elaborate, ite_eq_left domain.2.1, fromTree_corresponds _ _ _ reference]
+    exact reference
   constructor
-  · intro ast core domain ran
-    change passes.elaborate ast = .ok core at ran
-    rw [implementation] at ran
-    simp only [elaborate, ite_eq_left domain.2.1] at ran
-    have reference := corresponds slice ast domain
-    cases computed : elaboratePayload slice ast.source (cast (sliceGrammarStartShape slice) ast.tree) with
-    | error reason =>
-      rw [computed] at ran
-      cases ran
-    | ok payload =>
-      rw [computed] at ran reference
-      have output := Except.ok.inj ran
-      subst core
-      have wf := domain.2.2.2.2 payload reference
-      exact ⟨⟨wf, payload_inFragment slice ast.source _ computed⟩,
-        rfl, domain.2.1.symm, wf, reference⟩
-  · intro ast refusal domain ran
-    change passes.elaborate ast = .error refusal at ran
-    rw [implementation] at ran
-    simp only [elaborate, ite_eq_left domain.2.1] at ran
-    have reference := corresponds slice ast domain
-    cases computed : elaboratePayload slice ast.source (cast (sliceGrammarStartShape slice) ast.tree) with
-    | ok payload =>
-      rw [computed] at ran
-      cases ran
-    | error reason =>
-      rw [computed] at ran reference
-      have same := Except.error.inj ran
-      subst refusal
-      exact reference
+  · intro ast input domain ran
+    have h := corresponds ast domain
+    change passes.elaborate ast = .ok input at ran
+    rw [ran] at h
+    exact ⟨domain.2.2.2.2 input h, h⟩
+  · intro ast failure domain ran
+    have h := corresponds ast domain
+    change passes.elaborate ast = .error failure at ran
+    rwa [ran] at h
 
 section LCB
 

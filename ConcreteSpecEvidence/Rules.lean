@@ -105,6 +105,13 @@ theorem freshRefused : RuleRefused FreshLocal ("x", ["x"]) := by
   unfold RuleRefused FreshLocal
   decide
 
+theorem binderAvailable : RuleAccepted AvailableBinder "x" := by
+  unfold RuleAccepted
+  decide
+theorem binderUnavailable : RuleRefused AvailableBinder "main" := by
+  unfold RuleRefused
+  decide
+
 theorem reservedAccepted : RuleAccepted UnreservedLocal "x" := by
   unfold RuleAccepted UnreservedLocal
   decide
@@ -939,6 +946,8 @@ def registeredRuleExamples : List RuleExample :=
    ⟨``Slice0Rules.LocalBound, ``Slice0Rules.lookupRefused⟩,
    ⟨``Slice0Rules.FreshLocal, ``Slice0Rules.freshAccepted⟩,
    ⟨``Slice0Rules.FreshLocal, ``Slice0Rules.freshRefused⟩,
+   ⟨``Slice0Rules.AvailableBinder, ``Slice0Rules.binderAvailable⟩,
+   ⟨``Slice0Rules.AvailableBinder, ``Slice0Rules.binderUnavailable⟩,
    ⟨``Slice0Rules.UnreservedLocal, ``Slice0Rules.reservedAccepted⟩,
    ⟨``Slice0Rules.UnreservedLocal, ``Slice0Rules.reservedRefused⟩,
    ⟨``Slice0Rules.NamedBinding, ``Slice0Rules.namedAccepted⟩,

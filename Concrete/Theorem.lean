@@ -5,12 +5,13 @@ import LeanCompilerBackend.Verified.BuildIdentity
 namespace Concrete.ImageTheorem
 
 open Contracts Backend
+open ConcreteSpec.StageInterface.SurfacePreparation (Scope)
 open LeanCompilerBackend.Verified
 open ConcreteSpec.Surface0 (Token Derives Lexes Program Expr Span Binding BinderLegal checkBody)
 
 /-- Independent, name-parametric elaboration of operands and operations. The relation
 records the origin of each introduced operation and permits any fresh binder IDs. -/
-inductive ElaboratesExpr (scope : Elab.Scope) :
+inductive ElaboratesExpr (scope : Scope) :
     Expr → Core.Atom → List Core.Stmt → List Elab.SourceSite → Prop where
   | integer (n span) : ElaboratesExpr scope (.integer n none span) (.lit n) [] []
   | local {name span x} : scope.lookup name = some x →
@@ -21,7 +22,7 @@ inductive ElaboratesExpr (scope : Elab.Scope) :
         (left ++ right ++ [⟨x, .add a b⟩]) (ls ++ rs ++ [⟨x, site⟩])
 
 inductive ElaboratesBindings :
-    Elab.Scope → List Binding → Elab.Scope → List Core.Stmt → List Elab.SourceSite → Prop where
+    Scope → List Binding → Scope → List Core.Stmt → List Elab.SourceSite → Prop where
   | nil (scope) : ElaboratesBindings scope [] scope [] []
   | atom {scope binding rest final x a body sites} :
       BinderLegal (scope.map Prod.fst) binding.name →
@@ -34,7 +35,7 @@ inductive ElaboratesBindings :
       ElaboratesBindings ((binding.name, x) :: scope) rest final tail ts →
       ElaboratesBindings scope (binding :: rest) final (head ++ tail) (hs ++ ts)
 
-theorem ElaboratesBindings.headLegal {scope : Elab.Scope} {binding : Binding}
+theorem ElaboratesBindings.headLegal {scope : Scope} {binding : Binding}
     {rest final body sites} (h : ElaboratesBindings scope (binding :: rest) final body sites) :
     BinderLegal (scope.map Prod.fst) binding.name := by
   cases h with
@@ -54,7 +55,7 @@ private theorem additionBinders_append (left right : List Core.Stmt) :
 def OriginWellFormed (core : Elab.Output) : Prop :=
   (core.program.body.map (·.x)).Nodup ∧ core.sites.map (·.binding) = additionBinders core.program.body
 
-private theorem elaboratesExpr_origins {scope : Elab.Scope} {expr : Expr} {ret : Core.Atom}
+private theorem elaboratesExpr_origins {scope : Scope} {expr : Expr} {ret : Core.Atom}
     {body : List Core.Stmt} {sites : List Elab.SourceSite}
     (h : ElaboratesExpr scope expr ret body sites) :
     sites.map (·.binding) = additionBinders body := by
@@ -62,7 +63,7 @@ private theorem elaboratesExpr_origins {scope : Elab.Scope} {expr : Expr} {ret :
   | integer | «local» => rfl
   | add _ _ ih₁ ih₂ => simp [List.map_append, additionBinders_append, ih₁, ih₂]; rfl
 
-private theorem elaboratesBindings_origins {scope final : Elab.Scope} {bindings : List Binding}
+private theorem elaboratesBindings_origins {scope final : Scope} {bindings : List Binding}
     {body : List Core.Stmt} {sites : List Elab.SourceSite}
     (h : ElaboratesBindings scope bindings final body sites) :
     sites.map (·.binding) = additionBinders body := by
@@ -214,7 +215,7 @@ def ParserContract : EdgeContract (Graph Parse.parse) where
   outputInvariant := fun ast => ∃ tokens, Derives tokens ast
   correspondence := Derives
 
-def ElaborationContract : EdgeContract (Graph Elab.elaborate) where
+def ElaborationContract : EdgeContract (Graph Admission.prepareParsed) where
   kind := .namedPremise "P_elab"
   inputInvariant := ParserContract.outputInvariant
   outputInvariant := OriginWellFormed
@@ -309,7 +310,7 @@ def Frontend (input : Stages.Input) (out : Stages.Output) : Prop :=
 /-- Successful production exposes the exact intermediate results of the functions it invokes. -/
 def SharedHandoffs (input : Stages.Input) (out : Stages.Output) : Prop :=
   Lex.lex input.source input.fileId = .ok out.tokens ∧ Parse.parse out.tokens = .ok out.ast ∧
-  Elab.elaborate out.ast = .ok out.core ∧
+  Admission.prepareParsed out.ast = .ok out.core ∧
   (∃ admitted, Admission.check out.core = .ok admitted ∧ admitted.tokens = out.evidence ∧
     MIR.lower admitted = .ok out.mir) ∧
   Memory.lower out.mir = out.memory ∧ SSA.lower input.path out.memory = .ok out.bir
@@ -665,11 +666,11 @@ def LCBCorrect {Env : Type} {profile : Profile}
 
 def UncheckedHandoffs (input : Stages.Input) (core : Elab.Output) : Prop :=
   ∃ tokens ast, Lex.lex input.source input.fileId = .ok tokens ∧ Parse.parse tokens = .ok ast ∧
-    Elab.elaborate ast = .ok core
+    Admission.prepareParsed ast = .ok core
 
 def UncheckedFrontend (input : Stages.Input) (core : Elab.Output) : Prop :=
   ∃ tokens ast, Lex.lex input.source input.fileId = .ok tokens ∧ Parse.parse tokens = .ok ast ∧
-    Elab.elaborate ast = .ok core ∧ Lexes input.source tokens input.fileId ∧ Derives tokens ast ∧
+    Admission.prepareParsed ast = .ok core ∧ Lexes input.source tokens input.fileId ∧ Derives tokens ast ∧
     Elaborates ast core
 
 def UncheckedOrigins (input : Stages.Input) (core : Elab.Output) (bir : BIR.Program) : Prop :=
@@ -831,31 +832,31 @@ private def duplicateBinderParse :=
   parseBinderExample r#"fn main() -> u8 { let x: u8 = 1; let x: u8 = 20 + 22; return x; }"#
 
 example : ∃ ast, wildcardParse = .ok ast ∧
-    Elab.elaborate ast = .error (.unsupported "wildcard binding at byte 22") ∧
+    Admission.prepareParsed ast = .error (.unsupported "wildcard binding at byte 22") ∧
     ∀ core, ¬ Elaborates ast core := by
   refine ⟨_, rfl, rfl, ?_⟩
   exact refusesFirstBinder rfl (by decide)
 
 example : ∃ ast, mainBinderParse = .ok ast ∧
-    Elab.elaborate ast = .error (.checker "binding shadows 'main' at byte 22") ∧
+    Admission.prepareParsed ast = .error (.checker "binding shadows 'main' at byte 22") ∧
     ∀ core, ¬ Elaborates ast core := by
   refine ⟨_, rfl, rfl, ?_⟩
   exact refusesFirstBinder rfl (by decide)
 
 example : ∃ ast, intrinsicBinderParse = .ok ast ∧
-    Elab.elaborate ast = .error (.checker "binding shadows 'discard' at byte 22") ∧
+    Admission.prepareParsed ast = .error (.checker "binding shadows 'discard' at byte 22") ∧
     ∀ core, ¬ Elaborates ast core := by
   refine ⟨_, rfl, rfl, ?_⟩
   exact refusesFirstBinder rfl (by decide)
 
 example : ∃ ast, builtinTypeBinderParse = .ok ast ∧
-    Elab.elaborate ast = .error (.checker "binding shadows 'i8' at byte 22") ∧
+    Admission.prepareParsed ast = .error (.checker "binding shadows 'i8' at byte 22") ∧
     ∀ core, ¬ Elaborates ast core := by
   refine ⟨_, rfl, rfl, ?_⟩
   exact refusesFirstBinder rfl (by decide)
 
 example : ∃ ast, duplicateBinderParse = .ok ast ∧
-    Elab.elaborate ast = .error (.checker "binding shadows 'x' at byte 37") ∧
+    Admission.prepareParsed ast = .error (.checker "binding shadows 'x' at byte 37") ∧
     ∀ core, ¬ Elaborates ast core := by
   refine ⟨_, rfl, rfl, ?_⟩
   intro core h
@@ -1274,7 +1275,7 @@ theorem answerTerminates : SourceTerminates answerInput.path answerOutput.core a
 private def trapInput := overflowInput "// x"
 
 private def trapCore : Elab.Output :=
-  (do Elab.elaborate (← Parse.parse (← Lex.lex trapInput.source trapInput.fileId)) :
+  (do Admission.prepareParsed (← Parse.parse (← Lex.lex trapInput.source trapInput.fileId)) :
     Except Refusal Elab.Output).toOption.get (by rfl)
 
 private def trapBIR : BIR.Program :=

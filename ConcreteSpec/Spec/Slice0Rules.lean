@@ -81,6 +81,10 @@ def FreshLocal (input : String × List String) : Prop := input.1 ∉ input.2
 docs/decisions.md#recovered-59-32. -/
 def UnreservedLocal (name : String) : Prop := name ≠ "main" ∧ name ∉ intrinsicNames
 
+/-- The active surface binder policy at empty scope (OD67).
+ISS-0121 records its disagreement with UnreservedLocal pending the token ballot. -/
+abbrev AvailableBinder (name : String) : Prop := BinderLegal [] name
+
 /-- Slice 0 binds a name rather than a wildcard. Decision: OD62, Q8.3,
 docs/decisions.md#decided-slice0-surface-2026-11-06. -/
 def NamedBinding (name : String) : Prop := name ≠ "_"

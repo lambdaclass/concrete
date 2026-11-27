@@ -46,7 +46,7 @@ structure Output where
   provenance : ∃ file,
     project.fileAt fileId = some file ∧
     Lex.lex ⟨file.source.toBytes.toArray⟩ fileId = .ok tokens ∧
-    Parse.parse tokens = .ok ast ∧ Elab.elaborate ast = .ok core
+    Parse.parse tokens = .ok ast ∧ Admission.prepareParsed ast = .ok core
 
 /-- Resolve an actual elaborated operator site against the table used to compile it. -/
 def Output.operatorSpan (out : Output) (index : Nat) : Option (ScopedSpan out.project) := do
@@ -84,7 +84,7 @@ private def Pipeline.run {A C : Type} (stages : Pipeline A C) (input : A) : Exce
 private def stages (path : String) :=
   Pipeline.next lex <|
   .next (fun v => Parse.parse v.2) <|
-  .next (fun v => Elab.elaborate v.2) <|
+  .next (fun v => Admission.prepareParsed v.2) <|
   .next (fun v => Admission.check v.2) <|
   .next (fun v => MIR.lower v.2) <|
   .next (fun v => memory v.2) <|
@@ -94,7 +94,7 @@ private theorem edges_of_run {input : Input} {resolved tokens ast core admitted 
     (h : (stages input.path).run input =
       .ok (((((((resolved, tokens), ast), core), admitted), mir), mem), bir)) :
     Lex.lex input.source input.fileId = .ok tokens ∧
-    Parse.parse tokens = .ok ast ∧ Elab.elaborate ast = .ok core ∧
+    Parse.parse tokens = .ok ast ∧ Admission.prepareParsed ast = .ok core ∧
     Admission.check core = .ok admitted ∧ MIR.lower admitted = .ok mir ∧
     Memory.lower mir = mem ∧ SSA.lower input.path mem = .ok bir := by
   simp only [stages, Pipeline.run, lex, memory, bind, Except.bind] at h
@@ -149,7 +149,7 @@ theorem compile_of_edges (input : Input) (tokens : List ConcreteSpec.Surface0.To
     (mir : MIR.Program) (mem : Memory.Program) (bir : BIR.Program)
     (hLex : Lex.lex input.source input.fileId = .ok tokens)
     (hParse : Parse.parse tokens = .ok ast)
-    (hElab : Elab.elaborate ast = .ok core)
+    (hElab : Admission.prepareParsed ast = .ok core)
     (hAdmit : Admission.check core = .ok admitted)
     (hLower : MIR.lower admitted = .ok mir)
     (hMem : Memory.lower mir = mem)
@@ -206,7 +206,7 @@ parser, elaborator and lowering stages, with no admission or discharged evidence
 def unchecked (input : Input) : Except Refusal BIR.Program := do
   let tokens ← lex input
   let ast ← Parse.parse tokens
-  let core ← Elab.elaborate ast
+  let core ← Admission.prepareParsed ast
   let mir ← MIR.lowerUnchecked core
   let mem ← memory mir
   SSA.lower input.path mem

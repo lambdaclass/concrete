@@ -1,5 +1,6 @@
 import Concrete.IntegratedCore
 import ConcreteSpec.IntegratedCore
+import ConcreteSpec.Admission.Early
 
 namespace Concrete.IntegratedCore
 open Concrete.Interfaces
@@ -22,13 +23,13 @@ private def returnTokens : ParserView :=
     token 29 30 (.fixed .rbrace rfl)]⟩
 
 private def expected : CoreInput (sliceLanguage slice0) :=
-  ⟨source.project, slice0, earlyPayload (sliceEarlyCore slice0)
-    ⟨[], .lit 42, ⟨25, 27, 1, 26, ⟨0⟩⟩⟩⟩
+  ⟨source.project, slice0, .straightLine (.zero ⟨[], .lit 42, ⟨25, 27, 1, 26, ⟨0⟩⟩⟩) rfl⟩
 
 private def parseAndElaborate (tokens : ParserView) : Option (CoreInput (sliceLanguage slice0)) := do
   let parsed ← ((sliceParser slice0).run tokens).2
   let ast ← parsed.toOption
-  (elaborate slice0 ast).toOption
+  let surface ← (elaborate slice0 ast).toOption
+  surface.prepare.toOption
 
 -- Exercise the registered parser implementation and exact elaboration function.
 example : parseAndElaborate returnTokens = some expected := by
@@ -45,11 +46,11 @@ example :
     elaborate slice0 ⟨source, .inl (.node .body [])⟩ =
       .error (.diagnostic ⟨``Elab.surfaceProgram, 1⟩ ⟨⟨0⟩, 0, 0, 1, 1⟩ []) := rfl
 
--- A valid constructor tree can still reach a typed elaboration refusal.
+-- An empty body crosses elaboration intact and receives its refusal at preparation.
 example :
-    elaborate slice0 ⟨source, .inl (.node .program [
-      .leaf ⟨⟨⟨0⟩, 3, 7, 1, 4⟩, .name "main"⟩, .node .body []])⟩ =
-      .error (.slice0 .fallthrough) := rfl
+    ((elaborate slice0 ⟨source, .inl (.node .program [
+      .leaf ⟨⟨⟨0⟩, 3, 7, 1, 4⟩, .name "main"⟩, .node .body []])⟩).toOption.map AdmissionInput.prepare) =
+      some (.error (Surface0Issue.fallthrough ⟨3, 7, 1, 4, ⟨0⟩⟩).render) := rfl
 
 example :
     elaborate slice0 ⟨source, .inr true⟩ =
@@ -72,7 +73,7 @@ private def elaborationPasses : Passes slice0 profile where
   lex input := .error (.missingFile input.entryFile)
   elaborate := elaborate slice0
   typeCore _ := .error (.invalidInput ⟨``elaborate, 1⟩)
-  checkCore _ := .error ⟨⟨``elaborate, 1⟩, ⟨⟨0⟩, 0, 0, 1, 1⟩, [], none⟩
+  checkCore := ConcreteSpec.Admission.checkInput
   lowerCore _ := .error (.invalidInput ⟨``elaborate, 1⟩)
   lowerUnchecked _ := .error (.invalidInput ⟨``elaborate, 1⟩)
   lowerMemory _ := .error (.invalidInput ⟨``elaborate, 1⟩)
@@ -123,5 +124,153 @@ example :
     Hybrid.decode {linuxX8664 with byteOrder := .big} (.int .i16)
       (bytes.map fun byte => .init byte.toFin none) = some (.int .i16 (-257)) :=
   ⟨rfl, rfl⟩
+
+private def tokenName : ConcreteSpec.Name := ⟨"Token"⟩
+private def tokenId : DeclId := ⟨earlyEntry.module, tokenName⟩
+private def binderSpan : ConcreteSpec.Surface0.Span := ⟨3, 7, 1, 4, ⟨0⟩⟩
+private def useSpan : ConcreteSpec.Surface0.Span := ⟨25, 27, 1, 26, ⟨0⟩⟩
+private def introToken : LocatedStraightBinding :=
+  ⟨.bind (.name ⟨0⟩) (.nominal tokenName) (.construct tokenName), useSpan, binderSpan⟩
+private def takeToken : LocatedStraightBinding :=
+  ⟨.destructure tokenName (.move ⟨0⟩), useSpan, useSpan⟩
+private def tokenView (tail : List LocatedStraightBinding) : AdmissionView :=
+  .one ⟨[(tokenName, binderSpan)], introToken :: tail, .ret (.lit 42), useSpan⟩
+private def tokenInput (tail : List LocatedStraightBinding) : CoreInput (sliceLanguage sliceOne) :=
+  ⟨source.project, sliceOne, .straightLine (tokenView tail) rfl⟩
+
+-- Normal execution constructs and consumes the logical owner. A second
+-- destructure fails in both the checker and the instrumented machine.
+private def runTokens (tail : List LocatedStraightBinding) :=
+  let payload := (tokenInput tail).machineProgram
+  Exec.run payload.body (fun _ p => nomatch p) 32 payload.initial
+
+example : (ConcreteSpec.Admission.admitInput (tokenInput [takeToken])).isOk = true ∧
+    (runTokens [takeToken]).ending = .final (.returned (.scalar (.int .u8 42))) ∧
+    ConcreteSpec.checkProgram (tokenView [takeToken, takeToken]).program =
+      .error (.atPosition 2 (.movedBinding ⟨0⟩)) ∧
+    (runTokens [takeToken, takeToken]).ending = .stuck := by
+  with_unfolding_all exact ⟨rfl, rfl, rfl, rfl⟩
+
+-- The terminator and the variable's declaration have distinct coordinates.
+example :
+    let why := ConcreteSpec.Admission.Refusal.atPosition 1 (.liveLinearBinding ⟨0⟩)
+    ConcreteSpec.checkProgram (tokenView []).program = .error why ∧
+    (tokenView []).render why = some ⟨⟨``ConcreteSpec.ProgramPermitted, 1⟩,
+      surfaceFileSpan useSpan, [(⟨"binding"⟩, surfaceFileSpan binderSpan)], none, .core why⟩ :=
+  ⟨rfl, rfl⟩
+
+example :
+    let later : Slice := ⟨⟨2, by decide⟩⟩
+    ({tokenInput [] with slice := later}).decode = .error (.unsupportedSlice later) := rfl
+
+private def sourceReturn (e : ConcreteSpec.Surface0.Expr) : AdmissionInput (sliceLanguage slice0) :=
+  .pending source.project (.zero ⟨"main", binderSpan, [.ret e useSpan]⟩) rfl
+
+example :
+    let valid := sourceReturn (.integer 42 none useSpan)
+    let forged := (Surface0Issue.unknownLocal "absent" useSpan).render
+    ¬ valid.CheckerRefuses forged := by
+  intro _ _ refusal
+  obtain ⟨_, v, reason, represents, checked, _⟩ := refusal
+  have actual := (CoreInput.decode_iff _ v).2 represents
+  change Except.ok (.zero ⟨[], .lit 42, useSpan⟩) = Except.ok v at actual
+  cases Except.ok.inj actual
+  cases checked
+
+example :
+    let unknown := sourceReturn (.local "absent" useSpan)
+    let issue := (Surface0Issue.unknownLocal "absent" useSpan).render
+    (registry elaborationPasses).admission.run unknown = .error (.refused issue) ∧
+    (registry elaborationPasses).admission.refusal unknown (.refused issue) ∧
+    (registry elaborationPasses).typing.run unknown = .error .unpreparable ∧
+    (registry elaborationPasses).typing.refusal unknown .unpreparable :=
+  ⟨rfl, rfl, rfl, rfl⟩
+
+private def binding (name : String) : ConcreteSpec.Surface0.Statement :=
+  .bind ⟨name, binderSpan, .integer 42 none useSpan⟩ useSpan
+
+private def sourceBody (body : List ConcreteSpec.Surface0.Statement) : AdmissionInput (sliceLanguage slice0) :=
+  .pending source.project (.zero ⟨"main", binderSpan, body⟩) rfl
+
+-- The same located syntax crosses elaboration in every case. Body shape
+-- precedes name resolution, and duplicate/reserved binders have distinct rules.
+example :
+    let ret := ConcreteSpec.Surface0.Statement.ret (.integer 42 none useSpan) useSpan
+    (sourceBody [binding "x"]).prepare = .error (.fallthrough useSpan : Surface0Issue).render ∧
+    (sourceBody [ret, .ret (.local "missing" binderSpan) binderSpan]).prepare =
+      .error (.unreachable binderSpan : Surface0Issue).render ∧
+    (sourceReturn (.integer 42 (some .u8) useSpan)).prepare =
+      .error (.integerSuffix useSpan : Surface0Issue).render ∧
+    (sourceBody [binding "x", binding "x", ret]).prepare =
+      .error (.duplicateBinder "x" binderSpan : Surface0Issue).render ∧
+    (sourceBody [binding "main", ret]).prepare =
+      .error (.reservedBinder "main" binderSpan : Surface0Issue).render :=
+  ⟨rfl, rfl, rfl, rfl, rfl⟩
+
+-- Reject forged coordinates even when the underlying source really is invalid.
+example :
+    ¬ (sourceReturn (.local "absent" useSpan)).CheckerRefuses
+      (.unknownLocal "absent" binderSpan : Surface0Issue).render := by
+  intro h
+  cases h
+
+example :
+    let reason := ConcreteSpec.Admission.Refusal.atPosition 0 (.literalOutOfRange .u8 256)
+    let failure := CheckerRefusal.mk ⟨``Slice0Rules.LiteralTyped, 1⟩ (surfaceFileSpan useSpan) [] none (.core reason)
+    (registry elaborationPasses).admission.run (sourceReturn (.integer 256 none useSpan)) =
+      .error (.refused failure) := rfl
+
+example :
+    let big := {linuxX8664 with byteOrder := .big}
+    let ty : (sliceLanguage slice0).operands.Ty := .inl (.scalar (.int .i16))
+    (sliceLanguage slice0).layout [] big ty = some ⟨2, 2⟩ ∧
+    (sliceLanguage slice0).literal ty [254, 255] = some (.scalar (.int .i16 (-2))) ∧
+    Hybrid.decode big (.int .i16) [.init 254 none, .init 255 none] = some (.int .i16 (-257)) :=
+  ⟨rfl, rfl, rfl⟩
+
+private abbrev nominalLang := sliceLanguage sliceOne
+private abbrev nominalTy : nominalLang.operands.Ty := .inl (.nominal tokenId)
+private def root : MemoryPlace _ nominalTy := ⟨⟨⟨0⟩, []⟩, .materialized⟩
+private def memory : Memory (sliceLoweringLanguage sliceOne) profile :=
+  { project := source.project, entry := earlyEntry, signatures := []
+    functions := [(earlyEntry, [(root.logical.root, nominalTy)], ⟨⟨0⟩, #[]⟩)]
+    layouts := [(earlyEntry, [(root.logical.root, ⟨0, 1⟩)])]
+    storage := [(earlyEntry, [(root.logical.root, .materialized)])]
+    declarations := (tokenInput []).machineProgram.declarations }
+
+private def started : MemoryRegisters nominalLang profile :=
+  { frame := earlyEntry, block := ⟨0⟩, instruction := 0, virtualValues := [], materialized := [],
+    live := [root.logical.root], initialized := [], bytes := Mem.Memory.empty }
+private def stored : MemoryRegisters nominalLang profile :=
+  {started with initialized := [root.logical.root], zeroValues := [(root.logical.root, .other tokenId)]}
+private def constructed : MemoryRegisters nominalLang profile := stored.advance
+private def consumed : MemoryRegisters nominalLang profile :=
+  {constructed with initialized := [], zeroValues := []}
+
+-- The physical operation writes the nominal value without allocating bytes.
+-- Destructuring consumes the root and leaves a subsequent move unavailable.
+example :
+    memory.InstructionStep started constructed false
+      (.op (opcode := .named ⟨"constructEmpty"⟩) root () .nil []) ∧
+    memory.InstructionStep constructed consumed.advance false (.destructure root []) ∧
+    memory.readValue consumed.advance (.move root) = none := by
+  with_unfolding_all
+    refine ⟨?_, ?_, rfl⟩
+    · refine ⟨[], started, [], .other tokenId, [], Memory.operationStore started false, stored,
+        rfl, rfl, rfl, ⟨rfl, rfl, rfl, rfl⟩, rfl, ?_, rfl⟩
+      exact ⟨⟨rfl, nofun⟩, fun _ => ⟨⟨0, 1⟩, rfl, ⟨fun _ => rfl, fun _ => rfl⟩⟩, rfl, rfl, fun _ => .inl rfl⟩
+    · exact ⟨.other tokenId, consumed, [], consumed, rfl,
+        ⟨.nil, [], rfl, nofun, nofun⟩, rfl, .nil _, rfl⟩
+
+example :
+    let wrong := {memory with declarations := [(tokenId, ⟨tokenName, true, []⟩)]}
+    nominalLang.layout wrong.declarations profile.memoryTarget nominalTy = none ∧
+    ¬ wrong.InstructionStep started constructed false
+      (.op (opcode := .named ⟨"constructEmpty"⟩) root () .nil []) := by
+  refine ⟨rfl, ?_⟩
+  rintro ⟨_, _, _, _, _, _, _, reads, _, addresses, operation, _⟩
+  cases Option.some.inj reads
+  cases Option.some.inj addresses
+  cases operation.2.1
 
 end Concrete.IntegratedCore

@@ -344,7 +344,7 @@ def emitSource (path actual : String) (dir : System.FilePath) (expectation : Lis
   | ["trap", kind, _, _], .error (.checker _) =>
     let .ok tokens := Concrete.Lex.lex input.source input.fileId | IO.eprintln "lex failed"; return 1
     let .ok ast := Concrete.Parse.parse tokens | IO.eprintln "parse failed"; return 1
-    let .ok core := Concrete.Elab.elaborate ast | IO.eprintln "elaboration failed"; return 1
+    let .ok core := Concrete.Admission.prepareParsed ast | IO.eprintln "elaboration failed"; return 1
     let p := Concrete.Core.toCore core.program
     let .trap actualKind := Concrete.Core.run p (p.body.length + 1)
       | IO.eprintln s!"{path}: Core evaluator did not trap"; return 10
