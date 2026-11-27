@@ -259,9 +259,22 @@ echo "=== X: the examples, in the kernel's terms ==="
 # collected as E collects a theorem's. Each example becomes a noncomputable abbreviation.
 # warningAsError stays off in this axiom-only copy: named abbreviations can trigger declaration
 # linters that anonymous examples do not; warnings remain errors in the original library.
-EX="$TMP/ex"; mkdir -p "$EX/.lake"
+# Give a scratch build its own verified pinned dependency checkout via the shared helper.
+# Never symlink $SEED_DIR (doing so would inherit local backend edits and prebuilt .olean
+# outputs from the caller's workspace). Passing LAKE_SEED_PACKAGES_DIR only allows
+# extracting cryptographically verified pinned commit objects from the caller's git object
+# store into a fresh source-only checkout, falling back to a remote fetch on mismatch.
+prepare_scratch_packages() {
+  local seed_dir="$1"
+  local workspace_dir="$2"
+  (cd "$workspace_dir" && LAKE_SEED_PACKAGES_DIR="$seed_dir" bash "$ROOT_DIR/scripts/checks/lib/fetch_lake_packages.sh")
+  [ ! -L "$workspace_dir/.lake/packages" ]
+}
+
+EX="$TMP/ex"; mkdir -p "$EX"
 cp lakefile.toml lean-toolchain lake-manifest.json "$EX"/ || { no "could not copy the Lake files"; finish; }
-[ ! -d "$ROOT_DIR/.lake/packages" ] || ln -s "$ROOT_DIR/.lake/packages" "$EX/.lake/packages"
+prepare_scratch_packages "$ROOT_DIR/.lake/packages" "$EX" > "$TMP/ex-packages.log" 2>&1 \
+  || { no "could not prepare verified pinned packages for examples workspace: $(tail -5 "$TMP/ex-packages.log" | tr '\n' ' ')"; finish; }
 sed -i 's/^warningAsError = true$/warningAsError = false/' "$EX/lakefile.toml"
 cp "$ENUMERATOR" "$TMP/examples-enumerator.lean"
 NEX=$(python3 "$PROOFS_DIR/lean_lex.py" examples . "$EX" "${SRC[@]}" "${EVIDENCE_SRC[@]}" "${COMPILER_SRC[@]}") \
@@ -451,4 +464,83 @@ X=$(nonstandard "$TMP/exc.tsv")
   && ! has_match -F "C.lean:3»" <<<"$X" \
   && ok "control: an example proved by decide +native and one closed by stop are reported, rfl is not, and the word example in a string is no example ($(echo $X | tr '\n' ' '))" \
   || no "control: rewritten examples: $N, rows $(grep -c . "$TMP/exc.tsv"), reported '$X'"
+# Finding 2 (ISS-0130) negative control: the scratch examples workspace must never inherit
+# local dependency edits or prebuilt .olean outputs from the caller's .lake/packages.
+if (
+  set -euo pipefail
+  source "$ROOT_DIR/scripts/checks/lib/git_sandbox.sh" || exit 2
+  git_sandbox "$TMP/scratch-ctl-gitconfig" || exit 2
+  cat >"$GIT_CONFIG_GLOBAL" <<'EOF'
+[user]
+	name = trust-ban scratch control
+	email = control@example.invalid
+[init]
+	defaultBranch = main
+[advice]
+	detachedHead = false
+EOF
+  d="$TMP/scratch-isolation"
+  mkdir -p "$d/dep-src" "$d/caller" "$d/scratch"
+  cp "$ROOT_DIR/lean-toolchain" "$d/dep-src/"
+  printf 'name = "scratchDep"\n[[lean_lib]]\nname = "ScratchDep"\n' >"$d/dep-src/lakefile.toml"
+  printf 'def pinnedVal : Nat := 1\n' >"$d/dep-src/ScratchDep.lean"
+  git init -q "$d/dep-src"
+  git -C "$d/dep-src" add lakefile.toml ScratchDep.lean lean-toolchain
+  git -C "$d/dep-src" commit -qm "pinned"
+  dep_rev="$(git -C "$d/dep-src" rev-parse HEAD)"
+  git clone -q --bare "$d/dep-src" "$d/dep.git"
+  for ws in "$d/caller" "$d/scratch"; do
+    cp "$ROOT_DIR/lean-toolchain" "$ws/"
+    cat >"$ws/lakefile.toml" <<EOF
+name = "scratchCtl"
+[[require]]
+name = "scratchDep"
+git = "$d/dep.git"
+rev = "$dep_rev"
+[[lean_lib]]
+name = "ScratchMain"
+EOF
+    cat >"$ws/lake-manifest.json" <<EOF
+{"version": "1.3.0",
+ "packagesDir": ".lake/packages",
+ "packages":
+ [{"url": "$d/dep.git",
+   "type": "git",
+   "subDir": null,
+   "scope": "",
+   "rev": "$dep_rev",
+   "name": "scratchDep",
+   "manifestFile": "lake-manifest.json",
+   "inputRev": "$dep_rev",
+   "inherited": false,
+   "configFile": "lakefile.toml"}],
+ "name": "scratchCtl",
+ "lakeDir": ".lake",
+ "fixedToolchain": false}
+EOF
+    printf 'import ScratchDep\nexample : localAddedLemma = 42 := rfl\n' >"$ws/ScratchMain.lean"
+  done
+  (cd "$d/caller" && LAKE_FETCH_BACKOFF_BASE=0 bash "$ROOT_DIR/scripts/checks/lib/fetch_lake_packages.sh")
+  printf 'def localAddedLemma : Nat := 42\n' >>"$d/caller/.lake/packages/scratchDep/ScratchDep.lean"
+  # Caller builds with the locally added backend lemma (producing .olean outputs in caller/.lake/packages).
+  (cd "$d/caller" && "$LAKE" build ScratchMain)
+  # Take the remote offline to prove seeding uses only verified pinned objects with zero network access,
+  # while rejecting the caller's locally added backend lemma and prebuilt .olean outputs.
+  mv "$d/dep.git" "$d/dep-offline.git"
+  prepare_scratch_packages "$d/caller/.lake/packages" "$d/scratch"
+  [ ! -e "$d/scratch/.lake/packages/scratchDep/.lake" ]
+  if (cd "$d/scratch" && "$LAKE" build ScratchMain) >"$d/scratch-bad.log" 2>&1; then
+    echo "scratch build unexpectedly accepted locally added backend lemma" >&2
+    exit 1
+  fi
+  has_match -F "localAddedLemma" <"$d/scratch-bad.log"
+  # Clean example using only pinnedVal builds cleanly in the independent scratch workspace.
+  printf 'import ScratchDep\nexample : pinnedVal = 1 := rfl\n' >"$d/scratch/ScratchMain.lean"
+  (cd "$d/scratch" && "$LAKE" build ScratchMain)
+) >"$TMP/scratch-isolation.log" 2>&1; then
+  ok "control: examples scratch workspace rejects an example using a lemma added locally to the caller's backend"
+else
+  tail -20 "$TMP/scratch-isolation.log" >&2
+  no "control: examples scratch workspace isolation control failed"
+fi
 finish

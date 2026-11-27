@@ -4,14 +4,22 @@
 # Exercises scripts/checks/lib/fetch_lake_packages.sh end to end on local bare
 # repositories and a PATH-injected git stub, with no network access:
 #   - cold fetch of a pinned non-HEAD revision;
-#   - offline cache hit after the remote disappears;
+#   - offline cache hit after the remote disappears (discarding untrusted .git metadata);
 #   - revision mismatch after restore -> package deleted and refetched;
-#   - planted .lake/build inside a restored dependency -> deleted and refetched clean;
-#   - modified tracked file and stray unlisted package -> cleaned/refetched;
+#   - planted .lake/build and nested .lake inside restored dependency -> deleted and refetched;
+#   - unreadable directory hiding a traversal error -> invalidates, cleans and refetches;
+#   - modified tracked file (including hidden behind assume-unchanged and skip-worktree)
+#     and stray unlisted package -> detected without trusting git status, deleted and refetched;
+#   - tampered loose object in restored .git/objects -> detected by strict fsck and refetched;
+#   - configured Git mirror (url.<mirror>.insteadOf) -> fetches and verifies offline against
+#     stored literal manifest origin URL;
+#   - scratch-workspace object seeding (trust_ban.sh pattern) -> never symlinks or inherits
+#     local backend edits, extra commits or .lake/build outputs from caller's packages;
 #   - transient HTTP 403 failures -> bounded retry succeeds on attempt 3;
 #   - persistent HTTP 403 failures -> bounded retry fails closed after 3 attempts;
 #   - remote refusing direct SHA-1 fetch -> falls back to advertised refs;
-#   - stalled git fetch -> per-attempt timeout kills and fails closed after bounded retries;
+#   - stalled git fetch, slow primary+fallback exceeding one shared deadline, and slow
+#     checkout -> single per-attempt deadline kills and fails closed after bounded retries;
 #   - malformed/unsafe lake-manifest.json inputs -> refused before touching disk.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
@@ -21,7 +29,11 @@ HELPER="$ROOT_DIR/scripts/checks/lib/fetch_lake_packages.sh"
 source "$ROOT_DIR/scripts/checks/lib/git_sandbox.sh" || exit 2
 
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
+cleanup_tmp() {
+  chmod -R u+rwx "$TMP" 2>/dev/null || true
+  rm -rf "$TMP"
+}
+trap cleanup_tmp EXIT
 git_sandbox "$TMP/gitconfig" || exit 2
 cat >"$GIT_CONFIG_GLOBAL" <<'EOF'
 [user]
@@ -38,14 +50,20 @@ FAIL=0
 ok() { echo "  ok   $1"; PASS=$((PASS + 1)); }
 no() { echo "  FAIL $1"; FAIL=$((FAIL + 1)); }
 
-# Build a local bare dependency repository with two distinct commits (REV1 < REV2).
+# Build a local bare dependency repository with three distinct commits (REV0 < REV1 < REV2)
+# so pinned REV1 is both non-root (has a parent commit, exercising shallow depth-1 handling)
+# and non-HEAD (REV2 is HEAD).
 DEP_SRC="$TMP/dep-src"
 DEP_BARE="$TMP/dep.git"
 git init -q "$DEP_SRC"
 printf 'name = "dummy-dep"\n[[lean_lib]]\nname = "DummyDep"\n' >"$DEP_SRC/lakefile.toml"
-printf 'def dummyVal : Nat := 1\n' >"$DEP_SRC/DummyDep.lean"
+printf 'def dummyVal : Nat := 0\n' >"$DEP_SRC/DummyDep.lean"
 cp "$ROOT_DIR/lean-toolchain" "$DEP_SRC/"
 git -C "$DEP_SRC" add lakefile.toml DummyDep.lean lean-toolchain
+git -C "$DEP_SRC" commit -qm "rev0"
+
+printf 'def dummyVal : Nat := 1\n' >"$DEP_SRC/DummyDep.lean"
+git -C "$DEP_SRC" add DummyDep.lean
 git -C "$DEP_SRC" commit -qm "rev1"
 REV1="$(git -C "$DEP_SRC" rev-parse HEAD)"
 
@@ -91,12 +109,20 @@ cat >"$STUB_BIN/git" <<EOF
 set -euo pipefail
 REAL_GIT="$REAL_GIT"
 is_fetch=0
+is_checkout=0
 for arg in "\$@"; do
   if [ "\$arg" = "fetch" ]; then
     is_fetch=1
     break
+  elif [ "\$arg" = "checkout" ]; then
+    is_checkout=1
+    break
   fi
 done
+if [ "\$is_checkout" = 1 ] && [ "\${STUB_MODE:-}" = "slow-checkout" ]; then
+  sleep 5
+  exit 0
+fi
 if [ "\$is_fetch" = 1 ]; then
   if [ -n "\${STUB_COUNT_FILE:-}" ]; then
     count=0
@@ -107,6 +133,14 @@ if [ "\$is_fetch" = 1 ]; then
     count=1
   fi
   if [ "\${STUB_MODE:-}" = "forbid-sha" ]; then
+    for arg in "\$@"; do
+      if [[ "\$arg" =~ ^[0-9a-f]{40}\$ ]]; then
+        echo "fatal: remote error: upload-pack: not our ref \$arg" >&2
+        exit 128
+      fi
+    done
+  elif [ "\${STUB_MODE:-}" = "slow-fallback" ]; then
+    sleep 0.7
     for arg in "\$@"; do
       if [[ "\$arg" =~ ^[0-9a-f]{40}\$ ]]; then
         echo "fatal: remote error: upload-pack: not our ref \$arg" >&2
@@ -139,18 +173,25 @@ else
   no "cold fetch failed"
 fi
 
-# Delete the remote temporarily to prove a valid cache hit requires zero network access.
+# Plant an untrusted hook and assume-unchanged flag on an UNMODIFIED file, then delete the remote
+# to prove a valid cache hit works offline AND discards restored .git metadata by materializing fresh.
+mkdir -p "$PROJ/.lake/packages/dummy-dep/.git/hooks"
+printf '#!/bin/sh\nexit 99\n' >"$PROJ/.lake/packages/dummy-dep/.git/hooks/post-checkout"
+chmod +x "$PROJ/.lake/packages/dummy-dep/.git/hooks/post-checkout"
+git -C "$PROJ/.lake/packages/dummy-dep" update-index --assume-unchanged DummyDep.lean
 mv "$DEP_BARE" "$TMP/dep-offline.git"
 if (cd "$PROJ" && LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/hit.log" 2>&1 \
-   && has_match -F "cache verified at $REV1" <"$TMP/hit.log"; then
-  ok "valid restored package passes verification completely offline"
+   && has_match -F "cache verified at $REV1" <"$TMP/hit.log" \
+   && [ ! -e "$PROJ/.lake/packages/dummy-dep/.git/hooks/post-checkout" ] \
+   && [ -z "$(git -C "$PROJ/.lake/packages/dummy-dep" ls-files -v | grep '^[a-z]' || true)" ]; then
+  ok "valid restored package passes verification offline and replaces restored .git metadata cleanly"
 else
   cat "$TMP/hit.log" >&2
   no "offline cache hit failed"
 fi
 mv "$TMP/dep-offline.git" "$DEP_BARE"
 
-echo "=== post-restore mismatch, build-output, dirty-tree and stray-package controls ==="
+echo "=== post-restore mismatch, tamper, build-output, traversal and stray-package controls ==="
 # 1. Wrong checked-out revision (REV2 instead of pinned REV1).
 git -C "$PROJ/.lake/packages/dummy-dep" fetch -q --no-tags origin
 git -C "$PROJ/.lake/packages/dummy-dep" checkout -q --detach "$REV2"
@@ -183,20 +224,62 @@ mkdir -p "$PROJ/.lake/packages/stale-unlisted"
 printf 'orphan\n' >"$PROJ/.lake/packages/stale-unlisted/file"
 if (cd "$PROJ" && LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/dirty.log" 2>&1 \
    && has_match -F "pruning unexpected entry .lake/packages/stale-unlisted" <"$TMP/dirty.log" \
-   && has_match -F "dirty, untracked or ignored files present" <"$TMP/dirty.log" \
+   && has_match -F "working tree differs from pinned commit" <"$TMP/dirty.log" \
    && [ ! -e "$PROJ/.lake/packages/stale-unlisted" ] \
-   && [ -z "$(git -C "$PROJ/.lake/packages/dummy-dep" status --porcelain --untracked-files=all --ignored=matching)" ]; then
+   && [ "$(cat "$PROJ/.lake/packages/dummy-dep/DummyDep.lean")" = "def dummyVal : Nat := 1" ]; then
   ok "dirty package is refetched cleanly and stray unlisted packages are pruned"
 else
   cat "$TMP/dirty.log" >&2
   no "dirty-tree / stray-package control failed"
 fi
 
+# 3a. Finding 1 attack: modified tracked Lean file hidden behind assume-unchanged (git status is empty!).
+printf '%s\n' 'def tampered : Nat := 999' >>"$PROJ/.lake/packages/dummy-dep/DummyDep.lean"
+git -C "$PROJ/.lake/packages/dummy-dep" update-index --assume-unchanged DummyDep.lean
+if [ -n "$(git -C "$PROJ/.lake/packages/dummy-dep" status --porcelain --untracked-files=all --ignored=matching)" ]; then
+  no "assume-unchanged setup failed: git status unexpectedly reported the edit"
+elif (cd "$PROJ" && LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/assume-unchanged.log" 2>&1 \
+     && has_match -F "working tree differs from pinned commit (DummyDep.lean)" <"$TMP/assume-unchanged.log" \
+     && [ "$(cat "$PROJ/.lake/packages/dummy-dep/DummyDep.lean")" = "def dummyVal : Nat := 1" ]; then
+  ok "modified Lean file hidden by assume-unchanged is detected and refetched cleanly"
+else
+  cat "$TMP/assume-unchanged.log" >&2
+  no "assume-unchanged tamper control failed"
+fi
+
+# 3a2. Finding 1 variant: modified tracked Lean file hidden behind skip-worktree (git status is empty!).
+printf '%s\n' 'def tamperedSkip : Nat := 888' >>"$PROJ/.lake/packages/dummy-dep/DummyDep.lean"
+git -C "$PROJ/.lake/packages/dummy-dep" update-index --skip-worktree DummyDep.lean
+if [ -n "$(git -C "$PROJ/.lake/packages/dummy-dep" status --porcelain --untracked-files=all --ignored=matching)" ]; then
+  no "skip-worktree setup failed: git status unexpectedly reported the edit"
+elif (cd "$PROJ" && LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/skip-worktree.log" 2>&1 \
+     && has_match -F "working tree differs from pinned commit (DummyDep.lean)" <"$TMP/skip-worktree.log" \
+     && [ "$(cat "$PROJ/.lake/packages/dummy-dep/DummyDep.lean")" = "def dummyVal : Nat := 1" ]; then
+  ok "modified Lean file hidden by skip-worktree is detected and refetched cleanly"
+else
+  cat "$TMP/skip-worktree.log" >&2
+  no "skip-worktree tamper control failed"
+fi
+
+# 3a3. Corrupt object in restored .git/objects -> detected and refetched cleanly.
+BLOB_OID="$(git -C "$PROJ/.lake/packages/dummy-dep" rev-parse "${REV1}:DummyDep.lean")"
+BLOB_PATH="$PROJ/.lake/packages/dummy-dep/.git/objects/${BLOB_OID:0:2}/${BLOB_OID:2}"
+chmod u+w "$BLOB_PATH"
+printf 'corrupted-blob-bytes' >"$BLOB_PATH"
+if (cd "$PROJ" && LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/corrupt-obj.log" 2>&1 \
+   && has_match -F "restored package failed verification" <"$TMP/corrupt-obj.log" \
+   && [ "$(cat "$PROJ/.lake/packages/dummy-dep/DummyDep.lean")" = "def dummyVal : Nat := 1" ]; then
+  ok "corrupt blob object in restored .git/objects is detected and refetched cleanly"
+else
+  cat "$TMP/corrupt-obj.log" >&2
+  no "corrupt object control failed"
+fi
+
 # 3b. Wrong origin URL after restore -> deleted and refetched from manifest URL.
 git -C "$PROJ/.lake/packages/dummy-dep" remote set-url origin "https://example.invalid/wrong-repo"
 if (cd "$PROJ" && LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/origin.log" 2>&1 \
    && has_match -F "origin URL is https://example.invalid/wrong-repo, manifest pins $DEP_BARE" <"$TMP/origin.log" \
-   && [ "$(git -C "$PROJ/.lake/packages/dummy-dep" remote get-url origin)" = "$DEP_BARE" ] \
+   && [ "$(git -C "$PROJ/.lake/packages/dummy-dep" config --local --get remote.origin.url)" = "$DEP_BARE" ] \
    && [ "$(git -C "$PROJ/.lake/packages/dummy-dep" rev-parse HEAD)" = "$REV1" ]; then
   ok "origin URL mismatch after restore deletes package and refetches from manifest URL"
 else
@@ -228,7 +311,114 @@ else
   no "nested .lake control failed"
 fi
 
-echo "=== bounded retry, fallback and timeout controls ==="
+# 3e. Non-blocking 2: unreadable directory hiding nested .lake -> traversal error invalidates and refetches.
+mkdir -p "$PROJ/.lake/packages/dummy-dep/locked/.lake/build"
+printf 'hidden\n' >"$PROJ/.lake/packages/dummy-dep/locked/.lake/build/x.olean"
+chmod 000 "$PROJ/.lake/packages/dummy-dep/locked"
+if (cd "$PROJ" && LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/unreadable-dir.log" 2>&1 \
+   && has_match -F "filesystem traversal error" <"$TMP/unreadable-dir.log" \
+   && [ ! -e "$PROJ/.lake/packages/dummy-dep/locked" ] \
+   && [ "$(git -C "$PROJ/.lake/packages/dummy-dep" rev-parse HEAD)" = "$REV1" ]; then
+  ok "unreadable directory traversal error invalidates restored package and refetches clean"
+else
+  chmod 700 "$PROJ/.lake/packages/dummy-dep/locked" 2>/dev/null || true
+  cat "$TMP/unreadable-dir.log" >&2
+  no "unreadable directory traversal control failed"
+fi
+
+echo "=== Finding 3: configured Git mirror (url.*.insteadOf) controls ==="
+MIRROR_ROOT="$TMP/mirror"
+mkdir -p "$MIRROR_ROOT"
+git clone -q --bare "$DEP_SRC" "$MIRROR_ROOT/dummy-dep.git"
+MIRROR_CFG="$TMP/gitconfig-mirror"
+cat >"$MIRROR_CFG" <<EOF
+[user]
+	name = lake-packages mirror control
+	email = control@example.invalid
+[init]
+	defaultBranch = main
+[advice]
+	detachedHead = false
+[url "$MIRROR_ROOT/"]
+	insteadOf = https://example.invalid/upstream/
+EOF
+PROJ_MIRROR="$TMP/proj-mirror"
+MANIFEST_URL="https://example.invalid/upstream/dummy-dep.git"
+write_project "$PROJ_MIRROR" "$MANIFEST_URL" "$REV1"
+if (cd "$PROJ_MIRROR" && GIT_CONFIG_GLOBAL="$MIRROR_CFG" LAKE_FETCH_ATTEMPTS=1 LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/mirror-fetch.log" 2>&1 \
+   && [ "$(GIT_CONFIG_GLOBAL="$MIRROR_CFG" git -C "$PROJ_MIRROR/.lake/packages/dummy-dep" remote get-url origin)" = "$MIRROR_ROOT/dummy-dep.git" ] \
+   && [ "$(git config --file "$PROJ_MIRROR/.lake/packages/dummy-dep/.git/config" --get remote.origin.url)" = "$MANIFEST_URL" ] \
+   && [ "$(git -C "$PROJ_MIRROR/.lake/packages/dummy-dep" rev-parse HEAD)" = "$REV1" ]; then
+  ok "configured Git mirror (insteadOf) fetches and verifies stored literal manifest URL"
+else
+  cat "$TMP/mirror-fetch.log" >&2
+  no "Git mirror fetch control failed"
+fi
+
+# Prove offline cache hit still succeeds under the mirror gitconfig once the mirror disappears.
+mv "$MIRROR_ROOT/dummy-dep.git" "$MIRROR_ROOT/dummy-dep-offline.git"
+if (cd "$PROJ_MIRROR" && GIT_CONFIG_GLOBAL="$MIRROR_CFG" LAKE_FETCH_ATTEMPTS=1 LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/mirror-hit.log" 2>&1 \
+   && has_match -F "cache verified at $REV1" <"$TMP/mirror-hit.log"; then
+  ok "offline cache hit succeeds under configured Git mirror (insteadOf)"
+else
+  cat "$TMP/mirror-hit.log" >&2
+  no "Git mirror offline cache hit control failed"
+fi
+mv "$MIRROR_ROOT/dummy-dep-offline.git" "$MIRROR_ROOT/dummy-dep.git"
+
+echo "=== Finding 2: independent scratch-workspace object seeding controls ==="
+# Simulate a developer checkout whose .lake/packages/dummy-dep has a local added lemma,
+# prebuilt .lake/build outputs, AND a local HEAD commit on top of pinned REV1.
+CALLER_WS="$TMP/caller-ws"
+write_project "$CALLER_WS" "$DEP_BARE" "$REV1"
+(cd "$CALLER_WS" && LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/caller-init.log" 2>&1
+git -C "$CALLER_WS/.lake/packages/dummy-dep" fetch -q --no-tags origin
+git -C "$CALLER_WS/.lake/packages/dummy-dep" checkout -q --detach "$REV2"
+printf 'def localAddedLemma : Nat := 42\n' >>"$CALLER_WS/.lake/packages/dummy-dep/DummyDep.lean"
+mkdir -p "$CALLER_WS/.lake/packages/dummy-dep/.lake/build/lib/lean"
+printf 'local-olean\n' >"$CALLER_WS/.lake/packages/dummy-dep/.lake/build/lib/lean/DummyDep.olean"
+
+SCRATCH_WS="$TMP/scratch-ws"
+write_project "$SCRATCH_WS" "$DEP_BARE" "$REV1"
+mv "$DEP_BARE" "$TMP/dep-offline-seed.git"
+if (cd "$SCRATCH_WS" && LAKE_SEED_PACKAGES_DIR="$CALLER_WS/.lake/packages" LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/scratch-seed.log" 2>&1 \
+   && [ ! -L "$SCRATCH_WS/.lake/packages" ] \
+   && [ ! -L "$SCRATCH_WS/.lake/packages/dummy-dep" ] \
+   && [ "$(git -C "$SCRATCH_WS/.lake/packages/dummy-dep" rev-parse HEAD)" = "$REV1" ] \
+   && [ ! -e "$SCRATCH_WS/.lake/packages/dummy-dep/.lake" ] \
+   && ! has_match -F "localAddedLemma" <"$SCRATCH_WS/.lake/packages/dummy-dep/DummyDep.lean" \
+   && [ "$(cat "$SCRATCH_WS/.lake/packages/dummy-dep/DummyDep.lean")" = "def dummyVal : Nat := 1" ]; then
+  ok "scratch workspace gets independent verified pinned checkout without caller edits, extra commits or .lake/build"
+else
+  cat "$TMP/scratch-seed.log" >&2
+  no "scratch workspace isolation control failed"
+fi
+mv "$TMP/dep-offline-seed.git" "$DEP_BARE"
+
+# If the caller's object store lacks the pinned commit, seeding falls back cleanly to fetching from manifest URL.
+CALLER_WRONG="$TMP/caller-wrong"
+write_project "$CALLER_WRONG" "$DEP_BARE" "$REV2"
+(cd "$CALLER_WRONG" && LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/caller-wrong.log" 2>&1
+SCRATCH_FB="$TMP/scratch-seed-fb"
+write_project "$SCRATCH_FB" "$DEP_BARE" "$REV1"
+if (cd "$SCRATCH_FB" && LAKE_SEED_PACKAGES_DIR="$CALLER_WRONG/.lake/packages" LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/scratch-seed-fb.log" 2>&1 \
+   && has_match -F "seed object verification failed" <"$TMP/scratch-seed-fb.log" \
+   && [ "$(git -C "$SCRATCH_FB/.lake/packages/dummy-dep" rev-parse HEAD)" = "$REV1" ]; then
+  ok "scratch workspace falls back to verified remote fetch when caller seed lacks pinned commit"
+else
+  cat "$TMP/scratch-seed-fb.log" >&2
+  no "scratch seed fallback control failed"
+fi
+
+# Structural control on scripts/proofs/trust_ban.sh: must use fetch_lake_packages.sh and never symlink .lake/packages.
+if has_match -F "fetch_lake_packages.sh" <"$ROOT_DIR/scripts/proofs/trust_ban.sh" \
+   && ! has_match -E 'ln -s.*\.lake/packages' <"$ROOT_DIR/scripts/proofs/trust_ban.sh"; then
+  ok "trust_ban.sh populates its scratch workspace via fetch_lake_packages.sh without symlinking .lake/packages"
+else
+  no "trust_ban.sh still symlinks .lake/packages or omits fetch_lake_packages.sh"
+fi
+
+echo "=== bounded retry, fallback and single per-attempt deadline controls ==="
 # 4. Transient HTTP 403 on attempts 1 and 2, succeeds on attempt 3.
 PROJ_RETRY="$TMP/proj-retry"
 write_project "$PROJ_RETRY" "$DEP_BARE" "$REV1"
@@ -290,6 +480,36 @@ if [ "$rc" -ne 0 ] && [ "$(cat "$COUNT_FILE")" = "2" ] \
 else
   cat "$TMP/timeout.log" >&2
   no "timeout control failed (rc=$rc, count=$(cat "$COUNT_FILE" 2>/dev/null || echo none))"
+fi
+
+# 7b. Non-blocking 1: slow primary refusal (0.7s) + slow fallback (0.7s) share ONE 1s deadline.
+PROJ_SHARED_TO="$TMP/proj-shared-timeout"
+write_project "$PROJ_SHARED_TO" "$DEP_BARE" "$REV1"
+rc=0
+(cd "$PROJ_SHARED_TO" && PATH="$STUB_BIN:$PATH" STUB_MODE=slow-fallback \
+  LAKE_FETCH_ATTEMPTS=1 LAKE_FETCH_BACKOFF_BASE=0 LAKE_FETCH_TIMEOUT=1 bash "$HELPER") >"$TMP/shared-timeout.log" 2>&1 || rc=$?
+if [ "$rc" -ne 0 ] \
+   && has_match -F "fetch timed out after 1s" <"$TMP/shared-timeout.log" \
+   && [ ! -e "$PROJ_SHARED_TO/.lake/packages/dummy-dep" ]; then
+  ok "primary fetch refusal and fallback fetch share one single per-attempt deadline"
+else
+  cat "$TMP/shared-timeout.log" >&2
+  no "shared per-attempt deadline control failed (rc=$rc)"
+fi
+
+# 7c. Non-blocking 1: stalled checkout also runs inside the same per-attempt deadline.
+PROJ_CO_TO="$TMP/proj-checkout-timeout"
+write_project "$PROJ_CO_TO" "$DEP_BARE" "$REV1"
+rc=0
+(cd "$PROJ_CO_TO" && PATH="$STUB_BIN:$PATH" STUB_MODE=slow-checkout \
+  LAKE_FETCH_ATTEMPTS=1 LAKE_FETCH_BACKOFF_BASE=0 LAKE_FETCH_TIMEOUT=1 bash "$HELPER") >"$TMP/co-timeout.log" 2>&1 || rc=$?
+if [ "$rc" -ne 0 ] \
+   && has_match -F "fetch timed out after 1s" <"$TMP/co-timeout.log" \
+   && [ ! -e "$PROJ_CO_TO/.lake/packages/dummy-dep" ]; then
+  ok "stalled checkout is killed by the same single per-attempt deadline"
+else
+  cat "$TMP/co-timeout.log" >&2
+  no "checkout deadline control failed (rc=$rc)"
 fi
 
 echo "=== manifest integrity controls ==="
