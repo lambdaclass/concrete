@@ -1,8 +1,8 @@
-**PROPOSED RESEARCH & DESIGN NOTE (2026-11-27); decides no language rule. Maps to Stage-0 (`B0b`) provisional tasks [R-0736](../../../ROADMAP.md#r-0736)–[R-0740](../../../ROADMAP.md#r-0740).**
+**PROPOSED RESEARCH & DESIGN NOTE (2026-11-27); decides no language rule. Maps to Stage-0 (`B0b`) provisional tasks [R-0736](../../../ROADMAP.md#r-0736)–[R-0742](../../../ROADMAP.md#r-0742) (and extends `R-0528` / [R-0730](../../../ROADMAP.md#r-0730)).**
 
 # 06 — Stage-0 (`B0b`) Day-One Compiler Foundations & Engineering Multipliers
 
-**Scope.** Beyond the six frontier architectural upgrades ([Docs 01–05](README.md)), five pragmatic compiler-engineering foundations pay compounding returns on every single PR from Slice 0 through 1.0—and cost **10× more to retrofit** once Slices 2–11 land. All five belong in **Stage 0 (`B0b`)** (running alongside `B0b` / Slice 1 without blocking `B0a`), require **zero `ConcreteSpec` changes**, and decide no language rules.
+**Scope.** Beyond the six frontier architectural upgrades ([Docs 01–05](README.md)), eight pragmatic compiler-engineering foundations pay compounding returns on every single PR from Slice 0 through 1.0—and cost **10× more to retrofit** once Slices 2–11 land or Core freezes (`A2c`). All eight start in **Stage 0 (`B0b`)** (running alongside `B0b` / Slice 1 without blocking `B0a`), require **zero `ConcreteSpec` language-rule changes**, and decide no language rules.
 
 ---
 
@@ -89,6 +89,40 @@ Add one lightweight generator script that aggregates existing gate outputs (zero
 
 ---
 
+## <a id="6-synthetic-target-profile"></a>6. Synthetic 32-Bit / Big-Endian `TargetProfile` Portability Check Before `A2c` (`R-0741`)
+
+### Why Now (Before Core Freezes at Slice 11)
+Both active native targets (`x86_64-linux` and `aarch64-macos`) are **64-bit little-endian**. Without exercising at least one non-64-bit and one big-endian `TargetProfile` in `ConcreteSpec` (`C3`, `R-0609`) and `Concrete/Memory.lean` (`R-0580`) before Core freezes (`A2c`), accidental `ptr_width == 64`, `usize == u64`, or little-endian assumptions silently leak into layout, encoding, and BIR lowering.
+
+### Design
+- Define two synthetic test-only target profiles in Lean (e.g. `synthetic32LE` with 32-bit pointers/lengths and `synthetic32BE` with big-endian byte order) implementing `C3`'s `Target` profile interface.
+- Run `ConcreteSpec` layout/representation laws (`rep_roundtrip`, `C3` alignment/size laws) and `Memory`/`BIR` lowering tests across both real 64-bit targets **and** the synthetic 32-bit/big-endian profiles in CI.
+- **Zero native toolchain required:** executes purely inside Lean, guaranteeing embedded (`ARM32`, `RISC-V`), `wasm32`, and network big-endian portability remain structurally intact when Core freezes at `A2c`.
+
+---
+
+## <a id="7-deterministic-work-budgets"></a>7. Deterministic Work-Count Budgets for Admission & Validators (Extends `R-0528` & `R-0730`)
+
+### Why Now
+The single biggest usability failure in SMT-based verification languages (Dafny, Verus) is *"passes on my laptop, times out on CI."* Because Concrete forbids SMT in admission and already enforces deterministic work-count scaling (`R-0550`), every admission checker, parser, and `ValidatedPass` validator ([Doc 01](01-validated-passes-and-ub-free-opt.md)) can be bounded by **exact deterministic step/work counts**, never wall-clock timers.
+
+### Design
+- Every admission checker and `ValidatedPass` validator takes an explicit deterministic work budget (extending `R-0528`'s resource caps) and fails closed with a typed `workLimitExceeded (used, limit)` refusal when exceeded.
+- **Guarantee:** *"Accepted on a developer laptop ⇔ accepted on CI and independent replay"* becomes a machine-independent mathematical invariant, eliminating flaky builds across fast and slow runners.
+
+---
+
+## <a id="8-proof-backed-inspector"></a>8. Proof-Backed Source ↔ IR ↔ Assembly Inspector (`concrete inspect <fn>`) (`R-0742`)
+
+### Why Now
+Mainstream compilers rely on lossy DWARF debug info that optimizations routinely mangle, forcing systems engineers to guess why a loop spilled registers or whether a bounds check actually disappeared. Concrete already threads typed `Origin`s, `FactTable` entries, and `EliminationLedger` records ([Doc 01](01-validated-passes-and-ub-free-opt.md)) across `Core → MIR → Memory → BIR`, and `R-0736` gives every IR a canonical readable text view.
+
+### Design
+- **Stage-0 / Slice-0 increment:** `concrete inspect <fn>` renders source lines side-by-side with `Core`, `MIR`, `Memory`, and `BIR` using the exact `Origin` / `FactTable` / `EliminationLedger` graph—showing per source line which checks were discharged and eliminated (and why), which checks remain residual, and each register/slot assignment.
+- **`LP0` / `R-0517` native increment:** Carry `Origin` one final hop into LCB machine instructions so `concrete inspect <fn> --asm` acts as a **built-in, proof-backed Godbolt** mapping source lines directly to verified native assembly instructions, stack slots, and register spills (zero reliance on lossy DWARF).
+
+---
+
 ## Acceptance Gates (Stage 0 / `B0b`)
 
 | Task | Deliverable | Gate |
@@ -98,3 +132,6 @@ Add one lightweight generator script that aggregates existing gate outputs (zero
 | `R-0738` | `concrete reduce` AST/Core delta-minimizer | Deterministic minimization control shrinking a 30-line planted failing `.con` program to ≤ 5 lines while preserving the failure predicate |
 | `R-0739` | 5 kernel sketches + 5 paired refused twins parsed against `R-0728`'s combined 12-slice LL(1) grammar | All 5 sketches parse cleanly with `ll1`-checked combined grammar; friction log fed into Batch 2 (`R-0567`) |
 | `R-0740` | Per-commit Trust & Speed Scorecard generator over existing `Premises`, `R-0550`, `R-0702`, `R-0424` outputs | Deterministic regeneration control; planted added premise immediately increments open-premise count |
+| `R-0741` | Synthetic `synthetic32LE` and `synthetic32BE` `TargetProfile` instances exercised in `C3`/`Memory`/`BIR` Lean tests | Layout, `rep_roundtrip`, and lowering proofs/tests pass on 32-bit and big-endian profiles; planted hardcoded-64-bit/LE assumption fails |
+| `R-0528` / `R-0730` | Deterministic work-count budgets on admission checker and `ValidatedPass` validators (no wall-clock admission timeouts) | Exact-work-count refusal control reproducing identically across fast/slow hosts; zero wall-clock nondeterminism |
+| `R-0742` | `concrete inspect <fn>` side-by-side source ↔ IR (+ `--asm` at `LP0`/`R-0517`) over `Origin` + `FactTable` + `EliminationLedger` | Golden inspection output showing discharged/eliminated vs. residual checks with exact source spans; planted wrong-origin mapping fails |

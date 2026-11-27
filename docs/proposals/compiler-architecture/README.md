@@ -41,7 +41,7 @@ Auditing the live Lean modules on `main` identifies seven concrete structural up
 
 ## Roadmap Mapping, Slice Schedule & Spec Impact
 
-To obey [every fact once](../../PHILOSOPHY.md#the-rules) (Rule 5), work that refines existing roadmap items (`R-0583`, `R-0299`, `R-0580`, `R-0705`, `R-0556`, `R-0149`, `R-0711`, `R-0727`, `R-0201`, `R-0723`, `R-0272`, `R-0728`, `R-0550`, `R-0509`) extends and cross-links those rows; genuinely new architectural workstreams and Stage-0 (`B0b`) engineering multipliers receive provisional rows **`R-0730`–`R-0740`** in [ROADMAP.md](../../../ROADMAP.md).
+To obey [every fact once](../../PHILOSOPHY.md#the-rules) (Rule 5), work that refines existing roadmap items (`R-0583`, `R-0299`, `R-0580`, `R-0705`, `R-0556`, `R-0149`, `R-0711`, `R-0727`, `R-0201`, `R-0723`, `R-0272`, `R-0728`, `R-0550`, `R-0509`, `R-0528`, `R-0609`, `R-0517`) extends and cross-links those rows; genuinely new architectural workstreams and Stage-0 (`B0b`) engineering multipliers receive provisional rows **`R-0730`–`R-0742`** in [ROADMAP.md](../../../ROADMAP.md).
 
 | Task (provisional) | Title | Target Slice(s) | Touches `ConcreteSpec`? | Owner-gated? | Design Doc |
 |---|---|---|---|---|---|
@@ -56,6 +56,8 @@ To obey [every fact once](../../PHILOSOPHY.md#the-rules) (Rule 5), work that ref
 | [R-0738](../../../ROADMAP.md#r-0738) | Syntax/Core-directed bug minimizer (`concrete reduce`) | Stage 0 (`B0b` / Slices 0–2; extends `R-0272`) | **No** (tooling) | No | [Doc 06](06-day-one-compiler-foundations.md#3-bug-minimizer-concrete-reduce) |
 | [R-0739](../../../ROADMAP.md#r-0739) | Early real-world kernel sketches + paired refused twins checked against the combined 12-slice LL(1) grammar | Stage 0 (`B0b` / pre-`A2c`; feeds `R-0728`, `R-0567`, `R-0573`) | **No** (non-normative sketches) | No | [Doc 06](06-day-one-compiler-foundations.md#4-early-kernel-sketches) |
 | [R-0740](../../../ROADMAP.md#r-0740) | Live per-commit Trust & Speed Scorecard (`Premises`, stage proofs, replay time, scaling, speed vs `clang -O2`) | Stage 0 (`B0b`+; aggregates `R-0509`, `R-0550`, `R-0702`, `R-0424`) | **No** (tooling) | No | [Doc 06](06-day-one-compiler-foundations.md#5-trust-and-speed-scorecard) |
+| [R-0741](../../../ROADMAP.md#r-0741) | Synthetic 32-bit / big-endian `TargetProfile` portability check before Core freeze (`A2c`) | Stage 0 (`B0b` / pre-`A2c`; extends `R-0609`, `R-0580`) | **No** (test-only `C3` profiles) | No | [Doc 06](06-day-one-compiler-foundations.md#6-synthetic-target-profile) |
+| [R-0742](../../../ROADMAP.md#r-0742) | Proof-backed source ↔ IR ↔ assembly inspector (`concrete inspect <fn>`) over `Origin` + `FactTable` + `EliminationLedger` | Stage 0 IR view (`B0b`); native LCB `--asm` view at `LP0`/`R-0517` | **No** (pure `Concrete/` & tooling) | No | [Doc 06](06-day-one-compiler-foundations.md#8-proof-backed-inspector) |
 
 ---
 
