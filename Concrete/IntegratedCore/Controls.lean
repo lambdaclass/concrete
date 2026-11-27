@@ -1,4 +1,5 @@
 import Concrete.IntegratedCore
+import Concrete.Parse
 import ConcreteSpec.IntegratedCore
 
 namespace Concrete.IntegratedCore
@@ -28,12 +29,41 @@ private def expected : CoreInput (sliceLanguage slice0) :=
 -- Operation IDs locate these bindings. C9 ordinals follow sibling order even when the IDs differ.
 example :
     let span : ConcreteSpec.Surface0.Span := ⟨25, 27, 1, 26, ⟨0⟩⟩
-    let program : EarlyProgram := ⟨[(⟨⟨9⟩, .atom (.lit 1)⟩, span),
-      (⟨⟨4⟩, .atom (.lit 2)⟩, span)], .var ⟨4⟩, span⟩
+    let program : EarlyProgram := ⟨[⟨⟨⟨9⟩, .atom (.lit 1)⟩, span, .unnamed none⟩,
+      ⟨⟨⟨4⟩, .atom (.lit 2)⟩, span, .unnamed none⟩], .var ⟨4⟩, span⟩
     (AList.map Origin.evidenceKey (earlyPayload (sliceEarlyCore slice0) program).origins) =
       [(⟨9⟩, ⟨.function earlyEntry, ⟨[⟨.binding, .ordinal 0⟩]⟩⟩),
        (⟨4⟩, ⟨.function earlyEntry, ⟨[⟨.binding, .ordinal 1⟩]⟩⟩),
        (⟨2⟩, ⟨.function earlyEntry, ⟨[⟨.return, .ordinal 0⟩]⟩⟩)] := by decide
+
+private def sourceKeys (sourceText : String) : Option SiteKeyTable := do
+  let tokens ← (Lex.lex sourceText.toUTF8).toOption
+  let ast ← (Parse.parse tokens).toOption
+  let program ← (Elab.elaborateLocated ast).toOption
+  return AList.map Origin.evidenceKey (earlyPayload (sliceEarlyCore slice0) program).origins
+
+-- Inserting y changes x's lexical site. Both source programs issue the spec's full table,
+-- and looking up x at either site yields the very same named key.
+example :
+    let old := sourceKeys r"fn main() -> u8 { let x: u8 = 1; return x; }"
+    let new := sourceKeys r"fn main() -> u8 { let y: u8 = 1; let x: u8 = 1; return x; }"
+    let bind := fun (n : String) => (⟨.binding, .named ⟨n⟩, []⟩ : KeyConstruct)
+    let ret : KeyConstruct := ⟨.return, .unnamed none, []⟩
+    let x : StableKey := ⟨.function earlyEntry, ⟨[⟨.binding, .named ⟨"x"⟩⟩]⟩⟩
+    old = some (KeyConstruct.assignFunctionTable earlyEntry 0 [bind "x", ret]) ∧
+    new = some (KeyConstruct.assignFunctionTable earlyEntry 0 [bind "y", bind "x", ret]) ∧
+    (old.bind (AList.lookup · ⟨0⟩)) = some x ∧ (new.bind (AList.lookup · ⟨1⟩)) = some x := by
+  with_unfolding_all exact ⟨rfl, rfl, rfl, rfl⟩
+
+-- A nested addition creates a temporary before y. The return addition creates another
+-- after y. Only those temporaries occupy binding ordinals.
+example :
+    let src := r"fn main() -> u8 { let x: u8 = 1; let y: u8 = (x + 1) + 1; return y + x; }"
+    let temp : KeyConstruct := ⟨.binding, .unnamed none, []⟩
+    sourceKeys src = some (KeyConstruct.assignFunctionTable earlyEntry 0
+      [⟨.binding, .named ⟨"x"⟩, []⟩, temp, ⟨.binding, .named ⟨"y"⟩, []⟩, temp,
+       ⟨.return, .unnamed none, []⟩]) := by
+  with_unfolding_all rfl
 
 private def parseAndElaborate (tokens : ParserView) : Option (CoreInput (sliceLanguage slice0)) := do
   let parsed ← ((sliceParser slice0).run tokens).2

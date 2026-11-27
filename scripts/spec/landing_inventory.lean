@@ -240,6 +240,8 @@ private def completion : PieceId → Completion
       `collectKeysIn_collectionSound_example_nestedBody,
       `collectKeysIn_collectionSound_planted_nestedBody_unprefixedCollect,
       `collectKeysIn_complete_example_nestedBody, `collectKeysIn_complete_planted_nestedBody_shallowCollect,
+      `assignFunctionTable_insert_locality_example_leftBlock,
+      `assignFunctionTable_insert_locality_planted_leftBlock_insertUnderRight,
       `assignFunctionTable_occurrences_example_nestedBody,
       `assignFunctionTable_occurrences_planted_nestedBody_shallowAssign,
       `assignFunctionTable_lookup_example_nestedBody,

@@ -513,44 +513,57 @@ private theorem collectKeys_children (before after children : List KeyConstruct)
   rw [collectKeysIn_replace before [] after {parent with children := children} parent rfl rfl]
   rfl
 
-private theorem ParentContext.collectKeys_fill (context : ParentContext) :
-    ∃ (earlier later : List FunctionRelativeKey) (path : List KeySegment), ∀ forest,
-      collectKeys (context.fill forest) =
-        earlier ++ (collectKeys forest).map (prependPath path) ++ later := by
-  induction context with
-  | body =>
-    have identity : prependPath [] = id := by funext key; rfl
-    exact ⟨[], [], [], fun forest => by simp [fill, identity]⟩
+/-- The full parent path and the preorder entries surrounding its child list. -/
+structure PreorderFrame where
+  parentPath : List KeySegment
+  earlier : List FunctionRelativeKey
+  later : List FunctionRelativeKey
+
+/-- Read the preorder split from the supplied context. Each parent header precedes its
+children, and the enclosing siblings retain their order on either side. -/
+def ParentContext.preorder : ParentContext → PreorderFrame
+  | .body => ⟨[], [], []⟩
+  | .children outer before parent after =>
+    let frame := outer.preorder
+    let underOuter := prependPath frame.parentPath
+    ⟨frame.parentPath ++ [parent.segment before],
+     frame.earlier ++ (collectKeys before).map underOuter ++ [underOuter (parent.key before)],
+     (collectKeysIn (before ++ [parent]) after).map underOuter ++ frame.later⟩
+
+private theorem ParentContext.collectKeys_fill (context : ParentContext) (forest : List KeyConstruct) :
+    collectKeys (context.fill forest) =
+      context.preorder.earlier ++ (collectKeys forest).map (prependPath context.preorder.parentPath) ++
+        context.preorder.later := by
+  induction context generalizing forest with
+  | body => simp [fill, preorder, show prependPath [] = id by funext key; rfl]
   | children outer before parent after ih =>
-    obtain ⟨earlier, later, path, frame⟩ := ih
-    refine ⟨earlier ++ (collectKeys before).map (prependPath path) ++
-      [prependPath path (parent.key before)],
-      (collectKeysIn (before ++ [parent]) after).map (prependPath path) ++ later,
-      path ++ [parent.segment before], ?_⟩
-    intro forest
-    rw [fill, frame, collectKeys_children]
-    simp [List.map_append, List.map_map, Function.comp_def, prependPath, List.append_assoc]
+    rw [fill, ih, collectKeys_children]
+    simp [preorder, List.map_append, List.map_map, Function.comp_def, prependPath, List.append_assoc]
+
+/-- The two preorder key lists of an insertion at this context and sibling split.
+Both lists use the same enclosing path, unchanged prefix, and unchanged suffix. -/
+def ParentContext.InsertionKeys (context : ParentContext) (f : FnId)
+    (before after : List KeyConstruct) (inserted : KeyConstruct) (oldKeys newKeys : List StableKey) : Prop :=
+  let frame := context.preorder
+  let owner := fun key : FunctionRelativeKey => (⟨.function f, key⟩ : StableKey)
+  let underParent := fun key : FunctionRelativeKey => owner ⟨frame.parentPath ++ key.path⟩
+  let earlier := frame.earlier.map owner ++ (collectKeys before).map underParent
+  let later := frame.later.map owner
+  let siblings := collectKeysIn before after
+  oldKeys = earlier ++ siblings.map underParent ++ later ∧
+  newKeys = earlier ++ (collectKeysIn before [inserted]).map underParent ++
+    siblings.map (underParent ∘ shiftSibling inserted) ++ later
 
 /-- Law (subject `ConcreteSpec.Core.KeyConstruct.assignFunctionTable`).
-For insertion under any parent, the old and new ordered tables have identical surrounding keys.
-The inserted subtree appears at the split. Of the later siblings' paths, only a same-kind
-ordinal segment can increment, and only for an unnamed insertion. Every descendant retains
-its complete suffix. Both tables use the real owner, independently of their lexical offsets. -/
+The context fixes the parent path and the surrounding preorder entries in both tables.
+The inserted subtree follows the parent's earlier children. Of the later siblings' paths,
+only a same-kind ordinal segment can increment, and only for an unnamed insertion. Every
+descendant retains its complete suffix, independently of the tables' lexical offsets. -/
 theorem assignFunctionTable_insert_locality (f : FnId) (oldStart newStart : Nat)
     (context : ParentContext) (before after : List KeyConstruct) (inserted : KeyConstruct) :
-    ∃ (earlier later : List StableKey) (parentPath : List KeySegment),
-      let owned := fun (key : FunctionRelativeKey) =>
-        (⟨.function f, ⟨parentPath ++ key.path⟩⟩ : StableKey)
-      let siblings := collectKeysIn before after
-      List.map Prod.snd (assignFunctionTable f oldStart (context.fill (before ++ after))) =
-        earlier ++ siblings.map owned ++ later ∧
-      List.map Prod.snd (assignFunctionTable f newStart (context.fill (before ++ inserted :: after))) =
-        earlier ++ (collectKeysIn before [inserted]).map owned ++
-          siblings.map (owned ∘ shiftSibling inserted) ++ later := by
-  obtain ⟨outerBefore, outerAfter, path, frame⟩ := context.collectKeys_fill
-  let owner := fun key : FunctionRelativeKey => (⟨.function f, key⟩ : StableKey)
-  refine ⟨outerBefore.map owner ++ (collectKeys before).map (owner ∘ prependPath path),
-    outerAfter.map owner, path, ?_⟩
+    context.InsertionKeys f before after inserted
+      (List.map Prod.snd (assignFunctionTable f oldStart (context.fill (before ++ after))))
+      (List.map Prod.snd (assignFunctionTable f newStart (context.fill (before ++ inserted :: after)))) := by
   have split (forest : List KeyConstruct) : collectKeys (before ++ forest) =
       collectKeys before ++ collectKeysIn before forest := by simp [collectKeys, collectKeysIn_append]
   have changed : collectKeysIn before (inserted :: after) =
@@ -558,8 +571,9 @@ theorem assignFunctionTable_insert_locality (f : FnId) (oldStart newStart : Nat)
     rw [show inserted :: after = [inserted] ++ after from rfl, collectKeysIn_append]
     simpa only [List.append_nil] using congrArg (collectKeysIn before [inserted] ++ ·)
       (collectKeysIn_shift before [] after inserted)
-  simp only [assignFunctionTable, numberFunctionKeys_snd, frame, split, changed, List.map_append,
-    List.map_map, Function.comp_def, prependPath, owner, List.append_assoc, and_self]
+  simp only [ParentContext.InsertionKeys, assignFunctionTable, numberFunctionKeys_snd,
+    ParentContext.collectKeys_fill, split, changed, List.map_append, List.map_map, Function.comp_def,
+    prependPath, List.append_assoc, and_self]
 
 end KeyConstruct
 
@@ -655,7 +669,7 @@ theorem KeyConstruct.assignFunctionTable_descendant_mem (f : FnId) (startSite : 
 
 /-- Law (subject `ConcreteSpec.Core.KeyConstruct.assignFunctionTable`, `ConcreteSpec.Core.KeyConstruct.rename`).
 Renaming a named root assigns the new name to the construct's own table entry and the new prefix to
-every actual descendant. Its suffix is resolved in a fresh named scope, regardless of preceding
+every actual descendant. Its suffix is resolved among the renamed parent’s children, regardless of preceding
 siblings of any kind. Sibling preservation is proved by `KeyConstruct.descendant_rename_other` and
 the occurrence/table correspondence. -/
 theorem KeyConstruct.assignFunctionTable_rename_named (f : FnId) (startSite : Nat)

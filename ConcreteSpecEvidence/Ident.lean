@@ -113,6 +113,42 @@ def nestedPath : FunctionRelativeKey :=
   ⟨[⟨.block, .ordinal 0⟩, ⟨.loop, .ordinal 0⟩, ⟨.primitive, .pinned ⟨"effect"⟩⟩]⟩
 def insertedCall : KeyConstruct := ⟨.call, .unnamed none, []⟩
 
+private def callBlock (name : String) : KeyConstruct :=
+  ⟨.block, .named ⟨name⟩, [insertedCall]⟩
+
+/-- In [L { call }, R { call }], focus on L's children. -/
+def leftBlock : KeyConstruct.ParentContext :=
+  .children .body [] (callBlock "L") [callBlock "R"]
+
+private def blockKey (name : String) (calls : List KeySegment := []) : StableKey :=
+  ⟨.function function, ⟨⟨.block, .named ⟨name⟩⟩ :: calls⟩⟩
+
+private def afterLeftInsertion : List StableKey :=
+  [blockKey "L", blockKey "L" [⟨.call, .ordinal 0⟩], blockKey "L" [⟨.call, .ordinal 1⟩],
+   blockKey "R", blockKey "R" [⟨.call, .ordinal 0⟩]]
+
+/-- Instance (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_insert_locality`, case `ConcreteSpec.Core.Vacuity.leftBlock`). -/
+theorem assignFunctionTable_insert_locality_example_leftBlock :
+    List.map Prod.snd (KeyConstruct.assignFunctionTable function 0
+      (leftBlock.fill [insertedCall, insertedCall])) = afterLeftInsertion := by
+  with_unfolding_all exact
+    (KeyConstruct.assignFunctionTable_insert_locality function 0 0 leftBlock [] [insertedCall] insertedCall).2
+
+/-- Issue the table for an insertion before R's call, leaving L untouched. -/
+def insertUnderRight : SiteKeyTable :=
+  let right : KeyConstruct.ParentContext := .children .body [callBlock "L"] (callBlock "R") []
+  KeyConstruct.assignFunctionTable function 0 (right.fill [insertedCall, insertedCall])
+
+/-- Planted (law `ConcreteSpec.Core.KeyConstruct.assignFunctionTable_insert_locality`, case `ConcreteSpec.Core.Vacuity.leftBlock`, subject `ConcreteSpec.Core.KeyConstruct.assignFunctionTable`, mutant `ConcreteSpec.Core.Vacuity.insertUnderRight`). -/
+theorem assignFunctionTable_insert_locality_planted_leftBlock_insertUnderRight :
+    ¬ leftBlock.InsertionKeys function [] [insertedCall] insertedCall
+      (List.map Prod.snd (KeyConstruct.assignFunctionTable function 0 (leftBlock.fill [insertedCall])))
+      (List.map Prod.snd insertUnderRight) := by
+  intro wrong
+  have different : List.map Prod.snd insertUnderRight ≠ afterLeftInsertion :=
+    of_decide_eq_true (by with_unfolding_all rfl)
+  with_unfolding_all exact different wrong.2
+
 /-- Mutant collector that reproduces the old omission of every descendant. -/
 def shallowCollect (scope : List KeyConstruct) : List KeyConstruct → List FunctionRelativeKey
   | [] => []
@@ -227,7 +263,7 @@ theorem assignFunctionTable_lookup_planted_nestedBody_shallowAssign : ¬ (AList.
   revert found
   decide
 
-/-- Suffix below the toy block, independently resolved in its named scope. -/
+/-- Suffix below the toy block, independently resolved among its children. -/
 def nestedSuffix : FunctionRelativeKey := ⟨[⟨.loop, .ordinal 0⟩, ⟨.primitive, .pinned ⟨"effect"⟩⟩]⟩
 def renamedRootKey : FunctionRelativeKey := ⟨[⟨.block, .named ⟨"new"⟩⟩]⟩
 def renamedPath : FunctionRelativeKey := ⟨⟨.block, .named ⟨"new"⟩⟩ :: nestedSuffix.path⟩

@@ -426,19 +426,35 @@ def KeyConstruct.segment (preceding : List KeyConstruct) (construct : KeyConstru
 def KeyConstruct.key (preceding : List KeyConstruct) (construct : KeyConstruct) : FunctionRelativeKey :=
   ⟨[construct.segment preceding]⟩
 
-/-- Slice 0's flat body has a run of identical unnamed bindings followed by one return. -/
-def KeyConstruct.keyAfterCopies (construct sibling : KeyConstruct) (count : Nat) :
-    FunctionRelativeKey :=
-  construct.key (List.replicate count sibling)
+/-- Issue root keys for a list of direct siblings of one kind, retaining the caller's
+payload at each occurrence. The specification uses the actual preceding constructs. -/
+def KeyConstruct.mapSiblingKeys {α β : Type} (kind : ConstructKind) (name : α → ConstructName)
+    (emit : α → FunctionRelativeKey → β) (preceding : List KeyConstruct) : List α → List β
+  | [] => []
+  | item :: rest =>
+    let root : KeyConstruct := ⟨kind, name item, []⟩
+    emit item (root.key preceding) :: mapSiblingKeys kind name emit (preceding ++ [root]) rest
 
-private def KeyConstruct.keyAfterCopiesImpl (construct sibling : KeyConstruct) (count : Nat) :
-    FunctionRelativeKey :=
-  ⟨[construct.segmentAtOrdinal (if sibling.countsToward construct.kind then count else 0)]⟩
+private def KeyConstruct.mapSiblingKeysImpl {α β : Type} (kind : ConstructKind) (name : α → ConstructName)
+    (emit : α → FunctionRelativeKey → β) (preceding : List KeyConstruct) (items : List α) : List β :=
+  go (preceding.filter (countsToward kind)).length items
+where
+  go (ordinal : Nat) : List α → List β
+    | [] => []
+    | item :: rest =>
+      let root : KeyConstruct := ⟨kind, name item, []⟩
+      emit item ⟨[root.segmentAtOrdinal ordinal]⟩ ::
+        go (if root.countsToward kind then ordinal + 1 else ordinal) rest
 
-/-- Helper (computation). The compiled issuer counts a homogeneous sibling prefix in constant time. -/
-@[csimp] private theorem KeyConstruct.keyAfterCopies_eq : keyAfterCopies = keyAfterCopiesImpl := by
-  funext target sibling count
-  cases h : sibling.countsToward target.kind <;> simp [keyAfterCopies, keyAfterCopiesImpl, key, segment, h]
+/-- Helper (computation). A single counter suffices for every remaining sibling of this kind. -/
+@[csimp] private theorem KeyConstruct.mapSiblingKeys_eq : @mapSiblingKeys = @mapSiblingKeysImpl := by
+  funext α β kind name emit preceding items
+  unfold mapSiblingKeysImpl
+  induction items generalizing preceding with
+  | nil => rfl
+  | cons item rest ih =>
+    cases h : countsToward kind ⟨kind, name item, []⟩ <;>
+      simp [mapSiblingKeys, mapSiblingKeysImpl.go, key, segment, ih, List.filter_append, h]
 
 /-- Each parent starts a fresh ordinal sequence for its children (C9, revised 2026-11-27). -/
 def KeyConstruct.childScope (_preceding : List KeyConstruct) (_construct : KeyConstruct) :
