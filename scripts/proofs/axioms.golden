@@ -4033,14 +4033,13 @@ ConcreteSpec.GrammarData.Authority.component.sizeOf_spec
 ConcreteSpec.GrammarData.Authority.inHead.inj	
 ConcreteSpec.GrammarData.Authority.inHead.injEq	propext
 ConcreteSpec.GrammarData.Authority.inHead.sizeOf_spec	
+ConcreteSpec.GrammarData.Authority.inResult.inj	
+ConcreteSpec.GrammarData.Authority.inResult.injEq	propext
+ConcreteSpec.GrammarData.Authority.inResult.sizeOf_spec	
 ConcreteSpec.GrammarData.Authority.keyword.inj	
 ConcreteSpec.GrammarData.Authority.keyword.injEq	propext
 ConcreteSpec.GrammarData.Authority.keyword.sizeOf_spec	
-ConcreteSpec.GrammarData.Authority.namedResult.sizeOf_spec	
 ConcreteSpec.GrammarData.Authority.numeric.sizeOf_spec	
-ConcreteSpec.GrammarData.Authority.primitiveResult.inj	
-ConcreteSpec.GrammarData.Authority.primitiveResult.injEq	propext
-ConcreteSpec.GrammarData.Authority.primitiveResult.sizeOf_spec	
 ConcreteSpec.GrammarData.Authority.slice0.sizeOf_spec	
 ConcreteSpec.GrammarData.Authority.staticStr.sizeOf_spec	
 ConcreteSpec.GrammarData.Nonterminal.alternative.sizeOf_spec	
@@ -4285,23 +4284,7 @@ ConcreteSpec.GrammarData.instDecidableEqAuthority.decEq._proof_6
 ConcreteSpec.GrammarData.instDecidableEqAuthority.decEq._proof_60	
 ConcreteSpec.GrammarData.instDecidableEqAuthority.decEq._proof_61	
 ConcreteSpec.GrammarData.instDecidableEqAuthority.decEq._proof_62	
-ConcreteSpec.GrammarData.instDecidableEqAuthority.decEq._proof_63	
-ConcreteSpec.GrammarData.instDecidableEqAuthority.decEq._proof_64	
-ConcreteSpec.GrammarData.instDecidableEqAuthority.decEq._proof_65	
-ConcreteSpec.GrammarData.instDecidableEqAuthority.decEq._proof_66	
-ConcreteSpec.GrammarData.instDecidableEqAuthority.decEq._proof_67	
-ConcreteSpec.GrammarData.instDecidableEqAuthority.decEq._proof_68	
-ConcreteSpec.GrammarData.instDecidableEqAuthority.decEq._proof_69	
 ConcreteSpec.GrammarData.instDecidableEqAuthority.decEq._proof_7	
-ConcreteSpec.GrammarData.instDecidableEqAuthority.decEq._proof_70	
-ConcreteSpec.GrammarData.instDecidableEqAuthority.decEq._proof_71	
-ConcreteSpec.GrammarData.instDecidableEqAuthority.decEq._proof_72	
-ConcreteSpec.GrammarData.instDecidableEqAuthority.decEq._proof_73	
-ConcreteSpec.GrammarData.instDecidableEqAuthority.decEq._proof_74	
-ConcreteSpec.GrammarData.instDecidableEqAuthority.decEq._proof_75	
-ConcreteSpec.GrammarData.instDecidableEqAuthority.decEq._proof_76	
-ConcreteSpec.GrammarData.instDecidableEqAuthority.decEq._proof_77	
-ConcreteSpec.GrammarData.instDecidableEqAuthority.decEq._proof_78	
 ConcreteSpec.GrammarData.instDecidableEqAuthority.decEq._proof_8	
 ConcreteSpec.GrammarData.instDecidableEqAuthority.decEq._proof_9	
 ConcreteSpec.GrammarData.instDecidableEqNonterminal._proof_1	

@@ -138,19 +138,19 @@ inductive ProductionId where
   | endName
   deriving DecidableEq, Repr
 
-/-- The approved construct or token that dates a recognition row. A condition
-head needs both the operand and the containing conditional. -/
+/-- The approved construct or token that dates a recognition row. A position
+can require both the type or operand and its enclosing construct. -/
 inductive Authority where
-  | slice0 | component | keyword (t : Terminal) | primitiveResult (t : Terminal)
-  | namedResult | numeric | arithmetic | staticStr | inHead (operand : Authority)
+  | slice0 | component | keyword (t : Terminal) | inResult (type : Authority)
+  | numeric | arithmetic | staticStr | inHead (operand : Authority)
   deriving DecidableEq, Repr
 
 def Authority.firstSlice : Authority → Nat
   | .slice0 => 0
   | .component => 1
-  | .keyword t | .primitiveResult t => terminalFirstSlice t
+  | .keyword t => terminalFirstSlice t
+  | .inResult type => max 5 type.firstSlice  -- Ordinary functions enter at slice 5.
   | .numeric | .arithmetic => 2
-  | .namedResult => 5  -- General functions in the approved vertical-slice schedule.
   | .staticStr => 11   -- Q4.1 gives the literal its type. The ballot dates StaticStr.
   | .inHead operand => max (terminalFirstSlice .if_) operand.firstSlice
 
@@ -160,21 +160,13 @@ def Authority.references : Authority → List String
   | .slice0 => ["docs/decisions.md#decided-2026-11-25-freeze-and-grammar"]
   | .component => ["docs/decisions.md#q8-2-revision", "docs/decisions.md#od65",
       "docs/decisions.md#decided-project-vertical-slices-2026-11-06"]
-  | .keyword _ | .primitiveResult _ => [keywordBallot]
-  | .namedResult => ["docs/decisions.md#decided-project-vertical-slices-2026-11-06",
-      "docs/decisions.md#decided-2026-11-22-roadmap-reordering"]
+  | .keyword _ => [keywordBallot]
+  | .inResult type => "docs/decisions.md#decided-2026-11-27-result-position" :: type.references
   | .numeric => ["docs/grammar/TOKEN-BALLOT.md#slice-2-literals"]
   | .arithmetic => ["docs/grammar/TOKEN-BALLOT.md#other-punctuation-and-boundaries"]
   | .staticStr => ["docs/decisions.md#decided-2026-11-05-core",
       "docs/grammar/TOKEN-BALLOT.md#builtin-names-by-first-consumer"]
   | .inHead operand => keywordBallot :: "docs/decisions.md#od16" :: "docs/decisions.md#od34" :: operand.references
-
-/-- A recognition tag can date a prerequisite while positional approval is open. -/
-def Authority.pendingDecision : Authority → Option String
-  | .primitiveResult _ => some "pending decision: first use of the primitive keyword as a function result"
-  | .namedResult => some "pending decision: first use of a named type as a function result"
-  | .inHead operand => operand.pendingDecision
-  | _ => none
 
 structure ProductionRow where
   lhs : Nonterminal
@@ -187,7 +179,7 @@ structure ProductionRow where
 def ProductionRow.firstSlice (row : ProductionRow) := row.authority.firstSlice
 
 def primitiveReturn (t : Terminal) : ProductionRow :=
-  ⟨.returnType, [.t t], .primitiveResult t, some t⟩
+  ⟨.returnType, [.t t], .inResult (.keyword t), some t⟩
 
 def ProductionId.row : ProductionId → ProductionRow
   | .program => ⟨.program, [.n .structs, .t .fn, .t .ident, .t .lparen, .t .rparen, .t .arrow, .n .returnType, .t .lbrace, .n .body, .t .rbrace], .slice0, none⟩
@@ -204,7 +196,7 @@ def ProductionId.row : ProductionId → ProductionRow
   | .retBool => primitiveReturn .bool_
   | .retUnit => primitiveReturn .Unit_
   | .retChar => primitiveReturn .char_
-  | .retNamed => ⟨.returnType, [.t .ident], .namedResult, some .ident⟩
+  | .retNamed => ⟨.returnType, [.t .ident], .inResult .component, some .ident⟩
   | .localU8 => ⟨.localType, [.t .u8], .keyword .u8, none⟩
   | .localI8 => ⟨.localType, [.t .i8], .keyword .i8, some .i8⟩
   | .localI16 => ⟨.localType, [.t .i16], .keyword .i16, some .i16⟩

@@ -567,13 +567,16 @@ private def checkWordIdentities : IO Unit := do
 private def primitiveConsumers : List (Nat × List String) :=
   [(0, ["u8"]), (2, words "i8 i16 i32 i64 u16 u32 u64"), (3, ["bool", "Unit"]), (11, ["char"])]
 
+private def expectedPrimitiveResult (name : String) (keywordSlice : Nat) : Nat :=
+  if name == "u8" then 0 else max 5 keywordSlice
+
 private def primitiveExamples (slice : Nat) : List Example :=
   primitiveConsumers.flatMap fun (first, names) =>
     names.flatMap fun name =>
       [⟨s!"{name} annotation (first slice {first})", fnBody s!"let v: {name} = 1; return 0;",
         slice >= first⟩,
        ⟨s!"{name} function result", s!"fn f() -> {name} \{ return 1; }",
-        slice >= (if name == "u8" then 0 else max 5 first)⟩]
+        slice >= expectedPrimitiveResult name first⟩]
 
 private def countedLoopExamples : List Example := [
   ⟨"two bare loop bounds", fnBody "for i from 0 until 5 {}", false⟩,
@@ -1160,10 +1163,10 @@ private def checkPositionTags : IO Unit := do
   for (first, names) in primitiveConsumers do
     for name in names do
       let t := ConcreteSpec.Surface0.word name
-      for lhs in [Nonterminal.localType, .returnType] do
+      for (lhs, threshold) in [(Nonterminal.localType, first), (.returnType, expectedPrimitiveResult name first)] do
         let alternatives := productionIds.filter fun id => id.row.lhs == lhs && id.row.rhs == [.t t]
-        unless alternatives.map (·.row.firstSlice) == [first] do
-          throw (IO.userError s!"expected one {lhs.spelling} row for {name} at slice {first}")
+        unless alternatives.map (·.row.firstSlice) == [threshold] do
+          throw (IO.userError s!"expected one {lhs.spelling} row for {name} at slice {threshold}")
 
 open ConcreteSpec.GrammarData in
 private def checkProvenance : IO Unit := do
@@ -1180,10 +1183,9 @@ private def checkProvenance : IO Unit := do
             (line.drop 3).toString.toLower.replace " " "-" == anchor
         | _ => false
       unless found do throw (IO.userError s!"{repr id}: missing approved decision at {ref}")
-    let pending := id.row.lhs == .returnType && id != .retU8
-    unless authority.pendingDecision.isSome == pending &&
-        authority.pendingDecision.all (·.startsWith "pending decision: ") do
-      throw (IO.userError s!"{repr id}: wrong result-position approval status")
+    if id.row.lhs == .returnType && id != .retU8 then
+      unless authority.references.contains "docs/decisions.md#decided-2026-11-27-result-position" do
+        throw (IO.userError s!"{repr id}: missing result-position decision")
 
 private def checkStringRequirements : IO Unit := do
   unless ConcreteSpec.Surface0.terminalFirstSlice .stringLiteral == 4 &&
@@ -1208,22 +1210,21 @@ private def checkArithmeticAuthority : IO Unit := do
 open ConcreteSpec.GrammarData
 
 /-- Independent boundary expectations for the catalog controls. The exhaustive
-match requires a decision basis for each new production. Result rows use the
-recognition prerequisites documented in their provenance. -/
+match requires a decision basis for each new production. -/
 private def expectedFirst : ProductionId → Nat
   | .program | .endDecls | .retU8 | .localU8 | .binding | .retStmt | .endBody
   | .named | .annotated | .expr | .plus | .endSum | .product | .endProduct
   | .integer | .name | .group | .endName => 0
   | .emptyStruct | .localNamed | .callStmt | .wildcard | .destructure | .move | .literal => 1
-  | .retI8 | .retI16 | .retI32 | .retI64 | .retU16 | .retU32 | .retU64
   | .localI8 | .localI16 | .localI32 | .localI64 | .localU16 | .localU32 | .localU64
   | .minus | .times | .divide | .remainder | .byte => 2
-  | .retBool | .retUnit | .localBool | .localUnit | .ifStmt | .mutable | .conditional
+  | .localBool | .localUnit | .ifStmt | .mutable | .conditional
   | .otherwise | .endIf | .elseBlock | .elseIf | .trueLit | .falseLit | .headExpr
   | .headPlus | .headMinus | .headEndSum | .headProduct | .headTimes | .headDivide
   | .headRemainder | .headEndProduct | .headInteger | .headName | .headGroup
   | .headMove | .headByte | .headTrueLit | .headFalseLit => 3
-  | .retNamed => 5
+  | .retI8 | .retI16 | .retI32 | .retI64 | .retU16 | .retU32 | .retU64
+  | .retBool | .retUnit | .retNamed => 5
   | .retChar | .localChar | .stringLit | .headStringLit => 11
 
 private def terminalInput : String → String
@@ -1236,32 +1237,35 @@ private def yieldOf (samples : Std.HashMap String (List String)) (rhs : List (Sy
     | .t t => some [terminalInput t]
     | .n n => samples[n]?).flatten
 
-/-- First find a finite yield for each nonterminal. Then propagate a Program
-prefix and suffix to each reachable nonterminal, filling its siblings with
-those yields. Inserting each alternative in its LHS context gives a complete
-source witness, including for empty and recursive alternatives. -/
-private def programWitnesses (ids : List ProductionId) : IO (List (ProductionId × String)) := do
+/-- Fill operands and enclosing contexts from earlier rows wherever possible.
+Thus a type witness crosses its boundary by changing the type alone. In
+particular, a slice-1 named annotation uses the slice-0 named binding.
+Then extend the contexts to cover newly reachable and recursive productions. -/
+private def programWitnesses (first : Nat) : IO (List (ProductionId × String)) := do
+  let ids := productionIds.filter (expectedFirst · ≤ first)
+  let prior := grammar ((ids.filter (expectedFirst · < first)).map ProductionId.render)
   let g := grammar (ids.map ProductionId.render)
   let mut samples : Std.HashMap String (List String) := {}
-  for _ in [:Nonterminal.count] do
-    let before := samples.size
-    for (lhs, rhs) in g.prods do
-      if !samples.contains lhs then
-        if let some sample := yieldOf samples rhs then samples := samples.insert lhs sample
-    if samples.size == before then break
   let mut contexts : Std.HashMap String (List String × List String) := {}
   contexts := contexts.insert g.start ([], [])
-  for _ in [:Nonterminal.count] do
-    let before := contexts.size
-    for (lhs, rhs) in g.prods do
-      let some (left, right) := contexts[lhs]? | continue
-      for (sym, i) in rhs.zipIdx do
-        let .n child := sym | continue
-        if contexts.contains child then continue
-        let some pre := yieldOf samples (rhs.take i) | continue
-        let some post := yieldOf samples (rhs.drop (i+1)) | continue
-        contexts := contexts.insert child (left ++ pre, post ++ right)
-    if contexts.size == before then break
+  for rules in [prior.prods, g.prods] do
+    for _ in [:Nonterminal.count] do
+      let before := samples.size
+      for (lhs, rhs) in rules do
+        if !samples.contains lhs then
+          if let some sample := yieldOf samples rhs then samples := samples.insert lhs sample
+      if samples.size == before then break
+    for _ in [:Nonterminal.count] do
+      let before := contexts.size
+      for (lhs, rhs) in rules do
+        let some (left, right) := contexts[lhs]? | continue
+        for (sym, i) in rhs.zipIdx do
+          let .n child := sym | continue
+          if contexts.contains child then continue
+          let some pre := yieldOf samples (rhs.take i) | continue
+          let some post := yieldOf samples (rhs.drop (i+1)) | continue
+          contexts := contexts.insert child (left ++ pre, post ++ right)
+      if contexts.size == before then break
   (ids.zip g.prods).mapM fun (id, lhs, rhs) => do
     let some (left, right) := contexts[lhs]? | throw (IO.userError s!"unreachable {repr id}")
     let some sample := yieldOf samples rhs | throw (IO.userError s!"unproductive {repr id}")
@@ -1276,8 +1280,7 @@ private def checkCatalogBoundaries (targets : List ProductionId) : IO Unit := do
   let mut checked := []
   let mut predecessors := 0
   for first in (targets.map expectedFirst).eraseDups do
-    let expected := productionIds.filter (expectedFirst · ≤ first)
-    let witnesses ← programWitnesses expected
+    let witnesses ← programWitnesses first
     let (g, table) ← requireProjection s!"catalog slice {first}" (renderGrammarForSlice first)
     let previous ← match first with
       | 0 => pure none
