@@ -224,7 +224,7 @@ example (parser : Parser grammar) (project : Project) :
   intro observed sound
   have eligible : (stages 42).emitLLVM.inputInvariant input := by
     refine ⟨?_, (by decide : 0 ≤ 2), by simp [input, original, birReturn, testBIR],
-      by simp [input, original, birReturn, testBIR], nofun, birReturnTables project macLLVM⟩
+      by simp [input, original, birReturn, testBIR], nofun, birReturnTables project macLLVM, nofun⟩
     intro fn member block included slot trap
     cases List.mem_singleton.mp member
     cases List.mem_singleton.mp included
@@ -291,7 +291,7 @@ example :
       ¬ EmitsLCB testLanguage trapBIR output := by
   refine ⟨by with_unfolding_all rfl, ?_⟩
   intro emitted
-  apply stationaryRejects birExecution (LCBInput.Execution Nat tabProject)
+  apply stationaryRejects birExecution (LCBInput.Execution Nat tabProject) (LCBInput.Execution Nat tabProject).result
     (BIR.entryState (language := testLanguage) trapBIR) (some ⟨0, 0, #[]⟩)
     trapResult (.returned 134 ByteArray.empty) (fun _ h => h) ?_ ?_ ?_ ?_ emitted.2.2.2.2.2.2.1
   · with_unfolding_all rfl

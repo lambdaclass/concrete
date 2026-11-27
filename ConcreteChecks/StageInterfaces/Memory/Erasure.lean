@@ -23,8 +23,8 @@ theorem erasureBindingUnique (project : Project)
   obtain ⟨_, value, afterRead, stored, read, writes, rfl⟩ := step
   have readExact : some (CoreValue.other (), storeInitial) = some (value, afterRead) := read
   cases readExact
-  have params : @Memory.WriteParams erasureLanguage testLowering testProfile (@MIR.logicalView erasureLanguage testLowering testProfile (erasureSource project))
-      [⟨(), ⟨⟨storeRoot, []⟩, .virtual⟩⟩] [CoreValue.other ()] storeInitial stored := by
+  have params : ((erasureSource project).logicalView (language := erasureLanguage)).WriteParams (language := erasureLanguage)
+      [⟨(), ⟨⟨storeRoot, []⟩, .virtual⟩⟩] [CoreValue.other ()] storeInitial stored false := by
     simp only [Bool.true_or, ite_true] at writes
     with_unfolding_all exact writes
   cases params with

@@ -9,11 +9,7 @@ open ConcreteSpec Core Core.SourcePathSpan StageInterface StageGrammar
 namespace StageInterfaceControls
 
 private abbrev physicalFieldLanguage : CoreLanguage :=
-  {linearProjectedLanguage with
-    fieldRange := fun _ path _ =>
-      if path = [splitField] then some (0, ⟨1, 1⟩)
-      else if path = [secondSplitField] then some (1, ⟨1, 1⟩)
-      else none}
+  {linearProjectedLanguage with layout := fun _ _ _ => some pairLayout}
 
 private def physicalFields : MemoryRegisters physicalFieldLanguage testProfile :=
   {storeInitial with
@@ -30,7 +26,7 @@ private def physicalFieldSSA : SSA testLowering testProfile :=
   ⟨tabProject, Exec.Demo.mainF, [],
     [(Exec.Demo.mainF, [(storeRoot, ())], ⟨⟨0⟩, #[⟨⟨0⟩, [],
       physicalFieldLoads, .ret none, []⟩]⟩)],
-    [(Exec.Demo.mainF, [(storeRoot, ⟨2, 1⟩)])], [], []⟩
+    [(Exec.Demo.mainF, [(storeRoot, pairLayout)])], [], []⟩
 
 private def physicalFieldBIR : BIR testLowering testProfile :=
   ⟨tabProject, Exec.Demo.mainF, [],
@@ -84,14 +80,14 @@ private def splitSSA (project : Project) (dropSecond : Bool := false) : SSA test
     [(Exec.Demo.mainF, [(storeRoot, ())], ⟨⟨0⟩, #[⟨⟨0⟩, [],
       [⟨testOrigin, .destructure (.materialized (ty := ()) ⟨storeRoot, []⟩)
         (if dropSecond then splitRegisters.take 1 else splitRegisters)⟩], .ret none, []⟩]⟩)],
-    [(Exec.Demo.mainF, [(storeRoot, ⟨1, 1⟩)])], [], []⟩
+    [(Exec.Demo.mainF, [(storeRoot, ⟨1, 1, .nil⟩)])], [], []⟩
 
 private def splitBIR (project : Project) : BIR testLowering testProfile :=
   ⟨project, Exec.Demo.mainF, [],
     [(Exec.Demo.mainF, [(storeRoot, ())], ⟨⟨0⟩, #[⟨⟨0⟩, [],
       [⟨testOrigin, .destructure (.materialized (ty := ()) ⟨storeRoot, []⟩)
         splitRegisters⟩], .ret none, []⟩]⟩)],
-    [(Exec.Demo.mainF, [(storeRoot, ⟨1, 1⟩)])], #[], [], []⟩
+    [(Exec.Demo.mainF, [(storeRoot, ⟨1, 1, .nil⟩)])], #[], [], []⟩
 
 def splitBefore : MemoryRegisters twoFieldLanguage testProfile :=
   {backingAfter ⟨0⟩ 1 with instruction := 0}
@@ -112,7 +108,7 @@ private def splitBlock : MemoryBlock testLowering := ⟨⟨0⟩, [],
 private def splitMemory (project : Project) : Memory testLowering testProfile :=
   ⟨project, Exec.Demo.mainF, [],
     [(Exec.Demo.mainF, [(storeRoot, ()), (⟨1⟩, ()), (⟨2⟩, ())], ⟨⟨0⟩, #[splitBlock]⟩)],
-    [(Exec.Demo.mainF, [(storeRoot, ⟨1, 1⟩)])],
+    [(Exec.Demo.mainF, [(storeRoot, ⟨1, 1, .nil⟩)])],
     [(Exec.Demo.mainF, [(storeRoot, .materialized), (⟨1⟩, .virtual), (⟨2⟩, .virtual)])],
     [(Exec.Demo.mainF, [⟨1⟩, ⟨2⟩])], []⟩
 
@@ -259,7 +255,7 @@ example (project : Project) :
     ∀ next, ¬ (SSA.Execution (language := twoFieldLanguage)).step
       (splitSSA project true) splitBefore next := by
   intro next execution
-  obtain ⟨_, ⟨block, fetch, tick⟩, _⟩ := execution
+  obtain ⟨_, _, block, fetch, tick⟩ := Memory.Step.exists_outcome execution.2.1
   let expected : MemoryBlock testLowering := ⟨⟨0⟩, [],
     [⟨testOrigin, .destructure storePlace [(splitField, ⟨(), fieldRegister 1⟩)]⟩], .ret none, []⟩
   have exactBlock : some expected = some block := by with_unfolding_all exact fetch
@@ -342,12 +338,12 @@ private theorem fullSplitReturns (project : Project) :
   have allocate : exec.step bir start allocated := by
     with_unfolding_all
       refine ⟨rfl, ⟨_, rfl, {allocated with instruction := 0},
-        ⟨nofun, Or.inr ⟨rfl, ⟨1, 1⟩, rfl, Or.inr ?_⟩⟩, rfl⟩, [], rfl⟩
+        ⟨nofun, Or.inr ⟨rfl, ⟨1, 1, .nil⟩, rfl, Or.inr ?_⟩⟩, rfl⟩, [], rfl⟩
       exact ⟨by decide, ⟨0⟩, 1, ⟨0⟩, allocated.bytes, rfl, rfl⟩
   have bind : exec.step bir allocated bound := by
     with_unfolding_all
       refine ⟨rfl, ⟨_, rfl, .other (), allocated, {bound with instruction := 1}, rfl, ?_, rfl⟩, [], rfl⟩
-      refine ⟨⟨rfl, nofun⟩, fun _ => ⟨⟨1, 1⟩, rfl, ⟨nofun, nofun⟩⟩, rfl, rfl, ?_⟩
+      refine ⟨⟨rfl, nofun⟩, fun _ => ⟨⟨1, 1, .nil⟩, rfl, ⟨nofun, nofun⟩⟩, rfl, rfl, ?_⟩
       intro _
       refine Or.inr ⟨backingRange ⟨0⟩ 1, [(0, [.init 42 none])], rfl, rfl,
         fun _ => ⟨0, [.init 42 none], List.mem_singleton_self _, nofun⟩, ?_⟩
@@ -398,7 +394,7 @@ private theorem fullSplitReturns (project : Project) :
     let result : MemoryRegisters twoFieldLanguage testProfile := {finished with instruction := 6}
     have starts : memory.Initial start := by
       with_unfolding_all
-        exact ⟨rfl, rfl, ⟨_, rfl, rfl⟩, ⟨_, rfl, rfl⟩, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+        exact ⟨rfl, rfl, ⟨_, rfl, rfl⟩, ⟨_, rfl, rfl⟩, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
     have memoryAllocate : memory.Step start allocated := by
       obtain ⟨_, ⟨block, found, tick⟩, _⟩ := allocate
       have found' : some (((bir.memoryView (language := twoFieldLanguage)).blockAt start).getD splitBlock) =
@@ -409,7 +405,7 @@ private theorem fullSplitReturns (project : Project) :
     have memoryBind : memory.Step allocated bound := by
       with_unfolding_all
         refine ⟨_, rfl, .other (), allocated, {bound with instruction := 1}, rfl, ?_, rfl⟩
-        refine ⟨⟨rfl, nofun⟩, fun _ => ⟨⟨1, 1⟩, rfl, ⟨nofun, nofun⟩⟩, rfl, rfl, ?_⟩
+        refine ⟨⟨rfl, nofun⟩, fun _ => ⟨⟨1, 1, .nil⟩, rfl, ⟨nofun, nofun⟩⟩, rfl, rfl, ?_⟩
         intro _
         refine Or.inr ⟨backingRange ⟨0⟩ 1, [(0, [.init 42 none])], rfl, rfl,
           fun _ => ⟨0, [.init 42 none], List.mem_singleton_self _, nofun⟩, ?_⟩

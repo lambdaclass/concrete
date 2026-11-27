@@ -248,8 +248,8 @@ example (project : Project) :
       with_unfolding_all exact operates
     obtain ⟨_, rfl, rfl, meaning⟩ := observed
     rcases meaning with ⟨_, _, rfl⟩ | ⟨_, _, impossible, _⟩
-    · have params : @Memory.WriteParams addressLanguage testLowering testProfile (@MIR.logicalView addressLanguage testLowering testProfile (logicalAddressProgram project))
-          [⟨(), addressResultPlace⟩] [storeValue] (Memory.applyOperation suspendedAddress true indirectWriteStore) stored := by
+    · have params : ((logicalAddressProgram project).logicalView (language := addressLanguage)).WriteParams (language := addressLanguage)
+          [⟨(), addressResultPlace⟩] [storeValue] (Memory.applyOperation suspendedAddress true indirectWriteStore) stored false := by
         simp only [Bool.true_or, ite_true] at writes
         with_unfolding_all exact writes
       cases params with

@@ -32,16 +32,16 @@ private theorem callAtEntry (kind : TrapKind) :
   with_unfolding_all
     exact ⟨rfl, ⟨_, rfl, rfl, [], _, _, _, rfl, rfl, rfl, rfl, .nil _⟩, _, rfl⟩
 
-private theorem callAtEntryUnique (kind : TrapKind) (q : memoryExecution.State)
-    (tick : memoryExecution.step ((callingSSA kind).memoryView (language := testLanguage)) storeInitial q) :
-    q = helperState := by
-  obtain ⟨_, ⟨block, found, call⟩, _⟩ := tick
+private theorem callOutcomeUnique {startDefinitions : Bool} (kind : TrapKind) (q : memoryExecution.State) (mode : Bool)
+    (raw : ((callingSSA kind).memoryView (language := testLanguage)).StepOutcome storeInitial q mode startDefinitions) :
+    q = helperState ∧ mode = false := by
+  obtain ⟨block, found, call⟩ := raw
   let entry : MemoryBlock testLowering := ⟨⟨0⟩, [], [⟨testOrigin, .call callee none []⟩],
     .ret (some ⟨(), .literal ⟨[0]⟩⟩), []⟩
   have fetched : some entry = some block := by with_unfolding_all exact found
   have sameBlock := Option.some.inj fetched
   subst block
-  change _ ∧ ((callingSSA kind).memoryView (language := testLanguage)).Call callee none [] storeInitial q at call
+  change _ ∧ ((callingSSA kind).memoryView (language := testLanguage)).Call callee none [] storeInitial q mode at call
   obtain ⟨values, afterRead, graph, calleeEntry, read, graphFound, blockFound, _, params⟩ := call.2
   have read' : some ([], storeInitial) = some (values, afterRead) := read
   obtain ⟨rfl, rfl⟩ := Prod.mk.inj (Option.some.inj read')
@@ -52,8 +52,12 @@ private theorem callAtEntryUnique (kind : TrapKind) (q : memoryExecution.State)
   have found' : some helper = some calleeEntry := by with_unfolding_all exact blockFound
   have sameEntry := Option.some.inj found'
   subst calleeEntry
-  cases params
-  rfl
+  with_unfolding_all exact Memory.ParamOutcome.empty params
+
+private theorem callAtEntryUnique {startDefinitions : Bool} (kind : TrapKind) (q : memoryExecution.State)
+    (tick : ((callingSSA kind).memoryView (language := testLanguage)).Step storeInitial q startDefinitions) :
+    q = helperState := by
+  exact (callOutcomeUnique kind _ _ (Memory.Step.normal tick fun _ h => Bool.noConfusion (callOutcomeUnique kind _ _ h).2)).1
 
 -- The mutation changes only the reached helper's trap. All metadata is retained.
 set_option maxRecDepth 4096 in
@@ -72,7 +76,7 @@ example :
     cases path with
     | nil => exact .inl rfl
     | cons tick rest =>
-      obtain rfl := callAtEntryUnique .divisionByZero _ tick
+      obtain rfl := callAtEntryUnique .divisionByZero _ tick.2.1
       cases rest with
       | nil => exact .inr rfl
       | cons next _ => exact (memoryExecution.terminal _ _ _ terminal _ next).elim
@@ -113,13 +117,7 @@ example :
     with_unfolding_all exact ⟨rfl, ⟨_, rfl, rfl, [], _, _, _, rfl, rfl, rfl, rfl, .nil _⟩, _, rfl⟩
   have targetOnly (q : ssaExecution.State) (tick : ssaExecution.step ssa storeInitial q) :
       q = helperState := by
-    apply callAtEntryUnique .divisionByZero
-    obtain ⟨observed, ⟨block, found, executes⟩, trace⟩ := tick
-    let entry : MemoryBlock testLowering := ⟨⟨0⟩, [], [⟨testOrigin, .call callee none []⟩],
-      .ret (some ⟨(), .literal ⟨[0]⟩⟩), []⟩
-    have fetched : some entry = some block := by with_unfolding_all exact found
-    obtain rfl := (Option.some.inj fetched).symm
-    exact ⟨observed, ⟨entry, found, executes⟩, trace⟩
+    exact callAtEntryUnique (startDefinitions := true) .divisionByZero q tick.2.1
   have terminal : ssaExecution.result ssa helperState outcome := by with_unfolding_all rfl
   have reachable (q : ssaExecution.State) (finite : ssaExecution.finite ssa q) :
       q = storeInitial ∨ q = helperState := by

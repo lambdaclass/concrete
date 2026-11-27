@@ -64,7 +64,7 @@ private theorem singletonTrapWF (sites : TrapTable) (slot : TrapIndex)
     (locations : ∀ site ∈ sites.toList, ∃ span, site.origin.lexical.Binds tabProject span) :
     BIR.WF (language := earlyFixtureLanguage) (singletonTrapBIR sites slot) := by
   obtain ⟨entry, found⟩ := resolves
-  refine ⟨?_, Nat.zero_le _, .cons nofun .nil, List.mem_singleton_self _, locations, ?_⟩
+  refine ⟨?_, Nat.zero_le _, .cons nofun .nil, List.mem_singleton_self _, locations, ?_, nofun⟩
   · intro fn member block inside index trapped
     cases List.mem_singleton.mp member
     cases List.mem_singleton.mp inside
@@ -182,10 +182,11 @@ example :
     cases List.mem_singleton.mp present
     cases List.mem_singleton.mp inside
     cases trap
-  refine ⟨rfl, ⟨tables, List.mem_singleton_self _, by with_unfolding_all exact nofun⟩, ⟨noTrap, by decide, .cons nofun .nil,
+  refine ⟨rfl, ⟨tables, List.mem_singleton_self _, by with_unfolding_all exact ⟨nofun, nofun⟩⟩,
+    ⟨noTrap, by decide, .cons nofun .nil,
     List.mem_singleton_self _, nofun, ?_⟩, rfl,
     ⟨rfl, noTrap, ?_, ?_, by decide, ⟨rfl, rfl, by with_unfolding_all rfl⟩, ?_⟩, rfl⟩
-  · with_unfolding_all exact tables
+  · with_unfolding_all exact ⟨tables, nofun⟩
   · intro fn present block inside kind site trap
     cases List.mem_singleton.mp present
     cases List.mem_singleton.mp inside
@@ -198,7 +199,7 @@ example :
 example :
     ¬ BIR.WF (language := testLanguage) (birReturn tabProject false) := by
   intro wf
-  have checked := wf.2.2.2.2.2
+  have checked := wf.2.2.2.2.2.1
   obtain ⟨_, _, signature⟩ := checked.2.2.2.2.2.2 _ _ _ (List.mem_singleton_self _)
   obtain ⟨_, found, _⟩ := signature
   cases found
@@ -234,7 +235,7 @@ example (parser : Parser grammar) :
       cases List.mem_singleton.mp member
       cases List.mem_singleton.mp included
       cases trap
-    · exact birReturnTables tabProject testProfile
+    · exact ⟨birReturnTables tabProject testProfile, nofun⟩
   have wrong : false = true := by
     with_unfolding_all exact valid.2 input .lcbLinkingUnavailable eligible rfl
   cases wrong
@@ -258,7 +259,7 @@ example (project : Project) :
   · with_unfolding_all
       exact ⟨rfl, ⟨_, rfl, rfl, [], _, _, _, rfl, rfl, rfl, rfl, .nil _⟩, [], rfl⟩
   · intro q execution
-    obtain ⟨_, ⟨block, fetched, tick⟩, _⟩ := execution
+    obtain ⟨_, _, block, fetched, tick⟩ := Memory.Step.exists_outcome execution.2.1
     have eq : some physical = some block := by with_unfolding_all exact fetched
     obtain rfl := Option.some.inj eq
     exact tick.2

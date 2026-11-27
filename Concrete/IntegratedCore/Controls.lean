@@ -385,7 +385,7 @@ private def root : MemoryPlace _ nominalTy := ⟨⟨⟨0⟩, []⟩, .materialize
 private def memory : Memory (sliceLoweringLanguage sliceOne) profile :=
   { project := source.project, entry := earlyEntry, signatures := []
     functions := [(earlyEntry, [(root.logical.root, nominalTy)], ⟨⟨0⟩, #[]⟩)]
-    layouts := [(earlyEntry, [(root.logical.root, ⟨0, 1⟩)])]
+    layouts := [(earlyEntry, [(root.logical.root, .scalar 0 1)])]
     storage := [(earlyEntry, [(root.logical.root, .materialized)])]
     declarations := (tokenInput [introToken]).machineProgram.declarations }
 
@@ -409,7 +409,7 @@ example :
     refine ⟨?_, ?_, rfl⟩
     · refine ⟨[], started, [], .other tokenId, [], Memory.operationStore started false, stored,
         rfl, rfl, rfl, ⟨rfl, rfl, rfl, rfl⟩, rfl, ?_, rfl⟩
-      exact ⟨⟨rfl, nofun⟩, fun _ => ⟨⟨0, 1⟩, rfl, ⟨fun _ => rfl, fun _ => rfl⟩⟩, rfl, rfl, fun _ => .inl rfl⟩
+      exact ⟨⟨rfl, nofun⟩, fun _ => ⟨.scalar 0 1, rfl, ⟨fun _ => rfl, fun _ => rfl⟩⟩, rfl, rfl, fun _ => .inl rfl⟩
     · exact ⟨.other tokenId, consumed, [], consumed, rfl,
         ⟨.nil, [], rfl, nofun, nofun⟩, rfl, .nil _, rfl⟩
 
@@ -550,12 +550,12 @@ example :
     let place : MemoryPlace _ ty := ⟨⟨⟨0⟩, []⟩, .materialized⟩
     let mem : Memory (sliceLoweringLanguage sliceOne) profile := {memory with
       functions := [(earlyEntry, [(⟨0⟩, ty)], ⟨⟨0⟩, #[]⟩)],
-      layouts := [(earlyEntry, [(⟨0⟩, ⟨2, 2⟩)])]}
+      layouts := [(earlyEntry, [(⟨0⟩, .scalar 2 2)])]}
     let block := {Mem.candidate ⟨0⟩ 2 2 2 with bytes := [.init 254 none, .init 255 none]}
     let state : MemoryRegisters nominalLang profile := {started with
       initialized := [⟨0⟩],
       materialized := [(⟨0⟩, ⟨⟨⟨0⟩, 2, some ⟨0⟩⟩, 2, 2⟩)], bytes := ⟨[(⟨0⟩, block)], 1⟩}
-    nominalLang.layout [] big ty = some ⟨2, 2⟩ ∧
+    nominalLang.layout [] big ty = some (.scalar 2 2) ∧
     nominalLang.literal ty [254, 255] = some (.scalar (.int .i16 (-2))) ∧
     mem.loadMaterialized state place big = some (.scalar (.int .i16 (-257))) ∧
     mem.loadValue state place = some (.scalar (.int .i16 (-2))) := by
@@ -649,7 +649,7 @@ private theorem overflowWF : overflowCore.WF := by
     · exact ⟨⟨⟨0⟩, 31, 32, by decide, 1, 32, by decide, by decide⟩, _, rfl, rfl, by decide, rfl, rfl, rfl, rfl⟩
 
 private theorem overflowHandoff : overflowMIR.logicalView.HandoffWF := by
-  refine ⟨?_, List.mem_singleton_self _, ?_⟩
+  refine ⟨?_, List.mem_singleton_self _, ?_, nofun⟩
   · with_unfolding_all
       refine ⟨.cons nofun .nil, .cons nofun .nil, .cons nofun .nil, .nil, ?_, nofun, ?_⟩
       · intro fn classes member

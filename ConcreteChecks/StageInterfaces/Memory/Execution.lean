@@ -10,7 +10,7 @@ namespace StageInterfaceControls
 private theorem storingWrite (project : Project) :
     (storingMemory project).Writes (language := testLanguage) storeBefore storePlace storeValue
       {storeAfter with instruction := 1} := by
-  refine ⟨⟨rfl, fun _ => rfl⟩, (fun _ => ⟨⟨1, 1⟩, rfl, by decide⟩), rfl, rfl, fun _ => Or.inr ⟨storeRange, [(0, [.init 42 none])], rfl, rfl, ?_, ?_⟩⟩
+  refine ⟨⟨rfl, fun _ => rfl⟩, (fun _ => ⟨⟨1, 1, .nil⟩, rfl, by decide⟩), rfl, rfl, fun _ => Or.inr ⟨storeRange, [(0, [.init 42 none])], rfl, rfl, ?_, ?_⟩⟩
   · exact fun _ => ⟨0, [.init 42 none], List.mem_cons_self .., by decide⟩
   · intro offset bytes member
     have eq := List.mem_singleton.mp member
@@ -156,12 +156,12 @@ example (project : Project) :
   dsimp only
   refine ⟨?_, ?_, rfl, rfl, ?_⟩
   · exact ⟨_, rfl, {zeroStarted with instruction := 0},
-      ⟨by decide, Or.inr ⟨rfl, ⟨0, 1⟩, rfl, Or.inl ⟨rfl, rfl⟩⟩⟩, rfl⟩
+      ⟨by decide, Or.inr ⟨rfl, ⟨0, 1, .nil⟩, rfl, Or.inl ⟨rfl, rfl⟩⟩⟩, rfl⟩
   · refine ⟨_, rfl, _, zeroStarted, {zeroBound with instruction := 1}, rfl, ?_, rfl⟩
-    exact ⟨⟨rfl, nofun⟩, (fun _ => ⟨⟨0, 1⟩, rfl, by decide⟩), rfl, rfl,
+    exact ⟨⟨rfl, nofun⟩, (fun _ => ⟨⟨0, 1, .nil⟩, rfl, by decide⟩), rfl, rfl,
       fun _ => Or.inl rfl⟩
   · exact ⟨_, rfl, {storeInitial with instruction := 2},
-      ⟨⟨by decide, rfl⟩, Or.inr ⟨rfl, Or.inl ⟨⟨0, 1⟩, rfl, rfl, rfl⟩⟩⟩, rfl⟩
+      ⟨⟨by decide, rfl⟩, Or.inr ⟨rfl, Or.inl ⟨⟨0, 1, .nil⟩, rfl, rfl, rfl⟩⟩⟩, rfl⟩
 
 -- Destructuring a linear field cannot erase it or create two copies.
 example :
@@ -222,7 +222,8 @@ example (project : Project) (m : LoweringModels zeroLanguage testLowering testPr
 -- A projected write can replace an initialized field. It cannot revive a
 -- consumed root, even when the physical bytes of the moved value remain.
 example (project : Project) :
-    let memory := storingMemory project
+    let memory := {storingMemory project with layouts :=
+      [(Exec.Demo.mainF, [(storeRoot, ⟨1, 1, .cons splitField 0 (.scalar 1 1) .nil⟩)])]}
     let moved := {storeAfter with initialized := []}
     memory.readValue (language := linearProjectedLanguage) storeAfter (.move storePlace) =
       some (storeValue, moved) ∧
@@ -239,7 +240,7 @@ example (project : Project) :
     memory.Writes (language := projectedZeroLanguage) zeroBound projectedStorePlace (.scalar .unit) zeroBound ∧
     memory.writeValue (language := projectedZeroLanguage) zeroStarted projectedStorePlace (.scalar .unit) =
       none := by
-  exact ⟨rfl, ⟨⟨rfl, fun _ => rfl⟩, (fun _ => ⟨⟨0, 1⟩, rfl, by decide⟩), rfl,
+  exact ⟨rfl, ⟨⟨rfl, fun _ => rfl⟩, (fun _ => ⟨⟨0, 1, .nil⟩, rfl, by decide⟩), rfl,
     rfl, fun _ => Or.inl rfl⟩, rfl⟩
 
 example (project : Project) (next : MemoryRegisters zeroLanguage testProfile) :

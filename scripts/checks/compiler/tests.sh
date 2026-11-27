@@ -142,6 +142,9 @@ if [[ ${CONCRETE_TEST_EMIT_ONLY:-0} != 1 ]]; then
   build llvm-mutation-controls "$work/llvm-mutation-controls.log" bounded 120 \
     lake env python3 -B scripts/checks/compiler/llvm_mutation_controls.py
   cat "$work/llvm-mutation-controls.log"
+  build memory-exhaustion-mutation "$work/memory-exhaustion.log" bounded 300 \
+    python3 -B scripts/checks/compiler/memory_exhaustion_mutation.py
+  cat "$work/memory-exhaustion.log"
 fi
 
 fail=0

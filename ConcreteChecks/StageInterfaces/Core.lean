@@ -157,7 +157,7 @@ private def argLanguage : CoreLanguage where
     · cases h : AList.lookup locals argTemp <;> simp [h]
   OtherValue := Empty
   valueShape := rfl
-  layout := fun _ _ _ => some ⟨1, 1⟩
+  layout := fun _ _ _ => some ⟨1, 1, .nil⟩
   scalarType := fun _ => some (.int .u8)
   literal := fun _ bytes => bytes.head?.map fun byte => .scalar (.int .u8 (Int.ofNat byte.toNat))
   typeDecidableEq := inferInstance
@@ -167,7 +167,6 @@ private def argLanguage : CoreLanguage where
   checkTrap := fun _ _ _ => false
   field := fun _ _ => none
   replaceField := fun _ _ _ => none
-  fieldRange := fun _ _ _ => none
   encodeOther := fun _ _ other => nomatch other
   decodeOther := fun _ _ _ => none
   safety

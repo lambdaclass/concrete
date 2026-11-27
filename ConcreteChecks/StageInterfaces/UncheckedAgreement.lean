@@ -161,7 +161,7 @@ private theorem literalTables : literalMemory.TablesWF := by
 
 set_option maxRecDepth 4096 in
 private theorem literalHandoff : literalMemory.HandoffWF := by
-  refine ⟨literalTables, List.mem_singleton_self _, ?_⟩
+  refine ⟨literalTables, List.mem_singleton_self _, ?_, nofun⟩
   intro origin present
   have member : origin ∈ [literalOrigin] := by with_unfolding_all exact present
   obtain rfl := List.mem_singleton.mp member
@@ -218,8 +218,8 @@ private theorem literalMemoryContract : LowersMemory (language := earlyFixtureLa
         cases List.mem_singleton.mp present
         cases member
     refine ⟨rfl, rfl, ⟨fun _ h => h, fun _ h => h⟩, layout, ⟨rfl, rfl⟩, promotes, literalTables, literalTables,
-      refinesToTerminal literalMIRExecution literalMemoryExecution literalRegisters literalRegisters literalResult
-        ⟨_, rfl, .nil _⟩ sourceFinal targetFinal (fun _ h => h) (fun _ h => (Option.some.inj h).symm) rfl, ?_⟩
+      matchingRefinement (language := earlyFixtureLanguage) (refinesToTerminal literalMIRExecution literalMemoryExecution literalRegisters literalRegisters literalResult
+        ⟨literalRegisters, by with_unfolding_all rfl, .nil _⟩ sourceFinal targetFinal (fun _ h => h) (fun _ h => (Option.some.inj h).symm) rfl), ?_⟩
     intro _
     refine ⟨⟨fun p q => p = q, fun _ _ => 0, ?_, ?_, ?_⟩, ?_⟩
     · intro q atEntry
@@ -240,7 +240,7 @@ private theorem literalMemoryContract : LowersMemory (language := earlyFixtureLa
           literalRegisters.toMemoryFrame literalRegisters.toMemoryFrame literalRegisters.bytes := by
         exact ⟨⟨⟨Mem.empty_wellFormed _, .nil, .nil, nofun⟩, rfl⟩, rfl, nofun, .nil, .nil, .nil, .nil, nofun,
           fun _ => ⟨nofun, nofun⟩, nofun, nofun, nofun, nofun⟩
-      exact ⟨frame, rfl, nofun, ⟨rfl, nofun⟩, .nil, rfl, rfl⟩
+      exact ⟨⟨frame, rfl, nofun, ⟨rfl, nofun⟩, .nil, rfl, rfl⟩, rfl⟩
 
 set_option maxRecDepth 4096 in
 private theorem literalSSAContract : BuildsSSA (language := earlyFixtureLanguage) literalMemory literalSSA := by
@@ -286,7 +286,7 @@ example (unchecked : Bool) :
   have elaborates : (registry literalReturnPasses).elaborator.success parsedReturn pendingReturn :=
     ⟨returnProgram, rfl, rfl⟩
   have birWF : BIR.WF (language := earlyFixtureLanguage) literalBIR :=
-    ⟨literalBIRContract.2.1, by decide, .cons nofun .nil, List.mem_singleton_self _, nofun, by with_unfolding_all exact literalTables⟩
+    ⟨literalBIRContract.2.1, by decide, .cons nofun .nil, List.mem_singleton_self _, nofun, by with_unfolding_all exact literalTables, nofun⟩
   have ready : Source.WF elaborationSource ∧ elaborationSource.slice = slice0 := ⟨parsedReturnDomain.1, rfl⟩
   have front := returnLexerContract
   have parse := returnParserContract

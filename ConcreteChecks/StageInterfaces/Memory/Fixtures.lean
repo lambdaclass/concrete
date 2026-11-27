@@ -15,11 +15,11 @@ def storingMemory (project : Project) : Memory testLowering testProfile :=
     [⟨testOrigin, .beginLifetime storeRoot⟩, ⟨testOrigin, .bind storePlace (.literal ⟨[42]⟩)⟩],
     .ret none, []⟩
   ⟨project, Exec.Demo.mainF, [], [(Exec.Demo.mainF, [(storeRoot, ())], ⟨⟨0⟩, #[block]⟩)],
-    [(Exec.Demo.mainF, [(storeRoot, ⟨1, 1⟩)])], [(Exec.Demo.mainF, [(storeRoot, .materialized)])],
+    [(Exec.Demo.mainF, [(storeRoot, .scalar 1 1)])], [(Exec.Demo.mainF, [(storeRoot, .materialized)])],
     [(Exec.Demo.mainF, [storeRoot])], []⟩
 
 def storeInitial : MemoryRegisters testLanguage testProfile :=
-  ⟨⟨Exec.Demo.mainF, ⟨0⟩, 0, [], [], [], [], [], [], []⟩, Mem.Memory.empty, [], [], {}, 0⟩
+  ⟨⟨Exec.Demo.mainF, ⟨0⟩, 0, [], [], [], [], [], [], []⟩, Mem.Memory.empty, [], [], {}, 0, false⟩
 
 def storeBlock : Mem.Block :=
   ⟨⟨0⟩, 1, 1, 1, true, false, [.uninit]⟩
@@ -42,7 +42,7 @@ def storeAfter : MemoryRegisters testLanguage testProfile :=
 
 example (project : Project) : (storingMemory project).Step (language := testLanguage) storeInitial storeBefore := by
   refine ⟨_, rfl, {storeBefore with instruction := 0}, ⟨by decide, Or.inr ?_⟩, rfl⟩
-  exact ⟨rfl, ⟨⟨1, 1⟩, rfl, Or.inr ⟨by decide, ⟨0⟩, 1, ⟨0⟩, storeBefore.bytes, rfl, rfl⟩⟩⟩
+  exact ⟨rfl, ⟨⟨1, 1, .nil⟩, rfl, Or.inr ⟨by decide, ⟨0⟩, 1, ⟨0⟩, storeBefore.bytes, rfl, rfl⟩⟩⟩
 
 def returningMIR (project : Project) : MIR testLowering testProfile :=
   ⟨project, Exec.Demo.mainF, [(Exec.Demo.mainF, ⟨[], some ()⟩)],
@@ -57,7 +57,7 @@ abbrev zeroLanguage : CoreLanguage :=
   {testLanguage with
     operands := {testLanguage.operands with isCopy := fun _ => false}
     safety := fun _ => []
-    layout := fun _ _ _ => some ⟨0, 1⟩
+    layout := fun _ _ _ => some ⟨0, 1, .nil⟩
     scalarType := fun _ => none
     literal := fun _ _ => some (.scalar .unit)}
 
@@ -67,7 +67,7 @@ def zeroMemory (project : Project) : Memory testLowering testProfile :=
       ⟨testOrigin, .endLifetime storeRoot⟩], .ret none, []⟩
   {(storingMemory project) with
     functions := [(Exec.Demo.mainF, [(storeRoot, ())], ⟨⟨0⟩, #[block]⟩)]
-    layouts := [(Exec.Demo.mainF, [(storeRoot, ⟨0, 1⟩)])]}
+    layouts := [(Exec.Demo.mainF, [(storeRoot, ⟨0, 1, .nil⟩)])]}
 
 def zeroStarted : MemoryRegisters zeroLanguage testProfile :=
   {storeInitial with instruction := 1, live := [storeRoot]}
@@ -107,7 +107,7 @@ def projectedStorePlace : MemoryPlace Unit () :=
 abbrev projectedLanguage : CoreLanguage :=
   {testLanguage with
     fieldType := fun _ _ => some ()
-    fieldRange := fun _ _ _ => some (0, ⟨1, 1⟩)}
+    layout := fun _ _ _ => some ⟨1, 1, .cons splitField 0 (.scalar 1 1) .nil⟩}
 
 abbrev linearProjectedLanguage : CoreLanguage :=
   {projectedLanguage with
@@ -136,7 +136,7 @@ abbrev erasureLanguage : CoreLanguage :=
   {zeroLanguage with
     operands := testLanguage.operands
     safety := fun _ => []
-    layout := fun _ _ _ => some ⟨1, 1⟩
+    layout := fun _ _ _ => some ⟨1, 1, .nil⟩
     literal := fun _ encoding =>
       if encoding.isEmpty then some (.other ()) else some (.scalar (.int .u8 0))
     encodeOther := fun _ _ _ => some [(0, [.init 42 none])]
@@ -148,7 +148,7 @@ def immediateReturn (project : Project) : Memory testLowering testProfile :=
     signatures := [(Exec.Demo.mainF, ⟨[], some ()⟩)]
     functions := [(Exec.Demo.mainF, [(storeRoot, ())], ⟨⟨0⟩,
       #[⟨⟨0⟩, [], [], .ret (some ⟨(), .literal ⟨[0]⟩⟩), [testOrigin]⟩]⟩)]
-    layouts := [(Exec.Demo.mainF, [(storeRoot, ⟨1, 1⟩)])]}
+    layouts := [(Exec.Demo.mainF, [(storeRoot, ⟨1, 1, .nil⟩)])]}
 
 def erasureSource (project : Project) : MIR testLowering testProfile :=
   {(shadowMIR project) with

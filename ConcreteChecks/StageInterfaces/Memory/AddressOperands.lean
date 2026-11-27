@@ -18,7 +18,7 @@ private def nonzeroAddressBIR (project : Project) : BIR testLowering testProfile
       [⟨(), ⟨shadowRoot, []⟩⟩]⟩]}
   {(birReturn project false) with
     functions := [(Exec.Demo.mainF, [(shadowRoot, ())], ⟨⟨0⟩, #[block]⟩)]
-    layouts := [(Exec.Demo.mainF, [(shadowRoot, ⟨1, 1⟩)])]}
+    layouts := [(Exec.Demo.mainF, [(shadowRoot, ⟨1, 1, .nil⟩)])]}
 
 private def addressAtOne : MemoryRegisters nonzeroAddressLanguage testProfile :=
   {splitBefore with

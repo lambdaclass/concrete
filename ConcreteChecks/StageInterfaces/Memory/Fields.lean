@@ -71,7 +71,7 @@ example :
   refine ⟨?_, ?_, rfl, rfl, ?_, ?_⟩
   · with_unfolding_all
       exact ⟨rfl, rfl, ⟨_, rfl, rfl⟩, ⟨_, rfl, rfl⟩,
-        rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+        rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
   · refine .cons (b := erasureBound) ?_ (.cons (b := firstMoved) ?_ (.cons ?_ (.nil _)))
     · with_unfolding_all
         refine ⟨rfl, .other (), storeInitial, {erasureBound with instruction := 0}, rfl, ?_, rfl⟩
@@ -307,5 +307,8 @@ example : loanMemory.Represents (language := enumFieldLanguage) enumLogical (enu
     obtain ⟨physical, rfl, loaded, _⟩ := related (.scalar (.int .u8 25)) rfl
       [enumSurviving] (.inl (.scalar (.int .u8))) (.scalar (.int .u8 25)) rfl rfl rfl
     cases loaded
+
+def pairLayout : Layout :=
+  ⟨2, 1, .cons splitField 0 (.scalar 1 1) (.cons secondSplitField 1 (.scalar 1 1) .nil)⟩
 
 end StageInterfaceControls

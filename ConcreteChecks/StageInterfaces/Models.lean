@@ -15,6 +15,7 @@ def Observation.SameRuntimeResult (observed : Observation)
   | .trapped a k span bytes, .trapped b j site other =>
     a = b ∧ k = j ∧ span.line = site.location.line ∧ span.col = site.location.col ∧ bytes = other
   | .startupRefused a bytes, .startupRefused b other => a = b ∧ bytes = other
+  | .resourceExhausted, .resourceExhausted => True
   | _, _ => False
 
 /-- A precise terminal projection over the same transition system used by the composed theorem.

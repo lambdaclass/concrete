@@ -1,3 +1,4 @@
+import Concrete.Memory.Execution
 import ConcreteChecks.StageInterfaces.Memory.Addresses
 
 open Concrete
@@ -52,9 +53,9 @@ theorem AddressAllocation.storeScalar (allocation : AddressAllocation) (project 
     (addressMemory project).Writes (language := addressLanguage) allocation.before storePlace storeValue
       {allocation.bound with instruction := 1} := by
   have encoded : Hybrid.encode testProfile.memoryTarget (.int .u8 42) = some [.init 42 none] := rfl
-  refine ⟨⟨rfl, fun _ => rfl⟩, (fun _ => ⟨⟨1, 1⟩, rfl, ⟨nofun, nofun⟩⟩),
+  refine ⟨⟨rfl, fun _ => rfl⟩, (fun _ => ⟨⟨1, 1, .nil⟩, rfl, ⟨nofun, nofun⟩⟩),
     ?_, ?_, fun _ => Or.inr ⟨allocation.range, [(0, [.init 42 none])], rfl, rfl, ?_, ?_⟩⟩
-  · simp [Memory.writeValue, Memory.mayInitialize, Memory.authorizeWrite, Memory.writeOwnerView, Memory.ownerView, Memory.zeroRoot, Memory.rangeAt, Memory.byteRuns, Memory.layoutAt,
+  · simp [Memory.writeValue, Memory.markWritten, Memory.storeRuns, Memory.atOffset, Memory.mayInitialize, Memory.authorizeWrite, Memory.writeOwnerView, Memory.ownerView, Memory.zeroRoot, Memory.rangeAt, Memory.byteRuns, Memory.layoutAt,
       addressMemory, storingMemory, storePlace, AddressAllocation.before, AddressAllocation.bound,
       backingBefore, backingAfter, backingRange, storeBefore, storeInitial, storeRoot,
       Mem.Memory.store, Mem.Memory.access, Mem.Memory.block, Mem.Memory.modify,
@@ -178,8 +179,8 @@ private theorem logicalWritesUnique (memory : Memory testLowering testProfile)
     (before started stored expected : MemoryRegisters addressLanguage testProfile)
     (unique : ∀ other, (if before.live.contains place.logical.root then other = before
       else memory.Begins (language := addressLanguage) before place.logical.root other) → other = started)
-    (writes : @Memory.WriteParams addressLanguage testLowering testProfile memory [⟨(), place⟩]
-      [value] before stored)
+    (writes : memory.WriteParams (language := addressLanguage) [⟨(), place⟩]
+      [value] before stored false)
     (writing : memory.writeValue (language := addressLanguage) started place value = some expected) :
     stored = expected := by
   cases writes with
@@ -211,8 +212,8 @@ theorem logicalAddressExact (project : Project) (phase : AddressSourcePhase)
       obtain ⟨_, value, state, stored, read, write, rfl⟩ := run
       have actual : some (storeValue, storeInitial) = some (value, state) := read
       cases actual
-      have params : @Memory.WriteParams addressLanguage testLowering testProfile (logicalAddressView project)
-          [⟨(), ⟨⟨storeRoot, []⟩, .virtual⟩⟩] [storeValue] storeInitial stored := by
+      have params : (logicalAddressView project).WriteParams (language := addressLanguage)
+          [⟨(), ⟨⟨storeRoot, []⟩, .virtual⟩⟩] [storeValue] storeInitial stored false := by
         simp only [Bool.true_or, ite_true] at write
         with_unfolding_all exact write
       have unique : ∀ state, (logicalAddressView project).Begins
@@ -246,8 +247,8 @@ theorem logicalAddressExact (project : Project) (phase : AddressSourcePhase)
       · let ready : MemoryRegisters addressLanguage testProfile := {logicalAddressBefore with
           addressIds := [(storeRoot, ⟨0⟩)]
           nextAddressId := 1}
-        have params : @Memory.WriteParams addressLanguage testLowering testProfile (logicalAddressView project)
-            [⟨(), addressResultPlace⟩] [CoreValue.other ()] ready stored := by
+        have params : (logicalAddressView project).WriteParams (language := addressLanguage)
+            [⟨(), addressResultPlace⟩] [CoreValue.other ()] ready stored false := by
           simp only [Bool.true_or, ite_true] at write
           with_unfolding_all exact write
         have unique : ∀ state, (logicalAddressView project).Begins
@@ -285,8 +286,8 @@ theorem logicalAddressExact (project : Project) (phase : AddressSourcePhase)
       obtain ⟨_, rfl, rfl, meaning⟩ := meaning
       rcases meaning with ⟨_, _, rfl⟩ | ⟨_, _, impossible, _⟩
       · let ready := Memory.applyOperation (language := addressLanguage) logicalAddressAfter true modified
-        have params : @Memory.WriteParams addressLanguage testLowering testProfile (logicalAddressView project)
-            [⟨(), addressResultPlace⟩] [storeValue] ready stored := by
+        have params : (logicalAddressView project).WriteParams (language := addressLanguage)
+            [⟨(), addressResultPlace⟩] [storeValue] ready stored false := by
           simp only [Bool.true_or, ite_true] at write
           with_unfolding_all exact write
         have eq := logicalWritesUnique (logicalAddressView project) addressResultPlace
@@ -402,9 +403,9 @@ private theorem physicalIndirectExact (project : Project) (a : AddressAllocation
     · exact a.storeBound
     · exact ⟨⟨rfl, fun _ => rfl⟩, nofun, rfl, rfl, nofun⟩
 
-theorem addressTargetExact (project : Project) (phase : AddressTargetPhase)
+private theorem addressTargetNormal (project : Project) (phase : AddressTargetPhase)
     (next : MemoryRegisters addressLanguage testProfile) :
-    (addressMemory project).Step (language := addressLanguage) phase.state next ↔
+    (addressMemory project).StepOutcome (language := addressLanguage) phase.state next false ↔
       ∃ q, phase.Tick q ∧ q.state = next := by
   have block : (addressMemory project).blockAt phase.state = some addressBlock := by
     cases phase <;> rfl
@@ -421,10 +422,10 @@ theorem addressTargetExact (project : Project) (phase : AddressTargetPhase)
       rcases begins.2 with ⟨impossible, _⟩ | ⟨_, layout, found, zero | allocated⟩
       · have wrong : some StorageClass.materialized = some .virtual := impossible
         cases wrong
-      · have same : some (⟨1, 1⟩ : Layout) = some layout := found
+      · have same : some (⟨1, 1, .nil⟩ : Layout) = some layout := found
         cases same
         exact (Nat.one_ne_zero zero.1).elim
-      · have same : some (⟨1, 1⟩ : Layout) = some layout := found
+      · have same : some (⟨1, 1, .nil⟩ : Layout) = some layout := found
         cases same
         obtain ⟨_, space, base, id, bytes, alloc, rfl⟩ := allocated
         have result : Mem.Memory.empty.alloc testProfile.memoryTarget space base 1 1 = .ok (id, bytes) := alloc
@@ -468,7 +469,7 @@ theorem addressTargetExact (project : Project) (phase : AddressTargetPhase)
     refine ⟨addressBlock, block, ?_⟩
     cases tick with
     | allocate a =>
-      refine ⟨{a.before with instruction := 0}, ⟨by decide, Or.inr ⟨rfl, ⟨1, 1⟩, rfl, Or.inr ?_⟩⟩, rfl⟩
+      refine ⟨{a.before with instruction := 0}, ⟨by decide, Or.inr ⟨rfl, ⟨1, 1, .nil⟩, rfl, Or.inr ?_⟩⟩, rfl⟩
       refine ⟨by decide, a.space, a.base, ⟨0⟩, a.before.bytes, ?_, rfl⟩
       change Mem.Memory.empty.alloc testProfile.memoryTarget a.space a.base 1 1 = _
       unfold Mem.Memory.alloc
@@ -480,5 +481,46 @@ theorem addressTargetExact (project : Project) (phase : AddressTargetPhase)
       exact ⟨{a.bound with live := [shadowRoot, storeRoot]}, ⟨nofun, Or.inl ⟨rfl, rfl⟩⟩, rfl⟩
     | takeAddress a => exact (physicalAddressExact project a _).2 rfl
     | indirect a => exact (physicalIndirectExact project a _).2 rfl
+
+
+theorem addressTargetExact (project : Project) (phase : AddressTargetPhase)
+    (next : MemoryRegisters addressLanguage testProfile) :
+    (addressMemory project).Step (language := addressLanguage) phase.state next ↔
+      ∃ q, phase.Tick q ∧ q.state = next := by
+  constructor
+  · intro tick
+    apply (addressTargetNormal project phase next).mp
+    apply tick.normal (language := addressLanguage)
+    intro partialState failed
+    have block : (addressMemory project).blockAt phase.state = some addressBlock := by cases phase <;> with_unfolding_all rfl
+    cases phase with
+    | start =>
+      have ok := (addressTargetNormal project .start (.allocated ⟨⟨0⟩, 1, by unfold backingFits; decide⟩ : AddressTargetPhase).state).mpr
+        ⟨_, .allocate _, rfl⟩
+      have exhausted : (addressMemory project).BeginExhausted (language := addressLanguage) storeInitial storeRoot :=
+        failed.instructionAt (op := ⟨testOrigin, .beginLifetime storeRoot⟩) block (by with_unfolding_all rfl)
+      obtain ⟨started, begins, _⟩ := ok.instructionAt (op := ⟨testOrigin, .beginLifetime storeRoot⟩) block (by with_unfolding_all rfl)
+      exact exhausted.unavailable ⟨started, begins⟩
+    | allocated a =>
+      exact Memory.bind_cannot_exhaust (language := addressLanguage)
+        (failed.instructionAt (op := ⟨testOrigin, .bind storePlace (.literal ⟨[42]⟩)⟩) block (by with_unfolding_all rfl))
+    | bound a =>
+      have bad : (addressMemory project).BeginExhausted (language := addressLanguage) a.bound shadowRoot :=
+        failed.instructionAt (op := ⟨testOrigin, .beginLifetime shadowRoot⟩) block (by with_unfolding_all rfl)
+      have no : some StorageClass.virtual = some .materialized := by with_unfolding_all exact bad.materialized
+      contradiction
+    | ready a =>
+      exact Memory.op_cannot_exhaust (language := addressLanguage)
+        (failed.instructionAt (op := ⟨testOrigin, addressInstruction⟩) block (by with_unfolding_all rfl))
+    | reference a =>
+      exact Memory.op_cannot_exhaust (language := addressLanguage)
+        (failed.instructionAt (op := ⟨testOrigin, indirectInstruction⟩) block (by with_unfolding_all rfl))
+    | done a =>
+      obtain ⟨caller, rest, _, _, _, callers, _⟩ := failed.terminatorAt block (by with_unfolding_all rfl)
+      change [] = caller :: rest at callers
+      cases callers
+  · rintro ⟨q, tick, rfl⟩
+    have normal := (addressTargetNormal project phase q.state).mpr ⟨q, tick, rfl⟩
+    cases tick <;> exact normal
 
 end StageInterfaceControls

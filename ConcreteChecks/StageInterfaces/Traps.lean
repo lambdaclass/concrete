@@ -116,9 +116,10 @@ example :
         have equal := Option.some.inj (target.symm.trans observes)
         exact ⟨_, .nil _, equal ▸ source, by with_unfolding_all rfl⟩
       · rintro _ _ _ _ ⟨rfl, rfl⟩
-        exact abortMemoryCheckpoint
+        exact ⟨abortMemoryCheckpoint, rfl⟩
   · intro lowered
-    apply stationaryRejects mirExecution memoryExecution storeInitial storeInitial
+    apply stationaryRejects (b := abortMemory .divisionByZero) mirExecution memoryExecution
+      (Memory.MatchingResult (language := testLanguage)) storeInitial storeInitial
       (helperTrap .abort) (helperTrap .divisionByZero) atSource source
       (by with_unfolding_all rfl) (by with_unfolding_all rfl) ?_
       lowered.2.2.2.2.2.2.2.2.1
@@ -143,7 +144,7 @@ example :
       | (intro o; with_unfolding_all exact ⟨fun h => (Option.some.inj h).symm, fun h => congrArg some h.symm⟩)
       | with_unfolding_all rfl
   · intro formed
-    apply stationaryRejects memoryExecution ssaExecution storeInitial storeInitial
+    apply stationaryRejects memoryExecution ssaExecution ssaExecution.result storeInitial storeInitial
       (helperTrap .abort) (helperTrap .divisionByZero) (fun _ h => by with_unfolding_all exact h)
       (by with_unfolding_all rfl) (by with_unfolding_all rfl) (by with_unfolding_all rfl) ?_
       formed.2.2.2.2.2
@@ -207,7 +208,7 @@ example :
       cases BIRTerm.trap.inj trapped
       exact ⟨⟨.abort, testOrigin⟩, rfl⟩
   · intro emitted
-    apply stationaryRejects birExecution (LCBInput.Execution Nat tabProject)
+    apply stationaryRejects birExecution (LCBInput.Execution Nat tabProject) (LCBInput.Execution Nat tabProject).result
       (BIR.entryState (language := testLanguage) (abortBIR .abort)) (some ⟨0, 0, #[]⟩)
       (helperTrap .abort) (.returned 0 ByteArray.empty) (fun _ h => h)
       (by with_unfolding_all rfl) (by with_unfolding_all rfl) (by with_unfolding_all rfl) ?_

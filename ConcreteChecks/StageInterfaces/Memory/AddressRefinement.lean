@@ -171,7 +171,7 @@ private theorem addressRepresents (project : Project) (q : AddressTargetPhase) :
     · exact (List.not_mem_nil member).elim
     all_goals
       cases List.mem_singleton.mp member
-      refine ⟨?_, rfl, ⟨⟨1, 1⟩, ⟨0⟩, _, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩⟩
+      refine ⟨?_, rfl, ⟨⟨1, 1, .nil⟩, ⟨0⟩, _, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩⟩
       first | exact List.mem_singleton_self _ | exact List.mem_cons_of_mem _ (List.mem_singleton_self _)
   · intro place member
     cases q with
@@ -179,7 +179,7 @@ private theorem addressRepresents (project : Project) (q : AddressTargetPhase) :
     | allocated a =>
       cases List.mem_singleton.mp member
       exact ⟨_, _, (), .materialized, List.mem_singleton_self _, rfl, rfl,
-        fun _ => ⟨⟨1, 1⟩, rfl, ⟨nofun, nofun⟩⟩, fun _ => nofun⟩
+        fun _ => ⟨⟨1, 1, .nil⟩, rfl, ⟨nofun, nofun⟩⟩, fun _ => nofun⟩
     | bound a | ready a | reference a | done a =>
       have membership : place = storeRoot ∨ place = shadowRoot := by
         first
@@ -191,7 +191,7 @@ private theorem addressRepresents (project : Project) (q : AddressTargetPhase) :
       all_goals
         first
         | (refine ⟨_, _, (), .materialized, List.mem_singleton_self _, rfl, rfl,
-              fun _ => ⟨⟨1, 1⟩, rfl, ⟨nofun, nofun⟩⟩, ?_⟩
+              fun _ => ⟨⟨1, 1, .nil⟩, rfl, ⟨nofun, nofun⟩⟩, ?_⟩
            intro value found
            first
            | (have same : some storeValue = some value := found
@@ -285,7 +285,8 @@ example (project : Project) :
     LowersMemory (language := addressLanguage) (logicalAddressProgram project) (addressMemory project) := by
   have static := addressStatic project
   refine ⟨rfl, rfl, static.1, static.2.1, ⟨rfl, rfl⟩, static.2.2.1, static.2.2.2.1, static.2.2.2.2, ?_, ?_⟩
-  · refine finiteProgressRefines addressMIRExecution addressMemoryExecution _ _ addressResult
+  · apply matchingRefinement (language := addressLanguage)
+    refine finiteProgressRefines addressMIRExecution addressMemoryExecution _ _ addressResult
       AddressSourcePhase.done.state
       ⟨AddressSourcePhase.start.state, by with_unfolding_all rfl, .cons (addressMIRTick project (p := .start) (q := .bound) rfl)
         (.cons (addressMIRTick project (p := .bound) (q := .reference) rfl)
@@ -346,7 +347,7 @@ example (project : Project) :
            obtain rfl := Option.some.inj same
            exact ⟨_, .nil _, by with_unfolding_all rfl, by with_unfolding_all exact (rfl : [] = [])⟩)
     · rintro _ _ _ _ ⟨q, rfl, rfl⟩
-      exact addressCheckpoint project q
+      exact ⟨addressCheckpoint project q, by cases q <;> rfl⟩
 
 
 private def addressWrongReturn (project : Project) : Memory testLowering testProfile :=

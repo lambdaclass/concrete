@@ -115,7 +115,7 @@ abbrev testLanguage : CoreLanguage where
   argumentReadNoTrap := by simp
   OtherValue := Unit
   valueShape := rfl
-  layout := fun _ _ _ => some ⟨1, 1⟩
+  layout := fun _ _ _ => some ⟨1, 1, .nil⟩
   scalarType := fun _ => some (.int .u8)
   literal := fun _ bytes => (sliceLanguage slice0).literal (.inl (.scalar (.int .u8))) bytes |>.bind fun
     | .scalar v => some (.scalar v)
@@ -127,7 +127,6 @@ abbrev testLanguage : CoreLanguage where
   checkTrap := fun _ _ _ => false
   field := fun _ _ => none
   replaceField := fun _ _ _ => none
-  fieldRange := fun _ _ _ => none
   encodeOther := fun _ _ _ => none
   decodeOther := fun _ _ _ => none
   safety

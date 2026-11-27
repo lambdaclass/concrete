@@ -7,12 +7,14 @@ open ConcreteSpec Core Core.SourcePathSpan StageInterface StageGrammar
 
 namespace StageInterfaceControls
 
-private def materializedBinding (project : Project) : Memory testLowering testProfile :=
-  let block : MemoryBlock testLowering := ⟨⟨0⟩, [],
+private def materializedBindingBlock : MemoryBlock testLowering :=
+  ⟨⟨0⟩, [],
     [⟨testOrigin, .beginLifetime storeRoot⟩, ⟨testOrigin, .bind storePlace (.literal ⟨[]⟩)⟩],
     .ret (some ⟨(), .literal ⟨[0]⟩⟩), []⟩
+
+private def materializedBinding (project : Project) : Memory testLowering testProfile :=
   {(immediateReturn project) with
-    functions := [(Exec.Demo.mainF, [(storeRoot, ())], ⟨⟨0⟩, #[block]⟩)]}
+    functions := [(Exec.Demo.mainF, [(storeRoot, ())], ⟨⟨0⟩, #[materializedBindingBlock]⟩)]}
 
 private theorem backingAccess (space : AddrSpace) (base : Nat) :
     (backingBefore space base).bytes.access testProfile.memoryTarget (backingRange space base).ptr 1 1 =
@@ -35,9 +37,9 @@ private theorem aggregateWrite (project : Project) (space : AddrSpace) (base : N
         simp [backingAfter, backingBefore, backingRange, Mem.Memory.access, Mem.Memory.block,
           AList.lookup, Mem.candidate, Nat.mod_one]]
     rfl
-  refine ⟨⟨rfl, fun _ => rfl⟩, (fun _ => ⟨⟨1, 1⟩, rfl, ⟨nofun, nofun⟩⟩),
+  refine ⟨⟨rfl, fun _ => rfl⟩, (fun _ => ⟨⟨1, 1, .nil⟩, rfl, ⟨nofun, nofun⟩⟩),
     ?_, ?_, fun _ => Or.inr ⟨backingRange space base, [(0, [.init 42 none])], rfl, rfl, ?_, ?_⟩⟩
-  · simp [Memory.writeValue, Memory.mayInitialize, Memory.authorizeWrite, Memory.writeOwnerView, Memory.ownerView, Memory.zeroRoot, Memory.rangeAt, Memory.byteRuns,
+  · simp [Memory.writeValue, Memory.markWritten, Memory.storeRuns, Memory.atOffset, Memory.mayInitialize, Memory.authorizeWrite, Memory.writeOwnerView, Memory.ownerView, Memory.zeroRoot, Memory.rangeAt, Memory.byteRuns,
       Memory.layoutAt, materializedBinding, immediateReturn, zeroMemory, storePlace,
       backingBefore, backingAfter, backingRange, storeBefore, storeInitial, storeRoot,
       Mem.Memory.store, Mem.Memory.access, Mem.Memory.block, Mem.Memory.modify,
@@ -76,13 +78,13 @@ private theorem materializedRepresents (project : Project) (space : AddrSpace) (
   · intro place range member
     cases List.mem_singleton.mp member
     exact ⟨List.mem_singleton_self _, rfl,
-      ⟨⟨1, 1⟩, ⟨0⟩, _, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩⟩
+      ⟨⟨1, 1, .nil⟩, ⟨0⟩, _, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩⟩
   · intro place member
     have eq := List.mem_singleton.mp member
     subst place
     refine ⟨_, _, (), .materialized, List.mem_singleton_self _, rfl, rfl, ?_, ?_⟩
     · intro _
-      exact ⟨⟨1, 1⟩, rfl, ⟨nofun, nofun⟩⟩
+      exact ⟨⟨1, 1, .nil⟩, rfl, ⟨nofun, nofun⟩⟩
     · intro value lookedUp
       have same : some (CoreValue.other ()) = some value := lookedUp
       cases same
@@ -109,8 +111,8 @@ private inductive Materialization.Tick : Materialization → Materialization →
 private def materializedSourceState (done : Bool) : MemoryRegisters erasureLanguage testProfile :=
   if done then erasureBound else storeInitial
 
-private theorem materializationExact (project : Project) (p : Materialization) (next : MemoryRegisters erasureLanguage testProfile) :
-    (materializedBinding project).Step (language := erasureLanguage) p.state next ↔
+private theorem materializationNormal (project : Project) (p : Materialization) (next : MemoryRegisters erasureLanguage testProfile) :
+    (materializedBinding project).StepOutcome (language := erasureLanguage) p.state next false ↔
       ∃ q, p.Tick q ∧ q.state = next := by
   constructor
   · intro step
@@ -126,10 +128,10 @@ private theorem materializationExact (project : Project) (p : Materialization) (
       rcases begins.2 with ⟨impossible, _⟩ | ⟨_, layout, lookup, isZero | allocated⟩
       · have wrong : some StorageClass.materialized = some .virtual := impossible
         cases wrong
-      · have same : some (⟨1, 1⟩ : Layout) = some layout := lookup
+      · have same : some (⟨1, 1, .nil⟩ : Layout) = some layout := lookup
         cases same
         exact (Nat.one_ne_zero isZero.1).elim
-      · have same : some (⟨1, 1⟩ : Layout) = some layout := lookup
+      · have same : some (⟨1, 1, .nil⟩ : Layout) = some layout := lookup
         cases same
         obtain ⟨_, space, base, id, bytes, alloc, rfl⟩ := allocated
         have result : Mem.Memory.empty.alloc testProfile.memoryTarget space base 1 1 = .ok (id, bytes) := alloc
@@ -168,7 +170,7 @@ private theorem materializationExact (project : Project) (p : Materialization) (
     cases tick with
     | allocate space base fits =>
       refine ⟨_, rfl, {backingBefore space base with instruction := 0}, ⟨by decide, Or.inr ?_⟩, rfl⟩
-      refine ⟨rfl, ⟨⟨1, 1⟩, rfl, Or.inr ⟨by decide, space, base, ⟨0⟩, _, ?_, rfl⟩⟩⟩
+      refine ⟨rfl, ⟨⟨1, 1, .nil⟩, rfl, Or.inr ⟨by decide, space, base, ⟨0⟩, _, ?_, rfl⟩⟩⟩
       change Mem.Memory.empty.alloc testProfile.memoryTarget space base 1 1 = _
       unfold Mem.Memory.alloc
       have ok : Mem.Memory.empty.Fits testProfile.memoryTarget (Mem.candidate space base 1 1) := fits
@@ -177,6 +179,34 @@ private theorem materializationExact (project : Project) (p : Materialization) (
     | bind space base fits =>
       exact ⟨_, rfl, .other (), backingBefore space base, {backingAfter space base with instruction := 1},
         rfl, aggregateWrite project space base, rfl⟩
+
+private theorem materializationExact (project : Project) (p : Materialization) (next : MemoryRegisters erasureLanguage testProfile) :
+    (materializedBinding project).Step (language := erasureLanguage) p.state next ↔
+      ∃ q, p.Tick q ∧ q.state = next := by
+  constructor
+  · intro tick
+    apply (materializationNormal project p next).mp
+    apply tick.normal (language := erasureLanguage)
+    intro partialState failed
+    have block : (materializedBinding project).blockAt p.state = some materializedBindingBlock := by cases p <;> with_unfolding_all rfl
+    cases p with
+    | initial =>
+      have ok := (materializationNormal project .initial (.allocated ⟨0⟩ 1 (by unfold backingFits; decide) : Materialization).state).mpr
+        ⟨_, .allocate ⟨0⟩ 1 _, rfl⟩
+      have exhausted : (materializedBinding project).BeginExhausted (language := erasureLanguage) storeInitial storeRoot :=
+        failed.instructionAt (op := ⟨testOrigin, .beginLifetime storeRoot⟩) block (by with_unfolding_all rfl)
+      obtain ⟨started, begins, _⟩ := ok.instructionAt (op := ⟨testOrigin, .beginLifetime storeRoot⟩) block (by with_unfolding_all rfl)
+      exact exhausted.unavailable ⟨started, begins⟩
+    | allocated space base fits =>
+      exact Memory.bind_cannot_exhaust (language := erasureLanguage)
+        (failed.instructionAt (op := ⟨testOrigin, .bind storePlace (.literal ⟨[]⟩)⟩) block (by with_unfolding_all rfl))
+    | bound space base fits =>
+      obtain ⟨caller, rest, _, _, _, callers, _⟩ := failed.terminatorAt block (by with_unfolding_all rfl)
+      change [] = caller :: rest at callers
+      cases callers
+  · rintro ⟨q, tick, rfl⟩
+    have normal := (materializationNormal project p q.state).mpr ⟨q, tick, rfl⟩
+    cases tick <;> exact normal
 
 private def logicalBindingBlock : MemoryBlock testLowering :=
   ⟨⟨0⟩, [], [⟨testOrigin, .bind (ty := ()) ⟨⟨storeRoot, []⟩, .virtual⟩ (.literal ⟨[]⟩)⟩],
@@ -253,11 +283,11 @@ private theorem materializationRepresents (project : Project) (q : Materializati
     · intro place range member
       cases List.mem_singleton.mp member
       exact ⟨List.mem_singleton_self _, rfl,
-        ⟨⟨1, 1⟩, ⟨0⟩, _, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩⟩
+        ⟨⟨1, 1, .nil⟩, ⟨0⟩, _, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩⟩
     · intro place member
       cases List.mem_singleton.mp member
       exact ⟨_, _, (), .materialized, List.mem_singleton_self _, rfl, rfl,
-        fun _ => ⟨⟨1, 1⟩, rfl, ⟨nofun, nofun⟩⟩, fun _ => nofun⟩
+        fun _ => ⟨⟨1, 1, .nil⟩, rfl, ⟨nofun, nofun⟩⟩, fun _ => nofun⟩
   | bound space base fits => exact materializedRepresents project space base fits
 
 private theorem materializationStatic (project : Project) :
@@ -326,7 +356,8 @@ example (project : Project) :
   have static := materializationStatic project
   refine ⟨rfl, rfl, static.1, static.2.1, ⟨rfl, rfl⟩, static.2.2,
     (materializedTables project).1, (materializedTables project).2, ?_, ?_⟩
-  · refine finiteProgressRefines bindingMIR bindingMemory _ _ bindingResult erasureBound
+  · apply matchingRefinement (language := erasureLanguage)
+    refine finiteProgressRefines bindingMIR bindingMemory _ _ bindingResult erasureBound
       ⟨storeInitial, by with_unfolding_all rfl, .cons (bindingMIRTick project) (.nil _)⟩
       (by with_unfolding_all rfl) ?_ ?_ (fun state => 2 - state.instruction) ?_
     · intro q finite
@@ -379,7 +410,7 @@ example (project : Project) :
            obtain rfl := Option.some.inj same
            exact ⟨_, .nil _, by with_unfolding_all rfl, by with_unfolding_all exact (rfl : [] = [])⟩)
     · rintro _ _ _ _ ⟨phase, rfl, rfl⟩
-      refine ⟨materializationRepresents project phase, ?_, ?_, ?_, ?_, ?_, ?_⟩
+      refine ⟨⟨materializationRepresents project phase, ?_, ?_, ?_, ?_, ?_, ?_⟩, ?_⟩
       all_goals cases phase <;> first | rfl | exact ⟨rfl, nofun⟩ | exact List.nodup_nil | exact nofun
 
 -- This mutant returns the right value and retains the declaration and layout.
@@ -418,7 +449,7 @@ example (project : Project) :
   | @cons _ next _ tick _ =>
     have bound := erasureBindingUnique project next tick.1.2.1
     have physical := (represents next storeInitial ⟨_, starts, .cons tick.1 (.nil _)⟩
-      targetReach tick.2).1
+      targetReach tick.2).1.1
     rw [bound] at physical
     exact List.not_mem_nil (physical.2.2.1 storeRoot (List.mem_cons_self ..))
 

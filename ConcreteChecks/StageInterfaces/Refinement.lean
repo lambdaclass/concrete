@@ -1,3 +1,4 @@
+import Concrete.Memory.Execution
 import ConcreteChecks.StageInterfaces.Models
 
 open Concrete
@@ -94,11 +95,11 @@ theorem stationarySafe {A E : Type} (s : Concrete.Contracts.Semantics A E)
 
 theorem stationaryRejects {A B E : Type} {a : A} {b : B}
     (s : Concrete.Contracts.Semantics A E) (t : Concrete.Contracts.Semantics B E)
-    (p : s.State) (q : t.State) (expected actual : Concrete.Contracts.Observation)
+    (tr : B → t.State → Concrete.Contracts.Observation → Prop) (p : s.State) (q : t.State) (expected actual : Concrete.Contracts.Observation)
     (initial : ∀ x, s.initial a x → x = p) (sResult : s.result a p expected)
-    (tInitial : t.initial b q) (tResult : t.result b q actual)
+    (tInitial : t.initial b q) (tResult : tr b q actual)
     (wrong : ¬ s.result a p actual) :
-    ¬ BehaviorRefinement s t s.result t.result a b := by
+    ¬ BehaviorRefinement s t s.result tr a b := by
   intro preserves
   obtain ⟨state, finite, observation, _⟩ :=
     (preserves (stationarySafe s a p expected initial sResult)).1 q actual
@@ -126,6 +127,16 @@ theorem refinesToTerminal {A B E : Type} {a : A} {b : B}
   · intro x stuck
     obtain rfl := onlyT x stuck.1
     exact stuck.2.2 result tResult
+
+theorem matchingRefinement {language : CoreLanguage} {lang : LoweringLanguage language.operands.Ty}
+    {profile : Profile} {sourceProgram : MIR lang profile} {output : Memory lang profile}
+    (strict : BehaviorRefinement (MIR.Execution (language := language)) Memory.Execution
+      MIR.Execution.result Memory.Execution.result sourceProgram output) :
+    BehaviorRefinement (MIR.Execution (language := language)) Memory.Execution
+      MIR.Execution.result Memory.MatchingResult sourceProgram output := by
+  intro safe
+  obtain ⟨finish, infinite, progress⟩ := strict safe
+  exact ⟨fun q o hp h => finish q o hp (Memory.matchingResult_result h), infinite, progress⟩
 
 -- The finite phase analysis below certifies the registered executions. It
 -- covers every reachable machine state, including every legal allocation.

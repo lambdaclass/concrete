@@ -71,14 +71,18 @@ private def residualModels (m : LoweringModels residualLanguage testLowering tes
 
 private theorem residualStops (project : Project) (next : MemoryRegisters residualLanguage testProfile) :
     ¬ (residualMemory project [runtimeCheck]).Step (language := residualLanguage) storeInitial next := by
-  rintro ⟨block, fetched, step⟩
-  have equality : some _ = some block := fetched
-  cases equality
-  obtain ⟨values, state, _, _, _, _, _, read, checked, _⟩ := step
-  have readExact : some ([.scalar (.int .u8 0)], storeInitial) = some (values, state) := read
-  cases readExact
-  have impossible : some TrapKind.divisionByZero = none := checked
-  contradiction
+  intro tick
+  have noOutcome (s : MemoryRegisters residualLanguage testProfile) (mode : Bool)
+      (raw : (residualMemory project [runtimeCheck]).StepOutcome (language := residualLanguage) storeInitial s mode) : False := by
+    obtain ⟨block, fetched, step⟩ := raw
+    have equality : some _ = some block := fetched
+    cases equality
+    obtain ⟨values, state, _, _, _, _, _, read, checked, _⟩ := step
+    have readExact : some ([.scalar (.int .u8 0)], storeInitial) = some (values, state) := read
+    cases readExact
+    have impossible : some TrapKind.divisionByZero = none := by with_unfolding_all exact checked
+    contradiction
+  exact noOutcome _ false (tick.normal (language := residualLanguage) fun s => noOutcome s true)
 
 private theorem residualLogicalStops (project : Project)
     (next : MemoryRegisters residualLanguage testProfile) :
@@ -155,14 +159,14 @@ example (project : Project) (m : LoweringModels residualLanguage testLowering te
           List.mem_singleton_self _, List.mem_singleton_self _, rfl, noEscape⟩
     · refine ⟨⟨fun _ _ => ?_, fun _ _ => ?_⟩,
         fun _ _ _ h => h.elim, fun _ next _ step => (residualStops project next step).elim, ?_⟩
-      · exact ⟨rfl, rfl, ⟨_, rfl, rfl⟩, ⟨_, rfl, rfl⟩, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+      · exact ⟨rfl, rfl, ⟨_, rfl, rfl⟩, ⟨_, rfl, rfl⟩, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
       · with_unfolding_all rfl
       · intro _ _ _
         with_unfolding_all exact ⟨fun h => congrArg some h.symm, fun h => (Option.some.inj h).symm⟩
     · refine ⟨⟨fun _ _ => ?_, fun _ _ => ?_⟩,
         fun _ _ _ h => h.elim, fun _ next _ step => (residualLogicalStops project next step).elim, ?_⟩
       · with_unfolding_all
-          exact ⟨rfl, rfl, ⟨_, rfl, rfl⟩, ⟨_, rfl, rfl⟩, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+          exact ⟨rfl, rfl, ⟨_, rfl, rfl⟩, ⟨_, rfl, rfl⟩, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
       · with_unfolding_all rfl
       · intro _ _ _
         with_unfolding_all exact ⟨fun h => congrArg some h.symm, fun h => (Option.some.inj h).symm⟩
