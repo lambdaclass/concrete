@@ -1541,10 +1541,13 @@ Concrete.Interfaces.Memory.BeginExhausted.fresh	Quot.sound propext
 Concrete.Interfaces.Memory.BeginExhausted.materialized	Quot.sound propext
 Concrete.Interfaces.Memory.BeginExhausted.nonemptyLayout	Quot.sound propext
 Concrete.Interfaces.Memory.BeginExhausted.unavailable	Quot.sound propext
+Concrete.Interfaces.Memory.BeginExhausted.valid	Quot.sound propext
 Concrete.Interfaces.Memory.EndLocals.brecOn	Quot.sound propext
 Concrete.Interfaces.Memory.HandoffWF.eq_1	Quot.sound propext
 Concrete.Interfaces.Memory.InstructionStep.eq_1	Quot.sound propext
 Concrete.Interfaces.Memory.ParamOutcome.empty	Quot.sound propext
+Concrete.Interfaces.Memory.ParamOutcome.valid_of_exhausted	Quot.sound propext
+Concrete.Interfaces.Memory.ParamSpaceFits.not_exhausted	Quot.sound propext
 Concrete.Interfaces.Memory.SignatureMatches._sparseCasesOn_1.else_eq	propext
 Concrete.Interfaces.Memory.SignatureMatches._sparseCasesOn_4.else_eq	propext
 Concrete.Interfaces.Memory.SignatureMatches.eq_1	Quot.sound propext
@@ -2229,6 +2232,9 @@ Concrete.Memory.Slot.mk.sizeOf_spec
 Concrete.Memory.Store.mk.inj	
 Concrete.Memory.Store.mk.injEq	propext
 Concrete.Memory.Store.mk.sizeOf_spec	
+Concrete.Memory.TransferControl.SingleParam.alignment_three_stuck	Quot.sound propext
+Concrete.Memory.TransferControl.SingleParam.corrupted_target_rejected	Classical.choice Quot.sound propext
+Concrete.Memory.TransferControl.SingleParam.wrong_u32_root	Quot.sound propext
 Concrete.Memory.TransferControl.TrailingParam.corrupted_tag_rejected	Quot.sound propext
 Concrete.Memory.TransferControl.TrailingParam.immutable_stuck	Quot.sound propext
 Concrete.Memory.TransferControl.TrailingParam.instDecidableEqFault._proof_1	
@@ -3244,8 +3250,8 @@ _private.Concrete.Memory.Controls.0.Concrete.Memory.BindReturn.writes	Quot.sound
 _private.Concrete.Memory.ExhaustionControl.0.Concrete.Memory.RecursiveControl.allocated.eq_1	Quot.sound propext
 _private.Concrete.Memory.ExhaustionControl.0.Concrete.Memory.RecursiveControl.allocation_fits	Quot.sound propext
 _private.Concrete.Memory.ExhaustionControl.0.Concrete.Memory.RecursiveControl.allocation_fits._proof_1_1	Quot.sound propext
-_private.Concrete.Memory.ExhaustionControl.0.Concrete.Memory.RecursiveControl.allocation_fits._proof_1_2	Quot.sound propext
 _private.Concrete.Memory.ExhaustionControl.0.Concrete.Memory.RecursiveControl.begin_at	Quot.sound propext
+_private.Concrete.Memory.ExhaustionControl.0.Concrete.Memory.RecursiveControl.begin_at._proof_1_3	Quot.sound propext
 _private.Concrete.Memory.ExhaustionControl.0.Concrete.Memory.RecursiveControl.blocks.eq_1	propext
 _private.Concrete.Memory.ExhaustionControl.0.Concrete.Memory.RecursiveControl.blocks.eq_2	propext
 _private.Concrete.Memory.ExhaustionControl.0.Concrete.Memory.RecursiveControl.blocks.eq_def	propext
@@ -3416,6 +3422,13 @@ _private.Concrete.Memory.Refinement.0.Concrete.Memory.run_finite
 _private.Concrete.Memory.Refinement.0.Concrete.Memory.run_trace_mono	propext
 _private.Concrete.Memory.Refinement.0.Concrete.Memory.trace_at_result	Quot.sound propext
 _private.Concrete.Memory.Refinement.0.Concrete.Memory.trace_on_run	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.SingleParam.at_jump	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.SingleParam.invalid_root	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.SingleParam.no_begin	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.SingleParam.safe	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.SingleParam.source_jump	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.SingleParam.stuck_at_jump	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.SingleParam.threeBytes._proof_1	Quot.sound propext
 _private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.TrailingParam.Fault.immutable.sizeOf_spec	
 _private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.TrailingParam.Fault.ofNat_ctorIdx	
 _private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.TrailingParam.Fault.tag.sizeOf_spec	

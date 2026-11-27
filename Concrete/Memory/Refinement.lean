@@ -139,14 +139,13 @@ theorem begin_decreases {memory : Interfaces.Memory lang profile} {q q' : Memory
   rw [pc]
   omega
 
-/-- Every fresh root with a storage class and its required layout has a
-physical begin successor. Allocation choices range over the whole target. -/
+/-- A begin that is valid with unlimited space can either commit on this target
+or report exhaustion at its original checkpoint. -/
 theorem begin_progress {memory : Interfaces.Memory lang profile} {q : MemoryRegisters language profile}
     {block op root} (running : q.resourceExhausted = false)
     (found : memory.blockAt q = some block) (pc : block.body[q.instruction]? = some op)
-    (inst : op.instruction = .beginLifetime root) (fresh : root ∉ q.live)
-    (declared : memory.classAt q.frame root = some .virtual ∨
-      (memory.classAt q.frame root = some .materialized ∧ ∃ layout, memory.layoutAt q.frame root = some layout)) :
+    (inst : op.instruction = .beginLifetime root)
+    (valid : memory.BeginValid q root) :
     (∃ opened, memory.Begins q root opened ∧ Dst.step memory q opened.advance) ∨
       (Dst.step memory q {q with resourceExhausted := true} ∧
         Dst.result memory {q with resourceExhausted := true} .resourceExhausted) := by
@@ -163,11 +162,7 @@ theorem begin_progress {memory : Interfaces.Memory lang profile} {q : MemoryRegi
     refine ⟨block, found, ?_⟩
     simp only [pc, inst]
     exact ⟨opened, began, rfl⟩
-  · have failed : memory.BeginExhausted q root := by
-      rcases declared with virtual | ⟨cls, layout, hl⟩
-      · exact (space ⟨_, fresh, .inl ⟨virtual, rfl⟩⟩).elim
-      · refine ⟨fresh, cls, ⟨layout, hl, Nat.pos_of_ne_zero (fun zero => ?_)⟩, space⟩
-        exact space ⟨_, fresh, .inr ⟨cls, layout, hl, .inl ⟨zero, rfl⟩⟩⟩
+  · have failed : memory.BeginExhausted q root := ⟨valid, space⟩
     refine .inr ⟨Interfaces.Memory.silent_step ready ?_ rfl, memory.exhausted_result rfl⟩
     unfold Interfaces.Memory.Step
     simp only [running, Bool.false_eq_true, ite_false, ite_true, true_and]

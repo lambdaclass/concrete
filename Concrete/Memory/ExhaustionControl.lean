@@ -155,13 +155,13 @@ private def allocated (n : Nat) : State :=
 private def bound (n : Nat) : State :=
   {entry n with toMemoryFrame := boundFrame n, bytes := ⟨blocks (n+1), n+1⟩}
 
-private theorem allocation_fits (n : Nat) (h : n < capacity) :
-    (entry n).bytes.Fits profile.memoryTarget (candidate n) := by
+private theorem allocation_fits (n extraAddrBits : Nat)
+    (h : n + 2 ≤ 2 ^ (profile.memoryTarget.addrBits + extraAddrBits) - 1) :
+    (entry n).bytes.Fits {profile.memoryTarget with addrBits := profile.memoryTarget.addrBits + extraAddrBits}
+      (candidate n) := by
   refine ⟨(by decide : IsPow2 1), Nat.mod_one _, ?_, (by decide : 1 ≤ profile.memoryTarget.maxObject),
     fun _ => Nat.succ_ne_zero n, ?_, (by decide : (⟨0⟩ : AddrSpace) ∈ profile.memoryTarget.spaces)⟩
-  · change n + 1 + 1 ≤ 2 ^ 64 - 1
-    change n < 2 ^ 64 - 2 at h
-    omega
+  · exact h
   · intro e member _ overlap
     obtain ⟨i, hi, rfl⟩ := mem_blocks.mp member
     have above := overlap.2.2.2.2
@@ -173,7 +173,7 @@ private theorem begin_at (n : Nat) (h : n < capacity) : target.step physical (en
     refine ⟨rfl, ⟨_, rfl, {allocated n with instruction := 0}, ⟨nofun, Or.inr ?_⟩, rfl⟩, [], rfl⟩
     refine ⟨rfl, ⟨1, 1⟩, rfl, Or.inr ⟨by decide, ⟨0⟩, n+1, ⟨n⟩, _, ?_, rfl⟩⟩
     unfold Mem.Memory.alloc
-    exact ite_eq_left (allocation_fits n h)
+    exact ite_eq_left (allocation_fits n 0 (by change n < 2^64 - 2 at h; change n + 2 ≤ 2^64 - 1; omega))
 
 private theorem writes_byte (n : Nat) :
     physical.Writes (allocated n) slot value {bound n with instruction := 1} := by
@@ -214,27 +214,32 @@ private theorem next_call (n : Nat) (h : n < capacity) (reached : target.finite 
   exact finite_next (finite_next (finite_next reached (begin_at n h)) bind) call
 
 private theorem full : physical.BeginExhausted (entry capacity) ⟨0⟩ := by
-  refine ⟨nofun, by with_unfolding_all rfl, ⟨⟨1, 1⟩, by with_unfolding_all rfl, by decide⟩, ?_⟩
-  rintro ⟨_, _, ⟨hv, _⟩ | ⟨_, layout, hl, zero | alloc⟩⟩
-  · have no : some StorageClass.materialized = some .virtual := by with_unfolding_all exact hv
-    contradiction
-  all_goals have eq : some (⟨1, 1⟩ : Layout) = some layout := by with_unfolding_all exact hl
-  all_goals cases eq
-  · exact Nat.one_ne_zero zero.1
-  · obtain ⟨_, space, base, _, _, chosen, _⟩ := alloc
-    unfold Mem.Memory.alloc at chosen
-    dsimp only at chosen
-    split at chosen
-    · rename_i fits
-      have spaceEq : space = ⟨0⟩ := List.mem_singleton.mp fits.2.2.2.2.2.2
-      subst space
-      have nonnull : base ≠ 0 := fits.2.2.2.2.1 Nat.zero_lt_one
-      have hb : base + 1 ≤ 2 ^ 64 - 1 := fits.2.2.1
-      obtain ⟨i, rfl⟩ := Nat.exists_eq_succ_of_ne_zero nonnull
-      have hi : i < capacity := by change i < 2 ^ 64 - 2; omega
-      have collides := fits.2.2.2.2.2.1 (⟨i⟩, written i) (mem_blocks.mpr ⟨i, hi, rfl⟩) rfl
-      exact collides ⟨rfl, Nat.zero_lt_one, Nat.zero_lt_one, Nat.lt_succ_self _, Nat.lt_succ_self _⟩
-    · contradiction
+  constructor
+  · with_unfolding_all
+      refine ⟨1, {allocated capacity with instruction := 0}, nofun, .inr ⟨rfl, ⟨1, 1⟩, rfl, .inr
+        ⟨by decide, ⟨0⟩, capacity + 1, ⟨capacity⟩, _, ?_, rfl⟩⟩⟩
+      unfold Mem.Memory.alloc
+      exact ite_eq_left (allocation_fits capacity 1 (by decide))
+  · rintro ⟨_, _, ⟨hv, _⟩ | ⟨_, layout, hl, zero | alloc⟩⟩
+    · have no : some StorageClass.materialized = some .virtual := by with_unfolding_all exact hv
+      contradiction
+    all_goals have eq : some (⟨1, 1⟩ : Layout) = some layout := by with_unfolding_all exact hl
+    all_goals cases eq
+    · exact Nat.one_ne_zero zero.1
+    · obtain ⟨_, space, base, _, _, chosen, _⟩ := alloc
+      unfold Mem.Memory.alloc at chosen
+      dsimp only at chosen
+      split at chosen
+      · rename_i fits
+        have spaceEq : space = ⟨0⟩ := List.mem_singleton.mp fits.2.2.2.2.2.2
+        subst space
+        have nonnull : base ≠ 0 := fits.2.2.2.2.1 Nat.zero_lt_one
+        have hb : base + 1 ≤ 2 ^ 64 - 1 := fits.2.2.1
+        obtain ⟨i, rfl⟩ := Nat.exists_eq_succ_of_ne_zero nonnull
+        have hi : i < capacity := by change i < 2 ^ 64 - 2; omega
+        have collides := fits.2.2.2.2.2.1 (⟨i⟩, written i) (mem_blocks.mpr ⟨i, hi, rfl⟩) rfl
+        exact collides ⟨rfl, Nat.zero_lt_one, Nat.zero_lt_one, Nat.lt_succ_self _, Nat.lt_succ_self _⟩
+      · contradiction
 
 /-- Each call retains its initialized byte. For this legal allocation schedule
 the next entry reaches a typed terminal after every usable u8 address is occupied. -/
@@ -248,7 +253,7 @@ theorem recursive_exhaustion : recurMIR.logicalView.HandoffWF ∧ ProgramSafe so
   let first := function.2.2.blocks[0]'(by with_unfolding_all decide)
   have progress := begin_progress (memory := physical) (q := entry capacity) (block := first)
     (root := ⟨0⟩) rfl (by with_unfolding_all rfl) (by with_unfolding_all rfl) (by with_unfolding_all rfl)
-    full.fresh (.inr ⟨full.materialized, ⟨⟨1, 1⟩, by with_unfolding_all rfl⟩⟩)
+    full.valid
   rcases progress with ⟨s, began, _⟩ | ⟨stop, outcome⟩
   · exact (full.unavailable ⟨s, began⟩).elim
   · exact ⟨registered, safe, physical, lowered, _, finite_next (reach _ (Nat.le_refl _)) stop, outcome⟩

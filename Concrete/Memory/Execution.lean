@@ -53,7 +53,7 @@ theorem ParamOutcome.empty {memory : Memory lang profile} {q next : MemoryRegist
   cases exhausting
   · cases h
     exact ⟨rfl, rfl⟩
-  · exact (h.2 trivial).elim
+  · exact (h.2.2 trivial).elim
 
 theorem bind_cannot_exhaust {memory : Memory lang profile} {q next : MemoryRegisters language profile}
     {ty} {dst : MemoryPlace _ ty} {src} : ¬ memory.InstructionStep q next false (.bind dst src) true := by

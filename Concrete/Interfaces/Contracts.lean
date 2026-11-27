@@ -689,7 +689,7 @@ def readArgs (memory : Memory lang profile) :
     return (value :: tail, state)
 
 def Begins (memory : Memory lang profile) (state : MemoryRegisters language profile)
-    (place : PlaceId) (next : MemoryRegisters language profile) : Prop :=
+    (place : PlaceId) (next : MemoryRegisters language profile) (extraAddrBits : Nat := 0) : Prop :=
   place ∉ state.live ∧
   let live := {state with live := place :: state.live}
   (memory.classAt state.frame place = some .virtual ∧ next = live) ∨
@@ -697,18 +697,42 @@ def Begins (memory : Memory lang profile) (state : MemoryRegisters language prof
     ∃ layout, memory.layoutAt state.frame place = some layout ∧
     ((layout.size = 0 ∧ next = live) ∨
     (0 < layout.size ∧ ∃ space base block bytes,
-      state.bytes.alloc profile.memoryTarget space base layout.size layout.align = .ok (block, bytes) ∧
+      state.bytes.alloc {profile.memoryTarget with addrBits := profile.memoryTarget.addrBits + extraAddrBits}
+        space base layout.size layout.align = .ok (block, bytes) ∧
       next = {live with bytes := bytes, materialized :=
         (place, ⟨⟨space, base, some block⟩, layout.size, layout.align⟩) :: state.materialized})))
 
-/-- A rejected address is only one allocator choice. Exhaustion requires a fresh,
-nonempty materialized root with a known layout and no successful placement anywhere. -/
+/-- A successful begin at some finite address width witnesses validity with
+unbounded space. Only the allocator sees the extra bits. Its checks on the
+request, the layout, and the existing live blocks still apply. -/
+def BeginValid (memory : Memory lang profile) (state : MemoryRegisters language profile)
+    (place : PlaceId) : Prop :=
+  ∃ extraAddrBits next, memory.Begins state place next extraAddrBits
+
 structure BeginExhausted (memory : Memory lang profile) (state : MemoryRegisters language profile)
     (place : PlaceId) : Prop where
-  fresh : place ∉ state.live
-  materialized : memory.classAt state.frame place = some .materialized
-  nonemptyLayout : ∃ layout, memory.layoutAt state.frame place = some layout ∧ 0 < layout.size
+  valid : memory.BeginValid state place
   unavailable : ¬ ∃ next, memory.Begins state place next
+
+theorem BeginExhausted.fresh {memory : Memory lang profile} {q : MemoryRegisters language profile}
+    {root} (h : memory.BeginExhausted q root) : root ∉ q.live := by
+  obtain ⟨_, _, fresh, _⟩ := h.valid
+  exact fresh
+
+/-- A virtual begin in an unlimited execution is already possible on the
+actual target. Only a materialized root can therefore exhaust. -/
+theorem BeginExhausted.materialized {memory : Memory lang profile} {q : MemoryRegisters language profile}
+    {root} (h : memory.BeginExhausted q root) : memory.classAt q.frame root = some .materialized := by
+  obtain ⟨_, _, fresh, ⟨virtual, _⟩ | ⟨cls, _⟩⟩ := h.valid
+  · exact (h.unavailable ⟨_, fresh, .inl ⟨virtual, rfl⟩⟩).elim
+  · exact cls
+
+theorem BeginExhausted.nonemptyLayout {memory : Memory lang profile} {q : MemoryRegisters language profile}
+    {root} (h : memory.BeginExhausted q root) : ∃ layout, memory.layoutAt q.frame root = some layout ∧ 0 < layout.size := by
+  obtain ⟨_, _, fresh, ⟨virtual, _⟩ | ⟨cls, layout, found, zero | placed⟩⟩ := h.valid
+  · exact (h.unavailable ⟨_, fresh, .inl ⟨virtual, rfl⟩⟩).elim
+  · exact (h.unavailable ⟨_, fresh, .inr ⟨cls, layout, found, .inl ⟨zero.1, rfl⟩⟩⟩).elim
+  · exact ⟨layout, found, placed.1⟩
 
 def endOwnerView (memory : Memory lang profile) (state : MemoryRegisters language profile)
     (place : PlaceId) : Option (Own.State × Hybrid.Place) :=
@@ -771,14 +795,15 @@ def readOperands (memory : Memory lang profile) :
 sequence encountered an unavailable reservation after its authorized writes. -/
 inductive WriteParams (memory : Memory lang profile) :
     List (Sigma (MemoryPlace language.operands.Ty)) → List language.operands.Val →
-      MemoryRegisters language profile → MemoryRegisters language profile → (exhausting : optParam Bool false) → Prop
-  | nil (state) : WriteParams memory [] [] state state false
-  | cons {ty} {place : MemoryPlace _ ty} {params value values state started stored next exhausting} :
+      MemoryRegisters language profile → MemoryRegisters language profile → (exhausting : optParam Bool false) →
+      (extraAddrBits : optParam Nat 0) → Prop
+  | nil (state) {extraAddrBits} : WriteParams memory [] [] state state false extraAddrBits
+  | cons {ty} {place : MemoryPlace _ ty} {params value values state started stored next exhausting extraAddrBits} :
       (if state.live.contains place.logical.root then started = state
-        else memory.Begins state place.logical.root started) →
+        else memory.Begins state place.logical.root started extraAddrBits) →
       memory.Writes started place value stored →
-      WriteParams memory params values stored next exhausting →
-      WriteParams memory (⟨ty, place⟩ :: params) (value :: values) state next exhausting
+      WriteParams memory params values stored next exhausting extraAddrBits →
+      WriteParams memory (⟨ty, place⟩ :: params) (value :: values) state next exhausting extraAddrBits
   | exhausted {ty} {place : MemoryPlace _ ty} {params value values state} :
       memory.BeginExhausted state place.logical.root →
       WriteParams memory (⟨ty, place⟩ :: params) (value :: values) state state true
@@ -799,15 +824,32 @@ def ParamSpaceFits (memory : Memory lang profile)
       bytes.alloc profile.memoryTarget space base layout.size layout.align = .ok (block, reserved) ∧
       fits reserved) (fun _ : Mem.Memory => True) state.bytes
 
-/-- The failed branch authorizes the prefix. Only the allocator decides whether
-a different joint placement was available at the original checkpoint. -/
+/-- A finite transfer is valid with unlimited space when it completes from
+the same checkpoint with some additional address bits for allocation. Every
+parameter, including the suffix beyond a physical failure, uses ordinary Writes. -/
+def ParamsValid (memory : Memory lang profile)
+    (params : List (Sigma (MemoryPlace language.operands.Ty))) (values : List language.operands.Val)
+    (state : MemoryRegisters language profile) : Prop :=
+  ∃ extraAddrBits next, memory.WriteParams params values state next false extraAddrBits
+
+/-- A failed physical prefix rolls back only when the complete transfer is
+valid and no joint placement was available at the original checkpoint. -/
 def ParamOutcome (memory : Memory lang profile)
     (params : List (Sigma (MemoryPlace language.operands.Ty))) (values : List language.operands.Val)
     (state next : MemoryRegisters language profile) (exhausting : Bool) : Prop :=
   if exhausting then
     memory.WriteParams params values state next true ∧
-      ¬ memory.ParamSpaceFits params state
+      memory.ParamsValid params values state ∧ ¬ memory.ParamSpaceFits params state
   else memory.WriteParams params values state next false
+
+theorem ParamOutcome.valid_of_exhausted {memory : Memory lang profile} {params values}
+    {state next : MemoryRegisters language profile} (h : memory.ParamOutcome params values state next true) :
+    memory.ParamsValid params values state := h.2.1
+
+/-- Joint space alone excludes exhaustion, in particular for every valid transfer. -/
+theorem ParamSpaceFits.not_exhausted {memory : Memory lang profile} {params values}
+    {state next : MemoryRegisters language profile} (fits : memory.ParamSpaceFits params state) :
+    ¬ memory.ParamOutcome params values state next true := fun h => h.2.2 fits
 
 inductive EndLocals (memory : Memory lang profile) :
     List PlaceId → MemoryRegisters language profile → MemoryRegisters language profile → Prop

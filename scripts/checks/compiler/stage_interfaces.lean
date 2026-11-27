@@ -2174,7 +2174,7 @@ private theorem erasureBindingUnique (project : Project)
   obtain ⟨_, value, afterRead, stored, read, writes, rfl⟩ := step
   have readExact : some (CoreValue.other (), storeInitial) = some (value, afterRead) := read
   cases readExact
-  have params : @Memory.WriteParams erasureLanguage testLowering testProfile (@MIR.logicalView erasureLanguage testLowering testProfile (erasureSource project))
+  have params : ((erasureSource project).logicalView (language := erasureLanguage)).WriteParams (language := erasureLanguage)
       [⟨(), ⟨⟨storeRoot, []⟩, .virtual⟩⟩] [CoreValue.other ()] storeInitial stored false := by
     simp only [Bool.true_or, ite_true] at writes
     with_unfolding_all exact writes
@@ -2612,7 +2612,7 @@ example (project : Project) :
       with_unfolding_all exact operates
     obtain ⟨_, rfl, rfl, meaning⟩ := observed
     rcases meaning with ⟨_, _, rfl⟩ | ⟨_, _, impossible, _⟩
-    · have params : @Memory.WriteParams addressLanguage testLowering testProfile (@MIR.logicalView addressLanguage testLowering testProfile (logicalAddressProgram project))
+    · have params : ((logicalAddressProgram project).logicalView (language := addressLanguage)).WriteParams (language := addressLanguage)
           [⟨(), addressResultPlace⟩] [storeValue] (Memory.applyOperation suspendedAddress true indirectWriteStore) stored false := by
         simp only [Bool.true_or, ite_true] at writes
         with_unfolding_all exact writes
@@ -5537,7 +5537,7 @@ private theorem logicalWritesUnique (memory : Memory testLowering testProfile)
     (before started stored expected : MemoryRegisters addressLanguage testProfile)
     (unique : ∀ other, (if before.live.contains place.logical.root then other = before
       else memory.Begins (language := addressLanguage) before place.logical.root other) → other = started)
-    (writes : @Memory.WriteParams addressLanguage testLowering testProfile memory [⟨(), place⟩]
+    (writes : memory.WriteParams (language := addressLanguage) [⟨(), place⟩]
       [value] before stored false)
     (writing : memory.writeValue (language := addressLanguage) started place value = some expected) :
     stored = expected := by
@@ -5570,7 +5570,7 @@ private theorem logicalAddressExact (project : Project) (phase : AddressSourcePh
       obtain ⟨_, value, state, stored, read, write, rfl⟩ := run
       have actual : some (storeValue, storeInitial) = some (value, state) := read
       cases actual
-      have params : @Memory.WriteParams addressLanguage testLowering testProfile (logicalAddressView project)
+      have params : (logicalAddressView project).WriteParams (language := addressLanguage)
           [⟨(), ⟨⟨storeRoot, []⟩, .virtual⟩⟩] [storeValue] storeInitial stored false := by
         simp only [Bool.true_or, ite_true] at write
         with_unfolding_all exact write
@@ -5605,7 +5605,7 @@ private theorem logicalAddressExact (project : Project) (phase : AddressSourcePh
       · let ready : MemoryRegisters addressLanguage testProfile := {logicalAddressBefore with
           addressIds := [(storeRoot, ⟨0⟩)]
           nextAddressId := 1}
-        have params : @Memory.WriteParams addressLanguage testLowering testProfile (logicalAddressView project)
+        have params : (logicalAddressView project).WriteParams (language := addressLanguage)
             [⟨(), addressResultPlace⟩] [CoreValue.other ()] ready stored false := by
           simp only [Bool.true_or, ite_true] at write
           with_unfolding_all exact write
@@ -5644,7 +5644,7 @@ private theorem logicalAddressExact (project : Project) (phase : AddressSourcePh
       obtain ⟨_, rfl, rfl, meaning⟩ := meaning
       rcases meaning with ⟨_, _, rfl⟩ | ⟨_, _, impossible, _⟩
       · let ready := Memory.applyOperation (language := addressLanguage) logicalAddressAfter true modified
-        have params : @Memory.WriteParams addressLanguage testLowering testProfile (logicalAddressView project)
+        have params : (logicalAddressView project).WriteParams (language := addressLanguage)
             [⟨(), addressResultPlace⟩] [storeValue] ready stored false := by
           simp only [Bool.true_or, ite_true] at write
           with_unfolding_all exact write

@@ -132,7 +132,11 @@ private theorem fragmented {m : M} {s : State}
     (cls : m.classAt s.frame word.logical.root = some .materialized)
     (shape : m.layoutAt s.frame word.logical.root = some ⟨2, 2⟩)
     (bytes : s.bytes = (writtenByte 2).bytes) : m.BeginExhausted (language := Language) s word.logical.root := by
-  refine ⟨fresh, cls, ⟨_, shape, by decide⟩, ?_⟩
+  refine ⟨⟨1, reserved s word.logical.root (2^64) 2 2, fresh, .inr ⟨cls, _, shape, .inr
+    ⟨by decide, ⟨0⟩, 2^64, ⟨s.bytes.next⟩, _, ?_, rfl⟩⟩⟩, ?_⟩
+  · change s.bytes.alloc _ _ _ _ _ = .ok (_, ⟨_ :: s.bytes.blocks, s.bytes.next + 1⟩)
+    rw [bytes]
+    with_unfolding_all rfl
   rintro ⟨_, _, ⟨hv, _⟩ | ⟨_, layout, hl, zero | placed⟩⟩
   · cases cls.symm.trans hv
   all_goals cases Option.some.inj (hl.symm.trans shape)
@@ -178,7 +182,7 @@ theorem fitting_transfer :
   · with_unfolding_all exact ⟨rfl, ⟨_, rfl, rfl, _, _, _, rfl, rfl, rfl, fits_together⟩, [], rfl⟩
   · rintro ⟨_, tick, _⟩
     obtain ⟨_, partialState, raw⟩ := tick
-    exact (jump_outcome false rfl raw).2 joint_space
+    exact Interfaces.Memory.ParamSpaceFits.not_exhausted joint_space (jump_outcome false rfl raw)
 
 private theorem blocked_transfer : (program true).ParamOutcome (language := Language) params [byteValue, wordValue]
     (openByte 2) (writtenByte 2) true := by
@@ -188,9 +192,21 @@ private theorem blocked_transfer : (program true).ParamOutcome (language := Lang
     with_unfolding_all exact fragmented (by decide) rfl rfl rfl
   constructor
   · exact .cons rfl wrote (.exhausted blocked)
-  · rintro ⟨space, base, block, reservedBytes, alloc, _⟩
-    exact no_word_allocation (by with_unfolding_all exact List.mem_cons_self ..)
-      (by with_unfolding_all exact List.mem_cons_of_mem _ (List.mem_cons_self ..)) alloc
+  · let opened := reserved (writtenByte 2) word.logical.root (2^64) 2 2
+    let stored := ((program true).writeValue (language := Language) opened word wordValue).getD opened
+    refine ⟨⟨1, stored, .cons rfl wrote (.cons (started := opened) ?_ ?_ (.nil _))⟩, ?_⟩
+    · with_unfolding_all exact ⟨by decide, .inr ⟨rfl, _, rfl, .inr
+        ⟨by decide, ⟨0⟩, 2^64, ⟨2⟩, _, rfl, rfl⟩⟩⟩
+    · with_unfolding_all
+        refine ⟨⟨rfl, nofun⟩, fun _ => ⟨_, rfl, nofun, nofun⟩, rfl, rfl,
+          fun _ => .inr ⟨_, [(0, [.init 42 none, .init 0 none])], rfl, rfl,
+            fun _ => ⟨0, _, .head _, by decide⟩, ?_⟩⟩
+        intro off bytes present
+        cases List.mem_singleton.mp present
+        exact ⟨by decide, by decide, rfl⟩
+    · rintro ⟨space, base, block, reservedBytes, alloc, _⟩
+      exact no_word_allocation (by with_unfolding_all exact List.mem_cons_self ..)
+        (by with_unfolding_all exact List.mem_cons_of_mem _ (List.mem_cons_self ..)) alloc
 
 /-- A live first destination forces the u8 write at 2. The later reservation
 fails for every placement. Execution terminates at the original jump with the
@@ -371,7 +387,7 @@ private theorem stuck_of_rejected (fault : Fault)
     obtain ⟨s, mode, raw⟩ := Interfaces.Memory.Step.exists_outcome step.2.1
     cases mode
     · exact reject s (outcome fault raw)
-    · exact (outcome fault raw).2 (by cases fault <;> with_unfolding_all exact joint_space)
+    · exact Interfaces.Memory.ParamSpaceFits.not_exhausted (by cases fault <;> with_unfolding_all exact joint_space) (outcome fault raw)
   · intro o obs
     have impossible : none = some o := by cases fault <;> with_unfolding_all exact obs
     contradiction
@@ -589,5 +605,247 @@ theorem corrupted_tag_rejected :
   exact (refinement source_safe).2.2 atJump stuck
 
 end TrailingParam
+
+
+namespace SingleParam
+
+-- Every fixture jumps with the same literal. A valid outcome must complete
+-- the single binding when the allocator can request additional address bits.
+private def jump : CFGEdge (Sigma (MemoryRead _ Lowering.literal)) :=
+  ⟨⟨1⟩, [⟨u8Ty, .literal ⟨[42]⟩⟩]⟩
+
+private def first (body : List (LocatedOp (MemoryInst Lowering))) : MemoryBlock Lowering :=
+  ⟨⟨0⟩, [], body, .jump jump, []⟩
+private def last (p : MemoryPlace _ u8Ty) : MemoryBlock Lowering :=
+  ⟨⟨1⟩, [⟨u8Ty, p⟩], [], .ret (some ⟨u8Ty, .copy byte⟩), []⟩
+
+private theorem stuck_at_jump {language : CoreLanguage} {lang : LoweringLanguage language.operands.Ty}
+    {m : Interfaces.Memory lang profile} {q : MemoryRegisters language profile}
+    {edge : CFGEdge (Sigma (MemoryRead _ lang.literal))} {entry dst : MemoryBlock lang} {values}
+    (reachable : (Interfaces.Memory.Execution (language := language)).finite m q)
+    (lookup : m.blockAt q = some entry) (pc : entry.body[q.instruction]? = none)
+    (ending : entry.ending = .jump edge) (args : m.readOperands edge.arguments q = some (values, q))
+    (target : m.blockAt {q with block := edge.target} = some dst)
+    (invalid : ¬ m.ParamsValid dst.params values {q with block := edge.target, instruction := 0})
+    (running : m.terminalObservation q = none) :
+    (Interfaces.Memory.Execution (language := language)).stuck m q := by
+  refine ⟨reachable, ?_, ?_⟩
+  · intro next step
+    obtain ⟨s, mode, raw⟩ := Interfaces.Memory.Step.exists_outcome step.2.1
+    have transfer := raw.terminatorAt lookup pc
+    rw [ending] at transfer
+    obtain ⟨vs, read, block, hr, hb, _, outcome⟩ := transfer
+    cases Option.some.inj (args.symm.trans hr)
+    cases Option.some.inj (target.symm.trans hb)
+    cases mode
+    · exact invalid ⟨0, s, outcome⟩
+    · exact invalid outcome.valid_of_exhausted
+  · intro o obs
+    obtain ⟨_, observed, _⟩ := Option.bind_eq_some_iff.mp obs
+    cases running.symm.trans observed
+
+-- validPlace reads the frame's declarations. A begin may allocate anywhere,
+-- but its successor always retains that frame.
+private theorem invalid_root {language : CoreLanguage} {lang : LoweringLanguage language.operands.Ty}
+    {m : Interfaces.Memory lang profile} {q : MemoryRegisters language profile}
+    {ty} {p : MemoryPlace _ ty} {v}
+    (invalid : m.validPlace q p = false) : ¬ m.ParamsValid [⟨ty, p⟩] [v] q := by
+  rintro ⟨_, _, path⟩
+  cases path with
+  | cons opened write tail =>
+    rename_i started stored
+    have frame : started.frame = q.frame := by
+      split at opened
+      · cases opened; rfl
+      · rcases opened.2 with ⟨_, rfl⟩ | ⟨_, _, _, ⟨_, rfl⟩ | ⟨_, _, _, _, _, _, rfl⟩⟩ <;> rfl
+    have valid := write.1.1
+    unfold Interfaces.Memory.validPlace at valid invalid
+    rw [frame, invalid] at valid
+    contradiction
+
+private abbrev u32Ty : Language.operands.Ty := .inl (.scalar (.int .u32))
+private def wrong : MemoryPlace _ u8Ty := ⟨⟨⟨3⟩, []⟩, .materialized⟩
+private def opening : List (LocatedOp (MemoryInst Lowering)) := [⟨origin, MemoryInst.beginLifetime (lang := Lowering) backing⟩]
+private def threeBytes (p : MemoryPlace _ u8Ty) : M :=
+  let decls := locals ++ [(⟨3⟩, u32Ty)]
+  {program false with functions := [(mir.entry, decls, ⟨⟨0⟩, #[first opening, last p]⟩)]
+                      storage := [(mir.entry, List.map (fun d => (d.1, .materialized)) decls)]
+                      layouts := [(mir.entry, layouts[0].2 ++ [(⟨3⟩, ⟨4, 4⟩)])]}
+
+private theorem at_jump (p : MemoryPlace _ u8Ty) : exec.finite (threeBytes p) jumping := by
+  refine ⟨start, by with_unfolding_all rfl, .cons ?_ (.nil _)⟩
+  with_unfolding_all exact ⟨rfl, ⟨_, rfl, _, ⟨nofun, .inr ⟨rfl, _, rfl, .inr
+    ⟨by decide, ⟨0⟩, 4, ⟨0⟩, _, rfl, rfl⟩⟩⟩, rfl⟩, [], rfl⟩
+
+/-- Three free bytes suffice for the real u8. Redirecting its parameter to a
+declared u32 passes handoff, but the reachable jump has no successor or result. -/
+theorem wrong_u32_root :
+    (threeBytes wrong).HandoffWF ∧ exec.stuck (threeBytes wrong) jumping ∧
+    (threeBytes byte).ParamSpaceFits (language := Language) [⟨u8Ty, byte⟩] arriving ∧
+    exec.observes (threeBytes byte) (.returned 42 ByteArray.empty) := by
+  letI := Language.typeDecidableEq
+  refine ⟨(checkHandoff_iff _).mp (by with_unfolding_all decide), ?_,
+    by with_unfolding_all exact ⟨⟨0⟩, 1, ⟨1⟩, _, rfl, trivial⟩, ?_⟩
+  · apply stuck_at_jump (language := Language) (m := threeBytes wrong) (q := jumping)
+      (edge := jump) (entry := first opening) (dst := last wrong) (values := [byteValue])
+      (at_jump wrong) (by with_unfolding_all rfl) (by rfl) rfl (by with_unfolding_all rfl)
+      (by with_unfolding_all rfl) _ (by with_unfolding_all rfl)
+    exact invalid_root (by with_unfolding_all rfl)
+  · refine ⟨writtenByte 1, finite_next (at_jump byte) ?_, by with_unfolding_all rfl⟩
+    with_unfolding_all exact ⟨rfl, ⟨_, rfl, rfl, _, _, _, rfl, rfl, rfl,
+      .cons (begin_byte 1 (.inl rfl)) (write_byte 1 (.inl rfl)) (.nil _)⟩, [], rfl⟩
+
+private def misaligned : M :=
+  {program false with functions := [(mir.entry, [(byte.logical.root, u8Ty)], ⟨⟨0⟩, #[first [], last byte]⟩)]
+                      storage := [(mir.entry, [(byte.logical.root, .materialized)])]
+                      layouts := [(mir.entry, [(byte.logical.root, ⟨1, 3⟩)])]}
+
+private abbrev Plain := sliceLanguage slice0
+private def atParam : MemoryRegisters Plain profile := {start with block := jump.target}
+
+private theorem no_begin (bits : Nat) (next : MemoryRegisters Plain profile) :
+    ¬ misaligned.Begins atParam byte.logical.root next bits := by
+  rintro ⟨_, ⟨virtual, _⟩ | ⟨_, layout, found, zero | placed⟩⟩
+  · cases virtual
+  all_goals have eq : some (⟨1, 3⟩ : Layout) = some layout := by with_unfolding_all exact found
+  all_goals cases eq
+  · exact Nat.one_ne_zero zero.1
+  · obtain ⟨_, _, _, _, _, alloc, _⟩ := placed
+    unfold Mem.Memory.alloc at alloc
+    dsimp only at alloc
+    split at alloc
+    · rename_i fits
+      exact (by decide : ¬ IsPow2 3) fits.1
+    · contradiction
+
+/-- The standalone Slice 0 handoff admits the malformed layout. Both a
+parameter transfer and a bare begin reject it even with unlimited space. -/
+theorem alignment_three_stuck :
+    misaligned.HandoffWF ∧ (Interfaces.Memory.Execution (language := Plain)).stuck misaligned start ∧
+    ¬ misaligned.BeginExhausted atParam byte.logical.root := by
+  letI := Plain.typeDecidableEq
+  refine ⟨(checkHandoff_iff _).mp (by with_unfolding_all decide), ?_, ?_⟩
+  · apply stuck_at_jump (language := Plain) (m := misaligned) (q := start)
+      (edge := jump) (entry := first []) (dst := last byte) (values := [byteValue])
+      ⟨start, by with_unfolding_all rfl, .nil _⟩ (by with_unfolding_all rfl) (by rfl) rfl
+      (by with_unfolding_all rfl) (by with_unfolding_all rfl) _ (by with_unfolding_all rfl)
+    rintro ⟨_, _, path⟩
+    cases path with
+    | cons opened _ _ => exact no_begin _ _ opened
+  · rintro ⟨⟨bits, next, began⟩, _⟩
+    exact no_begin bits next began
+
+
+-- The unused local has a legal layout that cannot be placed in empty target
+-- memory. Both source and healthy target return 42 from a one-byte parameter.
+-- In the corrupted target only the parameter's root changes.
+private abbrev Huge : CoreLanguage := {sliceLanguage slice0 with
+  layout := fun target ty => match ty with
+    | .inr false => some ⟨2^64 - 1, 1⟩
+    | _ => (sliceLanguage slice0).layout target ty}
+private abbrev source := Interfaces.MIR.Execution (language := Huge) (lang := Lowering) (profile := profile)
+private abbrev target := Interfaces.Memory.Execution (language := Huge) (lang := Lowering) (profile := profile)
+private abbrev registers := MemoryRegisters Huge profile
+private def unused : MemoryPlace _ u8Ty := ⟨⟨⟨1⟩, []⟩, .materialized⟩
+private def decls : LocalTypes Huge.operands.Ty := [(byte.logical.root, u8Ty), (unused.logical.root, .inr false)]
+private def addressByte : MIRInst Lowering := .op (opcode := .read) byte.logical ()
+  (.cons (.literal (ty := u8Ty) ⟨[42]⟩) .nil) [] [⟨u8Ty, byte.logical⟩]
+private def sourceMir : MIR Lowering profile :=
+  {mir with functions := [(mir.entry, decls, ⟨⟨0⟩, #[
+    ⟨⟨0⟩, [], [], .jump ⟨⟨1⟩, [⟨u8Ty, .literal ⟨[42]⟩⟩]⟩, []⟩,
+    ⟨⟨1⟩, [⟨u8Ty, byte.logical⟩], [], .ret (some ⟨u8Ty, .copy byte.logical⟩), []⟩,
+    ⟨⟨2⟩, [], [⟨origin, addressByte⟩], .ret (some ⟨u8Ty, .literal ⟨[0]⟩⟩), []⟩]⟩)]}
+private def hugeTarget (p : MemoryPlace _ u8Ty) : M :=
+  let op : MemoryInst Lowering := .op (opcode := .read) byte ()
+    (.cons (.literal (ty := u8Ty) ⟨[42]⟩) .nil) [] [⟨u8Ty, byte⟩]
+  let dead : MemoryBlock Lowering := ⟨⟨2⟩, [], [⟨origin, .beginLifetime byte.logical.root⟩, ⟨origin, op⟩],
+    .ret (some ⟨u8Ty, .literal ⟨[0]⟩⟩), []⟩
+  {program false with functions := [(mir.entry, decls, ⟨⟨0⟩, #[first [], last p, dead]⟩)]
+                      storage := [(mir.entry, [(byte.logical.root, .materialized), (unused.logical.root, .materialized)])]
+                      layouts := [(mir.entry, [(byte.logical.root, ⟨1, 1⟩), (unused.logical.root, ⟨2^64 - 1, 1⟩)])]}
+
+private def entering : registers := {start with block := jump.target}
+private def bound : registers := {entering with live := [⟨0⟩], initialized := [⟨0⟩], virtualValues := [(⟨0⟩, byteValue)]}
+
+private theorem source_jump (q : registers) : source.step sourceMir start q ↔ q = bound := by
+  constructor
+  · intro step
+    let logical := sourceMir.logicalView (language := Huge)
+    let graph := logical.functions[0].2.2
+    let init := graph.blocks[0]'(by with_unfolding_all decide)
+    let dest := graph.blocks[1]'(by with_unfolding_all decide)
+    obtain ⟨block, hb, _, tick⟩ := step.2.1
+    have lookup : some init = some block := by with_unfolding_all exact hb
+    cases lookup
+    with_unfolding_all change logical.Transfer (language := Huge) jump start q at tick
+    obtain ⟨vs, read, block, hr, hb, _, writes⟩ := tick
+    have args : some ([byteValue], (start : registers)) = some (vs, read) := by with_unfolding_all exact hr
+    cases args
+    have found : some dest = some block := by with_unfolding_all exact hb
+    cases found
+    with_unfolding_all
+      change logical.WriteParams (language := Huge) [⟨u8Ty, {byte with storage := .virtual}⟩] [byteValue] entering q false at writes
+    cases writes with
+    | cons opened write tail =>
+      cases tail
+      rcases opened.2 with ⟨_, rfl⟩ | ⟨cls, _⟩
+      · have eq : some bound = some q := by with_unfolding_all exact write.2.2.1
+        exact (Option.some.inj eq).symm
+      · cases cls
+  · rintro rfl
+    with_unfolding_all exact ⟨rfl, ⟨_, rfl, rfl, _, _, _, rfl, rfl, rfl,
+      .cons (started := {entering with live := [⟨0⟩]}) ⟨nofun, .inl ⟨rfl, rfl⟩⟩
+        ⟨⟨rfl, nofun⟩, nofun, rfl, rfl, nofun⟩ (.nil _)⟩, [], rfl⟩
+
+private theorem safe : ProgramSafe source sourceMir := by
+  have result : source.result sourceMir bound (.returned 42 ByteArray.empty) := by with_unfolding_all rfl
+  intro q stuck
+  have reached := finite_invariant source sourceMir (fun p => p = start ∨ p = bound)
+    (fun _ hi => .inl (by with_unfolding_all exact hi)) (by
+      rintro _ next (rfl | rfl) step
+      · exact .inr ((source_jump _).mp step)
+      · exact (source.terminal _ _ _ result _ step).elim) stuck.1
+  rcases reached with rfl | rfl
+  · exact stuck.2.1 _ ((source_jump _).mpr rfl)
+  · exact stuck.2.2 _ result
+
+/-- From empty memory, the safe source and its actual lowering return 42.
+Redirecting only the destination to the unused root produces a reachable stuck
+state, violating the target-safety clause of the full lowering contract. -/
+theorem corrupted_target_rejected :
+    ProgramSafe source sourceMir ∧ source.observes sourceMir (.returned 42 ByteArray.empty) ∧
+    lowerGraph (language := Huge) sourceMir = .ok (hugeTarget byte) ∧
+    target.observes (hugeTarget byte) (.returned 42 ByteArray.empty) ∧
+    (hugeTarget unused).HandoffWF ∧ target.stuck (hugeTarget unused) start ∧
+    ¬ LowersMemory (language := Huge) sourceMir (hugeTarget unused) := by
+  letI := Huge.typeDecidableEq
+  have stuck : target.stuck (hugeTarget unused) start := by
+    apply stuck_at_jump (language := Huge) (m := hugeTarget unused) (q := start)
+      (edge := jump) (entry := first []) (dst := last unused) (values := [byteValue])
+      ⟨start, by with_unfolding_all rfl, .nil _⟩ (by with_unfolding_all rfl) (by rfl) rfl
+      (by with_unfolding_all rfl) (by with_unfolding_all rfl) _ (by with_unfolding_all rfl)
+    exact invalid_root (by with_unfolding_all rfl)
+  refine ⟨safe, ⟨bound, ⟨start, by with_unfolding_all rfl, .cons ((source_jump _).mpr rfl) (.nil _)⟩,
+    by with_unfolding_all rfl⟩, by with_unfolding_all rfl, ?_,
+    (checkHandoff_iff _).mp (by with_unfolding_all decide), stuck, ?_⟩
+  · let opened : registers := reserved entering byte.logical.root 1 1 1
+    let doneState := ((hugeTarget byte).writeValue (language := Huge) opened byte byteValue).getD entering
+    have write : (hugeTarget byte).Writes (language := Huge) opened byte byteValue doneState := by
+      with_unfolding_all
+        refine ⟨⟨rfl, nofun⟩, fun _ => ⟨_, rfl, nofun, nofun⟩, rfl, rfl,
+          fun _ => .inr ⟨_, [(0, [.init 42 none])], rfl, rfl, fun _ => ⟨0, _, .head _, by decide⟩, ?_⟩⟩
+        intro offset bytes member
+        cases List.mem_singleton.mp member
+        exact ⟨by decide, by decide, rfl⟩
+    have bindings : (hugeTarget byte).WriteParams (language := Huge) [⟨u8Ty, byte⟩] [byteValue] entering doneState := by
+      refine Interfaces.Memory.WriteParams.cons (language := Huge) (started := opened) ?_ write (.nil _)
+      with_unfolding_all exact ⟨nofun, .inr ⟨rfl, _, rfl, .inr ⟨by decide, ⟨0⟩, 1, ⟨0⟩, _, rfl, rfl⟩⟩⟩
+    refine ⟨doneState, ⟨start, by with_unfolding_all rfl, .cons ?_ (.nil _)⟩, by with_unfolding_all rfl⟩
+    with_unfolding_all exact ⟨rfl, ⟨_, rfl, rfl, _, _, _, rfl, rfl, rfl, bindings⟩, [], rfl⟩
+  · intro contract
+    obtain ⟨_, _, _, _, _, _, _, _, refinement, _⟩ := contract
+    exact (refinement safe).2.2 start stuck
+
+end SingleParam
 
 end Concrete.Memory.TransferControl
