@@ -51,31 +51,55 @@ if [[ ${CONCRETE_TEST_EMIT_ONLY:-0} != 1 ]]; then
   echo "ok   canonical artifact bytes and SHA-256 goldens in two environments, payload substitutions"
   bash scripts/checks/compiler/f31_census.sh
   # Lake reuses each topic's checked olean. Allow for a cold native runner.
-  stage_controls=(lake build ConcreteChecks.StageInterfaces)
+  stage_controls=(python3 -I "$root/scripts/checks/compiler/stage_controls.py")
   build stage-interface-controls "$work/stage-interface-controls.log" bounded 360 \
     "${stage_controls[@]}"
-  # Exercise the same library glob and exit status in a disposable Lake package.
-  # Start with a cached success so the plant also checks source invalidation.
+  # Use the real configuration for both the developer build and this CI gate.
   probe="$work/stage-interface-plant"
-  module=ConcreteChecks/StageInterfaces/Frontend/Planted.lean
-  mkdir -p "$probe/$(dirname "$module")" "$probe/.lake"
+  mkdir -p "$probe/ConcreteChecks/StageInterfaces/Frontend" "$probe/.lake"
   cp lakefile.toml lake-manifest.json lean-toolchain "$probe/"
   ln -s "$root/.lake/packages" "$probe/.lake/packages"
   (
     cd "$probe"
-    echo 'example : (0 : Nat) = 0 := rfl' >"$module"
+    touch Concrete.lean ConcreteSpec.lean
+    root_module=ConcreteChecks/StageInterfaces.lean
+    good='example : (0 : Nat) = 0 := rfl'
+    echo "$good" >"$root_module"
     build stage-interface-plant-baseline "$work/plant-baseline.log" bounded 60 "${stage_controls[@]}"
-    echo 'example : (0 : Nat) = 1 := rfl' >"$module"
+    reject_false_control() {
+      local module=$1
+      local rc=0
+      shift
+      bounded 60 "$@" >"$work/plant.log" 2>&1 || rc=$?
+      if [[ $rc != 1 ]] || ! has_match -F "$module:1:" <"$work/plant.log" ||
+          ! has_match -F '0 = 1' <"$work/plant.log"; then
+        cat "$work/plant.log" >&2
+        echo "FAIL $*: expected a false equality in $module" >&2
+        exit 1
+      fi
+    }
+    # Change the cached root, then add fresh, unimported sources at two depths.
+    for module in "$root_module" ConcreteChecks/StageInterfaces/Frontend/Planted.lean ConcreteChecks/Unlisted.lean; do
+      echo 'example : (0 : Nat) = 1 := rfl' >"$module"
+      reject_false_control "$module" lake build
+      reject_false_control "$module" "${stage_controls[@]}"
+      echo "$good" >"$module"
+    done
+    # Restore the old glob after caching all three successes. Even with valid
+    # oleans present, the inventory must identify both files the target skips.
+    build stage-interface-plant-repaired "$work/plant-repaired.log" bounded 60 "${stage_controls[@]}"
+    sed -i 's/"ConcreteChecks\.+"/"ConcreteChecks.StageInterfaces.+"/' lakefile.toml
     rc=0
     bounded 60 "${stage_controls[@]}" >"$work/plant.log" 2>&1 || rc=$?
-    if [[ $rc != 1 ]] || ! has_match -F "$module:1:" <"$work/plant.log" ||
-        ! has_match -F '0 = 1' <"$work/plant.log"; then
+    if [[ $rc != 1 ]] || ! has_match -Fx "missing from ConcreteChecks.StageInterfaces: $root_module" <"$work/plant.log" ||
+        ! has_match -Fx 'missing from ConcreteChecks.StageInterfaces: ConcreteChecks/Unlisted.lean' <"$work/plant.log"; then
       cat "$work/plant.log" >&2
-      echo "FAIL stage-interface target: expected the planted false equality to fail elaboration" >&2
+      echo "FAIL stage-interface inventory: expected the old glob to omit the root and sibling" >&2
       exit 1
     fi
   )
-  echo "ok   cached stage-interface target rejects a planted false equality"
+  echo "ok   default and native builds reject false stage controls in the root, a new nested file and a sibling"
+  echo "ok   stage-interface inventory detects omissions with a warm cache"
   build stage-end-to-end-audit "$work/stage-end-to-end-audit.log" bounded 60 \
     lake lean scripts/checks/compiler/stage_end_to_end_audit.lean -- -DwarningAsError=true -DautoImplicit=false
   missing_import="$work/missing_import.lean"

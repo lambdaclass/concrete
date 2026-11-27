@@ -20,7 +20,7 @@ def command_control(root, work):
     (repo / "lakefile.toml").write_text(
         'name = "f31-control"\n[[lean_lib]]\nname = "ConcreteSpec"\n'
         '[[lean_lib]]\nname = "Concrete"\n[[lean_lib]]\nname = "ConcreteSpecEvidence"\n'
-        '[[lean_lib]]\nname = "ConcreteChecks.StageInterfaces"\nglobs = ["ConcreteChecks.StageInterfaces.+"]\n',
+        '[[lean_lib]]\nname = "ConcreteChecks.StageInterfaces"\nglobs = ["ConcreteChecks.+"]\n',
         encoding="utf-8")
     (repo / "Concrete.lean").write_text(
         "import ConcreteSpec\ndef f31Consumer : F31Alias := Nat.zero\n", encoding="utf-8")

@@ -29,10 +29,10 @@ leanOptions = { autoImplicit = false }
 name = "Concrete"
 leanOptions = { autoImplicit = false }
 
-# Kernel-checked cross-stage controls. Build every topic, including new ones.
+# Discover every Lean file under ConcreteChecks/, including StageInterfaces.lean.
 [[lean_lib]]
 name = "ConcreteChecks.StageInterfaces"
-globs = ["ConcreteChecks.StageInterfaces.+"]
+globs = ["ConcreteChecks.+"]
 leanOptions = { warningAsError = true, autoImplicit = false }
 
 [[lean_exe]]

@@ -226,10 +226,12 @@ if reqs:
             bad.append(f"lake-manifest.json does not record the require {n} at {r['git']} {r['rev']}")
 libs = cfg.get("lean_lib", [])
 controls = "ConcreteChecks.StageInterfaces"
-stage_library = {"name": controls, "globs": [controls + ".+"],
+stage_library = {"name": controls, "globs": ["ConcreteChecks.+"],
                  "leanOptions": {"warningAsError": True, "autoImplicit": False}}
 if [l for l in libs if l.get("name") == controls] != [stage_library]:
     bad.append("the stage-interface controls library configuration differs")
+if controls not in cfg.get("defaultTargets", []):
+    bad.append("the default build omits the stage-interface controls")
 libs = [l for l in libs if l.get("name") != controls]
 if [l.get("name") for l in libs] != ["ConcreteSpec", "ConcreteSpecEvidence", "Concrete"]: bad.append(f"libraries {[l.get('name') for l in libs]}")
 for l in libs:
@@ -436,7 +438,10 @@ lake_variant drift 'import json; p="lake-manifest.json"; m=json.load(open(p)); m
 lake_variant subdir 'p="lakefile.toml"; s=open(p).read(); open(p,"w").write(s.replace("[[require]]\n", "[[require]]\nsubDir = \"x\"\n", 1))'
 lake_variant extralib 'p="lakefile.toml"; s=open(p).read(); open(p,"w").write(s + "\n[[lean_lib]]\nname = \"Other\"\n")'
 lake_variant extraexe 'p="lakefile.toml"; s=open(p).read(); open(p,"w").write(s + "\n[[lean_exe]]\nname = \"Other\"\n")'
-for v in short:"not pinned to a full commit" branch:"not pinned to a full commit" drift:"does not record the require" subdir:"sets ['subDir']" extralib:"libraries ['ConcreteSpec', 'ConcreteSpecEvidence', 'Concrete', 'Other']" extraexe:"the executable configuration differs"; do
+lake_variant stageglob 'p="lakefile.toml"; s=open(p).read(); open(p,"w").write(s.replace("ConcreteChecks.+", "ConcreteChecks.StageInterfaces.+"))'
+lake_variant stagedefault 'p="lakefile.toml"; s=open(p).read(); open(p,"w").write(s.replace(", \"ConcreteChecks.StageInterfaces\"]", "]"))'
+for v in short:"not pinned to a full commit" branch:"not pinned to a full commit" drift:"does not record the require" subdir:"sets ['subDir']" extralib:"libraries ['ConcreteSpec', 'ConcreteSpecEvidence', 'Concrete', 'Other']" extraexe:"the executable configuration differs" \
+         stageglob:"the stage-interface controls library configuration differs" stagedefault:"the default build omits the stage-interface controls"; do
   L=$(lake_options "$TMP/lk/${v%%:*}/lakefile.toml")
   case "$L" in *"${v#*:}"*) ok "control: a lakefile whose dependency or library set is changed (${v%%:*}) is refused ($L)" ;;
     *) no "control: the ${v%%:*} lakefile was not refused for '${v#*:}': '$L'" ;; esac
