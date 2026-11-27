@@ -1560,6 +1560,7 @@ Concrete.Interfaces.Memory.blockAt.eq_1	Quot.sound propext
 Concrete.Interfaces.Memory.byteRuns.eq_1	propext
 Concrete.Interfaces.Memory.canEnd.eq_1	Quot.sound propext
 Concrete.Interfaces.Memory.canEnd_iff	Quot.sound propext
+Concrete.Interfaces.Memory.classAt.eq_1	Quot.sound propext
 Concrete.Interfaces.Memory.copyRead_iff	Quot.sound propext
 Concrete.Interfaces.Memory.copyRead_iff._simp_1_5	propext
 Concrete.Interfaces.Memory.exhausted_result	Quot.sound propext
@@ -1588,6 +1589,7 @@ Concrete.Interfaces.Memory.terminalObservation._sparseCasesOn_1.else_eq	propext
 Concrete.Interfaces.Memory.terminalObservation._sparseCasesOn_4.else_eq	propext
 Concrete.Interfaces.Memory.terminalObservation._sparseCasesOn_7.else_eq	propext
 Concrete.Interfaces.Memory.terminalObservation.eq_1	Quot.sound propext
+Concrete.Interfaces.Memory.validPlace.eq_1	Quot.sound propext
 Concrete.Interfaces.Memory.writeOwnerView.eq_1	Quot.sound propext
 Concrete.Interfaces.Memory.writeValue.eq_1	Quot.sound propext
 Concrete.Interfaces.Memory.write_authorized	Quot.sound propext
@@ -2227,6 +2229,11 @@ Concrete.Memory.Slot.mk.sizeOf_spec
 Concrete.Memory.Store.mk.inj	
 Concrete.Memory.Store.mk.injEq	propext
 Concrete.Memory.Store.mk.sizeOf_spec	
+Concrete.Memory.TransferControl.TrailingParam.corrupted_tag_rejected	Quot.sound propext
+Concrete.Memory.TransferControl.TrailingParam.immutable_stuck	Quot.sound propext
+Concrete.Memory.TransferControl.TrailingParam.instDecidableEqFault._proof_1	
+Concrete.Memory.TransferControl.TrailingParam.instDecidableEqFault._proof_2	
+Concrete.Memory.TransferControl.TrailingParam.mixed_type_stuck	Quot.sound propext
 Concrete.Memory.TransferControl.bir_exhaustion	Quot.sound propext
 Concrete.Memory.TransferControl.fitting_transfer	Quot.sound propext
 Concrete.Memory.TransferControl.rollback_after_write	Quot.sound propext
@@ -3409,14 +3416,35 @@ _private.Concrete.Memory.Refinement.0.Concrete.Memory.run_finite
 _private.Concrete.Memory.Refinement.0.Concrete.Memory.run_trace_mono	propext
 _private.Concrete.Memory.Refinement.0.Concrete.Memory.trace_at_result	Quot.sound propext
 _private.Concrete.Memory.Refinement.0.Concrete.Memory.trace_on_run	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.TrailingParam.Fault.immutable.sizeOf_spec	
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.TrailingParam.Fault.ofNat_ctorIdx	
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.TrailingParam.Fault.tag.sizeOf_spec	
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.TrailingParam.Fault.type.sizeOf_spec	
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.TrailingParam.bind_iff	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.TrailingParam.immutable_rejected	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.TrailingParam.initial_binding	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.TrailingParam.jump_bindings	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.TrailingParam.jump_iff	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.TrailingParam.logical_unique	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.TrailingParam.materialized_begin	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.TrailingParam.materialized_write	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.TrailingParam.outcome	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.TrailingParam.physical.eq_1	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.TrailingParam.reaches	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.TrailingParam.rejected_annotation	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.TrailingParam.source_safe	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.TrailingParam.stuck_of_rejected	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.TrailingParam.uncons	Quot.sound propext
 _private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.begin_byte	Quot.sound propext
 _private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.blocked_transfer	Quot.sound propext
 _private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.fits_together	Quot.sound propext
 _private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.fragmented	Quot.sound propext
-_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.fragmented._proof_1_1	Quot.sound propext
-_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.fragmented._proof_1_2	Quot.sound propext
 _private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.handoff	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.joint_space	Quot.sound propext
 _private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.jump_outcome	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.no_word_allocation	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.no_word_allocation._proof_1_1	Quot.sound propext
+_private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.no_word_allocation._proof_1_2	Quot.sound propext
 _private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.origin._proof_1	Quot.sound propext
 _private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.origin._proof_2	Quot.sound propext
 _private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.origin._proof_3	Quot.sound propext

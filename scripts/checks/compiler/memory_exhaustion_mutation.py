@@ -32,10 +32,25 @@ def main():
         (package / ".lake/packages").symlink_to(root / ".lake/packages")
         # Copy the local build cache. Re-elaboration can replace any of its files.
         subprocess.run(["cp", "-a", "--reflink=auto", ".lake/build", package / ".lake/build"], check=True)
-        (package / contracts).write_text(source.replace(premise, "      False →"))
+        # Pin the reachable claim as well as the failing constructor. Removing
+        # or weakening the public theorem must fail the pristine compilation.
+        probe = package / control
+        with probe.open("a") as stream:
+            stream.write("""
+namespace Concrete.Memory.TransferControl
+example : (program true).HandoffWF ∧ exec.finite (program true) forced ∧
+    (writtenByte 2).bytes ≠ forced.bytes ∧
+    exec.step (program true) forced {forced with resourceExhausted := true} ∧
+    exec.result (program true) {forced with resourceExhausted := true} .resourceExhausted ∧
+    ∀ next, exec.step (program true) forced next → next = {forced with resourceExhausted := true} :=
+  rollback_after_write
+end Concrete.Memory.TransferControl
+""")
 
         # A broken interface, import or compiler is a gate failure.
-        command = ["lake", "lean", str(control), "--", "--json"]
+        command = ["lake", "lean", str(control), "--", "-DwarningAsError=true", "-DautoImplicit=false", "--json"]
+        subprocess.run(command, cwd=package, check=True)
+        (package / contracts).write_text(source.replace(premise, "      False →"))
         subprocess.run(["lake", "build", "Concrete.Memory.Refinement"], cwd=package, check=True)
         result = subprocess.run(command, cwd=package, capture_output=True, text=True)
         diagnostics = [json.loads(line) for line in result.stdout.splitlines() if line.startswith("{")]

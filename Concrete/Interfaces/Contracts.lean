@@ -783,14 +783,30 @@ inductive WriteParams (memory : Memory lang profile) :
       memory.BeginExhausted state place.logical.root →
       WriteParams memory (⟨ty, place⟩ :: params) (value :: values) state state true
 
-/-- A compound transfer exhausts only if a reservation actually fails and no
-placement sequence can complete the entire list from the original checkpoint. -/
+/-- Can the allocator reserve all the bytes needed by this transfer? Each fresh
+materialized root consumes its nonempty layout once. Class and layout come from
+the frame tables, regardless of the destination annotation or value to write. -/
+def ParamSpaceFits (memory : Memory lang profile)
+    (params : List (Sigma (MemoryPlace language.operands.Ty)))
+    (state : MemoryRegisters language profile) : Prop :=
+  let roots := (params.map (fun p => p.2.logical.root)).eraseDups
+  let layouts := roots.filterMap fun root =>
+    if !state.live.contains root && memory.classAt state.frame root == some .materialized then
+      (memory.layoutAt state.frame root).filter (fun layout => 0 < layout.size)
+    else none
+  layouts.foldr (fun layout fits bytes =>
+    ∃ space base block reserved,
+      bytes.alloc profile.memoryTarget space base layout.size layout.align = .ok (block, reserved) ∧
+      fits reserved) (fun _ : Mem.Memory => True) state.bytes
+
+/-- The failed branch authorizes the prefix. Only the allocator decides whether
+a different joint placement was available at the original checkpoint. -/
 def ParamOutcome (memory : Memory lang profile)
     (params : List (Sigma (MemoryPlace language.operands.Ty))) (values : List language.operands.Val)
     (state next : MemoryRegisters language profile) (exhausting : Bool) : Prop :=
   if exhausting then
     memory.WriteParams params values state next true ∧
-      ¬ ∃ completed, memory.WriteParams params values state completed false
+      ¬ memory.ParamSpaceFits params state
   else memory.WriteParams params values state next false
 
 inductive EndLocals (memory : Memory lang profile) :

@@ -57,7 +57,8 @@ A fresh nonempty materialized lifetime can end execution with the typed
 `resourceExhausted` observation when no target space and base can hold its layout.
 This rule covers explicit begins and the parameter writes inside calls, returns,
 edge transfers and destructuring. A compound transfer exhausts only if a reservation
-fails and every placement sequence for the whole parameter list fails to complete.
+fails after an authorized prefix and no joint allocation fits the distinct fresh
+nonempty materialized roots. A fitting transfer with an invalid write gets stuck.
 Memory, SSA and BIR retain the original PC, bytes, effects and ownership on exhaustion.
 `LowersMemory` matches ordinary terminal results and their traces, reflects divergence,
 and requires progress on a safe MIR input.
