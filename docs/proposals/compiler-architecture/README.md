@@ -41,7 +41,7 @@ Auditing the live Lean modules on `main` identifies seven concrete structural up
 
 ## Roadmap Mapping, Slice Schedule & Spec Impact
 
-To obey [every fact once](../../PHILOSOPHY.md#the-rules) (Rule 5), work that refines existing roadmap items (`R-0583`, `R-0299`, `R-0580`, `R-0705`, `R-0556`, `R-0149`, `R-0711`, `R-0727`, `R-0201`) extends and cross-links those rows; genuinely new architectural workstreams receive provisional rows **`R-0730`–`R-0735`** in [ROADMAP.md](../../../ROADMAP.md).
+To obey [every fact once](../../PHILOSOPHY.md#the-rules) (Rule 5), work that refines existing roadmap items (`R-0583`, `R-0299`, `R-0580`, `R-0705`, `R-0556`, `R-0149`, `R-0711`, `R-0727`, `R-0201`, `R-0723`, `R-0272`, `R-0728`, `R-0550`, `R-0509`) extends and cross-links those rows; genuinely new architectural workstreams and Stage-0 (`B0b`) engineering multipliers receive provisional rows **`R-0730`–`R-0740`** in [ROADMAP.md](../../../ROADMAP.md).
 
 | Task (provisional) | Title | Target Slice(s) | Touches `ConcreteSpec`? | Owner-gated? | Design Doc |
 |---|---|---|---|---|---|
@@ -51,6 +51,11 @@ To obey [every fact once](../../PHILOSOPHY.md#the-rules) (Rule 5), work that ref
 | [R-0733](../../../ROADMAP.md#r-0733) | Cost-preserving compilation contracts (`Cost` monoid on `Semantics` & `CheckpointSimulation`, through BIR and `LP0`+) | Lowering contract hook in `B0b`/Slice 1; loop/call step bounds at Slices 4–5; native stack/instruction bounds at `LP0`+ / Phase E (extends `R-0574`, `R-0508`, `R-0572`, `R-0505`) | **No new syntax** (uses Slice 4–5 step model; no source cost syntax per 2026-11-22) | No | [Doc 04](04-cost-preserving-and-compositional.md#1-cost-preserving-compilation) |
 | [R-0734](../../../ROADMAP.md#r-0734) | Open-component `InteractionSemantics` & compositional verified compilation / linking | Boundary contract at Slice 8 / before `A2c` (Slice 11); separate-module verified linking in Phase E (extends `R-0705`, `R-0582`, `R-0556`, `R-0717`) | **Yes** (open-module call-boundary relation in `StageInterface` / `C6` / `C10`) | **Yes** (`R-0705` subset, representation & residual assumptions) | [Doc 04](04-cost-preserving-and-compositional.md#2-compositional-verified-compilation-and-verified-linking) |
 | [R-0735](../../../ROADMAP.md#r-0735) | Bodyless canonical `InterfaceSummary`, content-addressed `QueryDB` & semantic-delta `concrete diff` backing | Interface summary & hash at Slice 8 (`R-0556`); `concrete diff` at Slice 10 (`R-0201`); full incremental cache in Phase G (`R-0149`, `R-0697`) | **No** (pure `Concrete/` & tooling) | No | [Doc 05](05-semantic-query-db-and-audit-diff.md) |
+| [R-0736](../../../ROADMAP.md#r-0736) | Canonical round-trip text + binary IR format (`Core`, `MIR`, `Memory`, `BIR`) & `--emit-ir`/`--from-ir` | Stage 0 (`B0b` / Slice 1) | **No** (pure `Concrete/`) | No | [Doc 06](06-day-one-compiler-foundations.md#1-round-trip-ir-text-format) |
+| [R-0737](../../../ROADMAP.md#r-0737) | Dense `Array`-indexed pass tables (`IdTable`) & modular proof-stability library (`ProofLib`) | Stage 0 (`B0b` / pre-Slice-2; extends `R-0723`, `R-0724`, `R-0550`) | **No** (pure `Concrete/`) | No | [Doc 06](06-day-one-compiler-foundations.md#2-dense-arrays-and-proof-stability) |
+| [R-0738](../../../ROADMAP.md#r-0738) | Syntax/Core-directed bug minimizer (`concrete reduce`) | Stage 0 (`B0b` / Slices 0–2; extends `R-0272`) | **No** (tooling) | No | [Doc 06](06-day-one-compiler-foundations.md#3-bug-minimizer-concrete-reduce) |
+| [R-0739](../../../ROADMAP.md#r-0739) | Early real-world kernel sketches + paired refused twins checked against the combined 12-slice LL(1) grammar | Stage 0 (`B0b` / pre-`A2c`; feeds `R-0728`, `R-0567`, `R-0573`) | **No** (non-normative sketches) | No | [Doc 06](06-day-one-compiler-foundations.md#4-early-kernel-sketches) |
+| [R-0740](../../../ROADMAP.md#r-0740) | Live per-commit Trust & Speed Scorecard (`Premises`, stage proofs, replay time, scaling, speed vs `clang -O2`) | Stage 0 (`B0b`+; aggregates `R-0509`, `R-0550`, `R-0702`, `R-0424`) | **No** (tooling) | No | [Doc 06](06-day-one-compiler-foundations.md#5-trust-and-speed-scorecard) |
 
 ---
 
