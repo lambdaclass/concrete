@@ -1980,6 +1980,16 @@ private def byteFailure (fileId : ConcreteSpec.Core.FileId) (pos : Position) (in
     | .unterminated => 3
   literalFailure fileId pos input offset 1 (.byte reason)
 
+/-- Once label recognition has also failed, a quote still commits the scanner
+to a byte literal. A valid raw byte leaves only the closing quote to check. -/
+private def unrecognizedToken (fileId : ConcreteSpec.Core.FileId) (pos : Position) (input : List Nat) : Refusal :=
+  match input with
+  | 39 :: c :: _ =>
+    if ByteRaw c then literalFailure fileId pos input 2 1 (.byte .unterminated)
+    else byteFailure fileId pos input (.invalidRaw c)
+  | [39] => literalFailure fileId pos input 1 1 (.byte .unterminated)
+  | _ => lexFailure fileId pos input .character
+
 private def encodingFailure (src : ByteArray) (fileId : ConcreteSpec.Core.FileId) (error : DecodeError) : Refusal :=
   let pos : Position := (src.data.toList.take error.offset).foldl (fun p b => p.advanceByte b.toNat) {}
   let stop := (src.data[error.offset]?.map (fun b => pos.advanceByte b.toNat)).getD pos
@@ -2007,7 +2017,7 @@ private def nextToken (fileId : ConcreteSpec.Core.FileId) (input : List Nat) (po
     | .ok (some (lexeme, decoded, rest)) => return (.byteLiteral (UInt8.ofNat decoded), lexeme, rest)
     | .ok none =>
       if let some (lexeme, rest) := label input then return (.label (scalarText lexeme.tail), lexeme, rest)
-      else throw (lexFailure fileId pos input .character)
+      else throw (unrecognizedToken fileId pos input)
 
 -- The budget is one step per input scalar. Every successful step consumes at least one.
 private def tokens (fileId : ConcreteSpec.Core.FileId) : Nat → List Nat → Position → Bool → List Piece → Except Refusal (List Piece)
@@ -2661,7 +2671,7 @@ private def previousNextToken (fileId : ConcreteSpec.Core.FileId) (budget : Opti
     | .ok (some (lexeme, _, rest)) => return (.fixed .byteLiteral, lexeme, rest)
     | .ok none =>
       if let some (lexeme, rest) := label input then return (.fixed .label, lexeme, rest)
-      else throw (lexFailure fileId pos input .character)
+      else throw (unrecognizedToken fileId pos input)
 
 private def previousTokens (budget : Option Nat) (fileId : ConcreteSpec.Core.FileId) : Nat → List Nat → Position → Bool → List Token → Except Refusal (List Token)
   | _, [], _, _, acc => .ok acc.reverse

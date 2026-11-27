@@ -494,7 +494,7 @@ if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" != 1 ]; then
   mkdir -p "$project_dir"
   printf 'fn main() -> u8 { return 42; }\n' >"$project_dir/answer.con"
   cli=(bash -c 'cd "$1" && shift && exec "$@"' _ "$project_dir" "$root/.lake/build/bin/concrete")
-  for manifest_case in schema malformed depth size encoding directory symlink; do
+  for manifest_case in schema malformed comment quote_after_key quote_value depth size encoding directory symlink; do
     project_file="$project_dir/Concrete.toml"
     case "$manifest_case" in
       schema)
@@ -502,6 +502,15 @@ if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" != 1 ]; then
         expected='Concrete.toml requires an approved manifest schema' ;;
       malformed)
         printf 'a = "open\n' >"$project_file"
+        expected='Concrete.toml is malformed' ;;
+      comment)
+        printf '[a.b.c.d.e.f.g.h.i.j.k.l.m.n.o.p]\n#ok\001' >"$project_file"
+        expected='Concrete.toml is malformed' ;;
+      quote_after_key)
+        printf 'a "oops' >"$project_file"
+        expected='Concrete.toml is malformed' ;;
+      quote_value)
+        printf 'a = "oops' >"$project_file"
         expected='Concrete.toml is malformed' ;;
       depth)
         printf '[a.b.c.d.e.f.g.h.i.j.k.l.m.n.o.p]\nx = true\n' >"$project_file"
@@ -523,6 +532,9 @@ if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" != 1 ]; then
     rule=
     case "$manifest_case" in
       malformed) span=9..10; rule=SyntaxAccepted ;;
+      comment) span=37..38; rule=SyntaxAccepted ;;
+      quote_after_key) span=2..3; rule=SyntaxAccepted ;;
+      quote_value) span=9..9; rule=SyntaxAccepted ;;
       depth) span=34..35; rule=DepthAccepted ;;
       size) span=65536..65537; rule=SizeAccepted ;;
       encoding) span=2..3; rule=EncodingAccepted ;;
@@ -530,7 +542,7 @@ if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" != 1 ]; then
     if [ -n "$rule" ]; then expected+=" [rule ConcreteSpec.Project.Manifest.$rule@1, Concrete.toml, bytes $span]"; fi
     case "$manifest_case" in
       directory|symlink) code=READ ;;
-      malformed) code=SYNTAX ;;
+      malformed|comment|quote_after_key|quote_value) code=SYNTAX ;;
       *) code=${manifest_case^^} ;;
     esac
     rc=0

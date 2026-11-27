@@ -21,8 +21,7 @@ private inductive Kind where
   | invalid
   | mark (c : Char)
   | bare (text : String)
-  | quoted (text : String) (multi : Bool)
-  deriving DecidableEq
+  | quoted (multi : Bool) (contents : Except ByteSpan String)
 
 private structure Token where
   kind : Kind
@@ -98,8 +97,8 @@ private def quoted (delim : Char) (multi : Bool) :
       throw ⟨pos, next⟩
     else quoted delim multi fuel next cs (c :: acc)
 
--- A lexical error ends the stream at the offending scalar. Earlier tokens
--- still enter the recognizer, so a later broken quote cannot hide a bad key.
+-- A quoted token starts at its delimiter. Its contents carry their own failure
+-- span, which matters only where the grammar accepts a quoted key or value.
 private def lex : Nat → Nat → List Char → List Token → List Token
   | _, _, [], acc => acc.reverse
   | 0, pos, cs, acc => (⟨.invalid, charSpan pos cs⟩ :: acc).reverse
@@ -119,8 +118,8 @@ private def lex : Nat → Nat → List Char → List Token → List Token
       let (start, body) := if multi && body.head? == some '\n' then (start + 1, body.drop 1)
         else if multi && body.take 2 == ['\r', '\n'] then (start + 2, body.drop 2) else (start, body)
       match quoted c multi (fuel + 1) start body [] with
-      | .error span => (⟨.invalid, span⟩ :: acc).reverse
-      | .ok (str, stop, rest) => lex fuel stop rest (⟨.quoted str multi, ⟨pos, stop⟩⟩ :: acc)
+      | .error span => (⟨.quoted multi (.error span), ⟨pos, next⟩⟩ :: acc).reverse
+      | .ok (str, stop, rest) => lex fuel stop rest (⟨.quoted multi (.ok str), ⟨pos, next⟩⟩ :: acc)
     else if punctuation c then lex fuel next cs (⟨.mark c, ⟨pos, next⟩⟩ :: acc)
     else if c.isWhitespace then (⟨.invalid, ⟨pos, next⟩⟩ :: acc).reverse
     else
@@ -137,9 +136,23 @@ where
       else if (c < ' ' && c != '\t') || c.toNat == 127 then .error ⟨pos, pos + c.utf8Size⟩
       else comment (pos + c.utf8Size) cs
 
+private def bareKeyChar (c : Char) : Bool :=
+  c.toNat < 128 && (c.isAlphanum || c == '_' || c == '-')
+
+-- Charge path depth only when a key segment actually starts. In particular,
+-- an invalid scalar in skipped comment text cannot open another segment.
+private def pathLimitError (tok : Token) : Error :=
+  match tok.kind with
+  | .quoted false _ => .depth tok.span
+  | .bare text =>
+    let first := text.front
+    let span := ⟨tok.span.start, tok.span.start + first.utf8Size⟩
+    if bareKeyChar first then .depth span else .malformed span
+  | _ => .malformed tok.span
+
 private def key (tok : Token) : Except Error String :=
   match tok.kind with
-  | .quoted value false => .ok value
+  | .quoted false contents => contents.mapError Error.malformed
   | .bare value =>
     match invalid tok.span.start value.toList with
     | none => .ok value
@@ -149,12 +162,12 @@ where
   invalid (offset : Nat) : List Char → Option ByteSpan
     | [] => none
     | c :: cs =>
-      if c.toNat < 128 && (c.isAlphanum || c == '_' || c == '-') then invalid (offset + 1) cs
+      if bareKeyChar c then invalid (offset + 1) cs
       else some ⟨offset, offset + c.utf8Size⟩
 
 private def path (eof : ByteSpan) : Nat → List Token → Except Error (List String × List Token)
-  | 0, tokens => .error (.depth (look eof tokens))
   | _, [] => .error (.malformed eof)
+  | 0, tok :: _ => .error (pathLimitError tok)
   | budget + 1, tok :: ⟨.mark '.', _⟩ :: rest => do
     let segment ← key tok
     let (suffix, rest) ← path eof budget rest
@@ -162,7 +175,7 @@ private def path (eof : ByteSpan) : Nat → List Token → Except Error (List St
   | _ + 1, tok :: rest => do return ([← key tok], rest)
 
 private def skipLines (tokens : List Token) : List Token :=
-  tokens.dropWhile (·.kind == .mark '\n')
+  tokens.dropWhile (fun tok => tok.kind matches .mark '\n')
 
 private def decimalInteger (text : String) : Bool :=
   let digits := match text.toList with
@@ -178,7 +191,7 @@ private def value (eof : ByteSpan) : Nat → Nat → List Token → Except Error
   | 0, _, tokens => .error (.malformed (look eof tokens))
   | fuel + 1, budget, tokens =>
     match tokens with
-    | ⟨.quoted _ _, _⟩ :: rest => .ok rest
+    | ⟨.quoted _ contents, _⟩ :: rest => contents.mapError Error.malformed *> .ok rest
     | ⟨.bare atom, span⟩ :: rest =>
       if atom == "true" || atom == "false" || decimalInteger atom then .ok rest
       else .error (.malformed span)
@@ -236,7 +249,8 @@ private def document (eof : ByteSpan) (limit : Nat) :
       let ⟨.mark ']', _⟩ :: tail := afterPath | throw (.malformed (look eof afterPath))
       if defs.explicitTables.contains segments || defs.dottedTables.contains segments ||
           defs.keys.any (·.isPrefixOf segments) then throw (.malformed (look eof rest))
-      if !tail.isEmpty && tail.head?.map Token.kind != some (.mark '\n') then throw (.malformed (look eof tail))
+      unless tail.isEmpty || (tail.head?.map Token.kind matches some (.mark '\n')) do
+        throw (.malformed (look eof tail))
       document eof limit fuel segments { defs with explicitTables := segments :: defs.explicitTables } tail
     | _ => do
       let (segments, afterPath) ← path eof (limit - header.length) tokens
@@ -247,7 +261,8 @@ private def document (eof : ByteSpan) (limit : Nat) :
             full.isPrefixOf table ||
               (header != table && header.isPrefixOf table && table.isPrefixOf full)) then throw (.malformed (look eof tokens))
       let tail ← value eof (fuel + 1) (limit - full.length) rest
-      if !tail.isEmpty && tail.head?.map Token.kind != some (.mark '\n') then throw (.malformed (look eof tail))
+      unless tail.isEmpty || (tail.head?.map Token.kind matches some (.mark '\n')) do
+        throw (.malformed (look eof tail))
       document eof limit fuel header
         { defs with keys := full :: defs.keys
                     dottedTables := dottedPrefixes header segments ++ defs.dottedTables } tail

@@ -128,8 +128,67 @@ where
       return (← inspect env origin domain) <|> (← inspectConstructor env origin body)
     | _ => return none
 
-private def check (env : Environment) (type : Expr) : Option (Name × Name) :=
+private def openModelBinder (env : Environment) (type : Expr) : Option (Name × Name) :=
   ((inspect env `endToEnd type).run {}).1
+
+-- Ties the audited field to the actual premise of the composition theorem.
+example {A R B : Type} (edge : Stage A R B) :
+    edge.Trusted = (∀ a b, edge.inputInvariant a → Concrete.Contracts.Graph edge.run a b →
+      edge.trust a b) := rfl
+
+example {A : Type} : (Pipeline.done (A := A)).Trusted = True := rfl
+
+example {A R B C : Type} (edge : Stage A R B) (rest : Pipeline B C) :
+    (Pipeline.next edge rest).Trusted = (edge.Trusted ∧ rest.Trusted) := rfl
+
+/-- The registered slice fixes the only permitted trust fields. The LLVM
+premise refers to this slice's language and lowering and this exact profile. -/
+private inductive AllowedTrust (slice : Slice) (profile : Profile) :
+    {A B : Type} → Concrete.Contracts.EvidenceKind → (A → B → Prop) → Prop
+  | direct {A B} : AllowedTrust slice profile .directProof (fun (_ : A) (_ : B) => True)
+  | validator {A B} : AllowedTrust slice profile .provedValidator (fun (_ : A) (_ : B) => True)
+  | llvm : AllowedTrust slice profile (.namedPremise "P_print")
+      (@P_print (sliceLanguage slice) (sliceLoweringLanguage slice) profile)
+
+private def permittedTrust (slice : Slice) (profile : Profile) {A B : Type} : Pipeline A B → Prop
+  | .done => True
+  | .next edge rest => AllowedTrust slice profile edge.kind edge.trust ∧ permittedTrust slice profile rest
+
+-- Closing this goal uses only constructor application and definitional equality.
+local macro "audit_trust" : tactic =>
+  `(tactic|
+    (repeat' first
+      | apply And.intro
+      | apply AllowedTrust.direct
+      | apply AllowedTrust.validator
+      | apply AllowedTrust.llvm
+      | exact True.intro) <;> done)
+
+example (slice : Slice) (profile : Profile) (passes : Passes slice profile) (unchecked : Bool) :
+    permittedTrust slice profile (Registry.pipeline passes unchecked) ∧
+    permittedTrust slice profile ((registry passes).lcbPipeline unchecked) := by
+  obtain ⟨backend, target, slots, bytes⟩ := profile
+  cases backend <;> cases unchecked <;> audit_trust
+
+-- Replacing the lexer's trust in a one-edge pipeline exercises the same
+-- obligation as the full pipeline. A definitionally wrapped True is allowed.
+private def lexerTrust (profile : Profile) (passes : Passes slice0 profile) (premise : Prop) :=
+  Pipeline.next {(registry passes).lexer with trust := fun _ _ => premise} .done
+
+private abbrev Decoder := ByteArray → Option UInt8
+
+example (profile : Profile) (passes : Passes slice0 profile) :
+    permittedTrust slice0 profile (lexerTrust profile passes (id True)) := by
+  let viaId := ¬ (id Exists) (fun (decode : Decoder) => decode ByteArray.empty ≠ none)
+  let viaLet := let witness := ∃ decode : Decoder, decode ByteArray.empty ≠ none; ¬ witness
+  let viaPair := (True, ¬ ∃ decode : Decoder, decode ByteArray.empty ≠ none).2
+  have : viaId = viaLet := rfl
+  have : viaId = viaPair := rfl
+  have : ¬ viaId := fun h => h ⟨fun _ => some 0, by decide⟩
+  fail_if_success have : permittedTrust slice0 profile (lexerTrust profile passes viaId) := by audit_trust
+  fail_if_success have : permittedTrust slice0 profile (lexerTrust profile passes viaLet) := by audit_trust
+  fail_if_success have : permittedTrust slice0 profile (lexerTrust profile passes viaPair) := by audit_trust
+  audit_trust
 
 -- This mutation hides a caller-selected model inside an unfolded relation.
 private abbrev Model := CoreLanguage
@@ -206,6 +265,14 @@ example {slice : Slice} {profile : Profile} (passes : Passes slice profile) (unc
     (Registry.pipeline passes unchecked).Corresponds input output :=
   @Pipeline.endToEnd profile slice passes unchecked input output validated trusted ready ran
 
+example {slice : Slice} {profile : Profile} (passes : Passes slice profile) (unchecked : Bool)
+    {input : Source} {output : LCBInput profile}
+    (validated : ((registry passes).lcbPipeline unchecked).Validated)
+    (ready : ((registry passes).lcbPipeline unchecked).Ready input)
+    (ran : ((registry passes).lcbPipeline unchecked).run input = .ok output) :
+    ((registry passes).lcbPipeline unchecked).Corresponds input output :=
+  @registeredLCBEndToEnd profile slice passes unchecked input output validated ready ran
+
 run_cmd do
   let env ← getEnv
   -- A model packaged inside the pass argument would still be caller-selected.
@@ -218,11 +285,11 @@ run_cmd do
   for name in [``Pipeline.endToEnd, ``registeredLCBEndToEnd] do
     let some theoremInfo := env.find? name
       | throwError "Missing registered end-to-end theorem {name}"
-    if let some (origin, binder) := check env theoremInfo.type then
+    if let some (origin, binder) := openModelBinder env theoremInfo.type then
       throwError "End-to-end statement has an open semantic binder {binder} in {origin}"
   let some soundInfo := env.find? ``Stage.Sound
     | throwError "Missing registered stage soundness"
-  if let some (origin, binder) := check env soundInfo.type <|> check env (.const ``Stage.Sound []) then
+  if let some (origin, binder) := openModelBinder env soundInfo.type <|> openModelBinder env (.const ``Stage.Sound []) then
     throwError "Stage soundness has an open semantic binder {binder} in {origin}"
   -- Each wrapper extracts the original quantified type inside Nonempty.
   -- Check the actual binder so unrelated findings cannot pass the controls.
@@ -234,21 +301,21 @@ run_cmd do
       (``plantedModelPair, `model),
       (``plantedModelOption, `model),
       (``plantedModelList, `model)] do
-    unless check env (.const name []) == some (privateToUserName name, binder) do
+    unless openModelBinder env (.const name []) == some (privateToUserName name, binder) do
       throwError "End-to-end audit accepted a caller-selected binder in {name}"
-  if (check env (.const ``closedCodec [])).isSome then
+  if (openModelBinder env (.const ``closedCodec [])).isSome then
     throwError "End-to-end audit rejected a fixed executable codec"
-  unless (check env (.const ``plantedStatement []) == some (`EndToEndAudit.plantedStatement, `model)) do
+  unless (openModelBinder env (.const ``plantedStatement []) == some (`EndToEndAudit.plantedStatement, `model)) do
     throwError "End-to-end audit accepted a planted semantic model parameter"
-  unless (check env (.const ``plantedRelation []) == some (`EndToEndAudit.plantedRelation, `meaning)) do
+  unless (openModelBinder env (.const ``plantedRelation []) == some (`EndToEndAudit.plantedRelation, `meaning)) do
     throwError "End-to-end audit accepted a planted relation parameter"
-  unless (check env (.const ``plantedCodec []) == some (`EndToEndAudit.plantedCodec, `decode)) do
+  unless (openModelBinder env (.const ``plantedCodec []) == some (`EndToEndAudit.plantedCodec, `decode)) do
     throwError "End-to-end audit accepted a planted codec parameter"
-  unless (check env (.const ``plantedWrapped []) == some (`EndToEndAudit.plantedWrapped, `wrapped)) do
+  unless (openModelBinder env (.const ``plantedWrapped []) == some (`EndToEndAudit.plantedWrapped, `wrapped)) do
     throwError "End-to-end audit accepted a planted wrapped decoder"
-  unless (check env (.const ``PlantedInductive []) == some (`EndToEndAudit.PlantedInductive, `decode)) do
+  unless (openModelBinder env (.const ``PlantedInductive []) == some (`EndToEndAudit.PlantedInductive, `decode)) do
     throwError "End-to-end audit accepted a planted decoder under an inductive constructor"
-  unless (check env (.const ``PlantedConstructor []) == some (`EndToEndAudit.PlantedConstructor, `decode)) do
+  unless (openModelBinder env (.const ``PlantedConstructor []) == some (`EndToEndAudit.PlantedConstructor, `decode)) do
     throwError "End-to-end audit accepted a planted decoder as an inductive constructor field"
   unless badPassField env ``PlantedPassBundle == some `run do
     throwError "End-to-end audit accepted a planted decoder in the executable pass bundle"

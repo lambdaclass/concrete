@@ -84,6 +84,20 @@ private def requireRefusal (clause : Clause) (bad : FunctionFacts) (source : Evi
     (decide (coverage.function = function ∧ coverage.requirements = predictable []))
   requireRefusal .stackBound actual .function .unknown
 
+open Concrete.Stages in
+example :
+    let input := Input.load "main.con" "fn main() -> u8 { return '!x'; }".toUTF8
+    let cause := ConcreteSpec.StageInterface.RefusalCause.lexical (.byte .unterminated) ⟨27, 28, 1, 28, ⟨0⟩⟩
+    input.bind compile = .error (.source cause) ∧ input.bind unchecked = .error (.source cause) := by
+  with_unfolding_all exact ⟨rfl, rfl⟩
+
+-- A comment cannot add a seventeenth path segment.
+example :
+    let text := "[a.b.c.d.e.f.g.h.i.j.k.l.m.n.o.p]\n#ok" ++ String.singleton (Char.ofNat 1)
+    Manifest.DepthAccepted text ∧ ¬ Manifest.SyntaxAccepted text ∧
+      Project.parseManifest text = .error (.invalid (.malformed ⟨37, 38⟩)) := by
+  cbv <;> decide
+
 -- A missing token binds EOF. A wrong token binds its own byte range,
 -- including after multibyte text or before a later unterminated quote.
 example : Project.parseManifest "\"é\" = [" = .error (.invalid (.malformed ⟨8, 8⟩)) ∧

@@ -16,6 +16,7 @@ cases = [
     ("main.con", "return 1i\0", "Slice0Rules.Lexed@2", "file 0", "27..28", "invalid source"),
     ("main.con", "return 42u8;", "Slice0Rules.ExpectedTypeLiteral@1", "file 0", "25..29", ""),
     ("main.con", "return 0x;", "Slice0Rules.Lexed@2", "file 0", "27..28", "missing digits"),
+    ("main.con", "return '!x';", "Slice0Rules.Lexed@2", "file 0", "27..28", "unterminated byte literal"),
     ("main.con", "return 'é';", "Slice0Rules.Lexed@2", "file 0", "26..28", "forbidden byte"),
     ("main.con", 'return "é\u2028";', "Slice0Rules.Lexed@2", "file 0", "28..31", "forbidden string"),
     ("main.con", r'return "é\n\q";', "Slice0Rules.Lexed@2", "file 0", "31..32", "invalid string escape"),
