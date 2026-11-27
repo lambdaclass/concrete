@@ -25,6 +25,9 @@ diff -u "$work/legal-binder-trap.con" "$fixture_dir/slice0/legal_binder_trap.con
 # Lean also needs the file as the argument to --run.
 # Emit-only runs validate fixture expectations without building native executables.
 if [[ ${CONCRETE_TEST_EMIT_ONLY:-0} != 1 ]]; then
+  # Exercise the standalone certificate before the census builds the full spec.
+  build grammar-certificate "$work/grammar-certificate.log" bounded 240 \
+    lake lean scripts/spec/grammar_certificate.lean -- --run scripts/spec/grammar_certificate.lean
   build rule-registry "$work/rule-registry.log" bounded 1800 \
     lake lean scripts/checks/compiler/rule_registry.lean
   echo "ok   slice-0 rule references and layout controls"
@@ -52,8 +55,6 @@ if [[ ${CONCRETE_TEST_EMIT_ONLY:-0} != 1 ]]; then
   bash scripts/checks/compiler/f31_census.sh
   # The kernel checks the full cross-stage controls in this compilation unit.
   # At two Lean threads this can exceed the standard build budget.
-  build grammar-certificate "$work/grammar-certificate.log" bounded 240 \
-    lake env lean --run scripts/spec/grammar_certificate.lean
   build stage-interface-controls "$work/stage-interface-controls.log" bounded 360 \
     lake lean scripts/checks/compiler/stage_interfaces.lean -- -DwarningAsError=true -DautoImplicit=false
   build stage-end-to-end-audit "$work/stage-end-to-end-audit.log" bounded 60 \
@@ -98,6 +99,9 @@ if [[ ${CONCRETE_TEST_EMIT_ONLY:-0} != 1 ]]; then
   build llvm-mutation-controls "$work/llvm-mutation-controls.log" bounded 120 \
     lake env python3 -B scripts/checks/compiler/llvm_mutation_controls.py
   cat "$work/llvm-mutation-controls.log"
+  build memory-exhaustion-mutation "$work/memory-exhaustion.log" bounded 300 \
+    python3 -B scripts/checks/compiler/memory_exhaustion_mutation.py
+  cat "$work/memory-exhaustion.log"
 fi
 
 fail=0

@@ -7,6 +7,13 @@ open Concrete.LL1
 private def catalog : RawGrammar :=
   ⟨Nonterminal.count, ConcreteSpec.Surface0.Terminal.count, numberedGrammar productionIds⟩
 
+-- The real catalog must fit by kernel reduction of the input dimensions alone.
+-- The quantified control also rules out hidden tests on the generated program.
+example : representable catalog := by decide +kernel
+example (g : RawGrammar) (shape : g.valid) (words : g.layout.scratch+1 < UInt64.size)
+    (indices : g.cfg.prods.length < UInt64.size) : representable g := by
+  simp only [representable, shape, words, indices, decide_true, Bool.and_self]
+
 /-- Small independently calculated proposals exercise the kernel's reduction of
 the same word machine used by the executable controls. Require the right length
 so an accidental change to the layout cannot turn a negative control green. -/
@@ -70,9 +77,15 @@ def main (args : List String) : IO Unit := do
       ("FOLLOW seed", l.follow 0 0, 0)] do
     unless addr < mem.size && mem[addr]! != word && !v.accepts (mem.set! addr word) g.budget do
       throw (IO.userError s!"{label} mutation escaped")
-  unless !v.accepts mem.pop g.budget && (decodeCells l mem.pop).isNone &&
-      v.accepts (mem.set! l.scratch 0xffffffffffffffff) g.budget do
-    throw (IO.userError "dimension or uninitialized scratch control failed")
+  let rankIndex : Fin l.n := ⟨1, by decide⟩
+  unless decodeRank l mem rankIndex == some mem[l.rank 1]!.toNat do
+    throw (IO.userError "decoder lost the accepted nonterminal rank")
+  for wrongSize in [mem.pop, mem.push 0] do
+    unless !v.accepts wrongSize g.budget && (decodeCells l wrongSize).isNone &&
+        (decodeRank l wrongSize rankIndex).isNone do
+      throw (IO.userError "wrong certificate dimensions accepted")
+  unless v.accepts (mem.set! l.scratch 0xffffffffffffffff) g.budget do
+    throw (IO.userError "initial scratch word changed acceptance")
   -- This FOLLOW bit is closed under the recursive occurrence and yields a
   -- conflict-free extra epsilon cell. Its only possible justification is itself.
   let recursive : RawGrammar := ⟨1, 2, 0, [(0,[.t 0,.n 0]), (0,[])]⟩
@@ -102,5 +115,5 @@ def main (args : List String) : IO Unit := do
   for i in [1,2] do
     if duplicate.accepts (m.set! 0 i) dup.budget then throw (IO.userError "duplicate row escaped")
   let invalid := {g with cfg.start := g.nonterminals}
-  unless !(compileTableVerifier invalid).accepts #[] invalid.budget do
+  unless !(compileTableVerifier invalid).accepts mem invalid.budget do
     throw (IO.userError "invalid nonterminal address escaped")

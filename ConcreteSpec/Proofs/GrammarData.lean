@@ -32,7 +32,7 @@ theorem integerSlices_exact (r : ConcreteSpec.Surface0.Radix) :
 
 theorem witness_at_lookahead (p : ProductionId) :
     ∀ t, p.row.witness = some t → p.row.rhs.head? = some (.t t) := by
-  cases p <;> simp [ProductionId.row]
+  cases p <;> simp [ProductionId.row, primitiveReturn]
 
 theorem recognition_ll1 : Concrete.LL1.ll1 (erase productionIds) = true := by decide
 

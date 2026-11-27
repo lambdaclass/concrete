@@ -322,15 +322,9 @@ structure Compiled where
   words : Nat
   program : Array VerifyInstruction
 
-/-- Size limits are on the actual emitted code and all addressed words. Invalid
-dimensions are rejected before allocating fact or occurrence arrays. -/
+/-- Representability depends only on the input grammar and its word-address layout. -/
 def representable (g : RawGrammar) : Bool :=
-  g.valid && g.layout.scratch + 1 ≤ g.budget && g.layout.scratch + 1 < UInt64.size &&
-  g.cfg.prods.length < UInt64.size &&
-  (grammarRules g).all (fun r => r.head.valid g.layout && r.premises.all (Fact.valid g.layout)) &&
-  clausesInBounds g &&
-    (let ts := checks g
-     totalWidth ts.toList + 2 ≤ g.budget && ts.all (Test.inBounds g.layout.scratch))
+  g.valid && g.layout.scratch + 1 < UInt64.size && g.cfg.prods.length < UInt64.size
 
 def compileTableVerifier (g : RawGrammar) : Compiled :=
   if representable g then ⟨g.layout.scratch + 1, compileTests g.layout.scratch (checks g)⟩

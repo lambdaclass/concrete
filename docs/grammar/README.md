@@ -9,7 +9,7 @@ due before the B1 parser, the slice 2 delta before the lexer and grammar lock, a
 each later delta before its parser. [R-0622](../../ROADMAP.md#r-0622) ·
 [R-0728](../../ROADMAP.md#r-0728)
 
-Regenerate sections 0 and 1 with `lake env lean --run docs/grammar/Check.lean --write` inside the development shell. The normal checker compares them byte for byte. [Lean catalog](../../ConcreteSpec/Spec/GrammarData.lean)
+Regenerate sections 0 and 1 with `lake lean docs/grammar/Check.lean -- --run docs/grammar/Check.lean --write` inside the development shell. The normal checker compares them byte for byte. [Lean catalog](../../ConcreteSpec/Spec/GrammarData.lean)
 
 The [closed token ballot](TOKEN-BALLOT.md) lists the exact spellings, first
 consumers and reservation policy.
@@ -35,18 +35,18 @@ The table gives the recorded Lean rules for slices 0 and 1 and the authority for
 
 ## Reproduce the checks
 
-From the repository root, build the spec lexer and run the standalone
-checker. It prints the completed projections and stops on a conflict, undefined
+From the repository root, run the standalone checker with its imports. It prints the completed projections and stops on a conflict, undefined
 production, unproductive nonterminal or failed example.
 
 ```sh
-LEAN_NUM_THREADS=2 nix develop -c bash -c '
-  lake build +ConcreteSpec.Spec.Surface0 &&
-  lake env lean --run docs/grammar/Check.lean
-'
+nix develop -c env LEAN_NUM_THREADS=2 lake lean docs/grammar/Check.lean -- --run docs/grammar/Check.lean
 ```
 
-For each cumulative slice, the checker checks every written rule for definedness and productivity, then builds the prediction table from the rules reachable from `Program`. It reports the reachable production count and replays each accept and refuse example from its first slice onward. An independent list checks the terminal that the spec lexer returns for each decided word. The recognizer projects that emitted terminal to its grammar column. Reservations apply even before the corresponding construct is admitted. The checker parses a let annotation for each of the eleven primitive names in every projection, using the first slices from the ballot as expectations. Literal controls cover digit separators, lowercase hex, suffix spellings, byte and string escapes, and forbidden raw scalars including NUL and U+FEFF.
+For each cumulative slice, the checker checks every written rule for definedness and productivity, then builds the prediction table from the rules reachable from `Program`. It reports the reachable production count and replays each accept and refuse example from its first slice onward. An independent list checks the terminal that the spec lexer returns for each decided word. The recognizer projects that emitted terminal to its grammar column. Reservations apply even before the corresponding construct is admitted.
+
+The checker parses each primitive in both a local annotation and a function result. Local types follow the ballot’s first consumer. The approved early signature returns `u8`. Section 5 of the compatibility draft opens the general return position, subject to each type’s own first slice. Owner approval of the Slice 5 production delta remains pending. The Slice 4 termination permission consumes a quoted reason, and Slice 11 introduces strings as expressions. [Keyword ballot](TOKEN-BALLOT.md#reservation-at-the-pre-slice-2-lock) · [Grammar approval](../decisions.md#decided-2026-11-25-freeze-and-grammar) · [Termination permission](../decisions.md#decided-project-no-hidden-traps)
+
+Literal checks exercise both sides of the Slice 2 radix boundary, including suffixed decimals. They also cover digit separators, lowercase hex, suffix spellings, byte and string escapes, and forbidden raw scalars including NUL and U+FEFF.
 
 The slice-2 type checker refuses a literal suffix whenever the literal's position already has a resolved integer type. R-0722 records the required typing cases. The draft checks OD48 directly on counted loops with two literal bounds. Exactly one bound must carry a suffix, and grouping or unary minus preserves a literal bound. [R-0722 typing controls](../../ROADMAP.md#slice-2-literal-suffixes) · [Counted bounds](../decisions.md#od48)
 

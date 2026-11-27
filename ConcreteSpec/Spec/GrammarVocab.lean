@@ -47,14 +47,16 @@ def terminalFirstSlice : Terminal → Nat
   | .i8 | .i16 | .i32 | .i64 | .u16 | .u32 | .u64 | .type_
   | .minus | .star | .slash | .percent | .byteLiteral => 2
   | .if_ | .else_ | .mut_ | .true_ | .false_ | .bool_ | .Unit_ => 3
-  | .exact_ | .while_ | .from_ | .until | .for_ | .break_ | .continue_ | .label => 4
+  -- The loop permission requires a quoted reason (decisions.md, no-hidden-traps,
+  -- item 3). Slice 11 is the separate first use in a value expression.
+  | .exact_ | .while_ | .from_ | .until | .for_ | .break_ | .continue_ | .label | .stringLiteral => 4
   | .Copy | .enum_ | .match_ => 6
   | .borrow_ => 7
   | .pub_ | .const_ | .mod_ | .import_ => 8
   | .trait_ | .impl_ | .defer_ | .Self | .cap | .Fs | .Network | .Env
   | .Time | .Alloc | .Device | .Console | .Process | .Unsafe | .Entropy => 9
   | .spec_ | .ghost | .assert_ | .assume_ | .by_ => 10
-  | .with_ | .char_ | .stringLiteral => 11
+  | .with_ | .char_ => 11
   | .trusted_ => 16
   | .extern_ | .kept => 17
 

@@ -140,7 +140,7 @@ inductive ProductionId where
 
 /-- Decision references are shared by rows with the same production authority. -/
 inductive Authority where
-  | slice0 | slice1 | ballot | numeric | conditional | functions | strings
+  | slice0 | slice1 | ballot | numeric | arithmetic | conditional | functions | strings
   deriving DecidableEq, Repr
 
 def Authority.reference : Authority → String
@@ -148,8 +148,11 @@ def Authority.reference : Authority → String
   | .slice1 => "docs/grammar/README.md#production-provenance-and-remaining-approvals"
   | .ballot => "docs/decisions.md#decided-2026-11-27-token-ballot"
   | .numeric => "docs/grammar/TOKEN-BALLOT.md#slice-2-literals"
+  -- The ballot records the arithmetic use and the Slice 2 row of ROADMAP.md#vertical-slices
+  -- lists the binary operators. The precise precedence productions await slice approval.
+  | .arithmetic => "docs/grammar/TOKEN-BALLOT.md#other-punctuation-and-boundaries"
   | .conditional => "docs/grammar/slices-0-11.grammar [3]"
-  | .functions => "docs/grammar/slices-0-11.grammar [5]"
+  | .functions => "docs/grammar/slices-0-11.grammar [5] (compatibility draft)"
   | .strings => "docs/grammar/slices-0-11.grammar [11]"
 
 structure ProductionRow where
@@ -161,21 +164,27 @@ structure ProductionRow where
   its requirement from the containing form and has no separate diagnostic. -/
   witness : Option Terminal
 
+/-- The approved early signature returns u8. Section 5 of the compatibility
+draft opens the general type position. Q1 supplies the keyword's own first
+consumer. The exact Slice 5 production delta still awaits owner approval. -/
+def primitiveReturn (t : Terminal) : ProductionRow :=
+  ⟨.returnType, [.t t], max 5 (terminalFirstSlice t), .functions, some t⟩
+
 def ProductionId.row : ProductionId → ProductionRow
   | .program => ⟨.program, [.n .structs, .t .fn, .t .ident, .t .lparen, .t .rparen, .t .arrow, .n .returnType, .t .lbrace, .n .body, .t .rbrace], 0, .slice0, none⟩
   | .emptyStruct => ⟨.structs, [.t .struct_, .t .ident, .t .lbrace, .t .rbrace, .n .structs], 1, .slice1, some .struct_⟩
   | .endDecls => ⟨.structs, [], 0, .slice0, none⟩
-  | .retU8 => ⟨.returnType, [.t .u8], terminalFirstSlice .u8, .ballot, none⟩
-  | .retI8 => ⟨.returnType, [.t .i8], terminalFirstSlice .i8, .ballot, some .i8⟩
-  | .retI16 => ⟨.returnType, [.t .i16], terminalFirstSlice .i16, .ballot, some .i16⟩
-  | .retI32 => ⟨.returnType, [.t .i32], terminalFirstSlice .i32, .ballot, some .i32⟩
-  | .retI64 => ⟨.returnType, [.t .i64], terminalFirstSlice .i64, .ballot, some .i64⟩
-  | .retU16 => ⟨.returnType, [.t .u16], terminalFirstSlice .u16, .ballot, some .u16⟩
-  | .retU32 => ⟨.returnType, [.t .u32], terminalFirstSlice .u32, .ballot, some .u32⟩
-  | .retU64 => ⟨.returnType, [.t .u64], terminalFirstSlice .u64, .ballot, some .u64⟩
-  | .retBool => ⟨.returnType, [.t .bool_], terminalFirstSlice .bool_, .ballot, some .bool_⟩
-  | .retUnit => ⟨.returnType, [.t .Unit_], terminalFirstSlice .Unit_, .ballot, some .Unit_⟩
-  | .retChar => ⟨.returnType, [.t .char_], terminalFirstSlice .char_, .ballot, some .char_⟩
+  | .retU8 => ⟨.returnType, [.t .u8], 0, .slice0, none⟩
+  | .retI8 => primitiveReturn .i8
+  | .retI16 => primitiveReturn .i16
+  | .retI32 => primitiveReturn .i32
+  | .retI64 => primitiveReturn .i64
+  | .retU16 => primitiveReturn .u16
+  | .retU32 => primitiveReturn .u32
+  | .retU64 => primitiveReturn .u64
+  | .retBool => primitiveReturn .bool_
+  | .retUnit => primitiveReturn .Unit_
+  | .retChar => primitiveReturn .char_
   | .retNamed => ⟨.returnType, [.t .ident], 5, .functions, some .ident⟩
   | .localU8 => ⟨.localType, [.t .u8], terminalFirstSlice .u8, .ballot, none⟩
   | .localI8 => ⟨.localType, [.t .i8], terminalFirstSlice .i8, .ballot, some .i8⟩
@@ -206,12 +215,12 @@ def ProductionId.row : ProductionId → ProductionRow
   | .elseIf => ⟨.elseBody, [.n .conditional], 3, .conditional, none⟩
   | .expr => ⟨.expr, [.n .product, .n .sumTail], 0, .slice0, none⟩
   | .plus => ⟨.sumTail, [.t .plus, .n .product, .n .sumTail], 0, .slice0, none⟩
-  | .minus => ⟨.sumTail, [.t .minus, .n .product, .n .sumTail], 2, .numeric, some .minus⟩
+  | .minus => ⟨.sumTail, [.t .minus, .n .product, .n .sumTail], 2, .arithmetic, some .minus⟩
   | .endSum => ⟨.sumTail, [], 0, .slice0, none⟩
   | .product => ⟨.product, [.n .atom, .n .productTail], 0, .slice0, none⟩
-  | .times => ⟨.productTail, [.t .star, .n .atom, .n .productTail], 2, .numeric, some .star⟩
-  | .divide => ⟨.productTail, [.t .slash, .n .atom, .n .productTail], 2, .numeric, some .slash⟩
-  | .remainder => ⟨.productTail, [.t .percent, .n .atom, .n .productTail], 2, .numeric, some .percent⟩
+  | .times => ⟨.productTail, [.t .star, .n .atom, .n .productTail], 2, .arithmetic, some .star⟩
+  | .divide => ⟨.productTail, [.t .slash, .n .atom, .n .productTail], 2, .arithmetic, some .slash⟩
+  | .remainder => ⟨.productTail, [.t .percent, .n .atom, .n .productTail], 2, .arithmetic, some .percent⟩
   | .endProduct => ⟨.productTail, [], 0, .slice0, none⟩
   | .integer => ⟨.atom, [.t .integer], 0, .slice0, none⟩
   | .name => ⟨.atom, [.t .ident, .n .nameTail], 0, .slice0, none⟩
@@ -223,12 +232,12 @@ def ProductionId.row : ProductionId → ProductionRow
   | .stringLit => ⟨.atom, [.t .stringLiteral], 11, .strings, some .stringLiteral⟩
   | .headExpr => ⟨.headExpr, [.n .headProduct, .n .headSumTail], 3, .conditional, none⟩
   | .headPlus => ⟨.headSumTail, [.t .plus, .n .headProduct, .n .headSumTail], 3, .conditional, none⟩
-  | .headMinus => ⟨.headSumTail, [.t .minus, .n .headProduct, .n .headSumTail], 3, .numeric, some .minus⟩
+  | .headMinus => ⟨.headSumTail, [.t .minus, .n .headProduct, .n .headSumTail], 3, .arithmetic, some .minus⟩
   | .headEndSum => ⟨.headSumTail, [], 3, .conditional, none⟩
   | .headProduct => ⟨.headProduct, [.n .headAtom, .n .headProductTail], 3, .conditional, none⟩
-  | .headTimes => ⟨.headProductTail, [.t .star, .n .headAtom, .n .headProductTail], 3, .numeric, some .star⟩
-  | .headDivide => ⟨.headProductTail, [.t .slash, .n .headAtom, .n .headProductTail], 3, .numeric, some .slash⟩
-  | .headRemainder => ⟨.headProductTail, [.t .percent, .n .headAtom, .n .headProductTail], 3, .numeric, some .percent⟩
+  | .headTimes => ⟨.headProductTail, [.t .star, .n .headAtom, .n .headProductTail], 3, .arithmetic, some .star⟩
+  | .headDivide => ⟨.headProductTail, [.t .slash, .n .headAtom, .n .headProductTail], 3, .arithmetic, some .slash⟩
+  | .headRemainder => ⟨.headProductTail, [.t .percent, .n .headAtom, .n .headProductTail], 3, .arithmetic, some .percent⟩
   | .headEndProduct => ⟨.headProductTail, [], 3, .conditional, none⟩
   | .headInteger => ⟨.headAtom, [.t .integer], 3, .conditional, none⟩
   | .headName => ⟨.headAtom, [.t .ident], 3, .conditional, none⟩

@@ -1,3 +1,4 @@
+import ConcreteSpec.Proofs.TableVerifierBounds
 import ConcreteSpec.Spec.LL1
 import ConcreteSpec.Spec.TableVerifier
 import ConcreteSpec.StageGrammar
@@ -235,8 +236,7 @@ theorem compileTableVerifier_spaceBound (g : RawGrammar) :
   unfold compileTableVerifier
   split
   · rename_i h
-    simp only [representable, Bool.and_eq_true, decide_eq_true_eq] at h
-    exact h.1.1.1.1.1.2
+    exact scratch_budget (valid_of_representable h)
   · exact Nat.zero_le _
 
 theorem compileTableVerifier_instructionBound (g : RawGrammar) :
@@ -244,7 +244,7 @@ theorem compileTableVerifier_instructionBound (g : RawGrammar) :
   unfold compileTableVerifier
   split
   · rename_i h
-    simp only [representable, Bool.and_eq_true, decide_eq_true_eq] at h
+    have width := checks_width_budget (valid_of_representable h)
     have len := congrArg List.length (emit_eq g.layout.scratch (totalWidth (checks g).toList + 1)
       #[] (checks g).toList)
     simpa [compileTests, block_length, Nat.add_comm] using
@@ -260,16 +260,16 @@ theorem compileTableVerifier_accepts_iff (g : RawGrammar) (mem : Array UInt64) :
       mem.size = g.layout.scratch + 1 ∧
       ∀ t ∈ (checks g).toList, t.eval (fun i => mem[i]!) = true := by
   by_cases h : representable g = true
-  · have facts := h
-    simp only [representable, Bool.and_eq_true, decide_eq_true_eq] at facts
+  · have bounds := checks_inBounds (valid_of_representable h)
+    have width := checks_width_budget (valid_of_representable h)
     simp only [compileTableVerifier, h, ↓reduceIte, Compiled.accepts, Bool.and_eq_true,
       beq_iff_eq, true_and]
     constructor
     · rintro ⟨size, accepted⟩
-      rw [compileTests_run _ _ _ _ facts.2.2 (by omega) (by have := facts.2.1; omega)] at accepted
+      rw [compileTests_run _ _ _ _ bounds (by omega) (by omega)] at accepted
       exact ⟨size, List.all_eq_true.mp (Option.some.inj accepted)⟩
     · rintro ⟨size, valid⟩
-      rw [compileTests_run _ _ _ _ facts.2.2 (by omega) (by have := facts.2.1; omega)]
+      rw [compileTests_run _ _ _ _ bounds (by omega) (by omega)]
       exact ⟨size, congrArg some (List.all_eq_true.mpr valid)⟩
   · simp only [compileTableVerifier, h, Compiled.accepts]
     cases budget : g.budget <;> simp [verifyRun, VerifyState.step]
@@ -278,10 +278,10 @@ theorem compileTableVerifier_completes (g : RawGrammar) (mem : Array UInt64)
     (shape : mem.size = (compileTableVerifier g).words) :
     (verifyRun (compileTableVerifier g).program ⟨0,mem⟩ g.budget).2.isSome := by
   by_cases h : representable g = true
-  · have facts := h
-    simp only [representable, Bool.and_eq_true, decide_eq_true_eq] at facts
+  · have bounds := checks_inBounds (valid_of_representable h)
+    have width := checks_width_budget (valid_of_representable h)
     simp only [compileTableVerifier, h, ↓reduceIte] at shape ⊢
-    rw [compileTests_run _ _ _ _ facts.2.2 (by omega) (by have := facts.2.1; omega)]
+    rw [compileTests_run _ _ _ _ bounds (by omega) (by omega)]
     rfl
   · simp only [compileTableVerifier, h]
     cases hb : g.budget with
@@ -292,10 +292,10 @@ theorem accepted_work_covers_grammar {g : RawGrammar} {mem : Array UInt64}
     (accepted : (compileTableVerifier g).accepts mem g.budget = true) :
     g.positions ≤ (verifyRun (compileTableVerifier g).program ⟨0,mem⟩ g.budget).1 := by
   obtain ⟨rep,shape,all⟩ := (compileTableVerifier_accepts_iff ..).1 accepted
-  have bounds := rep
-  simp only [representable, Bool.and_eq_true, decide_eq_true_eq] at bounds
-  have work := (compileTests_measured (checks g) g.layout.scratch mem g.budget bounds.2.2
-    (by omega) (by have := bounds.2.1; omega)).2 (List.all_eq_true.mpr all)
+  have bounds := checks_inBounds (valid_of_representable rep)
+  have width := checks_width_budget (valid_of_representable rep)
+  have work := (compileTests_measured (checks g) g.layout.scratch mem g.budget bounds
+    (by omega) (by omega)).2 (List.all_eq_true.mpr all)
   simp only [compileTableVerifier, rep, ↓reduceIte]
   apply Nat.le_trans _ work
   simp [checks, factChecks, Layout.factAddresses, Layout.scratch, Layout.suffixFirst,
@@ -316,26 +316,6 @@ theorem decodeCells_dimensions (l : Layout) (mem : Array UInt64) {cells : Array 
     simp [Array.size_extract, Nat.min_eq_left (by omega : l.n*l.c ≤ mem.size)]
   · simp [decodeCells, hs, guard] at h
     contradiction
-
-private theorem fold_group_mem {α : Type} (key : α → Nat) (items : List α)
-    (bins : Array (List α)) (i : Nat) (hi : i < bins.size) (x : α) :
-    x ∈ (items.foldl (fun acc y => acc.modify (key y) (y :: ·)) bins)[i]! ↔
-      x ∈ bins[i]! ∨ x ∈ items ∧ key x = i := by
-  induction items generalizing bins with
-  | nil => simp
-  | cons y ys ih =>
-    simp only [List.foldl_cons]
-    rw [ih _ (by simpa)]
-    by_cases h : key y = i
-    · simp [h, hi, Array.getElem_modify]
-      grind
-    · simp [h, hi, Array.getElem_modify]
-      grind
-
-private theorem group_mem {α : Type} (key : α → Nat) (size : Nat) (items : List α)
-    (i : Nat) (hi : i < size) (x : α) :
-    x ∈ (groupByAddress key size items)[i]! ↔ x ∈ items ∧ key x = i := by
-  simpa [groupByAddress, hi] using fold_group_mem key items (Array.replicate size []) i (by simpa) x
 
 private theorem eval_all (read : Nat → UInt64) (ts : List Test) :
     (Test.all ts).eval read = true ↔ ∀ t ∈ ts, t.eval read = true := by
@@ -438,11 +418,7 @@ theorem accepted_facts_exact (g : RawGrammar) (mem : Array UInt64)
     (a : Nat) (fact : g.layout.isFact a) :
     0 < mem[a]!.toNat ↔ Provable (grammarClauses g).toList a := by
   obtain ⟨h,_,valid⟩ := (compileTableVerifier_accepts_iff ..).1 accepted
-  simp only [representable, Bool.and_eq_true] at h
-  have wf := h.1.2
-  unfold clausesInBounds at wf
-  rw [← Array.all_toList] at wf
-  simp only [List.all_eq_true, Bool.and_eq_true] at wf
+  have wf := grammarClauses_valid (valid_of_representable h)
   have model := (factChecks_iff g.layout (grammarClauses g) (fun i => mem[i]!)
     wf).1 (fun t ht => valid t (by simp [checks, ht]))
   simpa [fact] using rankedFacts_exact model.1 model.2 a
@@ -499,12 +475,7 @@ theorem compileTableVerifier_correct (g : RawGrammar) (mem : Array UInt64) :
   by_cases h : representable g = true
   · simp only [h, true_and, and_congr_right_iff]
     intro _
-    have facts := h
-    simp only [representable, Bool.and_eq_true] at facts
-    have wf := facts.1.2
-    unfold clausesInBounds at wf
-    rw [← Array.all_toList] at wf
-    simp only [List.all_eq_true, Bool.and_eq_true] at wf
+    have wf := grammarClauses_valid (valid_of_representable h)
     simp only [checks, predictionChecks, Array.toList_append,
       List.forall_mem_append, List.forall_mem_flatMap, List.forall_mem_map, List.mem_range,
       factChecks_iff _ _ _ wf, cellChecks_iff, descentChecks_iff, eval_positive, ValidCertificate,
@@ -523,28 +494,12 @@ theorem compileTableVerifier_sound {g : RawGrammar} {mem : Array UInt64}
     ValidCertificate g (fun a => mem[a]!) :=
   ((compileTableVerifier_correct ..).1 accepted).2.2
 
-theorem grid_bound {i n c j : Nat} (hi : i < n) (hj : j < c) : i*c+j < n*c := by
-  have h := Nat.mul_le_mul_right c hi
-  rw [Nat.succ_mul] at h
-  omega
-
 private theorem grid_unique {a b c i j : Nat} (hi : i < c) (hj : j < c)
     (eqn : a*c+i = b*c+j) : a = b ∧ i = j := by
   have same : i = j := by
     simpa [Nat.mod_eq_of_lt hi, Nat.mod_eq_of_lt hj] using congrArg (· % c) eqn
   subst j
   exact ⟨Nat.eq_of_mul_eq_mul_right (by omega) (Nat.add_right_cancel eqn), rfl⟩
-
-theorem valid_fact_address {l : Layout} {f : Fact} (hf : f.valid l) :
-    l.isFact (f.address l) := by
-  cases f <;> simp only [Fact.valid, decide_eq_true_eq, Bool.and_eq_true] at hf
-  all_goals try obtain ⟨hf,hc⟩ := hf
-  all_goals try have upper := grid_bound hf hc
-  all_goals simp only [Fact.address, Layout.isFact, Layout.scratch, Layout.suffixFirst,
-    Layout.suffixProductive, Layout.suffixNull, Layout.prefixNull, Layout.follow,
-    Layout.firstNt, Layout.productive, Layout.nullNt, Layout.ntBase, Layout.rank,
-    Bool.and_eq_true]
-  all_goals constructor <;> apply decide_eq_true <;> omega
 
 private theorem address_injective {l : Layout} {a b : Fact} (ha : a.valid l)
     (hb : b.valid l) (eqn : a.address l = b.address l) : a = b := by
@@ -592,9 +547,7 @@ theorem accepted_symbolic_exact {g : RawGrammar} {mem : Array UInt64}
   rw [accepted_facts_exact g mem h _ (valid_fact_address hf)]
   simp only [grammarClauses, List.toList_toArray]
   have rep := ((compileTableVerifier_correct ..).1 h).1
-  simp only [representable, Bool.and_eq_true] at rep
-  have valid := rep.1.1.2
-  simp only [List.all_eq_true, Bool.and_eq_true] at valid
+  have valid := grammarRules_valid (valid_of_representable rep)
   exact ⟨fun p => provable_unmap _ (fun s => s.valid g.layout = true) valid
       (fun ha hb eqn => address_injective ha hb eqn) p f hf rfl,
     provable_map _⟩

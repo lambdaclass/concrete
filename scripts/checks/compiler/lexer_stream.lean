@@ -87,9 +87,24 @@ private def bridgeControl (filePath : SourcePath) : IO Unit := do
     throw (IO.userError "changed decoded integer, string, byte or label")
   let .error (.missingFile ⟨2⟩) := Lex.lexStream {input with entryFile := ⟨2⟩}
     | throw (IO.userError "missing entry did not retain its file ID")
+  for spelling in ["", " //é\r\n"] do
+    let emptyFile ← project [filePath] (.ofBytes spelling.toUTF8.data.toList)
+    let .ok empty := Lex.lexStream {input with project := emptyFile, entryFile := ⟨0⟩}
+      | throw (IO.userError "refused empty or trivia-only source")
+    unless empty.tokens.isEmpty && empty.trivia.size == 1 &&
+        (ConcreteSpec.StageInterface.reconstruct ⟨0⟩ empty.tokens empty.trivia).any
+          (·.data == spelling.toUTF8.data) do throw (IO.userError "lost EOF trivia")
   let malformed ← project [filePath] (.ofBytes "return ; @".toUTF8.data.toList)
-  let .error (.malformed _) := Lex.lexStream {input with project := malformed, entryFile := ⟨0⟩}
-    | throw (IO.userError "scanner failure did not precede parsing")
+  let .error (.malformed "unexpected character at byte 9") :=
+    Lex.lexStream {input with project := malformed, entryFile := ⟨0⟩}
+    | throw (IO.userError "scanner failure lost its location or precedence")
+  for prefixText in ["return ident", "return -", "return \"é"] do
+    let prefixBytes := prefixText.toUTF8.data.toList
+    let invalid ← project [filePath] (.ofBytes (prefixBytes ++ [0]))
+    let .error (.malformed diagnostic) := Lex.lexStream {input with project := invalid, entryFile := ⟨0⟩}
+      | throw (IO.userError "accepted NUL")
+    unless diagnostic.startsWith s!"invalid source at byte {prefixBytes.length}: " do
+      throw (IO.userError s!"wrong NUL offset: {diagnostic}")
   let large ← project [filePath] (.ofBytes (" " ++ String.ofList (List.replicate (Lex.integerDigitLimit+1) '9')).toUTF8.data.toList)
   let .error (.digitLimit 1 limit) := Lex.lexStream {input with project := large, entryFile := ⟨0⟩}
     | throw (IO.userError "digit limit became a syntax error")

@@ -1,3 +1,4 @@
+import ConcreteSpec.Proofs.TableVerifierBounds
 import ConcreteSpec.Proofs.TableVerifier
 import ConcreteSpec.Spec.TableVerifier
 import ConcreteSpec.Spec.LL1
@@ -31,15 +32,6 @@ private theorem row_parts {g : RawGrammar} {r : Row} (hr : r ∈ g.rows)
     (i : Nat) (hi : i ≤ r.rhs.length) :
     positionParts 0 (r.base+i) g.cfg.prods = (r.rhs.take i, r.rhs.drop i) :=
   row_parts_aux hr i hi
-
-private theorem row_shape_aux {r : Row} {rs : List (Nat × List (Sym Nat Nat))} {idx base}
-    (h : r ∈ indexRows idx base rs) : (r.lhs,r.rhs) ∈ rs := by
-  induction rs generalizing idx base with
-  | nil => contradiction
-  | cons item rs ih =>
-    rcases List.mem_cons.mp h with rfl | tail
-    · exact List.mem_cons_self
-    · exact List.mem_cons_of_mem _ (ih tail)
 
 private theorem null_nil (g : Grammar Nat Nat) : NullableSeq g [] :=
   ⟨[], rfl, fun _ h => nomatch h⟩
@@ -111,7 +103,7 @@ private theorem symbolRules_sound {g : RawGrammar} {r : Row} (hr : r ∈ g.rows)
   have here := row_parts hr i (by omega)
   have next := row_parts hr (i+1) lt
   rw [← Nat.add_assoc] at next
-  have source := row_shape_aux hr
+  have source := (indexed_row_bounds hr).1
   cases sym with
   | t t =>
     simp only [Layout.symbolRules, List.mem_cons, List.not_mem_nil, or_false] at hm
@@ -178,7 +170,7 @@ theorem symbolic_sound {g : RawGrammar} {f : Fact} (h : Provable (grammarRules g
     have stop := row_parts hr r.rhs.length (Nat.le_refl _)
     simp only [Nat.add_zero, List.take_zero, List.drop_zero] at start
     simp only [List.take_length, List.drop_length] at stop
-    have prod := row_shape_aux hr
+    have prod := (indexed_row_bounds hr).1
     simp only [Layout.rowRules, List.mem_append, List.mem_cons, List.not_mem_nil, or_false,
       List.mem_map, List.mem_range, List.mem_flatMap] at hrow
     rcases hrow with ((rfl | rfl | rfl | rfl | rfl) | ⟨t,_,rfl⟩) | ⟨⟨sym,i⟩,hm,hs⟩
@@ -474,7 +466,7 @@ theorem accepted_lookup_iff {g : RawGrammar} {mem : Array UInt64} {cells : Array
   have ⟨rep,_,valid⟩ := (compileTableVerifier_correct ..).1 accepted
   have fit := (by
     simp only [representable,Bool.and_eq_true,decide_eq_true_eq] at rep
-    exact rep.1.1.1.2 : g.cfg.prods.length < UInt64.size)
+    exact rep.2 : g.cfg.prods.length < UInt64.size)
   have cell := valid.2.2.1 n hn c hc
   let w := mem[g.layout.cell n c]!
   have lookup := decodeCells_at decoded (k := g.layout.cell n c) (grid_bound hn hc)

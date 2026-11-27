@@ -31,15 +31,22 @@ def linuxX8664Profile : Profile where
 def Profile.withByteOrder (profile : Profile) (order : ByteOrder) : Profile :=
   { profile with target := {profile.target with byteOrder := order}, wellFormed := profile.wellFormed }
 
-/-- The data needed to materialize a stored integer. The index binds byte order and the
-object bound to the same target used for memory access. -/
+/-- Geometry shared by the layout query and declared byte-storage layouts. -/
+structure StorageGeometry (target : Target) (byteSize align : Nat) : Prop where
+  alignPow2 : IsPow2 align
+  sizeAligned : byteSize % align = 0
+  fits : byteSize ≤ target.maxObject
+
+instance (target : Target) (size align : Nat) : Decidable (StorageGeometry target size align) :=
+  decidable_of_iff (IsPow2 align ∧ size % align = 0 ∧ size ≤ target.maxObject)
+    ⟨fun ⟨p, s, f⟩ => ⟨p, s, f⟩, fun g => ⟨g.alignPow2, g.sizeAligned, g.fits⟩⟩
+
+/-- The data needed to materialize a stored integer. -/
 structure Storage (target : Target) where
   byteSize : Nat
   align : Nat
   positive : 0 < byteSize
-  alignPow2 : IsPow2 align
-  sizeAligned : byteSize % align = 0
-  fits : byteSize ≤ target.maxObject
+  geometry : StorageGeometry target byteSize align
 
 def Storage.byteOrder {target : Target} (_ : Storage target) : ByteOrder := target.byteOrder
 
@@ -64,7 +71,7 @@ def query (profile : Profile) : Shape → Option (Layout profile.target)
   | .integer ty =>
     if fits : ty.byteSize ≤ profile.target.maxObject then
       some (.stored ⟨ty.byteSize, profile.intAlign ty, by cases ty <;> decide,
-        profile.intAlignPow2 ty, profile.intSizeAligned ty, fits⟩)
+        ⟨profile.intAlignPow2 ty, profile.intSizeAligned ty, fits⟩⟩)
     else none
 
 theorem logical_layout (profile : Profile) : query profile .logical = some .logical := rfl
@@ -72,7 +79,7 @@ theorem logical_layout (profile : Profile) : query profile .logical = some .logi
 theorem layout_fits {target : Target} (layout : Layout target) :
     layout.byteSize ≤ target.maxObject := by
   cases layout with
-  | stored storage => exact storage.fits
+  | stored storage => exact storage.geometry.fits
   | logical => exact Nat.zero_le _
 
 end ConcreteSpec.Core.Slice0Layout
