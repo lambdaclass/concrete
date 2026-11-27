@@ -14,10 +14,7 @@ private def fromTree (slice : Slice) (source : Source)
     match tree with
     | .inl tree =>
       match Elab.surfaceProgram tree with
-      | some program =>
-        ((Elab.elaborateLocated program).map fun out =>
-          AdmissionInput.pending source.project (.zero out) (congrArg sliceLanguage h)).mapError
-          ElabRefusal.slice0
+      | some program => .ok (.pending source.project (.zero program) (congrArg sliceLanguage h))
       | none => .error (.diagnostic ⟨``Elab.surfaceProgram, 1⟩ ⟨source.entryFile, 0, 0, 1, 1⟩ [])
     | .inr _ =>
       .error (.diagnostic ⟨``SliceElaboration, 1⟩ ⟨source.entryFile, 0, 0, 1, 1⟩ [])

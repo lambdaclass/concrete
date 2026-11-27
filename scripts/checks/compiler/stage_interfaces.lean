@@ -354,7 +354,7 @@ private structure FixtureEntries (profile : Profile) where
 
 private def fixtureEntries {profile : Profile} (parser : Parser grammar)
     (passes : PassFunctions grammar testLanguage testLowering profile) : FixtureEntries profile :=
-  ⟨passes.lexer, parserEntry parser.engine, passes.admissionEntry, passes.lowerUncheckedEntry,
+  ⟨passes.lexer, parserEntry parser.engine, passes.admissionEntry early, passes.lowerUncheckedEntry,
     passes.emitLLVMEntry, passes.emitLCBEntry⟩
 
 private abbrev r {profile : Profile} (_m : LoweringModels testLanguage testLowering profile)
@@ -502,7 +502,7 @@ private def parsedReturn : Parsed (SyntaxTree ⊕ Bool) :=
 
 private abbrev earlyFixtureLanguage := sliceLanguage slice0
 
-private def returnViewCore (n : Nat) := AdmissionView.zero ⟨[], .lit n, resultSpan⟩
+private def returnViewCore (n : Nat) := AdmissionView.zero ⟨[], .lit n, ⟨18, 28, 1, 19, ⟨0⟩⟩, resultSpan⟩
 
 private def elaboratedReturn (n : Nat) : CoreInput earlyFixtureLanguage :=
   ⟨elaborationSource.project, early, .straightLine (returnViewCore n) rfl⟩
@@ -523,10 +523,10 @@ private theorem typedReturn : (elaboratedReturn 42).StaticallyTyped :=
 set_option maxRecDepth 2048 in
 private theorem returnedCoreWF (n : Nat) : (elaboratedReturn n).WF := by
   let core := elaboratedReturn n
-  let origin : SiteId × Origin := ⟨⟨0⟩, ⟨⟨0⟩, ⟨⟨0⟩, 25, 27, 1, 26⟩,
+  let origin : SiteId × Origin := ⟨⟨0⟩, ⟨⟨0⟩, ⟨⟨0⟩, 18, 28, 1, 19⟩,
     ⟨.function earlyEntry, ⟨[⟨.return, .ordinal 0⟩]⟩⟩⟩⟩
   refine ⟨⟨by change [SiteId.mk 0].Nodup; simp, by change [SiteId.mk 0].Nodup; simp,
-    by change [origin.2.evidenceKey].Nodup; simp, ?_, ?_, ?_⟩, ?_, by exact nofun⟩
+    by change [origin.2.evidenceKey].Nodup; simp, ?_, ?_, ?_⟩, ?_, ?_⟩
   · intro site op member
     change (site, op) ∈ [(⟨0⟩, .expression (.inl (.read (.literal (.int .u8 n)))))] at member
     cases List.mem_singleton.mp member
@@ -580,12 +580,16 @@ private theorem returnedCoreWF (n : Nat) : (elaboratedReturn n).WF := by
     have same := List.mem_singleton.mp member
     obtain rfl := congrArg Prod.fst same
     obtain rfl := congrArg Prod.snd same
-    let specSpan : ConcreteSpec.Core.Span := ⟨⟨0⟩, 25, 27, by decide, 1, 26, by decide, by decide⟩
+    let specSpan : ConcreteSpec.Core.Span := ⟨⟨0⟩, 18, 28, by decide, 1, 19, by decide, by decide⟩
     exact ⟨rfl, specSpan, _, rfl, rfl, by decide, rfl, rfl, rfl, rfl⟩
   · intro site op member
     change (site, op) ∈ [(⟨0⟩, .expression (.inl (.read (.literal (.int .u8 n)))))] at member
     cases List.mem_singleton.mp member
     trivial
+  · intro location member
+    change location ∈ [resultSpan] at member
+    cases List.mem_singleton.mp member
+    exact ⟨⟨⟨0⟩, 25, 27, by decide, 1, 26, by decide, by decide⟩, _, rfl, rfl, by decide, rfl, rfl, rfl, rfl⟩
 
 example :
     ((Concrete.Lex.lex elaborationSourceText.toUTF8).bind Concrete.Parse.parse) = .ok returnProgram :=
@@ -647,7 +651,9 @@ private theorem parsedReturnDomain : Parsed.ElaborationDomain slice0 parsedRetur
   subst program
   have eq : pendingReturn = payload := Except.ok.inj matching
   subst payload
-  exact ⟨returnedCoreWF 42, _, representsReturn 42⟩
+  refine ⟨rfl, ?_⟩
+  intro purpose
+  cases purpose <;> exact ⟨returnedCoreWF 42, _, representsReturn 42⟩
 
 private theorem firstTokenConsumes {count : Nat} {g : SharedGrammar count} {slice : Slice}
     {rhs tokens args steps} (parsed : DerivesArgs g slice rhs tokens args steps) :
@@ -694,9 +700,10 @@ example :
     let registered := registry (returnPasses fixtureElaborate)
     registered.parser.Compatible registered.elaborator ∧
     ¬ registered.elaborator.inputInvariant {parsedReturn with tree := .inl (.node .body [])} ∧
-    registered.elaborator.Compatible registered.typing ∧
+    registered.elaborator.Compatible registered.eligibility ∧
+    registered.eligibility.Compatible registered.typing ∧
     registered.typing.Compatible registered.lowerUnchecked := by
-  refine ⟨fun _ h => h, ?_, fun _ h => h, fun _ h => h⟩
+  refine ⟨fun _ h => h, ?_, fun _ h => h, fun _ h => h, fun _ h => h⟩
   rintro ⟨_, _, _, ⟨result, matching⟩, _⟩
   obtain ⟨_, impossible, _⟩ := matching
   cases impossible
@@ -719,11 +726,11 @@ example :
     let failure : StageFailure := .invalidInput ⟨``CoreInput.StaticallyTyped, 1⟩
     let passes := {returnPasses fixtureElaborate with typeCore := fun _ => .error failure}
     let edge := (registry passes).typing
-    edge.inputInvariant (.core (elaboratedReturn 256)) ∧
-    edge.run (.core (elaboratedReturn 256)) = .error failure ∧
-    edge.refusal (.core (elaboratedReturn 256)) failure ∧
-    ¬ edge.refusal (.core (elaboratedReturn 42)) failure := by
-  refine ⟨⟨returnedCoreWF 256, ⟨_, representsReturn 256⟩⟩,
+    edge.inputInvariant (elaboratedReturn 256) ∧
+    edge.run (elaboratedReturn 256) = .error failure ∧
+    edge.refusal (elaboratedReturn 256) failure ∧
+    ¬ edge.refusal (elaboratedReturn 42) failure := by
+  refine ⟨⟨rfl, returnedCoreWF 256, ⟨_, representsReturn 256⟩⟩,
     rfl, ⟨rfl, return256IllTyped⟩, ?_⟩
   exact fun refused => refused.2 typedReturn
 
@@ -746,13 +753,13 @@ example :
 set_option maxRecDepth 4096 in
 example :
     let program : EarlyProgram :=
-      ⟨[⟨⟨⟨0⟩, .add (.lit 255) (.lit 1)⟩, resultSpan, resultSpan⟩], .var ⟨0⟩, resultSpan⟩
+      ⟨[⟨⟨⟨0⟩, .add (.lit 255) (.lit 1)⟩, resultSpan, resultSpan, (resultSpan, resultSpan)⟩], .var ⟨0⟩, resultSpan, resultSpan⟩
     let core : CoreInput earlyFixtureLanguage :=
       ⟨elaborationSource.project, slice0,  .straightLine (.zero program) rfl⟩
     let typing := (registry (returnPasses fixtureElaborate)).typing
-    typing.run (.core core) = .ok core ∧
+    typing.run core = .ok core ∧
     ConcreteSpec.run (AdmissionView.zero program).program 3 = .trap .arithmeticOverflow ∧
-    ∀ failure, ¬ typing.refusal (.core core) failure := by
+    ∀ failure, ¬ typing.refusal core failure := by
   refine ⟨rfl, rfl, fun _ refusal => refusal.2 ?_⟩
   exact ⟨_, ⟨rfl, rfl, rfl⟩, ⟨by decide, .letName (.add (.int rfl) (.int rfl)) (.ret (.copy rfl))⟩⟩
 
@@ -978,7 +985,7 @@ example (project : Project) :
 -- The registered checker claims a discharge, but the matching reachable Core operation traps.
 example (project : Project) (m : LoweringModels testLanguage testLowering testProfile) :
     ¬ (r m parser).admission.success (.core (testCore project)) ⟨testCore project, unsafeDischarges⟩ := by
-  rintro ⟨_, prepared, success⟩
+  rintro ⟨_, _, prepared, success⟩
   cases Except.ok.inj prepared
   have valid := success.2.2.2
   have member : unsafeDischarges.Contains testSite unsafeDischarge :=
@@ -1819,7 +1826,7 @@ example :
 
 private def retainedOwnerCore : CoreInput earlyFixtureLanguage :=
   ⟨elaborationSource.project, early,  .straightLine (.zero
-    ⟨[⟨⟨⟨storeRoot.id⟩, .atom (.lit 42)⟩, resultSpan, resultSpan⟩], .var ⟨storeRoot.id⟩, resultSpan⟩) rfl⟩
+    ⟨[⟨⟨⟨storeRoot.id⟩, .atom (.lit 42)⟩, resultSpan, resultSpan, ()⟩], .var ⟨storeRoot.id⟩, resultSpan, resultSpan⟩) rfl⟩
 
 private def retainedOwnerMIR (substituted : Bool) : MIR ownerFixtureLowering testProfile :=
   let dst : Place _ ownerFixtureType := ⟨storeRoot, []⟩
@@ -1986,7 +1993,7 @@ example :
     edge.inputInvariant (.core core) ∧
       ∃ failure, edge.run (.core core) = .error failure ∧ edge.refusal (.core core) failure := by
   let reason := ConcreteSpec.Admission.Refusal.atPosition 0 (.literalOutOfRange .u8 256)
-  refine ⟨⟨returnedCoreWF 256, _, representsReturn 256⟩, _, rfl, ?_, _, reason, representsReturn 256, rfl, rfl⟩
+  refine ⟨⟨rfl, fun _ => ⟨returnedCoreWF 256, _, representsReturn 256⟩⟩, _, rfl, rfl, ?_, _, reason, representsReturn 256, rfl, rfl⟩
   rintro ⟨v, represented, accepted⟩
   cases v.unique represented (representsReturn 256)
   exact Bool.noConfusion ((ConcreteSpec.check_iff _).mpr accepted)
@@ -2785,7 +2792,7 @@ private abbrev literalJobExecution := LCBInput.Execution (profile := testProfile
   earlyFixtureLanguage.operands.Event elaborationSource.project
 
 private def literalOrigin : Origin :=
-  ⟨⟨0⟩, ⟨⟨0⟩, 25, 27, 1, 26⟩, ⟨.function earlyEntry, ⟨[⟨.return, .ordinal 0⟩]⟩⟩⟩
+  ⟨⟨0⟩, ⟨⟨0⟩, 18, 28, 1, 19⟩, ⟨.function earlyEntry, ⟨[⟨.return, .ordinal 0⟩]⟩⟩⟩
 
 private def literalSignatures : AList FnId (FunctionSignature earlyFixtureLanguage.operands.Ty) :=
   [(earlyEntry, ⟨[], some returnType⟩)]
@@ -2868,7 +2875,7 @@ private theorem literalHandoff : literalMemory.HandoffWF := by
   have member : origin ∈ [literalOrigin] := by with_unfolding_all exact present
   obtain rfl := List.mem_singleton.mp member
   let checkedSpan : ConcreteSpec.Core.Span :=
-    ⟨⟨0⟩, 25, 27, by decide, 1, 26, by decide, by decide⟩
+    ⟨⟨0⟩, 18, 28, by decide, 1, 19, by decide, by decide⟩
   exact ⟨checkedSpan, _, rfl, rfl, by decide, rfl, rfl, rfl, rfl⟩
 
 set_option maxRecDepth 4096 in
@@ -3004,14 +3011,15 @@ example (unchecked : Bool) :
   cases unchecked
   · exact ⟨ready, returnStream, rfl, ⟨front.2.1, rfl⟩, front, trivial,
       parsedReturn, by with_unfolding_all rfl, parsedReturnDomain, parse, trivial,
-      pendingReturn, rfl, ⟨returnedCoreWF 42, fragment⟩, elaborates, trivial,
-      ⟨literalCore, []⟩, by with_unfolding_all rfl, admitted, ⟨_, rfl, checked⟩, trivial,
+      pendingReturn, rfl, parsedReturnDomain.2.2.2.2 _ elaborates, elaborates, trivial,
+      ⟨literalCore, []⟩, by with_unfolding_all rfl, admitted, ⟨rfl, _, rfl, checked⟩, trivial,
       literalMIR, rfl, literalHandoff, lowerCore, trivial,
       literalMemory, rfl, literalHandoff, ⟨literalMemoryContract, rfl⟩, trivial,
       literalSSA, by with_unfolding_all rfl, by with_unfolding_all exact literalHandoff, ⟨literalSSAContract, rfl⟩, trivial, back⟩
   · exact ⟨ready, returnStream, rfl, ⟨front.2.1, rfl⟩, front, trivial,
       parsedReturn, by with_unfolding_all rfl, parsedReturnDomain, parse, trivial,
-      pendingReturn, rfl, ⟨returnedCoreWF 42, fragment⟩, elaborates, trivial,
+      pendingReturn, rfl, parsedReturnDomain.2.2.2.2 _ elaborates, elaborates, trivial,
+      literalCore, rfl, ⟨rfl, returnedCoreWF 42, fragment⟩, ⟨rfl, rfl⟩, trivial,
       literalCore, by with_unfolding_all rfl, ⟨returnedCoreWF 42, typed⟩, rfl, trivial,
       literalMIR, rfl, literalHandoff, literalUnchecked, trivial,
       literalMemory, rfl, literalHandoff, ⟨literalMemoryContract, rfl⟩, trivial,

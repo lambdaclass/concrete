@@ -60,7 +60,6 @@ inductive LexRefusal where
 
 inductive ElabRefusal where
   | unsupportedSlice (slice : Slice)
-  | slice0 (reason : Concrete.Elab.ElabFailure)
   | diagnostic (rule : RuleId) (primary : FileSpan) (related : List (ConcreteSpec.Name × FileSpan))
 
 inductive StageFailure where

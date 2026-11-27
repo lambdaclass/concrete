@@ -1,4 +1,6 @@
 import Concrete.IntegratedCore
+import Concrete.Admission
+import Concrete.Parse
 import ConcreteSpec.IntegratedCore
 import ConcreteSpec.Admission.Early
 
@@ -23,7 +25,7 @@ private def returnTokens : ParserView :=
     token 29 30 (.fixed .rbrace rfl)]⟩
 
 private def expected : CoreInput (sliceLanguage slice0) :=
-  ⟨source.project, slice0, .straightLine (.zero ⟨[], .lit 42, ⟨25, 27, 1, 26, ⟨0⟩⟩⟩) rfl⟩
+  ⟨source.project, slice0, .straightLine (.zero ⟨[], .lit 42, ⟨18, 28, 1, 19, ⟨0⟩⟩, ⟨25, 27, 1, 26, ⟨0⟩⟩⟩) rfl⟩
 
 private def parseAndElaborate (tokens : ParserView) : Option (CoreInput (sliceLanguage slice0)) := do
   let parsed ← ((sliceParser slice0).run tokens).2
@@ -49,7 +51,7 @@ example :
 -- An empty body crosses elaboration intact and receives its refusal at preparation.
 example :
     ((elaborate slice0 ⟨source, .inl (.node .program [
-      .leaf ⟨⟨⟨0⟩, 3, 7, 1, 4⟩, .name "main"⟩, .node .body []])⟩).toOption.map AdmissionInput.prepare) =
+      .leaf ⟨⟨⟨0⟩, 3, 7, 1, 4⟩, .name "main"⟩, .node .body []])⟩).toOption.map (·.prepare)) =
       some (.error (Surface0Issue.fallthrough ⟨3, 7, 1, 4, ⟨0⟩⟩).render) := rfl
 
 example :
@@ -68,11 +70,11 @@ example :
 
 private def profile : Profile := ⟨.lcb, .x86_64Linux, 3, 4096⟩
 
--- The remaining edges refuse because this bundle exercises elaboration only.
-private def elaborationPasses : Passes slice0 profile where
+-- Keep the real elaborator and checker, with a type pass that always succeeds.
+private def fragmentPasses (slice : Slice) : Passes slice profile where
   lex input := .error (.missingFile input.entryFile)
-  elaborate := elaborate slice0
-  typeCore _ := .error (.invalidInput ⟨``elaborate, 1⟩)
+  elaborate := elaborate slice
+  typeCore _ := .ok ()
   checkCore := ConcreteSpec.Admission.checkInput
   lowerCore _ := .error (.invalidInput ⟨``elaborate, 1⟩)
   lowerUnchecked _ := .error (.invalidInput ⟨``elaborate, 1⟩)
@@ -81,6 +83,8 @@ private def elaborationPasses : Passes slice0 profile where
   buildBIR _ := .error (.invalidInput ⟨``elaborate, 1⟩)
   emitLLVM _ := .error (.invalidInput ⟨``elaborate, 1⟩)
   emitLCB _ := .error (.invalidInput ⟨``elaborate, 1⟩)
+
+private abbrev elaborationPasses := fragmentPasses slice0
 
 example : (registry elaborationPasses).elaborator.Validated :=
   validated elaborationPasses rfl
@@ -116,14 +120,6 @@ example :
       "concrete: trap: overflow at main.con:1:26 (site 9)\n".toUTF8 := by
   with_unfolding_all rfl
 
-
--- A signed multi-byte literal distinguishes Core order from big-endian storage.
-example :
-    let bytes := ([254, 255] : List UInt8)
-    (sliceLanguage slice0).literal (.inl (.scalar (.int .i16))) bytes = some (.scalar (.int .i16 (-2))) ∧
-    Hybrid.decode {linuxX8664 with byteOrder := .big} (.int .i16)
-      (bytes.map fun byte => .init byte.toFin none) = some (.int .i16 (-257)) :=
-  ⟨rfl, rfl⟩
 
 private def tokenName : ConcreteSpec.Name := ⟨"Token"⟩
 private def tokenId : DeclId := ⟨earlyEntry.module, tokenName⟩
@@ -173,7 +169,7 @@ example :
   intro _ _ refusal
   obtain ⟨_, v, reason, represents, checked, _⟩ := refusal
   have actual := (CoreInput.decode_iff _ v).2 represents
-  change Except.ok (.zero ⟨[], .lit 42, useSpan⟩) = Except.ok v at actual
+  change Except.ok (.zero ⟨[], .lit 42, useSpan, useSpan⟩) = Except.ok v at actual
   cases Except.ok.inj actual
   cases checked
 
@@ -182,9 +178,9 @@ example :
     let issue := (Surface0Issue.unknownLocal "absent" useSpan).render
     (registry elaborationPasses).admission.run unknown = .error (.refused issue) ∧
     (registry elaborationPasses).admission.refusal unknown (.refused issue) ∧
-    (registry elaborationPasses).typing.run unknown = .error .unpreparable ∧
-    (registry elaborationPasses).typing.refusal unknown .unpreparable :=
-  ⟨rfl, rfl, rfl, rfl⟩
+    (registry elaborationPasses).eligibility.run unknown = .error .unpreparable ∧
+    (registry elaborationPasses).eligibility.refusal unknown .unpreparable :=
+  ⟨rfl, ⟨rfl, rfl⟩, rfl, rfl, .inr ⟨_, rfl⟩⟩
 
 private def binding (name : String) : ConcreteSpec.Surface0.Statement :=
   .bind ⟨name, binderSpan, .integer 42 none useSpan⟩ useSpan
@@ -219,14 +215,6 @@ example :
     let failure := CheckerRefusal.mk ⟨``Slice0Rules.LiteralTyped, 1⟩ (surfaceFileSpan useSpan) [] none (.core reason)
     (registry elaborationPasses).admission.run (sourceReturn (.integer 256 none useSpan)) =
       .error (.refused failure) := rfl
-
-example :
-    let big := {linuxX8664 with byteOrder := .big}
-    let ty : (sliceLanguage slice0).operands.Ty := .inl (.scalar (.int .i16))
-    (sliceLanguage slice0).layout [] big ty = some ⟨2, 2⟩ ∧
-    (sliceLanguage slice0).literal ty [254, 255] = some (.scalar (.int .i16 (-2))) ∧
-    Hybrid.decode big (.int .i16) [.init 254 none, .init 255 none] = some (.int .i16 (-257)) :=
-  ⟨rfl, rfl, rfl⟩
 
 private abbrev nominalLang := sliceLanguage sliceOne
 private abbrev nominalTy : nominalLang.operands.Ty := .inl (.nominal tokenId)
@@ -265,12 +253,142 @@ example :
 example :
     let wrong := {memory with declarations := [(tokenId, ⟨tokenName, true, []⟩)]}
     nominalLang.layout wrong.declarations profile.memoryTarget nominalTy = none ∧
-    ¬ wrong.InstructionStep started constructed false
+    ∀ next, ¬ wrong.InstructionStep started next false
       (.op (opcode := .named ⟨"constructEmpty"⟩) root () .nil []) := by
   refine ⟨rfl, ?_⟩
-  rintro ⟨_, _, _, _, _, _, _, reads, _, addresses, operation, _⟩
+  rintro next ⟨_, _, _, _, _, _, _, reads, _, addresses, operation, _⟩
   cases Option.some.inj reads
   cases Option.some.inj addresses
   cases operation.2.1
+
+-- Even an independently admissible abort cannot cross into another registry.
+private def abortOnly : CoreInput (sliceLanguage sliceOne) :=
+  ⟨source.project, sliceOne, .straightLine (.one ⟨[], [], .abort, useSpan⟩) rfl⟩
+
+private def slice2 : Slice := ⟨⟨2, by decide⟩⟩
+
+example :
+    ((registry (fragmentPasses sliceOne)).admission.run (.core abortOnly)).isOk = true ∧
+    (registry (fragmentPasses slice0)).admission.run (.core abortOnly) =
+      .error (.fragment (.sliceMismatch slice0 sliceOne)) ∧
+    (registry (fragmentPasses slice2)).admission.run (.core abortOnly) =
+      .error (.fragment (.sliceMismatch slice2 sliceOne)) ∧
+    ¬ (registry (fragmentPasses slice0)).admission.inputInvariant (.core abortOnly) ∧
+    ¬ (registry (fragmentPasses slice2)).admission.inputInvariant (.core abortOnly) := by
+  refine ⟨rfl, rfl, rfl, ?_, ?_⟩ <;> intro h <;> cases h.1
+
+example :
+    ({abortOnly with slice := slice0}).decode = .error .outsideFragment ∧
+    ({abortOnly with payload := .integrated abortOnly.machineProgram}).decode = .error .outsideFragment ∧
+    ({expected with payload := .integrated expected.machineProgram}).decode = .error .outsideFragment :=
+  ⟨rfl, rfl, rfl⟩
+
+example (p : EarlyProgram) : (AdmissionView.zero p).program = ConcreteSpec.Slice0.toCore p.eraseLocations := rfl
+
+example :
+    let badEntry : AdmissionInput (sliceLanguage slice0) :=
+      .pending source.project (.zero ⟨"other", binderSpan, []⟩) rfl
+    let ret := ConcreteSpec.Surface0.Statement.ret (.integer 42 none useSpan) useSpan
+    badEntry.prepare = .error (Surface0Issue.unexpectedEntry binderSpan).render ∧
+    (sourceBody [binding "_", ret]).prepare = .error (Surface0Issue.wildcard binderSpan).render :=
+  ⟨rfl, rfl⟩
+
+-- This unbound return names the ID a wildcard used to acquire.
+example :
+    let wildcard : LocatedStraightBinding :=
+      ⟨.bind .wild .u8 (.scalar (.atom (.lit 42))), binderSpan, binderSpan⟩
+    let view := AdmissionView.one ⟨[], [wildcard], .ret (.var ⟨0⟩), useSpan⟩
+    let machine := view.execution
+    ConcreteSpec.run view.program 8 = .stuck .unbound ∧
+    (Exec.run machine.body (fun _ prim => nomatch prim) 32 machine.initial).ending = .stuck := by
+  with_unfolding_all exact ⟨rfl, rfl⟩
+
+-- A later RHS can also read an unbound ID. The terminator here contains no variables.
+example :
+    let wildcard : LocatedStraightBinding :=
+      ⟨.bind .wild .u8 (.scalar (.atom (.lit 42))), binderSpan, binderSpan⟩
+    let useMissing : LocatedStraightBinding :=
+      ⟨.bind .wild .u8 (.scalar (.add (.lit 0) (.var ⟨0⟩))), useSpan, useSpan⟩
+    let view := AdmissionView.one ⟨[], [wildcard, useMissing], .ret (.lit 42), useSpan⟩
+    let machine := view.execution
+    ConcreteSpec.run view.program 8 = .stuck .unbound ∧
+    (Exec.run machine.body (fun _ prim => nomatch prim) 32 machine.initial).ending = .stuck := by
+  with_unfolding_all exact ⟨rfl, rfl⟩
+
+private def parseSource (text : String) := (Lex.lex text.toUTF8).bind Parse.parse
+
+example :
+    ((parseSource r"fn main() -> u8 { return 42; let _: u8 = 1; }").bind
+      (fun ast => Admission.prepareParsed ast)) =
+      .error (.checker "unreachable code (STMT-14) at 1:30, bytes 29..43") := by
+  with_unfolding_all rfl
+
+private def pendingSource (text : String) : Option (AdmissionInput (sliceLanguage slice0)) := do
+  let ast ← (parseSource text).toOption
+  return .pending (Project.singleton mainSourcePath (SourceText.ofBytes text.toUTF8.data.toList))
+    (.zero ast) rfl
+
+-- A source spelling erased by resolution cannot affect the unchecked Core type pass.
+example :
+    let parsed := pendingSource r"fn main() -> u8 { let main: u8 = 42; return main; }"
+    let r := registry elaborationPasses
+    (parsed.bind fun input => (r.eligibility.run input).toOption.bind (fun i =>
+      (r.typing.run i).toOption.map (fun out => out.decode.toOption.map AdmissionView.program))) =
+      some (some (ConcreteSpec.Slice0.toCore ⟨[⟨⟨0⟩, .atom (.lit 42)⟩], .var ⟨0⟩⟩)) ∧
+    (parsed.map fun input => r.admission.run input) = some (.error (.refused
+      (Surface0Issue.reservedBinder "main" ⟨22, 26, 1, 23, ⟨0⟩⟩).render)) := by
+  with_unfolding_all exact ⟨rfl, rfl⟩
+
+private def sourceDiagnostic (text : String) : Option CheckerRefusal := do
+  let input ← pendingSource text
+  let .error (.refused diagnostic) := (registry elaborationPasses).admission.run input | none
+  return diagnostic
+
+example :
+    let reason := ConcreteSpec.Admission.Refusal.atPosition 0
+      (.additionOperandType (.int .u8 256) (.atomFailure (.outOfRange .u8 256)))
+    let literalAt := fun start =>
+      some (CheckerRefusal.mk ⟨``Slice0Rules.LiteralTyped, 1⟩ ⟨⟨0⟩, start, start + 3, 1, start + 1⟩ [] none (.core reason))
+    sourceDiagnostic r"fn main() -> u8 { return 256 + 1; }" = literalAt 25 ∧
+    sourceDiagnostic r"fn main() -> u8 { return 1 + 256; }" = literalAt 29 ∧
+    sourceDiagnostic r"fn main() -> u8 { return 256 + 256; }" = literalAt 25 := by
+  with_unfolding_all exact ⟨rfl, rfl, rfl⟩
+
+example :
+    let why := ConcreteSpec.Admission.Refusal.atPosition 2 (.unusedBinding ⟨0⟩)
+    sourceDiagnostic r"fn main() -> u8 { let x: u8 = 1; return 20 + 22; }" =
+      some ⟨⟨``Slice0Rules.LocalsUsed, 1⟩, ⟨⟨0⟩, 33, 48, 1, 34⟩,
+        [(⟨"binding"⟩, ⟨⟨0⟩, 22, 23, 1, 23⟩)], none, .core why⟩ := by
+  with_unfolding_all rfl
+
+example :
+    let otherName : ConcreteSpec.Name := ⟨"Other"⟩
+    let other : DeclId := ⟨earlyEntry.module, otherName⟩
+    let env := (tokenId, ⟨tokenName, false, []⟩) :: [(other, ⟨otherName, false, []⟩)]
+    nominalLang.activeFields env nominalTy (.other other) = none ∧
+    nominalLang.evalIn env [] ⟨[], Mem.Memory.empty⟩
+      (.inl (.consumeEmpty tokenId (.constructEmpty other))) = .stuck ∧
+    nominalLang.activeFields env nominalTy (.other tokenId) = some [] ∧
+    nominalLang.evalIn env [] ⟨[], Mem.Memory.empty⟩
+      (.inl (.consumeEmpty other (.constructEmpty other))) = .ok (.scalar .unit, ⟨[], Mem.Memory.empty⟩) :=
+  ⟨rfl, rfl, rfl, rfl⟩
+
+-- The same two initialized octets go through the materialized byte-range load.
+example :
+    let big := {linuxX8664 with byteOrder := .big}
+    let ty : nominalLang.operands.Ty := .inl (.scalar (.int .i16))
+    let place : MemoryPlace _ ty := ⟨⟨⟨0⟩, []⟩, .materialized⟩
+    let mem : Memory (sliceLoweringLanguage sliceOne) profile := {memory with
+      functions := [(earlyEntry, [(⟨0⟩, ty)], ⟨⟨0⟩, #[]⟩)],
+      layouts := [(earlyEntry, [(⟨0⟩, ⟨2, 2⟩)])]}
+    let block := {Mem.candidate ⟨0⟩ 2 2 2 with bytes := [.init 254 none, .init 255 none]}
+    let state : MemoryRegisters nominalLang profile := {started with
+      initialized := [⟨0⟩],
+      materialized := [(⟨0⟩, ⟨⟨⟨0⟩, 2, some ⟨0⟩⟩, 2, 2⟩)], bytes := ⟨[(⟨0⟩, block)], 1⟩}
+    nominalLang.layout [] big ty = some ⟨2, 2⟩ ∧
+    nominalLang.literal ty [254, 255] = some (.scalar (.int .i16 (-2))) ∧
+    mem.loadMaterialized state place big = some (.scalar (.int .i16 (-257))) ∧
+    mem.loadValue state place = some (.scalar (.int .i16 (-2))) := by
+  with_unfolding_all exact ⟨rfl, rfl, rfl, rfl⟩
 
 end Concrete.IntegratedCore

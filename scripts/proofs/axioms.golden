@@ -4518,9 +4518,11 @@ ConcreteSpec.StageInterface.AdmissionFailure.unmappedEvidence.sizeOf_spec
 ConcreteSpec.StageInterface.AdmissionInput.core.inj	Quot.sound propext
 ConcreteSpec.StageInterface.AdmissionInput.core.injEq	Quot.sound propext
 ConcreteSpec.StageInterface.AdmissionInput.core.sizeOf_spec	Quot.sound propext
+ConcreteSpec.StageInterface.AdmissionInput.pending.congr_simp	Quot.sound propext
 ConcreteSpec.StageInterface.AdmissionInput.pending.inj	Quot.sound propext
 ConcreteSpec.StageInterface.AdmissionInput.pending.injEq	Quot.sound propext
 ConcreteSpec.StageInterface.AdmissionInput.pending.sizeOf_spec	Quot.sound propext
+ConcreteSpec.StageInterface.AdmissionInput.preparedSlice	Quot.sound propext
 ConcreteSpec.StageInterface.AdmissionView.one.inj	
 ConcreteSpec.StageInterface.AdmissionView.one.injEq	propext
 ConcreteSpec.StageInterface.AdmissionView.one.sizeOf_spec	
@@ -4532,6 +4534,9 @@ ConcreteSpec.StageInterface.Admitted.mk.inj	Quot.sound propext
 ConcreteSpec.StageInterface.Admitted.mk.injEq	Quot.sound propext
 ConcreteSpec.StageInterface.Admitted.mk.sizeOf_spec	Quot.sound propext
 ConcreteSpec.StageInterface.BridgeRefusal.outsideFragment.sizeOf_spec	
+ConcreteSpec.StageInterface.BridgeRefusal.sliceMismatch.inj	
+ConcreteSpec.StageInterface.BridgeRefusal.sliceMismatch.injEq	propext
+ConcreteSpec.StageInterface.BridgeRefusal.sliceMismatch.sizeOf_spec	
 ConcreteSpec.StageInterface.BridgeRefusal.unsupportedSlice.inj	
 ConcreteSpec.StageInterface.BridgeRefusal.unsupportedSlice.injEq	propext
 ConcreteSpec.StageInterface.BridgeRefusal.unsupportedSlice.sizeOf_spec	
@@ -4711,6 +4716,9 @@ ConcreteSpec.StageInterface.StraightBinding.bind.sizeOf_spec
 ConcreteSpec.StageInterface.StraightBinding.destructure.inj	
 ConcreteSpec.StageInterface.StraightBinding.destructure.injEq	propext
 ConcreteSpec.StageInterface.StraightBinding.destructure.sizeOf_spec	
+ConcreteSpec.StageInterface.StraightBinding.slice0.inj	
+ConcreteSpec.StageInterface.StraightBinding.slice0.injEq	propext
+ConcreteSpec.StageInterface.StraightBinding.slice0.sizeOf_spec	
 ConcreteSpec.StageInterface.StraightEnd.abort.sizeOf_spec	
 ConcreteSpec.StageInterface.StraightEnd.ret.inj	
 ConcreteSpec.StageInterface.StraightEnd.ret.injEq	propext
@@ -4743,12 +4751,18 @@ ConcreteSpec.StageInterface.Surface0Issue.integerSuffix.sizeOf_spec
 ConcreteSpec.StageInterface.Surface0Issue.reservedBinder.inj	
 ConcreteSpec.StageInterface.Surface0Issue.reservedBinder.injEq	propext
 ConcreteSpec.StageInterface.Surface0Issue.reservedBinder.sizeOf_spec	
+ConcreteSpec.StageInterface.Surface0Issue.unexpectedEntry.inj	
+ConcreteSpec.StageInterface.Surface0Issue.unexpectedEntry.injEq	propext
+ConcreteSpec.StageInterface.Surface0Issue.unexpectedEntry.sizeOf_spec	
 ConcreteSpec.StageInterface.Surface0Issue.unknownLocal.inj	
 ConcreteSpec.StageInterface.Surface0Issue.unknownLocal.injEq	propext
 ConcreteSpec.StageInterface.Surface0Issue.unknownLocal.sizeOf_spec	
 ConcreteSpec.StageInterface.Surface0Issue.unreachable.inj	
 ConcreteSpec.StageInterface.Surface0Issue.unreachable.injEq	propext
 ConcreteSpec.StageInterface.Surface0Issue.unreachable.sizeOf_spec	
+ConcreteSpec.StageInterface.Surface0Issue.wildcard.inj	
+ConcreteSpec.StageInterface.Surface0Issue.wildcard.injEq	propext
+ConcreteSpec.StageInterface.Surface0Issue.wildcard.sizeOf_spec	
 ConcreteSpec.StageInterface.SurfaceIssue.zero.inj	
 ConcreteSpec.StageInterface.SurfaceIssue.zero.injEq	propext
 ConcreteSpec.StageInterface.SurfaceIssue.zero.sizeOf_spec	
@@ -4760,6 +4774,11 @@ ConcreteSpec.StageInterface.SurfaceNode.extension.injEq	propext
 ConcreteSpec.StageInterface.SurfaceNode.extension.sizeOf_spec	
 ConcreteSpec.StageInterface.SurfaceNode.program.sizeOf_spec	
 ConcreteSpec.StageInterface.SurfaceNode.return_.sizeOf_spec	
+ConcreteSpec.StageInterface.SurfacePreparation.Purpose.admission.sizeOf_spec	
+ConcreteSpec.StageInterface.SurfacePreparation.Purpose.eligibility.sizeOf_spec	
+ConcreteSpec.StageInterface.SurfacePreparation.Purpose.ofNat_ctorIdx	
+ConcreteSpec.StageInterface.SurfacePreparation.instDecidableEqPurpose._proof_1	
+ConcreteSpec.StageInterface.SurfacePreparation.instDecidableEqPurpose._proof_2	
 ConcreteSpec.StageInterface.SyntaxTree._sizeOf_2_eq	propext
 ConcreteSpec.StageInterface.SyntaxTree.brecOn.eq	propext
 ConcreteSpec.StageInterface.SyntaxTree.brecOn_1.eq	propext
@@ -4895,9 +4914,39 @@ ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_42
 ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_43	
 ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_44	
 ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_45	
+ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_46	
+ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_47	
+ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_48	
+ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_49	
 ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_5	
+ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_50	
+ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_51	
+ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_52	
+ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_53	
+ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_54	
+ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_55	
+ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_56	
+ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_57	
+ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_58	
+ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_59	
 ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_6	
+ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_60	
+ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_61	
+ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_62	
+ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_63	
+ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_64	
+ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_65	
+ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_66	
+ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_67	
+ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_68	
+ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_69	
 ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_7	
+ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_70	
+ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_71	
+ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_72	
+ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_73	
+ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_74	
+ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_75	
 ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_8	
 ConcreteSpec.StageInterface.instDecidableEqSurface0Issue.decEq._proof_9	
 ConcreteSpec.StageInterface.instDecidableEqTokenValue.decEq._proof_1	propext
@@ -7130,6 +7179,11 @@ _private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.bootstrapVerifica
 _private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.bootstrapWords.eq_1	propext
 _private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.later._proof_1	
 _private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.returnRhs.eq_1	
+_private.ConcreteSpec.StageInterface.0.ConcreteSpec.StageInterface.AdmissionInput.prepare.match_1.eq_1	
+_private.ConcreteSpec.StageInterface.0.ConcreteSpec.StageInterface.AdmissionInput.prepare.match_1.eq_2	
+_private.ConcreteSpec.StageInterface.0.ConcreteSpec.StageInterface.SurfacePreparation.LocatedAtom.mk.inj	
+_private.ConcreteSpec.StageInterface.0.ConcreteSpec.StageInterface.SurfacePreparation.LocatedAtom.mk.injEq	propext
+_private.ConcreteSpec.StageInterface.0.ConcreteSpec.StageInterface.SurfacePreparation.LocatedAtom.mk.sizeOf_spec	
 _private.ConcreteSpec.StageInterface.0.ConcreteSpec.StageInterface.SurfacePreparation.Rhs.add.inj	
 _private.ConcreteSpec.StageInterface.0.ConcreteSpec.StageInterface.SurfacePreparation.Rhs.add.injEq	propext
 _private.ConcreteSpec.StageInterface.0.ConcreteSpec.StageInterface.SurfacePreparation.Rhs.add.sizeOf_spec	

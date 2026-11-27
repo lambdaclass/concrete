@@ -58,33 +58,66 @@ def Parsed.ElaborationDomain (slice : Slice)
   (∃ stream : ParserView, stream.WF ∧ ((sliceParser slice).run stream).2 = some (.ok ast)) ∧
   (∃ result, SliceElaboration slice ast.source.project (cast (sliceGrammarStartShape slice) ast.tree) result) ∧
   ∀ input, SliceElaboration slice ast.source.project (cast (sliceGrammarStartShape slice) ast.tree) (.ok input) →
-    input.Ready
+    input.Ready slice
 
-def PassFunctions.typingEntry (passes : PassFunctions grammar language lang profile) :
+/-- Resolve representable source before unchecked Core typing. The slice is the
+one selected by the registry, independently of the implementation language. -/
+def eligibilityEntry (language : CoreLanguage) (slice : Slice) :
     Stage (AdmissionInput language) StageFailure (CoreInput language) where
-  run input := do
-    let prepared ← input.prepare.mapError (fun _ => StageFailure.unpreparable)
-    (passes.typeCore prepared).map fun _ => prepared
+  run input := if input.slice = slice then
+      (input.prepare .eligibility).mapError (fun _ => .unpreparable)
+    else .error .unpreparable
   kind := .directProof
-  inputInvariant := AdmissionInput.Ready
-  outputInvariant input := input.WF ∧ input.StaticallyTyped
-  success input output := input.prepare = .ok output
-  refusal input failure := match input.prepare with
-    | .error _ => failure = .unpreparable
-    | .ok prepared =>
-      failure = .invalidInput ⟨``CoreInput.StaticallyTyped, 1⟩ ∧ ¬ prepared.StaticallyTyped
+  inputInvariant input := input.Ready slice
+  outputInvariant input := input.slice = slice ∧ input.WF ∧ input.InFragment
+  success input output := input.slice = slice ∧ input.prepare .eligibility = .ok output
+  refusal input failure := failure = .unpreparable ∧
+    (input.slice ≠ slice ∨ ∃ r, input.prepare .eligibility = .error r)
 
-def PassFunctions.admissionEntry (passes : PassFunctions grammar language lang profile) :
+theorem eligibilityEntry_validated (language : CoreLanguage) (slice : Slice) :
+    (eligibilityEntry language slice).Validated := by
+  constructor
+  · intro input output ready ran
+    change (if input.slice = slice then
+      (input.prepare .eligibility).mapError (fun _ => StageFailure.unpreparable) else .error .unpreparable) = .ok output at ran
+    rw [ite_eq_left ready.1] at ran
+    have domain := ready.2 .eligibility
+    cases prepared : input.prepare .eligibility with
+    | error reason => simp [prepared, Except.mapError] at ran
+    | ok i =>
+      simp only [prepared, Except.mapError, Except.ok.injEq] at ran
+      subst output
+      rw [prepared] at domain
+      exact ⟨⟨(input.preparedSlice prepared).trans ready.1, domain⟩, ready.1, prepared⟩
+  · intro input failure ready ran
+    change (if input.slice = slice then
+      (input.prepare .eligibility).mapError (fun _ => StageFailure.unpreparable) else .error .unpreparable) = .error failure at ran
+    rw [ite_eq_left ready.1] at ran
+    cases prepared : input.prepare .eligibility <;> simp [prepared, Except.mapError] at ran
+    exact ⟨ran.symm, .inr ⟨_, prepared⟩⟩
+
+def PassFunctions.typingEntry (passes : PassFunctions grammar language lang profile) (slice : Slice) :
+    Stage (CoreInput language) StageFailure (CoreInput language) where
+  run input := (passes.typeCore input).map fun _ => input
+  kind := .directProof
+  inputInvariant input := input.slice = slice ∧ input.WF ∧ input.InFragment
+  outputInvariant input := input.WF ∧ input.StaticallyTyped
+  success input output := input = output
+  refusal input failure := failure = .invalidInput ⟨``CoreInput.StaticallyTyped, 1⟩ ∧ ¬ input.StaticallyTyped
+
+def PassFunctions.admissionEntry (passes : PassFunctions grammar language lang profile) (slice : Slice) :
     Stage (AdmissionInput language) AdmissionFailure (Admitted language) where
   run input := do
+    unless input.slice = slice do throw (.fragment (.sliceMismatch slice input.slice))
     let prepared ← input.prepare.mapError AdmissionFailure.refused
     (passes.checkCore prepared).map fun discharges => ⟨prepared, discharges⟩
   kind := .directProof
-  inputInvariant := AdmissionInput.Ready
+  inputInvariant input := input.Ready slice
   outputInvariant := Admitted.Valid
-  success input output := ∃ prepared, input.prepare = .ok prepared ∧ Admits prepared output
+  success input output := input.slice = slice ∧ ∃ prepared, input.prepare = .ok prepared ∧ Admits prepared output
   refusal input
-    | .refused diagnostic => input.CheckerRefuses diagnostic
+    | .refused diagnostic => input.slice = slice ∧ input.CheckerRefuses diagnostic
+    | .fragment (.sliceMismatch expected actual) => expected = slice ∧ actual = input.slice ∧ actual ≠ expected
     | _ => False
 
 def Memory.HandoffWF {Ty : Type} {lowering : LoweringLanguage Ty}
@@ -191,7 +224,8 @@ structure Registry (slice : Slice) (profile : Profile) where
   lexer : Stage Source LexRefusal TokenStream
   parser : Stage TokenStream ParseRefusal (Parsed ((sliceGrammar slice).value (sliceGrammar slice).start))
   elaborator : Stage (Parsed ((sliceGrammar slice).value (sliceGrammar slice).start)) ElabRefusal (AdmissionInput (sliceLanguage slice))
-  typing : Stage (AdmissionInput (sliceLanguage slice)) StageFailure (CoreInput (sliceLanguage slice))
+  eligibility : Stage (AdmissionInput (sliceLanguage slice)) StageFailure (CoreInput (sliceLanguage slice))
+  typing : Stage (CoreInput (sliceLanguage slice)) StageFailure (CoreInput (sliceLanguage slice))
   admission : Stage (AdmissionInput (sliceLanguage slice)) AdmissionFailure (Admitted (sliceLanguage slice))
   lowerCore : Stage (Admitted (sliceLanguage slice)) StageFailure (MIR (sliceLoweringLanguage slice) profile)
   lowerUnchecked : Stage (CoreInput (sliceLanguage slice)) StageFailure (MIR (sliceLoweringLanguage slice) profile)
@@ -212,13 +246,14 @@ def registry {slice : Slice} (passes : Passes slice profile) : Registry slice pr
     { run := passes.elaborate
       kind := .directProof
       inputInvariant := Parsed.ElaborationDomain slice
-      outputInvariant := AdmissionInput.Ready
+      outputInvariant := (·.Ready slice)
       success := fun ast input =>
         SliceElaboration slice ast.source.project (cast (sliceGrammarStartShape slice) ast.tree) (.ok input)
       refusal := fun ast failure =>
         SliceElaboration slice ast.source.project (cast (sliceGrammarStartShape slice) ast.tree) (.error failure) }
-  typing := passes.typingEntry
-  admission := passes.admissionEntry
+  eligibility := eligibilityEntry _ slice
+  typing := passes.typingEntry slice
+  admission := passes.admissionEntry slice
   lowerCore := ⟨passes.lowerCore, .directProof, Admitted.Valid,
     fun mir => mir.logicalView.HandoffWF, LowersCore (language := sliceLanguage slice), fun _ _ => False, fun _ _ => True⟩
   lowerUnchecked := passes.lowerUncheckedEntry
@@ -244,7 +279,7 @@ def registry {slice : Slice} (passes : Passes slice profile) : Registry slice pr
   emitLCB := passes.emitLCBEntry
 
 inductive Edge where
-  | lexer | parser | elaborator | typing | admission | lowerCore | lowerUnchecked
+  | lexer | parser | elaborator | eligibility | typing | admission | lowerCore | lowerUnchecked
   | lowerMemory | buildSSA | buildBIR | emitLLVM | emitLCB
 
 /-- Soundness refers to the selected repository contract for the executable edge. -/
@@ -252,6 +287,7 @@ def Stage.Sound {slice : Slice} (passes : Passes slice profile) : Edge → Prop
   | .lexer => (registry passes).lexer.Checks
   | .parser => (registry passes).parser.Checks
   | .elaborator => (registry passes).elaborator.Checks
+  | .eligibility => (registry passes).eligibility.Checks
   | .typing => (registry passes).typing.Checks
   | .admission => (registry passes).admission.Checks
   | .lowerCore => (registry passes).lowerCore.Checks
@@ -267,7 +303,7 @@ private def Registry.chain {slice : Slice} {Output : Type} (r : Registry slice p
     Pipeline Source Output :=
   let lowering := Pipeline.next r.lowerMemory <| .next r.buildSSA <| .next r.buildBIR <|
     .next backend .done
-  let core := if unchecked then Pipeline.next r.typing (.next r.lowerUnchecked lowering)
+  let core := if unchecked then Pipeline.next r.eligibility (.next r.typing (.next r.lowerUnchecked lowering))
     else .next r.admission (.next r.lowerCore lowering)
   .next r.lexer (.next r.parser (.next r.elaborator core))
 

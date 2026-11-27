@@ -215,7 +215,7 @@ def ParserContract : EdgeContract (Graph Parse.parse) where
   outputInvariant := fun ast => ∃ tokens, Derives tokens ast
   correspondence := Derives
 
-def ElaborationContract : EdgeContract (Graph Admission.prepareParsed) where
+def ElaborationContract : EdgeContract (Graph (fun ast => Admission.prepareParsed ast)) where
   kind := .namedPremise "P_elab"
   inputInvariant := ParserContract.outputInvariant
   outputInvariant := OriginWellFormed

@@ -206,7 +206,7 @@ parser, elaborator and lowering stages, with no admission or discharged evidence
 def unchecked (input : Input) : Except Refusal BIR.Program := do
   let tokens ← lex input
   let ast ← Parse.parse tokens
-  let core ← Admission.prepareParsed ast
+  let core ← Admission.prepareParsed ast .eligibility
   let mir ← MIR.lowerUnchecked core
   let mem ← memory mir
   SSA.lower input.path mem

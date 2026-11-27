@@ -19,7 +19,7 @@ def LocatedOutput.erase (out : LocatedOutput) : Output :=
     match binding.statement.e with
     | .atom _ => none
     | .add .. => some (⟨binding.statement.x, binding.operationSpan⟩ : SourceSite)
-  ⟨⟨out.bindings.map (·.statement), out.ret⟩, sites⟩
+  ⟨out.eraseLocations, sites⟩
 
 private def evalExpr (env : List (String × Int)) : Expr → Except ConcreteSpec.Outcome Int
   | .integer value _ _ => .ok value

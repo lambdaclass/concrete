@@ -164,6 +164,8 @@ structure ResourceRefusal where
 def sliceOne : Slice := ⟨⟨1, by decide⟩⟩
 
 inductive Surface0Issue where
+  | unexpectedEntry (span : Surface0.Span)
+  | wildcard (span : Surface0.Span)
   | fallthrough (span : Surface0.Span)
   | unreachable (span : Surface0.Span)
   | integerSuffix (span : Surface0.Span)
@@ -517,80 +519,112 @@ structure MachineProgram (language : CoreLanguage) where
 structure LocatedBinding where
   statement : ConcreteSpec.Slice0.Stmt
   operationSpan : Surface0.Span
-  declarationSpan : Surface0.Span := operationSpan
+  declarationSpan : Surface0.Span
+  /-- An atomic RHS is located at operationSpan. An addition also carries each read. -/
+  operandSpans : match statement.e with
+    | .atom _ => Unit
+    | .add .. => Surface0.Span × Surface0.Span
+
+private def LocatedBinding.readSpans (b : LocatedBinding) : List (ConcreteSpec.Atom × Surface0.Span) :=
+  match b with
+  | ⟨⟨_, .atom a⟩, span, _, _⟩ => [(a.toCore, span)]
+  | ⟨⟨_, .add l r⟩, _, _, (ls, rs)⟩ => [(l.toCore, ls), (r.toCore, rs)]
 
 structure EarlyProgram where
   bindings : List LocatedBinding
   ret : ConcreteSpec.Slice0.Atom
   returnSpan : Surface0.Span
+  resultSpan : Surface0.Span
+
+def EarlyProgram.eraseLocations (p : EarlyProgram) : Slice0.Program :=
+  ⟨p.bindings.map (·.statement), p.ret⟩
 
 namespace SurfacePreparation
 open ConcreteSpec.Surface0
+
+/-- Both routes resolve the same fragment. Admission also enforces source rules
+whose evidence disappears when local names and type annotations are erased. -/
+inductive Purpose where
+  | eligibility | admission
+  deriving DecidableEq
 
 private structure State where
   next : Nat := 0
   bindings : List LocatedBinding := []
 
-private def State.bind (s : State) (rhs : ConcreteSpec.Slice0.Expr)
-    (span : ConcreteSpec.Surface0.Span) (decl : ConcreteSpec.Surface0.Span := span) :
-    ConcreteSpec.Var × State :=
-  let x : ConcreteSpec.Var := ⟨s.next⟩
-  (x, ⟨s.next + 1, ⟨⟨x, rhs⟩, span, decl⟩ :: s.bindings⟩)
-
 abbrev Scope := List (String × ConcreteSpec.Var)
 
+private structure LocatedAtom where
+  atom : Slice0.Atom
+  span : Surface0.Span
+
 private inductive Rhs where
-  | atom (value : ConcreteSpec.Slice0.Atom) (span : ConcreteSpec.Surface0.Span)
-  | add (lhs rhs : ConcreteSpec.Slice0.Atom) (site : ConcreteSpec.Surface0.Span)
+  | atom (value : LocatedAtom)
+  | add (lhs rhs : LocatedAtom) (site : Surface0.Span)
 
 private def Rhs.bind (rhs : Rhs) (s : State)
-    (decl : Option ConcreteSpec.Surface0.Span := none) : ConcreteSpec.Var × State :=
-  match rhs with
-  | .atom a span => s.bind (.atom a) span (decl.getD span)
-  | .add a b site => s.bind (.add a b) site (decl.getD site)
+    (decl : Option Surface0.Span := none) : (Var × Surface0.Span) × State :=
+  let x : Var := ⟨s.next⟩
+  let b : LocatedBinding := match rhs with
+    | .atom a => ⟨⟨x, .atom a.atom⟩, a.span, decl.getD a.span, ()⟩
+    | .add l r site => ⟨⟨x, .add l.atom r.atom⟩, site, decl.getD site, l.span, r.span⟩
+  ((x, b.operationSpan), ⟨s.next + 1, b :: s.bindings⟩)
 
-private def Rhs.asAtom (rhs : Rhs) (s : State) : ConcreteSpec.Slice0.Atom × State :=
+private def Rhs.asAtom (rhs : Rhs) (s : State) : LocatedAtom × State :=
   match rhs with
-  | .atom a _ => (a, s)
+  | .atom a => (a, s)
   | .add .. =>
-    let (x, s) := rhs.bind s
-    (.var x, s)
+    let ((x, site), s) := rhs.bind s
+    (⟨.var x, site⟩, s)
 
-private def expr (scope : Scope) : ConcreteSpec.Surface0.Expr → State → Except Surface0Issue (Rhs × State)
+private def expr (purpose : Purpose) (scope : Scope) :
+    Surface0.Expr → State → Except Surface0Issue (Rhs × State)
   | .integer n suffix span, s =>
-    if suffix.isSome then .error (.integerSuffix span)
-    else .ok (.atom (.lit n) span, s)
+    -- Slice 0 Core can represent only u8. Admission also checks the
+    -- expected-type rule on an explicit u8 suffix.
+    if suffix.any (· != .u8) || (purpose == .admission && suffix.isSome) then
+      .error (.integerSuffix span)
+    else .ok (.atom ⟨.lit n, span⟩, s)
   | .local name span, s =>
     match scope.lookup name with
-    | some x => .ok (.atom (.var x) span, s)
+    | some x => .ok (.atom ⟨.var x, span⟩, s)
     | none => .error (.unknownLocal name span)
   | .add lhs rhs site, s => do
-    let (left, s) ← expr scope lhs s
+    let (left, s) ← expr purpose scope lhs s
     let (a, s) := left.asAtom s
-    let (right, s) ← expr scope rhs s
+    let (right, s) ← expr purpose scope rhs s
     let (b, s) := right.asAtom s
     return (.add a b site, s)
 
-private def binding (acc : Scope × State) (b : Binding) : Except Surface0Issue (Scope × State) := do
+private def binding (purpose : Purpose) (acc : Scope × State) (b : Binding) :
+    Except Surface0Issue (Scope × State) := do
   let (scope, s) := acc
-  if b.name ∈ scope.map Prod.fst then throw (.duplicateBinder b.name b.span)
-  unless Slice0Rules.AvailableBinder b.name do throw (.reservedBinder b.name b.span)
-  let (rhs, s) ← expr scope b.rhs s
-  let (x, s) := rhs.bind s (some b.span)
+  letI : Decidable (Slice0Rules.NamedBinding b.name) := by
+    unfold Slice0Rules.NamedBinding
+    infer_instance
+  unless Slice0Rules.NamedBinding b.name do throw (.wildcard b.span)
+  if purpose = .admission then
+    if b.name ∈ scope.map Prod.fst then throw (.duplicateBinder b.name b.span)
+    unless Slice0Rules.AvailableBinder b.name do throw (.reservedBinder b.name b.span)
+  let (rhs, s) ← expr purpose scope b.rhs s
+  let ((x, _), s) := rhs.bind s (some b.span)
   return ((b.name, x) :: scope, s)
 
-/-- Apply the source admission rules in precedence order and resolve names. Each
-A-normal binding retains its RHS site and its declaration site. -/
-def prepareSurface0 (ast : ConcreteSpec.Surface0.Program) : Except Surface0Issue EarlyProgram := do
-  let (bindings, result) ← (checkBody ast.body).mapError fun
+/-- Body shape is established before visiting any binding. The two routes
+share name resolution and location-preserving A-normalization. -/
+def prepareSurface0 (ast : Surface0.Program) (purpose : Purpose := .admission) :
+    Except Surface0Issue EarlyProgram := do
+  letI : Decidable (Slice0Rules.EntryName ast.name) := by
+    unfold Slice0Rules.EntryName
+    infer_instance
+  unless Slice0Rules.EntryName ast.name do throw (.unexpectedEntry ast.nameSpan)
+  let (bindings, result, returnSpan) ← (checkLocatedBody ast.body).mapError fun
     | .fallthrough => .fallthrough ((ast.body.getLast?.map Statement.span).getD ast.nameSpan)
     | .unreachable span => .unreachable span
-  let (scope, s) ← bindings.foldlM binding ([], {})
-  let (rhs, s) ← expr scope result s
-  let returnSpan := match rhs with
-    | .atom _ span | .add _ _ span => span
+  let (scope, s) ← bindings.foldlM (binding purpose) ([], {})
+  let (rhs, s) ← expr purpose scope result s
   let (ret, s) := rhs.asAtom s
-  return ⟨s.bindings.reverse, ret, returnSpan⟩
+  return ⟨s.bindings.reverse, ret.atom, returnSpan, ret.span⟩
 
 end SurfacePreparation
 
@@ -623,6 +657,7 @@ inductive StraightExpr where
   | construct (name : Name)
 
 inductive StraightBinding where
+  | slice0 (statement : Slice0.Stmt)
   | bind (binder : ConcreteSpec.Binder) (ty : StraightType) (rhs : StraightExpr)
   | destructure (name : Name) (rhs : StraightExpr)
 
@@ -652,7 +687,7 @@ def AdmissionView.slice : AdmissionView → Slice
 def AdmissionView.located : AdmissionView → StraightProgram
   | .one p => p
   | .zero p => ⟨[], p.bindings.map (fun b =>
-      ⟨.bind (.name b.statement.x) .u8 (.scalar b.statement.e), b.operationSpan, b.declarationSpan⟩),
+      ⟨.slice0 b.statement, b.operationSpan, b.declarationSpan⟩),
       .ret p.ret, p.returnSpan⟩
 
 private def StraightType.toCore : StraightType → Ty
@@ -665,18 +700,20 @@ private def StraightExpr.toCore : StraightExpr → Expr
   | .construct name => .mk name []
 
 private def StraightBinding.toCore : StraightBinding → Stmt
+  | .slice0 s => s.toCore
   | .bind binder ty rhs => .let_ binder ty.toCore rhs.toCore
   | .destructure name rhs => .letStruct name [] rhs.toCore
 
 private def StraightProgram.decls (p : StraightProgram) : Declarations :=
   p.declarations.map fun (name, _) => (⟨earlyEntry.module, name⟩, ⟨name, false, []⟩)
 
-def AdmissionView.program (v : AdmissionView) : ConcreteSpec.Program :=
-  let p := v.located
-  ⟨List.map Prod.snd p.decls, p.bindings.map (StraightBinding.toCore ∘ LocatedStraightBinding.statement),
-    match p.ending with
-    | .ret a => .ret a.toCore
-    | .abort => .abort ⟨p.bindings.length⟩⟩
+def AdmissionView.program : AdmissionView → ConcreteSpec.Program
+  | .zero p => Slice0.toCore p.eraseLocations
+  | .one p =>
+    ⟨List.map Prod.snd p.decls, p.bindings.map (StraightBinding.toCore ∘ LocatedStraightBinding.statement),
+      match p.ending with
+      | .ret a => .ret a.toCore
+      | .abort => .abort ⟨p.bindings.length⟩⟩
 
 def StraightProgram.endingOrigin (p : StraightProgram) : SiteId × Origin :=
   earlyOrigin earlyEntry ⟨p.bindings.length⟩ (match p.ending with | .ret _ => .return | .abort => .abort)
@@ -689,35 +726,51 @@ def AdmissionView.originAt (v : AdmissionView) (position : Nat) : Option Origin 
   if position = v.located.bindings.length then some v.located.endingOrigin.2 else
     v.located.bindings[position]?.map fun b => (StraightProgram.bindingOrigin b position).2
 
+private def StraightBinding.destination : StraightBinding → Option Var
+  | .slice0 s => some s.x
+  | .bind (.name x) .. => some x
+  | _ => none
+
 def AdmissionView.bindingAt (v : AdmissionView) (x : Var) : Option Surface0.Span :=
-  v.located.bindings.findSome? fun b => match b.statement with
-    | .bind (.name y) _ _ => if x = y then some b.declarationSpan else none
-    | _ => none
+  (v.located.bindings.find? (fun b => b.statement.destination == some x)).map (·.declarationSpan)
+
+private def StraightBinding.rhs : StraightBinding → StraightExpr
+  | .slice0 s => .scalar s.e
+  | .bind _ _ rhs | .destructure _ rhs => rhs
 
 private def StraightExpr.integrated : StraightExpr → EarlyExpr
   | .scalar e => earlyExpression e
   | .move x => .read (.move x)
   | .construct name => .constructEmpty ⟨earlyEntry.module, name⟩
 
-private def StraightBinding.destination : StraightBinding → Option Var
-  | .bind (.name x) .. => some x
-  | _ => none
+private def atomBound : Slice0.Atom → Nat
+  | .lit _ => 0
+  | .var x => x.id + 1
+
+private def StraightExpr.variableBound : StraightExpr → Nat
+  | .scalar (.atom a) => atomBound a
+  | .scalar (.add l r) => max (atomBound l) (atomBound r)
+  | .move x => x.id + 1
+  | .construct _ => 0
 
 private def StraightBinding.descriptor : StraightBinding → Own.Descriptor
-  | .bind _ .u8 _ => ⟨.int .u8, true, false⟩
+  | .slice0 _ | .bind _ .u8 _ => ⟨.int .u8, true, false⟩
   | .bind _ (.nominal _) _ => ⟨.unit, false, false⟩
   | .destructure .. => ⟨.unit, true, false⟩
 
 /-- Build the machine from the same located syntax inspected by admission. A
-synthetic destination for a wildcard or destructure is fresh above every source binding. -/
+synthetic destination for a wildcard or destructure is fresh above all source reads and writes, including unbound reads. -/
 def AdmissionView.execution (v : AdmissionView) : MachineProgram (sliceLanguage v.slice) :=
   let p := v.located
-  let fresh := p.bindings.foldl (fun n b => max n ((b.statement.destination.map (·.id + 1)).getD 0)) 0
+  let endBound := match p.ending with | .ret a => atomBound a | .abort => 0
+  let fresh := p.bindings.foldl (fun n b =>
+    max n (max ((b.statement.destination.map (·.id + 1)).getD 0) b.statement.rhs.variableBound)) endBound
   let rows := p.bindings.zipIdx.map fun (b, i) =>
     let x := b.statement.destination.getD ⟨fresh + i⟩
-    let expr := match b.statement with
-      | .bind _ _ rhs => rhs.integrated
-      | .destructure name rhs => .consumeEmpty ⟨earlyEntry.module, name⟩ rhs.integrated
+    let rhs := b.statement.rhs.integrated
+    let expr : EarlyExpr := match b.statement with
+      | .destructure name _ => .consumeEmpty ⟨earlyEntry.module, name⟩ rhs
+      | _ => rhs
     (x, b.statement.descriptor, expr, StraightProgram.bindingOrigin b i)
   let ownership := rows.map fun (x, desc, _) => (x, desc)
   let ending : Exec.Stmt ((sliceLanguage v.slice).instrumented ownership p.decls) := match p.ending with
@@ -812,15 +865,19 @@ def CoreInput.LocationsWF {language : CoreLanguage} (input : CoreInput language)
 def surfaceFileSpan (s : ConcreteSpec.Surface0.Span) : FileSpan :=
   ⟨s.fileId, s.start, s.stop, s.line, s.column⟩
 
-def CoreInput.DeclarationLocationsWF {language} (input : CoreInput language) : Prop :=
+/-- Diagnostic spans in addition to the machine's operation origins. -/
+def CoreInput.DiagnosticLocationsWF {language} (input : CoreInput language) : Prop :=
   match input.payload with
   | .integrated _ => True
   | .straightLine v _ =>
-    ∀ location ∈ List.map Prod.snd v.located.declarations ++ v.located.bindings.map (·.declarationSpan),
+    let reads := match v with
+      | .zero p => p.resultSpan :: p.bindings.flatMap (fun b => b.readSpans.map Prod.snd)
+      | .one _ => []
+    ∀ location ∈ List.map Prod.snd v.located.declarations ++ v.located.bindings.map (·.declarationSpan) ++ reads,
       ∃ span, (surfaceFileSpan location).Binds input.project span
 
 def CoreInput.WF {language : CoreLanguage} (input : CoreInput language) : Prop :=
-  input.LocationsWF ∧ input.ArgumentsWF ∧ input.DeclarationLocationsWF
+  input.LocationsWF ∧ input.ArgumentsWF ∧ input.DiagnosticLocationsWF
 
 /-- A discharge identifies an exact operation, ordered typed operands and obligation.
 The enclosing set belongs to the exact Core payload and its checking context. -/
@@ -849,6 +906,7 @@ def AdmissionView.Represents {language} (v : AdmissionView) (i : CoreInput langu
 
 inductive BridgeRefusal where
   | unsupportedSlice (slice : Slice)
+  | sliceMismatch (expected actual : Slice)
   | outsideFragment
 
 /-- Structural bridge failures are explicit at execution time. A validated stage
@@ -893,22 +951,30 @@ def CoreInput.StaticallyTyped {language} (input : CoreInput language) : Prop :=
 def CoreInput.Accepted {language} (input : CoreInput language) : Prop :=
   ∃ view : AdmissionView, view.Represents input ∧ Checked view.program
 
+private def EarlyProgram.readsAt (p : EarlyProgram) (position : Nat) :=
+  if position = p.bindings.length then [(p.ret.toCore, p.resultSpan)]
+  else (p.bindings[position]?.map LocatedBinding.readSpans).getD []
+
 def AdmissionView.render (v : AdmissionView) (r : Admission.Refusal) : Option CheckerRefusal := do
   let general := (⟨``ProgramPermitted, 1⟩ : RuleId)
   match r with
   | .atPosition pos reason =>
     let origin ← v.originAt pos
-    let rule := match v, reason with
-      | .zero _, .literalOutOfRange .. => ⟨``Slice0Rules.LiteralTyped, 1⟩
-      | .zero _, .unusedBinding _ => ⟨``Slice0Rules.LocalsUsed, 1⟩
-      | .zero _, .additionOverflowUnproven => ⟨``Slice0Rules.AdditionFits, 1⟩
-      | _, _ => general
+    let (rule, primary) ← match v, reason with
+      | .zero p, .literalOutOfRange ty n
+      | .zero p, .additionOperandType _ (.atomFailure (.outOfRange ty n)) => do
+        -- The checker visits operands from left to right, including equal literals.
+        let (_, span) ← (p.readsAt pos).find? (fun read => read.1 == .int ty n)
+        pure (⟨``Slice0Rules.LiteralTyped, 1⟩, surfaceFileSpan span)
+      | .zero _, .unusedBinding _ => pure (⟨``Slice0Rules.LocalsUsed, 1⟩, origin.lexical)
+      | .zero _, .additionOverflowUnproven => pure (⟨``Slice0Rules.AdditionFits, 1⟩, origin.lexical)
+      | _, _ => pure (general, origin.lexical)
     let related ← match reason with
       | .unusedBinding x | .liveLinearBinding x => do
         let span ← v.bindingAt x
         pure [(⟨"binding"⟩, surfaceFileSpan span)]
       | _ => pure []
-    return ⟨rule, origin.lexical, related, none, .core r⟩
+    return ⟨rule, primary, related, none, .core r⟩
   | .duplicateStructName name | .reservedStructName name | .duplicateDeclaredField name _ =>
     let (_, span) ← v.located.declarations.find? (fun d => d.1 == name)
     return ⟨general, surfaceFileSpan span, [], none, .core r⟩
@@ -919,6 +985,8 @@ def CoreInput.CheckerRefuses {language} (input : CoreInput language) (failure : 
 
 def Surface0Issue.render (reason : Surface0Issue) : CheckerRefusal :=
   let (name, span) := match reason with
+    | .unexpectedEntry s => (``Slice0Rules.EntryName, s)
+    | .wildcard s => (``Slice0Rules.NamedBinding, s)
     | .fallthrough s => (``Slice0Rules.Returns, s)
     | .unreachable s => (``Slice0Rules.ReachableBody, s)
     | .integerSuffix s => (``Slice0Rules.ExpectedTypeLiteral, s)
@@ -937,18 +1005,40 @@ inductive AdmissionInput (language : CoreLanguage) where
   | pending {slice : Slice} (project : Project) (source : SourceForm slice)
       (instanceEq : language = sliceLanguage slice)
 
-def AdmissionInput.prepare {language} : AdmissionInput language → Except CheckerRefusal (CoreInput language)
-  | .core input => .ok input
-  | .pending project (.zero source) eq => do
-    let body ← (SurfacePreparation.prepareSurface0 source).mapError Surface0Issue.render
-    return ⟨project, slice0, .straightLine (.zero body) eq⟩
+def AdmissionInput.slice {language} : AdmissionInput language → Slice
+  | .core input => input.slice
+  | .pending (slice := s) .. => s
 
-def AdmissionInput.Ready {language} (input : AdmissionInput language) : Prop :=
-  match input.prepare with
-  | .ok prepared => prepared.WF ∧ prepared.InFragment
-  | .error refusal => match input with
-    | .pending project .. => ∃ span, refusal.primary.Binds project span
-    | .core _ => False
+def AdmissionInput.prepare {language} (input : AdmissionInput language)
+    (purpose : SurfacePreparation.Purpose := .admission) : Except CheckerRefusal (CoreInput language) :=
+  match input with
+  | .core i => .ok i
+  | .pending project (.zero source) eq =>
+    match SurfacePreparation.prepareSurface0 source purpose with
+    | .error issue => .error issue.render
+    | .ok body => .ok ⟨project, slice0, .straightLine (.zero body) eq⟩
+
+theorem AdmissionInput.preparedSlice {language} (input : AdmissionInput language)
+    {purpose output} (h : input.prepare purpose = .ok output) : output.slice = input.slice := by
+  cases input with
+  | core i => cases h; rfl
+  | pending project source eq =>
+    cases source with
+    | zero ast =>
+      change (match SurfacePreparation.prepareSurface0 ast purpose with
+        | .error issue => Except.error issue.render
+        | .ok body => .ok (CoreInput.mk project slice0 (.straightLine (.zero body) eq))) = .ok output at h
+      split at h <;> cases h
+      rfl
+
+def AdmissionInput.Ready {language} (input : AdmissionInput language) (slice : Slice) : Prop :=
+  input.slice = slice ∧ ∀ purpose, match input.prepare purpose with
+    | .ok prepared => prepared.WF ∧ prepared.InFragment
+    | .error refusal => match input with
+      | .pending project .. =>
+        (∃ span, refusal.primary.Binds project span) ∧
+        ∀ related ∈ refusal.related, ∃ span, related.2.Binds project span
+      | .core _ => False
 
 def AdmissionInput.CheckerRefuses {language} (input : AdmissionInput language) (r : CheckerRefusal) : Prop :=
   match input.prepare with

@@ -127,9 +127,7 @@ def SliceElaboration (slice : Slice) (project : Project)
   if h : slice = slice0 then
     match ast with
     | .inl tree => ∃ program, Concrete.Elab.surfaceProgram tree = some program ∧
-        ((Concrete.Elab.elaborateLocated program).map (fun out =>
-          AdmissionInput.pending project (.zero out) (congrArg sliceLanguage h))).mapError
-          ElabRefusal.slice0 = result
+        .ok (.pending project (.zero program) (congrArg sliceLanguage h)) = result
     | .inr _ => False
   else result = .error (.unsupportedSlice slice)
 
@@ -400,6 +398,21 @@ private def commitOwner (state : MemoryRegisters language profile) (root : Place
       if slot.place == id then {slot with status := ((Own.slot owners id).map (·.status)).getD slot.status}
       else slot}
 
+/-- Read the projected byte range of a nonempty materialized place at the
+resolved target. This also covers spec targets without a hosted backend. -/
+def loadMaterialized (memory : Memory lang profile) (state : MemoryRegisters language profile)
+    {ty : language.operands.Ty} (place : MemoryPlace _ ty) (target : Target) :
+    Option language.operands.Val := do
+  let range ← memory.rangeAt state place.logical
+  let bytes ← state.bytes.load target range.ptr range.extent range.align
+  match language.scalarType ty with
+  | some scalar =>
+    let value ← Hybrid.decode target scalar bytes
+    return language.valueShape.symm ▸ CoreValue.scalar value
+  | none =>
+    let value ← language.decodeOther target ty bytes
+    return language.valueShape.symm ▸ CoreValue.other value
+
 private def loadBacking (memory : Memory lang profile)
     (state : MemoryRegisters language profile) {ty : language.operands.Ty}
     (place : MemoryPlace _ ty) : Option language.operands.Val := do
@@ -414,15 +427,7 @@ private def loadBacking (memory : Memory lang profile)
       let root ← AList.lookup state.zeroValues place.logical.root
       if place.logical.path.isEmpty then some root else language.field root place.logical.path
     else do
-      let range ← memory.rangeAt state place.logical
-      let bytes ← state.bytes.load profile.memoryTarget range.ptr range.extent range.align
-      match language.scalarType ty with
-      | some scalar =>
-        let value ← Hybrid.decode profile.memoryTarget scalar bytes
-        return language.valueShape.symm ▸ CoreValue.scalar value
-      | none =>
-        let value ← language.decodeOther profile.memoryTarget ty bytes
-        return language.valueShape.symm ▸ CoreValue.other value
+      memory.loadMaterialized state place profile.memoryTarget
 
 def loadValue (memory : Memory lang profile)
     (state : MemoryRegisters language profile) {ty : language.operands.Ty}

@@ -661,14 +661,18 @@ inductive BodyError where
 unconditional return is unreachable and must be refused
 (decided-2026-11-23-slice0-and-roadmap-answers, answer 1a).
 A successful check gives elaboration the bindings and the single final result. -/
-def checkBody (body : List Statement) : Except BodyError (List Binding × Expr) :=
+def checkLocatedBody (body : List Statement) : Except BodyError (List Binding × Expr × Span) :=
   go [] body
 where
-  go (bindings : List Binding) : List Statement → Except BodyError (List Binding × Expr)
+  go (bindings : List Binding) : List Statement → Except BodyError (List Binding × Expr × Span)
     | [] => .error .fallthrough
     | .bind binding _ :: rest => go (binding :: bindings) rest
-    | [.ret value _] => .ok (bindings.reverse, value)
+    | [.ret value span] => .ok (bindings.reverse, value, span)
     | .ret _ _ :: next :: _ => .error (.unreachable next.span)
+
+/-- The unlocated projection used by the source correspondence judgments. -/
+def checkBody (body : List Statement) : Except BodyError (List Binding × Expr) :=
+  (checkLocatedBody body).map fun (bindings, result, _) => (bindings, result)
 
 section
 private def sampleSpan : Span := ⟨0, 9, 1, 1, ⟨0⟩⟩

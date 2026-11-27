@@ -34,31 +34,4 @@ def surfaceProgram : SyntaxTree → Option Program
     return ⟨name, surfaceSpan span, ← statements.mapM SyntaxTree.statement⟩
   | _ => none
 
-inductive ElabFailure where
-  | unexpectedEntry (span : Span)
-  | wildcard (span : Span)
-
-def ElabFailure.diagnostic : ElabFailure → Refusal
-  | .unexpectedEntry span => .unsupported s!"expected the entry point 'main' at byte {span.start}"
-  | .wildcard span => .unsupported s!"wildcard binding at byte {span.start}"
-
-/-- The handoff preserves every name, suffix, statement and coordinate.
-Only unsupported syntax or entry shape can fail here. -/
-def elaborateLocated (ast : Program) : Except ElabFailure Program :=
-  if ast.name != "main" then .error (.unexpectedEntry ast.nameSpan)
-  else match ast.body.findSome? (fun
-      | .bind b _ => if b.name = "_" then some b.span else none
-      | .ret .. => none) with
-    | some span => .error (.wildcard span)
-    | none => .ok ast
-
-theorem elaborateLocated_faithful {ast out : Program} (h : elaborateLocated ast = .ok out) :
-    ast = out := by
-  unfold elaborateLocated at h
-  split at h
-  · cases h
-  · split at h
-    · cases h
-    · exact Except.ok.inj h
-
 end Concrete.Elab

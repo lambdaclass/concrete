@@ -70,7 +70,7 @@ theorem declarationsOfTyped {language} {i : CoreInput language} (typed : i.Stati
   obtain ⟨v, ⟨_, eq, code⟩, decls, _⟩ := typed
   cases eq
   simp only [CoreInput.machineProgram, code, Payload.execution]
-  exact decls
+  cases v <;> exact decls
 
 /-- The issuer fixes the pre-read context and operands in the dependent batch.
 Only an ordered subset of that batch can cross into operation-keyed evidence. -/

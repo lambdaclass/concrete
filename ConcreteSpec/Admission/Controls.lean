@@ -3,7 +3,8 @@ import ConcreteSpec.Admission.Early
 namespace ConcreteSpec.Admission.Controls
 
 private def return42 : StageInterface.EarlyProgram :=
-  ⟨[], .lit 42, ⟨0, 2, 1, 1, ⟨0⟩⟩⟩
+  let span := (⟨0, 2, 1, 1, ⟨0⟩⟩ : Surface0.Span)
+  ⟨[], .lit 42, span, span⟩
 
 private def return256 : StageInterface.EarlyProgram :=
   { return42 with ret := .lit 256 }
@@ -42,7 +43,7 @@ theorem duplicate_refused : batch.validates [issued, issued] = false := by decid
 example (project : Core.SourcePathSpan.Project) :
     let span := return42.returnSpan
     let view := StageInterface.AdmissionView.zero
-      ⟨[⟨⟨⟨0⟩, .add (.lit 19) (.lit 23)⟩, span, span⟩], .var ⟨0⟩, span⟩
+      ⟨[⟨⟨⟨0⟩, .add (.lit 19) (.lit 23)⟩, span, span, (span, span)⟩], .var ⟨0⟩, span, span⟩
     let input : StageInterface.CoreInput (StageInterface.sliceLanguage view.slice) :=
       ⟨project, view.slice, .straightLine view rfl⟩
     let exactBatch : InputBatch input := ⟨view, ⟨rfl, rfl, rfl⟩, batch⟩

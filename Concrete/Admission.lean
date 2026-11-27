@@ -3,9 +3,11 @@ import Concrete.Elab
 namespace Concrete.Admission
 
 /-- Compose structural elaboration and spec preparation for the pre-cutover driver. -/
-def prepareParsed (ast : ConcreteSpec.Surface0.Program) : Except Refusal Elab.Output := do
-  let source ← (Elab.elaborateLocated ast).mapError Elab.ElabFailure.diagnostic
-  let prepared ← (ConcreteSpec.StageInterface.SurfacePreparation.prepareSurface0 source).mapError fun
+def prepareParsed (ast : ConcreteSpec.Surface0.Program)
+    (purpose : ConcreteSpec.StageInterface.SurfacePreparation.Purpose := .admission) : Except Refusal Elab.Output := do
+  let prepared ← (ConcreteSpec.StageInterface.SurfacePreparation.prepareSurface0 ast purpose).mapError fun
+    | .unexpectedEntry span => .unsupported s!"expected the entry point 'main' at byte {span.start}"
+    | .wildcard span => .unsupported s!"wildcard binding at byte {span.start}"
     | .fallthrough _ => .checker "reachable end of a u8 function (STMT-9)"
     | .unreachable span =>
       .checker s!"unreachable code (STMT-14) at {span.line}:{span.column}, bytes {span.start}..{span.stop}"
