@@ -11,6 +11,10 @@
 # Planted controls exercise typed observation mismatches, manifest inventory and exact byte
 # comparison. The two native runtime controls exercise divergence and invalid result words.
 set -euo pipefail
+# CI restores .lake across revisions. Clean the import path before the first build
+# or probe, including probes that run Lean with a private mutation overlay.
+prune_cache=(env -u LEAN_PATH lean --run "$PWD/scripts/checks/lib/prune_lean_cache.lean")
+bash scripts/checks/lib/bounded.sh 60 "${prune_cache[@]}"
 # shellcheck source=scripts/checks/lib/slice0_common.sh
 source scripts/checks/lib/slice0_common.sh
 # shellcheck source=scripts/checks/lib/has_match.sh
@@ -65,6 +69,12 @@ if [[ ${CONCRETE_TEST_EMIT_ONLY:-0} != 1 ]]; then
     root_module=ConcreteChecks/StageInterfaces.lean
     good='example : (0 : Nat) = 0 := rfl'
     echo "$good" >"$root_module"
+    nested=ConcreteChecks/StageInterfaces/Frontend/Planted
+    placements=("$root_module" "$nested.lean" ConcreteChecks/Unlisted.lean)
+    if [[ -f "$root/ConcreteChecks.lean" ]]; then
+      echo "$good" >ConcreteChecks.lean
+      placements+=(ConcreteChecks.lean)
+    fi
     build stage-interface-plant-baseline "$work/plant-baseline.log" bounded 60 "${stage_controls[@]}"
     reject_false_control() {
       local module=$1
@@ -79,15 +89,31 @@ if [[ ${CONCRETE_TEST_EMIT_ONLY:-0} != 1 ]]; then
       fi
     }
     # Change the cached root, then add fresh, unimported sources at two depths.
-    for module in "$root_module" ConcreteChecks/StageInterfaces/Frontend/Planted.lean ConcreteChecks/Unlisted.lean; do
+    for module in "${placements[@]}"; do
       echo 'example : (0 : Nat) = 1 := rfl' >"$module"
       reject_false_control "$module" lake build
       reject_false_control "$module" "${stage_controls[@]}"
       echo "$good" >"$module"
     done
-    # Restore the old glob after caching all three successes. Even with valid
-    # oleans present, the inventory must identify both files the target skips.
+    echo 'def plantedRender (n : Nat) := toString n' >>"$nested.lean"
     build stage-interface-plant-repaired "$work/plant-repaired.log" bounded 60 "${stage_controls[@]}"
+    # Model the LLVM fixture's raw import from a cross-revision cache.
+    printf '%s\n' "import ${nested//\//.}" 'example : plantedRender 42 = "42" := rfl' >RenderProbe.lean
+    build live-render-import "$work/render.log" bounded 60 lake env lean RenderProbe.lean
+    mv "$nested.lean" "${nested}Renamed.lean"
+    test -s ".lake/build/lib/lean/$nested.olean"
+    bounded 60 "${prune_cache[@]}"
+    rc=0
+    bounded 60 lake env lean RenderProbe.lean >"$work/render.log" 2>&1 || rc=$?
+    if [[ $rc != 1 ]] || ! has_match -F "of module ${nested//\//.} does not exist" <"$work/render.log"; then
+      cat "$work/render.log" >&2
+      echo "FAIL cache restore: expected the renamed rendering import to fail" >&2
+      exit 1
+    fi
+    echo "ok   a renamed rendering control with a cached .olean fails at its unchanged import"
+    # Restore the old glob. The live root and sibling are still cached.
+    test -s .lake/build/lib/lean/ConcreteChecks/StageInterfaces.olean
+    test -s .lake/build/lib/lean/ConcreteChecks/Unlisted.olean
     sed -i 's/"ConcreteChecks\.+"/"ConcreteChecks.StageInterfaces.+"/' lakefile.toml
     rc=0
     bounded 60 "${stage_controls[@]}" >"$work/plant.log" 2>&1 || rc=$?

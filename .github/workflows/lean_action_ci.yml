@@ -78,6 +78,10 @@ jobs:
         with:
           build-args: "--log-level=warning"
 
+      - &prune_lean_cache
+        name: Prune restored Lean modules without a current source
+        run: env -u LEAN_PATH lean --run scripts/checks/lib/prune_lean_cache.lean
+
       - name: Build the specification, warnings refused
         run: |
           OUTPUT=$(lake build 2>&1) || { echo "$OUTPUT"; exit 1; }
@@ -131,6 +135,8 @@ jobs:
         with:
           build-args: "--log-level=warning"
 
+      - *prune_lean_cache
+
       - name: Proof axioms (scripts/proofs/axioms.sh)
         run: bash scripts/proofs/axioms.sh
 
@@ -165,6 +171,8 @@ jobs:
         with:
           build-args: "--log-level=warning"
 
+      - *prune_lean_cache
+
       - name: Proof trust ban (sorry, native_decide) (scripts/proofs/trust_ban.sh)
         run: bash scripts/proofs/trust_ban.sh
 
@@ -198,6 +206,8 @@ jobs:
         uses: leanprover/lean-action@v1
         with:
           build-args: "--log-level=warning"
+
+      - *prune_lean_cache
 
       - name: Kernel replay (leanchecker) (scripts/proofs/kernel_replay.sh)
         run: bash scripts/proofs/kernel_replay.sh
@@ -244,6 +254,8 @@ jobs:
         uses: leanprover/lean-action@v1
         with:
           build-args: "--log-level=warning"
+
+      - *prune_lean_cache
 
       - name: External re-check (con-leche, nanoda) (scripts/proofs/external.sh)
         shell: "nix develop .#extcheck --command bash --noprofile --norc -eo pipefail {0}"
