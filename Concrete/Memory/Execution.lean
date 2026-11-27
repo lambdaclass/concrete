@@ -92,8 +92,9 @@ private theorem read_frame {memory : Memory lang profile} {q read : MemoryRegist
   cases op with
   | literal =>
     simp only [readValue] at args
-    split at args <;> obtain ⟨_, _, eq⟩ := Option.bind_eq_some_iff.mp args <;>
-      cases eq <;> exact ⟨rfl, rfl⟩
+    obtain ⟨_, _, eq⟩ := Option.bind_eq_some_iff.mp args
+    cases eq
+    exact ⟨rfl, rfl⟩
   | copy p =>
     obtain rfl := ((memory.copyRead_iff q p v read).mp args).2.2.2
     exact ⟨rfl, rfl⟩

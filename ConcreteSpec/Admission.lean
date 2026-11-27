@@ -48,11 +48,8 @@ private theorem bindPat_types (d : StructDecl) (facts : List (Name × Option Sca
           ih ((x, entry) :: ctx)
       | none => simpa [bindPat, bindTypes, h] using ih ctx
 
-theorem checked_staticallyTyped {program : Program} (h : Checked program) :
-    StaticallyTyped program := by
-  refine ⟨h.1, ?_⟩
-  have body {Δ : Decls} {Γ : Ctx} {ss : List Stmt} {ending : Terminator}
-      (ok : BodyOk Δ Γ ss ending) : BodyTyped Δ Γ.tys ss ending := by
+theorem body_staticallyTyped {evidence : Ctx → Expr → Bool} {Δ : Decls} {Γ : Ctx} {ss : List Stmt} {ending : Terminator}
+      (ok : BodyOkWith evidence Δ Γ ss ending) : BodyTyped Δ Γ.tys ss ending := by
     induction ok with
     | ret ht => exact .ret ht
     | abort => exact .abort
@@ -67,7 +64,9 @@ theorem checked_staticallyTyped {program : Program} (h : Checked program) :
       | letStruct ht _ hd hp hu _ =>
         apply BodyTyped.letStruct ht hd hp
         simpa only [bindPat_types, uses_tys hu] using ih
-  exact body h.2
+
+theorem checked_staticallyTyped {program : Program} (h : Checked program) :
+    StaticallyTyped program := ⟨h.1, body_staticallyTyped h.2⟩
 
 theorem Batch.staticallyTyped {program : Program} (batch : Batch program) :
     StaticallyTyped program :=
@@ -95,10 +94,10 @@ private theorem bodyDischarge_from {Δ : Decls} {Γ : Ctx} {ss : List Stmt} {end
     {d : Discharge} (hd : d ∈ ds) : start ≤ d.position := by
   induction ss generalizing Γ start ds with
   | nil =>
-    simp only [checkCoreBody] at h
+    simp only [checkCoreBody, checkCoreBodyWith] at h
     split at h <;> simp_all
   | cons s rest ih =>
-    simp only [checkCoreBody] at h
+    simp only [checkCoreBody, checkCoreBodyWith, ArithmeticPolicy.discharge] at h
     split at h
     · cases h
     · rename_i next _
@@ -116,10 +115,10 @@ private theorem bodyDischarge_unique {Δ : Decls} {Γ : Ctx} {ss : List Stmt} {e
     (ds.map Discharge.position).Nodup := by
   induction ss generalizing Γ start ds with
   | nil =>
-    simp only [checkCoreBody] at h
+    simp only [checkCoreBody, checkCoreBodyWith] at h
     split at h <;> simp_all
   | cons s rest ih =>
-    simp only [checkCoreBody] at h
+    simp only [checkCoreBody, checkCoreBodyWith, ArithmeticPolicy.discharge] at h
     split at h
     · cases h
     · split at h
@@ -142,7 +141,7 @@ private theorem bodyDischarge_unique {Δ : Decls} {Γ : Ctx} {ss : List Stmt} {e
 theorem Batch.uniquePositions {program : Program} (batch : Batch program) :
     (batch.discharges.map Discharge.position).Nodup := by
   have h := batch.issued
-  unfold checkProgram at h
+  unfold checkProgram checkProgramWith at h
   split at h
   · exact bodyDischarge_unique h
   · cases h
@@ -182,7 +181,7 @@ private theorem bodyDischarge_reachable {Δ : Decls} {ending : Terminator}
     ∃ next, execStmt Δ before s = .ok next := by
   induction reach generalizing Γ start ds with
   | here =>
-    simp only [checkCoreBody] at h
+    simp only [checkCoreBody, checkCoreBodyWith, ArithmeticPolicy.discharge] at h
     split at h
     · cases h
     · rename_i next hs
@@ -195,7 +194,7 @@ private theorem bodyDischarge_reachable {Δ : Decls} {ending : Terminator}
         · have hlt := bodyDischarge_from ht rest
           omega
   | next step _ ih =>
-    simp only [checkCoreBody] at h
+    simp only [checkCoreBody, checkCoreBodyWith, ArithmeticPolicy.discharge] at h
     split at h
     · cases h
     · rename_i next hs
@@ -224,7 +223,7 @@ theorem Batch.dischargeSafety {program : Program} (batch : Batch program) {d : D
     AtomTy d.context.tys d.left (.int d.type) ∧ AtomTy d.context.tys d.right (.int d.type) ∧
     ∃ next, execStmt program.decls before s = .ok next := by
   have h := batch.issued
-  unfold checkProgram at h
+  unfold checkProgram checkProgramWith at h
   split at h
   · exact bodyDischarge_reachable reached .nil h member (by simp)
   · cases h

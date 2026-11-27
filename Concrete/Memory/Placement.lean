@@ -315,6 +315,7 @@ private theorem Rel.loadBacking {memory : Memory lang profile} {q : MemoryRegist
   cases p.storage <;> first | rfl | skip
   change (if memory.zeroRoot q.frame p.logical.root then _ else _) = (if memory.zeroRoot q.frame p.logical.root then _ else _)
   split <;> first | rfl | skip
+  unfold Memory.loadMaterialized
   rw [h.loadAt p.logical]
   rfl
 

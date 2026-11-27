@@ -16,6 +16,11 @@ source scripts/checks/lib/slice0_common.sh
 # shellcheck source=scripts/checks/lib/has_match.sh
 source scripts/checks/lib/has_match.sh
 
+# The trap row exercises exactly the expression masked by the reserved-binder refusal.
+fixture_dir=$(dirname "$test_manifest")
+sed 's/\bOption\b/number/g' "$fixture_dir/slice0/reserved_binder_trap.con" >"$work/legal-binder-trap.con"
+diff -u "$work/legal-binder-trap.con" "$fixture_dir/slice0/legal_binder_trap.con"
+
 # Lake builds each control's imports from its header. For executable controls,
 # Lean also needs the file as the argument to --run.
 # Emit-only runs validate fixture expectations without building native executables.
@@ -455,7 +460,6 @@ if [ "${CONCRETE_TEST_MANIFEST_SKIP_CONTROLS:-0}" != 1 ]; then
   done <<<"$rows"
 
   rc=0
-  fixture_dir=$(dirname "$test_manifest")
   "${emitter[@]}" control-wrong-compiler-origin tests/slice0/after_return.con \
     "$fixture_dir/slice0/after_return.con" || rc=$?
   if [ "$rc" = 18 ]; then

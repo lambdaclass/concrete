@@ -2,6 +2,21 @@ import Concrete.Elab
 
 namespace Concrete.Admission
 
+/-- Compose structural elaboration and spec preparation for the pre-cutover driver. -/
+def prepareParsed (purpose : ConcreteSpec.StageInterface.SurfacePreparation.Purpose)
+    (ast : ConcreteSpec.Surface0.Program) : Except Refusal Elab.Output := do
+  let prepared ← (ConcreteSpec.StageInterface.SurfacePreparation.prepareSurface0 ast purpose).mapError fun
+    | .unexpectedEntry span => .unsupported s!"expected the entry point 'main' at byte {span.start}"
+    | .wildcard span => .unsupported s!"wildcard binding at byte {span.start}"
+    | .fallthrough _ => .checker "reachable end of a u8 function (STMT-9)"
+    | .unreachable span =>
+      .checker s!"unreachable code (STMT-14) at {span.line}:{span.column}, bytes {span.start}..{span.stop}"
+    | .integerSuffix span => .checker s!"integer suffix in an expected-type position at byte {span.start}"
+    | .unknownLocal name span => .checker s!"unknown local '{name}' at byte {span.start}"
+    | .duplicateBinder name span | .reservedBinder name span =>
+      .checker s!"binding shadows '{name}' at byte {span.start}"
+  return Elab.LocatedOutput.erase prepared
+
 /-- The statically known result of an addition, indexed by the Core binder for that operation. -/
 structure Token where
   binding : ConcreteSpec.Var

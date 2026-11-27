@@ -341,7 +341,8 @@ def lowerGraph (mir : MIR lowering profile) :
     functions
     storage := prepared.storage
     layouts := prepared.layouts
-    mutableLocals := mir.mutableLocals}
+    mutableLocals := mir.mutableLocals
+    declarations := mir.declarations}
 
 /-- Static part of the frozen contract on the actual result of lowering.
 The source handoff is the input invariant of the registry edge. -/
@@ -349,6 +350,7 @@ structure GraphHandoff (mir : MIR lowering profile) (memory : Interfaces.Memory 
   project : memory.project = mir.project
   entry : memory.entry = mir.entry
   signatures : memory.signatures = mir.signatures
+  declarations : memory.declarations = mir.declarations
   mutability : memory.mutableLocals = mir.mutableLocals
   origins : PreservesOrigins mir.origins memory.origins
   layouts : LayoutsMatch language.layout memory
@@ -372,7 +374,8 @@ theorem lowerGraph_handoff {mir : MIR lowering profile} {memory : Interfaces.Mem
       subst memory
       let memory : Interfaces.Memory lowering profile := {
         project := mir.project, entry := mir.entry, signatures := mir.signatures
-        functions, layouts := graphs.layouts, storage := graphs.storage, mutableLocals := mir.mutableLocals }
+        functions, layouts := graphs.layouts, storage := graphs.storage, mutableLocals := mir.mutableLocals
+        declarations := mir.declarations }
       have walk := traversal_mapM placeFunction body
       have shape {x y : FnId × LocalTypes language.operands.Ty × MemoryGraph lowering}
           (h : placeFunction x = .ok y) :
@@ -413,7 +416,7 @@ theorem lowerGraph_handoff {mir : MIR lowering profile} {memory : Interfaces.Mem
           obtain ⟨y, hy, rel⟩ := walk.forward _ hx
           exact ⟨y, hy, ((shape rel).2.2.origins o).mpr member⟩
       have fnKeys := ids.symm.trans keys
-      refine ⟨rfl, rfl, rfl, rfl, ?_, layouts, promoted, ?_, ?_⟩
+      refine ⟨rfl, rfl, rfl, rfl, rfl, ?_, layouts, promoted, ?_, ?_⟩
       · rw [← logicalView_origins mir]
         exact ⟨fun o => (origins o).mp, fun o => (origins o).mpr⟩
       · refine ⟨⟨fnKeys ▸ source.1.1, source.1.2.1, storageKeys ▸ source.1.1,

@@ -340,7 +340,7 @@ theorem lowerGraph_refines {mir : MIR lang profile} {memory : Interfaces.Memory 
     (steps : ProgramSafe Src mir → LocalCorrespondence (language := language) mir memory) :
     LowersMemory (language := language) mir memory := by
   have static := lowerGraph_handoff ok source
-  refine ⟨static.project, static.entry, static.origins, static.layouts, static.signatures,
+  refine ⟨static.project, static.entry, static.origins, static.layouts, ⟨static.signatures, static.declarations⟩,
     static.promotion, static.handoff.1, source.1, ?_, ?_⟩
   · intro safe
     have corr := steps safe

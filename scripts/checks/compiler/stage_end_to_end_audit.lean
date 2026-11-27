@@ -175,7 +175,7 @@ example {slice : Slice} {profile : Profile} (passes : Passes slice profile) (unc
 run_cmd do
   let env ← getEnv
   -- A model packaged inside the pass argument would still be caller-selected.
-  let fields := #[`lex, `elaborate, `typeCore, `checkCore, `lowerCore, `lowerUnchecked, `lowerMemory,
+  let fields := #[`lex, `elaborate, `checkCore, `lowerCore, `lowerUnchecked, `lowerMemory,
     `buildSSA, `buildBIR, `emitLLVM, `emitLCB]
   unless (getStructureInfo? env ``PassFunctions).map (·.fieldNames) == some fields do
     throwError "The pass argument must contain only the registered executable functions"

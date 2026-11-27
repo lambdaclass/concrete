@@ -87,7 +87,7 @@ theorem appendTrap_preserves_lookup (table : TrapTable) (kind : TrapKind) (origi
 /-- The Core handoff binds every origin to the project admitted for that payload. -/
 theorem coreOrigins_bind {language : CoreLanguage} {input : CoreInput language}
     (locations : input.LocationsWF) :
-    ∀ origin ∈ List.map Prod.snd input.payload.origins,
+    ∀ origin ∈ List.map Prod.snd input.machineProgram.origins,
       ∃ span, origin.lexical.Binds input.project span := by
   intro origin member
   obtain ⟨⟨site, entry⟩, inTable, rfl⟩ := List.mem_map.mp member

@@ -88,6 +88,8 @@ def registeredRules : List RuleId :=
    ⟨``Leak.Account.WF, 1⟩, ⟨``Leak.ResetConserved, 1⟩, ⟨``Leak.SignedNetSound, 1⟩,
    ⟨``Leak.ByteBoundSound, 1⟩, ⟨``Leak.ByteBoundSoundOptional, 1⟩, ⟨``Leak.ReportSound, 1⟩,
    ⟨``AbortReady, 1⟩, ⟨``ProgramPermitted, 1⟩,
+   ⟨``OwnershipRule.FreshBinder, 1⟩, ⟨``OwnershipRule.FreshPattern, 1⟩,
+   ⟨``OwnershipRule.ReadAllowed, 1⟩, ⟨``OwnershipRule.ReturnDischarged, 1⟩, ⟨``WildcardPermitted, 1⟩,
    ⟨``Leak.FiniteActionPermitted, 1⟩, ⟨``Leak.FiniteSequencePermitted, 1⟩] ++ SourcePath.Reason.inOrder.map SourcePath.Reason.ruleId ++
   [SourcePath.Project.Reason.caseCollision, .fileDirectoryConflict, .duplicate].map
     SourcePath.Project.Reason.ruleId ++

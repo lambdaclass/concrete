@@ -183,6 +183,9 @@ def bindPat (d : StructDecl) (K : List (Name × Option Scalar)) : List (Name × 
 def PatFresh (Γ : Ctx) (pat : List (Name × Binder)) : Prop :=
   (patNames pat).Nodup ∧ ∀ x ∈ patNames pat, Fresh Γ x
 
+/-- OWN-5 and OD62. A wildcard may discard a value exactly when its type is Copy. -/
+def WildcardPermitted (input : Decls × Ty) : Prop := input.2.isCopy input.1 = true
+
 /-- A statement is well typed, respects ownership and every operation in it is admitted.
 
 * `let x: T = e;` — `e` has type `T` (TYPE-4), its operation is admitted (no hidden traps), its reads are
@@ -194,17 +197,19 @@ def PatFresh (Γ : Ctx) (pat : List (Name × Binder)) : Prop :=
 * `let S { f: b, ... } = e;` — `e` has type `S`, the pattern names every field (PAT-5), the
   scrutinee is consumed (PAT-5: a linear `e` is moved), and the binders are fresh. Each binder
   receives the known value of its field, if the scrutinee has one. -/
-inductive StmtOk (Δ : Decls) : Ctx → Stmt → Ctx → Prop where
-  | let_ {Γ Γ₁ x t e} : HasType Δ Γ.tys e t → admitted Γ e = true → Uses Δ Γ e Γ₁ →
+inductive StmtOkWith (evidence : Ctx → Expr → Bool) (Δ : Decls) : Ctx → Stmt → Ctx → Prop where
+  | let_ {Γ Γ₁ x t e} : HasType Δ Γ.tys e t → evidence Γ e = true → Uses Δ Γ e Γ₁ →
       Fresh Γ₁ x →
-      StmtOk Δ Γ (.let_ (.name x) t e)
+      StmtOkWith evidence Δ Γ (.let_ (.name x) t e)
         ((x, { ty := t, live := true, used := false, known := knownExpr Γ e,
                kfields := knownFields Γ e }) :: Γ₁)
-  | letWild {Γ Γ₁ t e} : HasType Δ Γ.tys e t → admitted Γ e = true → t.isCopy Δ = true →
-      Uses Δ Γ e Γ₁ → StmtOk Δ Γ (.let_ .wild t e) Γ₁
-  | letStruct {Γ Γ₁ s d pat e} : HasType Δ Γ.tys e (.struct s) → admitted Γ e = true →
+  | letWild {Γ Γ₁ t e} : HasType Δ Γ.tys e t → evidence Γ e = true → WildcardPermitted (Δ, t) →
+      Uses Δ Γ e Γ₁ → StmtOkWith evidence Δ Γ (.let_ .wild t e) Γ₁
+  | letStruct {Γ Γ₁ s d pat e} : HasType Δ Γ.tys e (.struct s) → evidence Γ e = true →
       findDecl Δ s = some d → PatOk d pat → Uses Δ Γ e Γ₁ → PatFresh Γ₁ pat →
-      StmtOk Δ Γ (.letStruct s pat e) (bindPat d (knownFields Γ e) pat Γ₁)
+      StmtOkWith evidence Δ Γ (.letStruct s pat e) (bindPat d (knownFields Γ e) pat Γ₁)
+
+abbrev StmtOk := StmtOkWith admitted
 
 /-- At `return`, every linear binding has been consumed (OWN-2) and every binding has been used
 (OWN-5). -/
@@ -217,11 +222,35 @@ def AbortReady (Γ : Ctx) : Prop := ∀ b ∈ Γ, b.2.used = true
 
 /-- A body checks each statement in order. Return checks a u8 atom and discharges the
 remaining context. Abort checks that all bindings were used and leaves live values in place. -/
-inductive BodyOk (Δ : Decls) : Ctx → List Stmt → Terminator → Prop where
+inductive BodyOkWith (evidence : Ctx → Expr → Bool) (Δ : Decls) : Ctx → List Stmt → Terminator → Prop where
   | ret {Γ Γ₁ r} : HasType Δ Γ.tys (.atom r) (.scalar (.int .u8)) → Uses Δ Γ (.atom r) Γ₁ →
-      Discharged Δ Γ₁ → BodyOk Δ Γ [] (.ret r)
-  | abort {Γ site} : AbortReady Γ → BodyOk Δ Γ [] (.abort site)
-  | cons {Γ Γ₁ s ss r} : StmtOk Δ Γ s Γ₁ → BodyOk Δ Γ₁ ss r → BodyOk Δ Γ (s :: ss) r
+      Discharged Δ Γ₁ → BodyOkWith evidence Δ Γ [] (.ret r)
+  | abort {Γ site} : AbortReady Γ → BodyOkWith evidence Δ Γ [] (.abort site)
+  | cons {Γ Γ₁ s ss r} : StmtOkWith evidence Δ Γ s Γ₁ → BodyOkWith evidence Δ Γ₁ ss r → BodyOkWith evidence Δ Γ (s :: ss) r
+
+abbrev BodyOk := BodyOkWith admitted
+
+/-- The two routes differ only in where checked arithmetic is discharged. -/
+inductive ArithmeticPolicy where
+  | static
+  | runtime
+
+def ArithmeticPolicy.permits : ArithmeticPolicy → Ctx → Expr → Bool
+  | .static => admitted
+  | .runtime => fun _ _ => true
+
+/-- Erasing the evidence premise preserves the exact static derivation. -/
+theorem BodyOkWith.runtime {Δ Γ ss ending} (checked : BodyOk Δ Γ ss ending) :
+    BodyOkWith ArithmeticPolicy.runtime.permits Δ Γ ss ending := by
+  induction checked with
+  | ret ty reads discharge => exact .ret ty reads discharge
+  | abort ready => exact .abort ready
+  | cons stmt _ tail =>
+    apply BodyOkWith.cons _ tail
+    cases stmt with
+    | let_ ty _ reads fresh => exact .let_ ty rfl reads fresh
+    | letWild ty _ copy reads => exact .letWild ty rfl copy reads
+    | letStruct ty _ decl pat reads fresh => exact .letStruct ty rfl decl pat reads fresh
 
 /-- Struct declarations are well formed: struct names are distinct, none is `main`, and each
 struct's field names are distinct. -/
@@ -232,5 +261,22 @@ def DeclsOk (Δ : Decls) : Prop :=
 including the mandatory static refusal of every operation without evidence (no hidden traps, which
 subsumes the refusal of known violations of Q6.1–Q6.6). -/
 def Checked (p : Program) : Prop := DeclsOk p.decls ∧ BodyOk p.decls [] p.body p.ending
+
+/- Unary registry views of the Core judgments. -/
+namespace Core.OwnershipRule
+
+/-- Q9.1 requires each Core local identity to be fresh in its context. -/
+def FreshBinder (i : Ctx × Var) : Prop := Fresh i.1 i.2
+
+/-- Q9.1 requires fresh identities throughout a destructuring pattern. -/
+def FreshPattern (i : Ctx × List (Name × Binder)) : Prop := PatFresh i.1 i.2
+
+/-- Q9.1 and OWN-1 require the read mode and liveness to permit this use. -/
+def ReadAllowed (i : Decls × Ctx × Atom) : Prop := ∃ next, UseAtom i.1 i.2.1 i.2.2 next
+
+/-- OD62 and OWN-2 require the return context to discharge its bindings. -/
+def ReturnDischarged (i : Decls × Ctx) : Prop := Discharged i.1 i.2
+
+end Core.OwnershipRule
 
 end ConcreteSpec

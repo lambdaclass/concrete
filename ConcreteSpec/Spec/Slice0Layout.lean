@@ -27,6 +27,10 @@ def linuxX8664Profile : Profile where
   intAlignPow2 := by intro ty; cases ty <;> decide
   intSizeAligned := by intro ty; cases ty <;> decide
 
+/-- Changing storage byte order preserves every size, alignment and bound. -/
+def Profile.withByteOrder (profile : Profile) (order : ByteOrder) : Profile :=
+  { profile with target := {profile.target with byteOrder := order}, wellFormed := profile.wellFormed }
+
 /-- Geometry shared by the layout query and declared byte-storage layouts. -/
 structure StorageGeometry (target : Target) (byteSize align : Nat) : Prop where
   alignPow2 : IsPow2 align
@@ -54,6 +58,12 @@ inductive Layout (target : Target) where
 def Layout.byteSize {target : Target} : Layout target → Nat
   | .stored storage => storage.byteSize
   | .logical => 0
+
+/-- Native aggregate alignment is the maximum field alignment with identity
+one (foundation C3). A logical empty root imposes no alignment on a byte block. -/
+def Layout.alignment {target : Target} : Layout target → Nat
+  | .stored s => s.align
+  | .logical => 1
 
 /-- A valid target can still refuse an integer wider than its object bound (Q3.10). -/
 def query (profile : Profile) : Shape → Option (Layout profile.target)

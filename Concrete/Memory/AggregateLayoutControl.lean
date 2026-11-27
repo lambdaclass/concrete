@@ -43,9 +43,9 @@ private abbrev language (s : Scenario) (fixed : Bool) : CoreLanguage := {baseLan
     | .primitive prim args => baseLang.safety (.primitive prim args)
     | .call callee args => baseLang.safety (.call callee args)
     | .abort => baseLang.safety .abort
-  layout := fun target ty =>
+  layout := fun env target ty =>
     if ty == aggregateTy then some (description s fixed)
-    else if ty == backingTy then some (.scalar s.backingSize 1) else baseLang.layout target ty
+    else if ty == backingTy then some (.scalar s.backingSize 1) else baseLang.layout env target ty
   literal := fun ty bs => if (ty == aggregateTy || ty == backingTy) && bs == [42] then some aggregateValue
     else baseLang.literal ty bs
   fieldType := fun ty f => if ty == aggregateTy && f == fld then some u32 else none

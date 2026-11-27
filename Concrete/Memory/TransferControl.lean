@@ -10,10 +10,10 @@ private def backingSize := 2^64 - 5
 private def aggregateId : DeclId := ⟨(bindReturnControl slice0).entry.module, ⟨"suffix"⟩⟩
 private def suffixRuns : List (Nat × List Mem.MByte) := [(0, [.init 42 none]), (4, [])]
 private abbrev Language : CoreLanguage := {sliceLanguage slice0 with
-  layout := fun target ty => match ty with
+  layout := fun env target ty => match ty with
     | .inr false => some ⟨backingSize, 1, .nil⟩
     | .inr true => some ⟨4, 1, .nil⟩
-    | _ => (sliceLanguage slice0).layout target ty
+    | _ => (sliceLanguage slice0).layout env target ty
   literal := fun ty bytes => match ty with
     | .inr true => if bytes == [42] then some (.other aggregateId) else none
     | _ => (sliceLanguage slice0).literal ty bytes
@@ -871,9 +871,9 @@ theorem alignment_ceiling_refused : ¬ (misaligned (2^64)).HandoffWF := by
 -- memory. Both source and healthy target return 42 from a one-byte parameter.
 -- In the corrupted target only the parameter's root changes.
 private abbrev Huge : CoreLanguage := {sliceLanguage slice0 with
-  layout := fun target ty => match ty with
+  layout := fun env target ty => match ty with
     | .inr false => some ⟨2^64 - 1, 1, .nil⟩
-    | _ => (sliceLanguage slice0).layout target ty}
+    | _ => (sliceLanguage slice0).layout env target ty}
 private abbrev source := Interfaces.MIR.Execution (language := Huge) (lang := Lowering) (profile := profile)
 private abbrev target := Interfaces.Memory.Execution (language := Huge) (lang := Lowering) (profile := profile)
 private abbrev registers := MemoryRegisters Huge profile

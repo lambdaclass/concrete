@@ -88,7 +88,7 @@ private def rootLayouts (mir : MIR lang profile) (fn : FnId) (locals : LocalType
     match storageClass (language := language) mir fn root ty with
     | .virtual => pure none
     | .materialized =>
-      match language.layout profile.memoryTarget ty with
+      match language.layout mir.declarations profile.memoryTarget ty with
       | some layout => if layout.WellFormed profile.memoryTarget then pure (some (root, layout)) else throw ⟨fn, root, ty⟩
       | none => throw ⟨fn, root, ty⟩
 
@@ -143,10 +143,10 @@ private structure RootLayoutsMatch (mir : MIR lang profile) (fn : FnId)
   keys : (List.map Prod.fst slots).Sublist (List.map Prod.fst locals)
   complete : ∀ root ty, (root, ty) ∈ locals →
     storageClass (language := language) mir fn root ty = .materialized →
-    ∃ d, (root, d) ∈ slots ∧ language.layout profile.memoryTarget ty = some d
+    ∃ d, (root, d) ∈ slots ∧ language.layout mir.declarations profile.memoryTarget ty = some d
   sound : ∀ root d, (root, d) ∈ slots → ∃ ty, (root, ty) ∈ locals ∧
     storageClass (language := language) mir fn root ty = .materialized ∧
-    language.layout profile.memoryTarget ty = some d ∧ d.WellFormed profile.memoryTarget
+    language.layout mir.declarations profile.memoryTarget ty = some d ∧ d.WellFormed profile.memoryTarget
 
 private theorem rootLayouts_match (mir : MIR lang profile) (fn : FnId)
     {locals : LocalTypes language.operands.Ty} {slots}
@@ -174,7 +174,7 @@ private theorem rootLayouts_match (mir : MIR lang profile) (fn : FnId)
         obtain ⟨t, ht, c, l, wf⟩ := tail.sound p d mem
         exact ⟨t, .tail _ ht, c, l, wf⟩
     | materialized =>
-      cases layout : language.layout profile.memoryTarget ty with
+      cases layout : language.layout mir.declarations profile.memoryTarget ty with
       | none => simp [cls, layout, bind, Except.bind, throw] at ok
       | some d =>
         by_cases wf : d.WellFormed profile.memoryTarget
@@ -218,7 +218,8 @@ def prepareGraph (mir : MIR lang profile) :
     layouts}
 
 /-- The prepared layout and storage tables are exact for any placement retaining
-the ordered function/local declarations. The sublist property also gives layout
+the ordered function/local declarations, resolving types in the source environment.
+The sublist property also gives layout
 key uniqueness, without trusting the layout query to deduplicate a table. -/
 theorem prepareGraph_layouts {mir : MIR lang profile} {graphs : PreparedGraphs lang profile}
     {memory : Interfaces.Memory lang profile}
@@ -227,7 +228,7 @@ theorem prepareGraph_layouts {mir : MIR lang profile} {graphs : PreparedGraphs l
     (decls : (List.map (fun e => (e.1, e.2.1)) memory.functions) =
       (List.map (fun e => (e.1, e.2.1)) graphs.functions))
     (source : mir.logicalView.TablesWF) :
-    LayoutsMatch language.layout memory ∧
+    LayoutsMatch (profile := profile) language.layout {memory with declarations := mir.declarations} ∧
       (List.map Prod.fst memory.layouts = List.map Prod.fst mir.logicalView.functions) ∧
       (∀ fn slots, (fn, slots) ∈ memory.layouts → (List.map Prod.fst slots).Nodup) ∧
       ∀ table ∈ memory.layouts, ∀ slot ∈ table.2, slot.2.WellFormed profile.memoryTarget := by
@@ -473,11 +474,17 @@ private def nominalRootControl : MIR (sliceLoweringLanguage slice1) profileContr
   functions := [(controlFn, [(⟨0⟩, .inl (.nominal controlDecl))],
     ⟨⟨0⟩, #[⟨⟨0⟩, [], [], .ret none, []⟩]⟩)]
 
-example : (sliceLanguage slice1).layout profileControl.memoryTarget
+example : (sliceLanguage slice1).layout [] profileControl.memoryTarget
     (.inl (.nominal controlDecl)) = none := rfl
 
 example : prepareGraph (language := sliceLanguage slice1) nominalRootControl =
     .error ⟨controlFn, ⟨0⟩, .inl (.nominal controlDecl)⟩ := by with_unfolding_all rfl
+
+private def declaredEmpty : Declarations := [(controlDecl, ⟨controlDecl.name, false, []⟩)]
+
+example : (prepareGraph (language := sliceLanguage slice1) (profile := profileControl)
+    {nominalRootControl with declarations := declaredEmpty}).toOption.map (·.layouts) =
+      some [(controlFn, [(⟨0⟩, .scalar 0 1)])] := by with_unfolding_all rfl
 
 private abbrev controlLang := sliceLoweringLanguage slice1
 private abbrev u8Ty : (sliceLanguage slice1).operands.Ty := .inl (.scalar (.int .u8))
@@ -541,8 +548,7 @@ example :
       .ok (some (.virtual, [.materialized])) := by
   with_unfolding_all rfl
 
-/-- A declared nominal root cannot be retained by a valid lowering while the
-frozen spec layout is absent. Promotion cannot supply a virtual fallback. -/
+/-- A nominal identity missing its declaration cannot be materialized or promoted. -/
 theorem nominal_root_blocks_layout
     (memory : Interfaces.Memory (sliceLoweringLanguage slice1) profileControl)
     (lowered : LowersMemory (language := sliceLanguage slice1) nominalRootControl memory)
@@ -564,7 +570,8 @@ theorem nominal_root_blocks_layout
   rw [classification, materialized] at valid
   rcases valid with impossible | ⟨_, _, _, _, _, existsLayout⟩
   · contradiction
-  · contradiction
+  · rw [lowered.2.2.2.2.1.2] at existsLayout
+    contradiction
 
 /-- Reading can consume an initialized value or a field, but only a lifetime
 instruction (or parameter binding) can change the set of live roots. -/
@@ -576,7 +583,9 @@ theorem readValue_live {language : CoreLanguage}
   cases src with
   | literal lit =>
     simp only [Interfaces.Memory.readValue] at read
-    split at read <;> simp only [bind, Option.bind] at read <;> split at read <;> simp_all
+    obtain ⟨_, _, eq⟩ := Option.bind_eq_some_iff.mp read
+    cases eq
+    rfl
   | copy place => rw [((Interfaces.Memory.copyRead_iff ..).mp read).2.2.2]
   | move place =>
     simp only [Interfaces.Memory.readValue, bind, Option.bind] at read

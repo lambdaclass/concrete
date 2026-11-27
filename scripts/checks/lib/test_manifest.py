@@ -32,7 +32,7 @@ TRAP_KINDS = frozenset(("arithmeticOverflow", "division_by_zero", "invalid_shift
 ORIGIN_RE = re.compile(r"([0-9]+):([0-9]+):([1-9][0-9]*):([1-9][0-9]*)")
 CLI_CODE_RE = re.compile(r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*")
 LABEL_RE = re.compile(r"[a-z][a-z0-9_]*")
-REFUSAL_KINDS = frozenset(("unreachable_statement",))
+REFUSAL_KINDS = frozenset(("unreachable_statement", "reserved_binder"))
 PENDING_REFUSALS = frozenset(("syntax", "unsupported_form", "checker"))
 # Shrink this inventory as 4(c)/4(d)/4(f) expose typed refusals. New paths require typed fields.
 PENDING_SOURCES = frozenset(

@@ -14,8 +14,8 @@ private abbrev decl : DeclId := ⟨(bindReturnControl slice0).entry.module, ⟨"
 private abbrev aggregateValue : baseLang.operands.Val := .other decl
 private def runs : List (Nat × List Mem.MByte) := [(0, [.init 42 none]), (1, [])]
 private abbrev full := 2^64 - 2
-private def layout (target : Target) (ty : baseLang.operands.Ty) : Option Layout :=
-  if ty == aggregateTy then some ⟨1, 1, .nil⟩ else if ty == blockTy then some ⟨full, 1, .nil⟩ else baseLang.layout target ty
+private def layout (env : Declarations) (target : Target) (ty : baseLang.operands.Ty) : Option Layout :=
+  if ty == aggregateTy then some ⟨1, 1, .nil⟩ else if ty == blockTy then some ⟨full, 1, .nil⟩ else baseLang.layout env target ty
 private def literal (ty : baseLang.operands.Ty) (bs : List UInt8) : Option baseLang.operands.Val :=
   if (ty == aggregateTy || ty == blockTy) && bs == [42] then some aggregateValue else baseLang.literal ty bs
 private def encode (_ : Target) (ty : baseLang.operands.Ty) (v : DeclId) :=

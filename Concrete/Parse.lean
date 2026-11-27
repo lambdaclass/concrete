@@ -39,42 +39,47 @@ def table0 : CheckedTable Terminal Nonterminal :=
 
 private inductive Task (T N : Type) where
   | read (symbol : Sym T N)
-  | reduce (lhs : N) (rhs : List (Sym T N))
+  | reduce (lhs : N) (rhs : List (Sym T N)) (start : Span)
+
+private def lookSpan (input : List Token) (eof : Span) : Span :=
+  input.head?.map Token.span |>.getD eof
+
+private def mismatch (input : List Token) (eof : Span) : ParserError :=
+  match input with
+  | tok :: _ => ⟨.unexpectedToken, tok.span⟩
+  | [] => ⟨.unexpectedEnd, eof⟩
 
 private def runTasks {T N V : Type} [DecidableEq T] [DecidableEq N]
-    (table : CheckedTable T N) (kind : Token → T) (leaf : Token → Except Refusal V)
-    (reduce : N → List (Sym T N) → List V → Except Refusal V)
-    (mismatch : Sym T N → List Token → List V → Refusal) :
-    Nat → List (Task T N) → List Token → List V → Except Refusal V
+    (table : CheckedTable T N) (kind : Token → T) (leaf : Token → V)
+    (reduce : N → List (Sym T N) → Span → List V → Except ParserError V) (eof : Span) :
+    Nat → List (Task T N) → List Token → List V → Except ParserError V
   | _, [], [], [result] => .ok result
-  | _, [], _ :: _, _ => .error (.syntaxError "trailing tokens")
-  | 0, _, _, _ => .error (.internal "parser exhausted its progress bound")
+  | _, [], tok :: _, _ => .error ⟨.trailingTokens, tok.span⟩
+  | 0, _, input, _ => .error ⟨.internal "parser exhausted its progress bound", lookSpan input eof⟩
   | fuel + 1, .read (.n lhs) :: pending, input, values => do
     let look := input.head?.map kind
     let some (_, rhs) := table.entries.find? (fun row => row.1 == (lhs, look))
-      | throw (mismatch (.n lhs) input values)
-    runTasks table kind leaf reduce mismatch fuel
-      (rhs.map Task.read ++ .reduce lhs rhs :: pending) input values
+      | throw (mismatch input eof)
+    runTasks table kind leaf reduce eof fuel
+      (rhs.map Task.read ++ .reduce lhs rhs (lookSpan input eof) :: pending) input values
   | fuel + 1, .read (.t expected) :: pending, input, values => do
     match input with
     | tok :: rest =>
       if kind tok == expected then
-        let value ← leaf tok
-        runTasks table kind leaf reduce mismatch fuel pending rest (value :: values)
-      else throw (mismatch (.t expected) input values)
-    | [] => throw (mismatch (.t expected) [] values)
-  | fuel + 1, .reduce lhs rhs :: pending, input, values => do
-    let value ← reduce lhs rhs (values.take rhs.length).reverse
-    runTasks table kind leaf reduce mismatch fuel pending input (value :: values.drop rhs.length)
-  | _, [], [], _ => .error (.internal "invalid parser result stack")
+        runTasks table kind leaf reduce eof fuel pending rest (leaf tok :: values)
+      else throw (mismatch input eof)
+    | [] => throw (mismatch [] eof)
+  | fuel + 1, .reduce lhs rhs start :: pending, input, values => do
+    let value ← reduce lhs rhs start (values.take rhs.length).reverse
+    runTasks table kind leaf reduce eof fuel pending input (value :: values.drop rhs.length)
+  | _, [], [], _ => .error ⟨.internal "invalid parser result stack", eof⟩
 
-/-- Parse from the checked grammar's start symbol with the caller's semantic actions. -/
+/-- Parse from the checked grammar's start symbol. Reductions retain their first lookahead span. -/
 def run {T N V : Type} [DecidableEq T] [DecidableEq N]
-    (table : CheckedTable T N) (kind : Token → T) (leaf : Token → Except Refusal V)
-    (reduce : N → List (Sym T N) → List V → Except Refusal V)
-    (mismatch : Sym T N → List Token → List V → Refusal)
-    (fuel : Nat) (input : List Token) : Except Refusal V :=
-  runTasks table kind leaf reduce mismatch fuel [.read (.n table.grammar.grammar.start)] input []
+    (table : CheckedTable T N) (kind : Token → T) (leaf : Token → V)
+    (reduce : N → List (Sym T N) → Span → List V → Except ParserError V)
+    (eof : Span) (fuel : Nat) (input : List Token) : Except ParserError V :=
+  runTasks table kind leaf reduce eof fuel [.read (.n table.grammar.grammar.start)] input []
 
 private inductive Value where
   | tok (token : Token)
@@ -83,7 +88,7 @@ private inductive Value where
   | body (statements : List Statement)
   | program (ast : Program)
 
-private def reduce : Nonterminal → List Value → Except Refusal Value
+private def reduce (start : Span) : Nonterminal → List Value → Except ParserError Value
   | .program, [_, .tok ⟨.name name, span⟩, _, _, _, _, _, .body statements, _] =>
     .ok (.program ⟨name, span, statements⟩)
   | .body, [.tok keyword, .tok ⟨.name name, span⟩, _, _, _, .expr rhs, .tok semi, .body rest] =>
@@ -98,52 +103,56 @@ private def reduce : Nonterminal → List Value → Except Refusal Value
   | .atom, [.tok ⟨.integer value _ suffix, span⟩] => .ok (.expr (.integer value suffix span))
   | .atom, [.tok ⟨.name name, span⟩] => .ok (.expr (.local name span))
   | .atom, [_, .expr expr, _] => .ok (.expr expr)
-  | _, _ => .error (.internal "grammar and semantic actions disagree")
-
-private def syntaxError (input : List Token) : Refusal :=
-  match input with
-  | tok :: _ => .syntaxError s!"unexpected token at byte {tok.span.start}"
-  | [] => .syntaxError "unexpected end of file"
+  | _, _ => .error ⟨.internal "grammar and semantic actions disagree", start⟩
 
 private def refusalTable : CheckedTable Terminal Nonterminal :=
   ⟨checkedRefusalGrammar, makeTable checkedRefusalGrammar.grammar, rfl⟩
 
-private def nonDecimal (tok : Token) : Bool :=
+private def literalIssue (tok : Token) : Option ParserError :=
   match tok.value with
-  | .integer _ radix _ => radix != .decimal
-  | _ => false
+  | .integer _ radix _ =>
+    letI : Decidable (ConcreteSpec.Core.Slice0Rules.DecimalLiteral radix) :=
+      inferInstanceAs (Decidable (radix = .decimal))
+    if ConcreteSpec.Core.Slice0Rules.DecimalLiteral radix then none else some ⟨.nonDecimal, tok.span⟩
+  | _ => none
 
 private def recognizeProduction (lhs : Nonterminal) (rhs : List (Sym Terminal Nonterminal))
-    (children : List Bool) : Except Refusal Bool := do
+    (start : Span) (children : List (Option ParserError)) : Except ParserError (Option ParserError) := do
   let some outside := refusalProductions.lookup (lhs, rhs)
-    | throw (.internal "unclassified refusal production")
-  return outside || children.any id
+    | throw ⟨.internal "unclassified refusal production", start⟩
+  return if outside then some ⟨.outsideProduction, start⟩ else children.findSome? id
 
--- These budgets scale with the input. Each grammar has bounded work between
--- terminal reads and at most a constant number of reductions per consumed token.
--- Exhaustion of either budget indicates broken parser progress.
-private def recognizeDecided (input : List Token) : Except Refusal Bool :=
-  run refusalTable (·.value.kind) (fun tok => .ok (nonDecimal tok))
-    recognizeProduction (fun _ tokens _ => syntaxError tokens)
-    (32 * (input.length + 1)) input
-
-def parse (input : List Token) : Except Refusal Program := do
-  -- Classify a form as unsupported only after consuming its entire syntax.
-  -- Slice 0 requires an identifier as a let binder. The refusal grammar also
-  -- recognizes the wildcard and `mut` followed by an identifier.
-  match run table0 (·.value.kind) (fun tok => .ok (.tok tok)) (fun lhs _ => reduce lhs)
-      (fun _ tokens _ => syntaxError tokens)
-      (16 * (input.length + 1)) input with
+/-- Consume the entire refusal grammar before reporting its first unsupported production or literal.
+A malformed suffix therefore takes precedence over an otherwise unsupported prefix. -/
+def parse (eof : Span) (input : List Token) : Except ParserError Program := do
+  -- The checked grammars have bounded work and reductions between terminal reads.
+  match run table0 (·.value.kind) Value.tok (fun lhs _ start => reduce start lhs)
+      eof (16 * (input.length + 1)) input with
   | .ok (.program ast) =>
-    for tok in input do
-      if nonDecimal tok then
-        throw (.unsupported s!"non-decimal integer at byte {tok.span.start}")
+    if let some issue := input.findSome? literalIssue then throw issue
     return ast
-  | .ok _ => throw (.internal "parser did not produce a program")
-  | .error (.syntaxError _) =>
-    if ← recognizeDecided input then
-      throw (.unsupported "program uses a form outside the slice-0 fragment")
-    throw (.internal "in-slice body rejected by the slice parser")
-  | .error e => throw e
+  | .ok _ => throw ⟨.internal "parser did not produce a program", eof⟩
+  | .error e =>
+    match e.issue with
+    | .unexpectedToken | .unexpectedEnd | .trailingTokens =>
+      match ← run refusalTable (·.value.kind) literalIssue recognizeProduction
+          eof (32 * (input.length + 1)) input with
+      | some issue => throw issue
+      | none => throw ⟨.internal "in-slice body rejected by the slice parser", e.span⟩
+    | _ => throw e
+
+/-- The EOF of an in-memory source includes trailing trivia and belongs to the lexed file. -/
+def eofSpan (source : ByteArray) (fileId : ConcreteSpec.Core.FileId := ⟨0⟩) : Span :=
+  let pos := source.data.foldl (fun (p : Position) b => p.advanceByte b.toNat) {}
+  Position.span pos pos fileId
+
+/-- Inject the located parser error into the driver's refusal vocabulary. -/
+def parseForDriver (eof : Span) (input : List Token) : Except Refusal Program :=
+  (parse eof input).mapError Refusal.parser
+
+@[simp] theorem parseForDriver_ok {eof tokens ast} :
+    parseForDriver eof tokens = .ok ast ↔ parse eof tokens = .ok ast := by
+  unfold parseForDriver
+  cases parse eof tokens <;> simp [Except.mapError]
 
 end Concrete.Parse
