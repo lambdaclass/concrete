@@ -56,8 +56,48 @@ private def firstPiece (origin : Project) (id : FileId) : IO (Lex.Piece × Scope
       | throw (IO.userError "failed to scope the first piece")
     pure (piece, issued)
 
+private def bridgeControl (filePath : SourcePath) : IO Unit := do
+  let names := wordTokens.map Prod.fst
+  let identifiers := names.map (· ++ "x") ++ intrinsicNames ++
+    ["Option", "Result", "Heap", "Vec", "String", "math", "self", "as", "vec_pop", "alloc_array", "free_array", "string_length"]
+  let spellings := names ++ identifiers
+  let source := " //é\r\n" ++ String.intercalate " " spellings ++
+    " 42u8 0x2au16 \"a\\n\" '\\t' 'loop //tail\r\n"
+  let bytes := source.toUTF8
+  let files ← project [filePath, ← path "tokens.con"] (.ofBytes bytes.data.toList)
+  let input : ConcreteSpec.StageInterface.Source := ⟨files, ⟨1⟩, ConcreteSpec.StageInterface.slice0⟩
+  let .ok stream := Lex.lexStream input | throw (IO.userError "refused bridge fixture")
+  unless stream.parserView.invalidSpan.isNone && stream.source.entryFile == input.entryFile &&
+      (ConcreteSpec.StageInterface.reconstruct input.entryFile stream.tokens stream.trivia).any
+        (·.data == bytes.data) do throw (IO.userError "entry, coordinates or lossless replay changed")
+  unless stream.tokens.size == spellings.length + 5 &&
+      (stream.trivia[0]?.getD #[]).toList.map (·.value.data) == [" ".toUTF8.data, "//é".toUTF8.data, "\r\n".toUTF8.data] &&
+      (stream.trivia.back?.getD #[]).toList.map (·.value.data) == [" ".toUTF8.data, "//tail".toUTF8.data, "\r\n".toUTF8.data] do
+    throw (IO.userError "changed token count or trivia boundaries")
+  for ((spelling, terminal), i) in wordTokens.zipIdx do
+    let some token := stream.tokens[i]? | throw (IO.userError spelling)
+    unless token.decoded.value.kind == terminal && token.spelling.data == spelling.toUTF8.data do
+      throw (IO.userError s!"lost reservation or spelling for {spelling}")
+  for (spelling, i) in identifiers.zipIdx do
+    let some token := stream.tokens[names.length + i]? | throw (IO.userError spelling)
+    unless token.decoded.value == .name spelling do throw (IO.userError s!"split or reserved {spelling}")
+  let payloads := (stream.tokens.toList.drop spellings.length).map (·.decoded.value)
+  unless payloads == [.integer 42 .decimal (some .u8), .integer 42 .hexadecimal (some .u16),
+      .stringLiteral [97,10], .byteLiteral 9, .label ⟨"loop"⟩] do
+    throw (IO.userError "changed decoded integer, string, byte or label")
+  let .error (.missingFile ⟨2⟩) := Lex.lexStream {input with entryFile := ⟨2⟩}
+    | throw (IO.userError "missing entry did not retain its file ID")
+  let malformed ← project [filePath] (.ofBytes "return ; @".toUTF8.data.toList)
+  let .error (.malformed _) := Lex.lexStream {input with project := malformed, entryFile := ⟨0⟩}
+    | throw (IO.userError "scanner failure did not precede parsing")
+  let large ← project [filePath] (.ofBytes (" " ++ String.ofList (List.replicate (Lex.integerDigitLimit+1) '9')).toUTF8.data.toList)
+  let .error (.digitLimit 1 limit) := Lex.lexStream {input with project := large, entryFile := ⟨0⟩}
+    | throw (IO.userError "digit limit became a syntax error")
+  unless limit == Lex.integerDigitLimit do throw (IO.userError "wrong digit limit")
+
 def main : IO Unit := do
   let first ← path "a.con"
+  bridgeControl first
   let second ← path "b.con"
   let source := SourceText.ofBytes "//a //b\r\nword".toUTF8.data.toList
   let origin ← project [first, second] source

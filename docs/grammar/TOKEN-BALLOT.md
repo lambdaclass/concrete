@@ -4,7 +4,7 @@ Closed on 2026-11-27 by unanimous agreement of Claude, Codex and agy under the o
 
 ## Reservation at the pre-slice-2 lock
 
-The lexer reserves every keyword whose construct and spelling are decided. Each later slice adds productions using this vocabulary. Words with undecided spellings stay available. The first consumer determines when a keyword can appear in a production. [Shared word classifier](../../ConcreteSpec/Spec/Surface0.lean)
+The lexer reserves every keyword whose construct and spelling are decided. Each later slice adds productions using this vocabulary. Words with undecided spellings stay available. The first consumer determines when a keyword can appear in a production. [Shared word classifier](../../ConcreteSpec/Spec/GrammarVocab.lean)
 
 | First consumer | Reserved words |
 |---|---|

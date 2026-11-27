@@ -1,6 +1,6 @@
 # Concrete 0.1 grammar compatibility draft
 
-This is the non-normative R-0728 draft for slices 0–11. The [production
+Sections 0 and 1 are generated from the factored Lean production catalog. Sections 2–11 are the R-0728 compatibility draft. The [production
 table](slices-0-11.grammar) is cumulative. Each section replaces all preceding rules
 with the same left-hand side and otherwise adds rules. An empty right-hand side
 means epsilon. The [checker](Check.lean) loads the table and runs the same repository fixed-point computation and
@@ -8,6 +8,8 @@ closure checks as `Concrete.LL1.ll1`. Each production contributes one table entr
 due before the B1 parser, the slice 2 delta before the lexer and grammar lock, and
 each later delta before its parser. [R-0622](../../ROADMAP.md#r-0622) ·
 [R-0728](../../ROADMAP.md#r-0728)
+
+Regenerate sections 0 and 1 with `lake env lean --run docs/grammar/Check.lean --write` inside the development shell. The normal checker compares them byte for byte. [Lean catalog](../../ConcreteSpec/Spec/GrammarData.lean)
 
 The [closed token ballot](TOKEN-BALLOT.md) lists the exact spellings, first
 consumers and reservation policy.

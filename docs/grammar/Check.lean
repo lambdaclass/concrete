@@ -1,3 +1,4 @@
+import ConcreteSpec.Spec.GrammarData
 import ConcreteSpec.Spec.Surface0
 import Std.Data.HashMap
 
@@ -1094,10 +1095,73 @@ def checkLiterals : IO Unit := do
     throw (IO.userError "raw BOM accepted")
   IO.println s!"pass: {cases.length} literal examples, slice boundary and raw scalars"
 
-def main : IO Unit := do
+private def generatedSections : String := Id.run do
+  let mut out := "# Sections [0] and [1] are generated from ConcreteSpec.Spec.GrammarData.\n"
+  out := out ++ "# Regenerate with the grammar checker --write. Later sections are compatibility drafts.\n"
+  for slice in [0, 1] do
+    out := out ++ s!"\n[{slice}]\n"
+    for (lhs, rhs) in ConcreteSpec.GrammarData.renderGrammarForSlice slice do
+      out := out ++ String.intercalate " " ([lhs, "="] ++ rhs) ++ "\n"
+  return out ++ "\n"
+
+private def agreesWithCatalog (sections : String) := sections == generatedSections
+
+private def checkDriftControls : IO Unit := do
+  for (fromRow, toRow) in [
+      ("LetTail = { }\n", ""),
+      ("LetHead = IDENT @LetTail\n", "LetHead = @LetTail IDENT\n"),
+      ("Structs =\n", "Structs =\nStructs =\n")] do
+    let changed := generatedSections.replace fromRow toRow
+    if agreesWithCatalog changed then throw (IO.userError s!"undetected grammar drift at {fromRow}")
+
+/-- Read the ballot's first-consumer column independently of the terminal layout. -/
+private def checkBallotSlices : IO Unit := do
+  let ballot ← IO.FS.readFile "docs/grammar/TOKEN-BALLOT.md"
+  let some table := (ballot.splitOn "| First consumer | Reserved words |")[1]?
+    | throw (IO.userError "missing reservation ballot")
+  let mut seen := []
+  for line in (table.splitOn "\n\n").head!.splitOn "\n" do
+    let fields := line.splitOn "|"
+    let some first := fields[1]? | continue
+    let some words := fields[2]? | continue
+    let label := ((first.trimAscii.toString.splitOn " ").head!).splitOn "–"
+    let some lo := label.head!.toNat? | continue
+    let some hi := label.getLast!.toNat? | throw (IO.userError "invalid slice range")
+    for (name,i) in (words.splitOn "`").zipIdx do
+      if i % 2 == 1 then
+        let t := ConcreteSpec.Surface0.word name
+        let some actual := ConcreteSpec.GrammarData.terminalSlices[t.ctorIdx]?
+          | throw (IO.userError s!"missing terminal slice for {name}")
+        unless lo ≤ actual && actual ≤ hi do throw (IO.userError s!"wrong terminal slice for {name}")
+        seen := name :: seen
+  unless seen.mergeSort == (wordTokens.map Prod.fst).mergeSort do
+    throw (IO.userError "ballot first-consumer table differs from the word catalog")
+
+def main (args : List String) : IO Unit := do
+  let path := "docs/grammar/slices-0-11.grammar"
+  let input ← IO.FS.readFile path
+  let [prior, draft] := input.splitOn "\n[2]\n" | throw (IO.userError "missing slice 2 boundary")
+  let generated := generatedSections
+  if args == ["--write"] then
+    IO.FS.writeFile path (generated ++ "[2]\n" ++ draft)
+  else
+    unless args.isEmpty && agreesWithCatalog (prior ++ "\n") do
+      throw (IO.userError "early grammar differs from Lean catalog (run checker --write)")
+  let catalog := ConcreteSpec.GrammarData.productionIds
+  unless ll1 (ConcreteSpec.GrammarData.erase catalog) do
+    throw (IO.userError "full recognition catalog has a prediction conflict")
+  let slices := (List.finRange _).map ConcreteSpec.Core.SliceId.mk
+  for id in slices do
+    let slice := id.n.val
+    unless productive (grammar (ConcreteSpec.GrammarData.renderGrammarForSlice slice)) &&
+        ll1 (ConcreteSpec.GrammarData.erase (ConcreteSpec.GrammarData.projection slice)) do
+      throw (IO.userError s!"recognition projection {slice} failed productivity or LL(1)")
   unless (wordTokens.map Prod.fst).Nodup && (wordTokens.map Prod.snd).Nodup do
     throw (IO.userError "word catalog requires one spelling per fixed terminal")
   checkWordIdentities
+  checkBallotSlices
+  checkDriftControls
+  IO.println s!"pass: recognition grammar and all {slices.length} projections satisfy LL(1) and productivity"
   checkLiterals
   let sections ← readSections (← IO.FS.readFile "docs/grammar/slices-0-11.grammar")
   let mut rules := []
@@ -1106,6 +1170,16 @@ def main : IO Unit := do
     checkProjection slice rules
     if slice == 0 then
       requireConflict "duplicate integer atom" (rules ++ [("Atom", ["INTEGER"])])
+    if slice == 0 then
+      requireConflict "second Program predicted on fn" (rules ++ [("Program", ["fn"])])
+    if slice == 1 then
+      let sample := fnBody "let x {} = x;"
+      let (baseline, original) ← requireProjection "original brace tail" rules
+      unless recognizes slice baseline original sample do throw (IO.userError "missing original destructuring form")
+      let (mutant, table) ← requireProjection "missing brace tail"
+        (rules.filter (· != ("LetTail", ["{", "}"])))
+      if recognizes slice mutant table sample then
+        throw (IO.userError "destructuring survived deletion of its brace tail")
     if slice == 3 then
       let (reversed, table) ← requireProjection "reversed comparison precedence" (reversedComparisonPrecedence rules)
       unless (parseDraft slice reversed table precedenceSource).any

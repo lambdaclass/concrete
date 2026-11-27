@@ -52,6 +52,8 @@ if [[ ${CONCRETE_TEST_EMIT_ONLY:-0} != 1 ]]; then
   bash scripts/checks/compiler/f31_census.sh
   # The kernel checks the full cross-stage controls in this compilation unit.
   # At two Lean threads this can exceed the standard build budget.
+  build grammar-certificate "$work/grammar-certificate.log" bounded 240 \
+    lake env lean --run scripts/spec/grammar_certificate.lean
   build stage-interface-controls "$work/stage-interface-controls.log" bounded 360 \
     lake lean scripts/checks/compiler/stage_interfaces.lean -- -DwarningAsError=true -DautoImplicit=false
   build stage-end-to-end-audit "$work/stage-end-to-end-audit.log" bounded 60 \
