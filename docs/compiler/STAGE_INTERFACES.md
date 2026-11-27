@@ -57,7 +57,7 @@ block and terminator families and check the types of block arguments. The integr
 determines layouts, literal and operation values, field projections and aggregate codecs.
 Core literal operands have a profile-independent byte encoding. MIR/Memory operand reads call `CoreLanguage.literal`. Materialized scalar storage reads use the selected target's `Hybrid.decode`. For the Core bytes `fe ff`, an i16 literal is −2 under either byte order. The materialized load resolves the backing range and reads those two initialized bytes as −257 at the big-endian spec target.
 
-Core execution, MIR, Memory, SSA and BIR carry the same qualified declaration environment. Independent typing establishes the spec's `DeclsOk`; each lowering contract preserves the exact declarations. Layout, active fields and operation semantics consult that environment. A declared empty linear nominal has size zero and alignment one, the identity for maximum field alignment under foundation C3. It has a logical value and ownership lifetime even without a backing block. Materialized unknown or unsupported types produce `MissingLayout`. Fix (b) can use the declaration at the normal layout, construction, transfer and destructure entry points when proving the MIR-to-Memory simulation and promotion for eligible roots. The controls execute construction and consuming destructure, then try to read the consumed value.
+Core execution, MIR, Memory, SSA and BIR carry the same qualified declaration environment. Independent typing establishes the spec's `DeclsOk`; each lowering contract preserves the exact declarations. Layout, active fields and operation semantics consult that environment. A declared empty linear nominal has size zero and alignment one, the identity for maximum field alignment under foundation C3. It has a logical value and ownership lifetime even without a backing block. Memory lowering queries each materialized root in the MIR declaration environment and carries those declarations into the placed graph. A missing layout or one that fails `Layout.WellFormed` for the physical target produces `MissingLayout`. The controls execute construction and consuming destructure, then try to read the consumed value.
 
 Each reachable
 projection must execute the instruction fetched at its program counter. Calls push the
@@ -74,6 +74,20 @@ representation at each intermediate source state. The source path can follow the
 allocation decisions already made by the target. A target step that makes no
 source progress decreases a natural-valued rank. Complete behavior refinement
 independently requires a matching source execution for any target divergence.
+
+A fresh nonempty materialized lifetime can end execution with the typed
+`resourceExhausted` observation when no target space and base can hold its layout.
+This rule covers explicit begins and the parameter writes inside calls, returns,
+edge transfers and destructuring. A compound transfer exhausts when no joint allocation fits its distinct fresh
+nonempty materialized roots and all of its writes succeed at one widened address
+ceiling. Allocation, stores and readback share that ceiling, including empty
+runs at a one-past address. The handoff checks each declared layout against
+the physical target. An invalid write anywhere in the transfer prevents exhaustion.
+Memory, SSA and BIR retain the original PC, bytes, effects and ownership on exhaustion.
+`LowersMemory` matches ordinary terminal results and their traces, reflects divergence,
+and requires progress on a safe MIR input.
+The separate `Concrete.toml` memory-bound proof must exclude reachable exhaustion
+to recover strict matching of every terminal result.
 
 Address operands name typed places explicitly. Physical execution resolves a live,
 initialized materialized place through its recorded range and passes that range, byte
@@ -160,10 +174,10 @@ a pinned linked semantics and a proof of behavior preservation. The
 
 An execution starts in a program's designated initial configuration and follows
 small steps. A program is safe when no reachable state lacks both a successor
-and a terminal result. A terminal result records return, trap or startup
-refusal, with exact stderr and diagnostic sites where applicable. A language
-trap is a defined outcome. Interpreter failure to take a step or report a
-terminal result is going wrong.
+and a terminal result. A terminal result records return, trap, startup
+refusal or physical resource exhaustion, with exact stderr and diagnostic sites
+where applicable. A language trap is a defined outcome. Interpreter failure to
+take a step or report a terminal result is going wrong.
 
 `BehaviorRefinement` states safe-source backward inclusion directly. If the
 source is safe, every target termination has a reachable source termination

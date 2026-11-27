@@ -264,6 +264,7 @@ structure MemoryState (Ty Value Event : Type) (profile : Profile) extends Memory
   effects : List Event := []
   ownership : Own.State := {}
   nextAddressId : Nat := 0
+  resourceExhausted : Bool := false
 
 def MemoryState.BytesWF {Ty Value Event : Type} {profile : Profile}
     (state : MemoryState Ty Value Event profile) :

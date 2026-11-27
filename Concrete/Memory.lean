@@ -186,7 +186,8 @@ def checkHandoff {Ty : Type} [DecidableEq Ty] {lang : LoweringLanguage Ty}
     decide (List.map Prod.fst locals).Nodup &&
     Concrete.CFG.check graph Sigma.fst Sigma.fst && checkSignature memory fn graph) &&
   decide (memory.entry ∈ List.map Prod.fst memory.functions) &&
-  memory.origins.all (fun origin => Concrete.CFG.checkSpan memory.project origin.lexical)
+  memory.origins.all (fun origin => Concrete.CFG.checkSpan memory.project origin.lexical) &&
+  memory.layouts.all (fun table => table.2.all (fun slot => slot.2.WellFormed profile.memoryTarget))
 
 theorem checkHandoff_iff {Ty : Type} [DecidableEq Ty] {lang : LoweringLanguage Ty}
     {profile : Profile} (memory : Interfaces.Memory lang profile) :
@@ -199,16 +200,16 @@ theorem checkHandoff_iff {Ty : Type} [DecidableEq Ty] {lang : LoweringLanguage T
     simp [invalid] at hb
   simp only [checkHandoff, Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true,
     Concrete.CFG.check_iff, checkSignature_iff, Concrete.CFG.checkSpan_iff,
-    Interfaces.Memory.HandoffWF, Interfaces.Memory.TablesWF, Prod.forall]
+    Interfaces.Memory.HandoffWF, Interfaces.Memory.LayoutsWF, Interfaces.Memory.TablesWF, Prod.forall]
   constructor
-  · rintro ⟨⟨⟨⟨⟨keys, storage⟩, layouts⟩, graphs⟩, entry⟩, origins⟩
+  · rintro ⟨⟨⟨⟨⟨⟨keys, storage⟩, layouts⟩, graphs⟩, entry⟩, origins⟩, geometry⟩
     exact ⟨⟨keys.1, keys.2.1, keys.2.2.1, keys.2.2.2, storage, layouts, fun fn locals graph h =>
       let ⟨⟨unique, cfg, _⟩, sig⟩ := graphs fn locals graph h
-      ⟨unique, cfg, sig⟩⟩, entry, origins⟩
-  · rintro ⟨⟨fns, sigs, classes, slots, storage, layouts, graphs⟩, entry, origins⟩
-    exact ⟨⟨⟨⟨⟨⟨fns, sigs, classes, slots⟩, storage⟩, layouts⟩, fun fn locals graph h =>
+      ⟨unique, cfg, sig⟩⟩, entry, origins, geometry⟩
+  · rintro ⟨⟨fns, sigs, classes, slots, storage, layouts, graphs⟩, entry, origins, geometry⟩
+    exact ⟨⟨⟨⟨⟨⟨⟨fns, sigs, classes, slots⟩, storage⟩, layouts⟩, fun fn locals graph h =>
       let ⟨unique, cfg, sig⟩ := graphs fn locals graph h
-      ⟨⟨unique, cfg, valid sig⟩, sig⟩⟩, entry⟩, origins⟩
+      ⟨⟨unique, cfg, valid sig⟩, sig⟩⟩, entry⟩, origins⟩, geometry⟩
 
 private theorem ownerAccess_without_conflict (owners : Own.State) (id : Hybrid.Place)
     (mode : Own.Mode) (loan : Own.Loan) (active : loan ∈ owners.loans)

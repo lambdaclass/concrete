@@ -68,6 +68,9 @@ structure Target where
   maxObject : Nat
   deriving DecidableEq, Repr
 
+/-- Exclusive bound on numeric addresses of the physical target. -/
+def Target.addressCeiling (t : Target) : Nat := 2 ^ t.addrBits
+
 /-- What every profile must satisfy.
 
 - An address has at least one bit, and a stored pointer has room for all of them.
