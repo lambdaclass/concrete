@@ -2193,7 +2193,24 @@ Concrete.Parse.CheckedTable.entries_eq	propext
 Concrete.Parse.CheckedTable.mk.inj	propext
 Concrete.Parse.CheckedTable.mk.injEq	propext
 Concrete.Parse.CheckedTable.mk.sizeOf_spec	propext
+Concrete.Parse.parseForDriver_ok	propext
+Concrete.Parse.parseForDriver_ok._simp_1	propext
 Concrete.Parse.table0_checked	
+Concrete.ParserError.mk.inj	
+Concrete.ParserError.mk.injEq	propext
+Concrete.ParserError.mk.sizeOf_spec	
+Concrete.ParserError.rule._proof_1	Quot.sound propext
+Concrete.ParserError.rule._proof_2	Quot.sound propext
+Concrete.ParserError.rule._proof_3	Quot.sound propext
+Concrete.ParserError.rule._proof_4	Quot.sound propext
+Concrete.ParserIssue.internal.inj	
+Concrete.ParserIssue.internal.injEq	propext
+Concrete.ParserIssue.internal.sizeOf_spec	
+Concrete.ParserIssue.nonDecimal.sizeOf_spec	
+Concrete.ParserIssue.outsideProduction.sizeOf_spec	
+Concrete.ParserIssue.trailingTokens.sizeOf_spec	
+Concrete.ParserIssue.unexpectedEnd.sizeOf_spec	
+Concrete.ParserIssue.unexpectedToken.sizeOf_spec	
 Concrete.Premises.Premise.mk.inj	
 Concrete.Premises.Premise.mk.injEq	propext
 Concrete.Premises.Premise.mk.sizeOf_spec	
@@ -2212,6 +2229,7 @@ Concrete.Refusal.backendResource.sizeOf_spec
 Concrete.Refusal.checker.inj	
 Concrete.Refusal.checker.injEq	propext
 Concrete.Refusal.checker.sizeOf_spec	
+Concrete.Refusal.diagnosticAt.eq_1	Quot.sound propext
 Concrete.Refusal.internal.inj	
 Concrete.Refusal.internal.injEq	propext
 Concrete.Refusal.internal.sizeOf_spec	
@@ -2221,6 +2239,10 @@ Concrete.Refusal.lexerDigitLimit.sizeOf_spec
 Concrete.Refusal.manifest.inj	
 Concrete.Refusal.manifest.injEq	propext
 Concrete.Refusal.manifest.sizeOf_spec	
+Concrete.Refusal.parser.inj	
+Concrete.Refusal.parser.injEq	propext
+Concrete.Refusal.parser.sizeOf_spec	
+Concrete.Refusal.parser_diagnosticAt_iff	Quot.sound propext
 Concrete.Refusal.syntaxError.inj	
 Concrete.Refusal.syntaxError.injEq	propext
 Concrete.Refusal.syntaxError.sizeOf_spec	
@@ -2249,6 +2271,7 @@ Concrete.Stages.compile_lexes	Classical.choice Quot.sound propext
 Concrete.Stages.compile_of_edges	Classical.choice Quot.sound propext
 Concrete.Stages.compile_project	Classical.choice Quot.sound propext
 Concrete.Stages.compile_ssa_correct	Classical.choice Quot.sound propext
+Concrete.Stages.fileEnd._proof_1	Quot.sound propext
 Concrete.Stages.prepareLCB.eq_1	Classical.choice Quot.sound propext
 Concrete.Stages.prepareLCB_of_edges	Classical.choice Quot.sound propext
 Concrete.Stages.unchecked.eq_1	Classical.choice Quot.sound propext
@@ -2284,6 +2307,41 @@ Concrete.instDecidableEqManifestRefusal.decEq._proof_6
 Concrete.instDecidableEqManifestRefusal.decEq._proof_7	
 Concrete.instDecidableEqManifestRefusal.decEq._proof_8	
 Concrete.instDecidableEqManifestRefusal.decEq._proof_9	
+Concrete.instDecidableEqParserError.decEq._proof_1	
+Concrete.instDecidableEqParserError.decEq._proof_2	
+Concrete.instDecidableEqParserError.decEq._proof_3	
+Concrete.instDecidableEqParserIssue.decEq._proof_1	
+Concrete.instDecidableEqParserIssue.decEq._proof_10	
+Concrete.instDecidableEqParserIssue.decEq._proof_11	
+Concrete.instDecidableEqParserIssue.decEq._proof_12	
+Concrete.instDecidableEqParserIssue.decEq._proof_13	
+Concrete.instDecidableEqParserIssue.decEq._proof_14	
+Concrete.instDecidableEqParserIssue.decEq._proof_15	
+Concrete.instDecidableEqParserIssue.decEq._proof_16	
+Concrete.instDecidableEqParserIssue.decEq._proof_17	
+Concrete.instDecidableEqParserIssue.decEq._proof_18	
+Concrete.instDecidableEqParserIssue.decEq._proof_19	
+Concrete.instDecidableEqParserIssue.decEq._proof_2	
+Concrete.instDecidableEqParserIssue.decEq._proof_20	
+Concrete.instDecidableEqParserIssue.decEq._proof_21	
+Concrete.instDecidableEqParserIssue.decEq._proof_22	
+Concrete.instDecidableEqParserIssue.decEq._proof_23	
+Concrete.instDecidableEqParserIssue.decEq._proof_24	
+Concrete.instDecidableEqParserIssue.decEq._proof_25	
+Concrete.instDecidableEqParserIssue.decEq._proof_26	
+Concrete.instDecidableEqParserIssue.decEq._proof_27	
+Concrete.instDecidableEqParserIssue.decEq._proof_28	
+Concrete.instDecidableEqParserIssue.decEq._proof_29	
+Concrete.instDecidableEqParserIssue.decEq._proof_3	
+Concrete.instDecidableEqParserIssue.decEq._proof_30	
+Concrete.instDecidableEqParserIssue.decEq._proof_31	
+Concrete.instDecidableEqParserIssue.decEq._proof_32	
+Concrete.instDecidableEqParserIssue.decEq._proof_4	
+Concrete.instDecidableEqParserIssue.decEq._proof_5	
+Concrete.instDecidableEqParserIssue.decEq._proof_6	
+Concrete.instDecidableEqParserIssue.decEq._proof_7	
+Concrete.instDecidableEqParserIssue.decEq._proof_8	
+Concrete.instDecidableEqParserIssue.decEq._proof_9	
 Concrete.instDecidableEqRefusal.decEq._proof_1	
 Concrete.instDecidableEqRefusal.decEq._proof_10	
 Concrete.instDecidableEqRefusal.decEq._proof_11	
@@ -2303,6 +2361,8 @@ Concrete.instDecidableEqRefusal.decEq._proof_23
 Concrete.instDecidableEqRefusal.decEq._proof_24	
 Concrete.instDecidableEqRefusal.decEq._proof_25	
 Concrete.instDecidableEqRefusal.decEq._proof_26	
+Concrete.instDecidableEqRefusal.decEq._proof_27	
+Concrete.instDecidableEqRefusal.decEq._proof_28	
 Concrete.instDecidableEqRefusal.decEq._proof_3	
 Concrete.instDecidableEqRefusal.decEq._proof_4	
 Concrete.instDecidableEqRefusal.decEq._proof_5	
@@ -2318,6 +2378,7 @@ ConcreteSpec.Core.SourcePathSpan.Project.fileAt.eq_1	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.SlotResolves.eq_1	Quot.sound propext
 ConcreteSpec.Core.inRangeOr.eq_1	propext
 ConcreteSpec.Core.plain.eq_1	propext
+ConcreteSpec.Core.validateRule.eq_1	Quot.sound propext
 ConcreteSpec.StageInterface.AdmissionView.located.eq_1	
 ConcreteSpec.StageInterface.AdmissionView.located.eq_2	
 ConcreteSpec.StageInterface.AdmissionView.program.eq_1	
@@ -3293,6 +3354,8 @@ _private.Concrete.Parse.0.Concrete.Parse.Value.tok.inj
 _private.Concrete.Parse.0.Concrete.Parse.Value.tok.injEq	propext
 _private.Concrete.Parse.0.Concrete.Parse.Value.tok.sizeOf_spec	
 _private.Concrete.Parse.0.Concrete.Parse.refusalTable._proof_1	propext
+_private.Concrete.Parse.0.Except.map.match_1.eq_1	
+_private.Concrete.Parse.0.Except.map.match_1.eq_2	
 _private.Concrete.Refusal.0.Concrete.Diagnostic.mk.inj	
 _private.Concrete.Refusal.0.Concrete.Diagnostic.mk.injEq	propext
 _private.Concrete.Refusal.0.Concrete.Diagnostic.mk.sizeOf_spec	
@@ -3300,6 +3363,15 @@ _private.Concrete.Refusal.0.Concrete.ManifestRefusal.registeredRule._proof_1	Quo
 _private.Concrete.Refusal.0.Concrete.ManifestRefusal.registeredRule._proof_2	Quot.sound propext
 _private.Concrete.Refusal.0.Concrete.ManifestRefusal.registeredRule._proof_3	Quot.sound propext
 _private.Concrete.Refusal.0.Concrete.ManifestRefusal.registeredRule._proof_4	Quot.sound propext
+_private.Concrete.Refusal.0.Concrete.Refusal.withRule._sparseCasesOn_3.else_eq	propext
+_private.Concrete.Refusal.0.Concrete.Refusal.withRule.eq_1	Quot.sound propext
+_private.Concrete.Refusal.0.Concrete.Refusal.withRule.eq_2	Quot.sound propext
+_private.Concrete.Refusal.0.Concrete.Refusal.withRule.eq_3	Quot.sound propext
+_private.Concrete.Refusal.0.Concrete.Refusal.withRule.match_1.eq_1	
+_private.Concrete.Refusal.0.Concrete.Refusal.withRule.match_1.eq_2	
+_private.Concrete.Refusal.0.Concrete.Refusal.withRule.match_3.eq_1	propext
+_private.Concrete.Refusal.0.Concrete.Refusal.withRule.match_3.eq_2	propext
+_private.Concrete.Refusal.0.Concrete.Refusal.withRule.match_3.eq_3	propext
 _private.Concrete.SSA.0.Concrete.BIR.ScalarBridge.toCore.match_1.eq_1	
 _private.Concrete.SSA.0.Concrete.BIR.ScalarBridge.toCore.match_1.eq_2	
 _private.Concrete.SSA.0.Concrete.BIR.ScalarBridge.toCore.match_1.eq_3	

@@ -196,7 +196,7 @@ def LexerContract : EdgeContract
   outputInvariant := fun tokens => ∃ bytes fileId, Lexes bytes tokens fileId
   correspondence := fun (bytes, fileId) tokens => Lexes bytes tokens fileId
 
-def ParserContract : EdgeContract (Graph Parse.parse) where
+def ParserContract : EdgeContract (fun tokens ast => ∃ eof, Graph (Parse.parse eof) tokens ast) where
   kind := .namedPremise "P_parse"
   inputInvariant := LexerContract.outputInvariant
   outputInvariant := fun ast => ∃ tokens, Derives tokens ast
@@ -296,7 +296,7 @@ def Frontend (input : Stages.Input) (out : Stages.Output) : Prop :=
 
 /-- Successful production exposes the exact intermediate results of the functions it invokes. -/
 def SharedHandoffs (input : Stages.Input) (out : Stages.Output) : Prop :=
-  Lex.lex input.source input.fileId = .ok out.tokens ∧ Parse.parse out.tokens = .ok out.ast ∧
+  Lex.lex input.source input.fileId = .ok out.tokens ∧ Parse.parse input.eof out.tokens = .ok out.ast ∧
   Admission.prepareParsed .admission out.ast = .ok out.core ∧
   (∃ admitted, Admission.check out.core = .ok admitted ∧ admitted.tokens = out.evidence ∧
     MIR.lower admitted = .ok out.mir) ∧
@@ -652,7 +652,7 @@ def LCBCorrect {Env : Type} {profile : Profile}
     Compiled input out ∧ ImageCorrect n admittedCoreSemantics input.path out.core build.image
 
 def UncheckedHandoffs (input : Stages.Input) (core : Elab.Output) : Prop :=
-  ∃ tokens ast, Lex.lex input.source input.fileId = .ok tokens ∧ Parse.parse tokens = .ok ast ∧
+  ∃ tokens ast, Lex.lex input.source input.fileId = .ok tokens ∧ Parse.parse input.eof tokens = .ok ast ∧
     Admission.prepareParsed .eligibility ast = .ok core
 
 /-- Every successful unchecked run exposes the frontend handoff used by the
@@ -665,10 +665,10 @@ theorem unchecked_handoffs_of_run {input : Stages.Input} {bir : BIR.Program}
     split at ran <;> try contradiction
     next ast parsed =>
       split at ran <;> try contradiction
-      next core prepared => exact ⟨core, tokens, ast, lexed, parsed, prepared⟩
+      next core prepared => exact ⟨core, tokens, ast, lexed, Parse.parseForDriver_ok.mp parsed, prepared⟩
 
 def UncheckedFrontend (input : Stages.Input) (core : Elab.Output) : Prop :=
-  ∃ tokens ast, Lex.lex input.source input.fileId = .ok tokens ∧ Parse.parse tokens = .ok ast ∧
+  ∃ tokens ast, Lex.lex input.source input.fileId = .ok tokens ∧ Parse.parse input.eof tokens = .ok ast ∧
     Admission.prepareParsed .eligibility ast = .ok core ∧ Lexes input.source tokens input.fileId ∧ Derives tokens ast ∧
     Elaborates .eligibility ast core
 
@@ -805,7 +805,7 @@ theorem answerCompiles : Stages.compile answerInput = .ok answerOutput := by
 private def bindingSpan : Span := ⟨0, 1, 1, 1, ⟨0⟩⟩
 
 private def parseBinderExample (source : String) : Except Refusal Program := do
-  Parse.parse (← Lex.lex source.toUTF8)
+  Parse.parseForDriver (Parse.eofSpan source.toUTF8) (← Lex.lex source.toUTF8)
 
 private theorem refusesFirstBinder {ast : Program} {bindings : List Binding} {binding : Binding}
     {result : Expr} (shape : checkBody ast.body = .ok (binding :: bindings, result))
@@ -830,13 +830,46 @@ private def builtinTypeBinderParse :=
 private def duplicateBinderParse :=
   parseBinderExample r#"fn main() -> u8 { let x: u8 = 1; let x: u8 = 20 + 22; return x; }"#
 
-example : wildcardParse = .error (.unsupported "program uses a form outside the slice-0 fragment") := by rfl
+private def keywordBinderParse :=
+  parseBinderExample r#"fn main() -> u8 { let i8: u8 = 42; return i8; }"#
 
-example : parseBinderExample r#"fn main() -> u8 { let i8: u8 = 42; return i8; }"# =
-    .error (.syntaxError "unexpected token at byte 22") := by rfl
+private def cites (result : Except Refusal Program) (rule : ConcreteSpec.Core.RuleId) : Bool :=
+  match result with
+  | .error e => (e.diagnosticAt rule).isSome
+  | .ok _ => false
 
+open ConcreteSpec.Core in
+example : keywordBinderParse = .error (.parser ⟨.unexpectedToken, ⟨22, 24, 1, 23, ⟨0⟩⟩⟩) ∧
+    cites keywordBinderParse ⟨``Slice0Rules.Parsed, 1⟩ = true ∧
+    cites keywordBinderParse ⟨``Slice0Rules.Lexed, 2⟩ = false := ⟨rfl, rfl, rfl⟩
+
+open ConcreteSpec.Core in
+example : wildcardParse = .error (.parser ⟨.outsideProduction, ⟨22, 23, 1, 23, ⟨0⟩⟩⟩) ∧
+    cites wildcardParse ⟨``Slice0Rules.AdmittedProduction, 2⟩ = true ∧
+    cites wildcardParse ⟨``Slice0Rules.EntryName, 1⟩ = false := ⟨rfl, rfl, rfl⟩
+
+-- A later malformed expression takes priority over a syntactically complete wildcard binder.
 example : parseBinderExample r#"fn main() -> u8 { let _: u8 = 42; return _; }"# =
-    .error (.syntaxError "unexpected token at byte 41") := by rfl
+    .error (.parser ⟨.unexpectedToken, ⟨41, 42, 1, 42, ⟨0⟩⟩⟩) := rfl
+
+open ConcreteSpec.Core in
+example :
+    let result := parseBinderExample r#"fn main() -> u8 { return 0xff; }"#
+    result = .error (.parser ⟨.nonDecimal, ⟨25, 29, 1, 26, ⟨0⟩⟩⟩) ∧
+      cites result ⟨``Slice0Rules.DecimalLiteral, 1⟩ = true ∧
+      cites result ⟨``Slice0Rules.AdmittedProduction, 2⟩ = false := ⟨rfl, rfl, rfl⟩
+
+-- The complete refusal parse selects the first violation when both rules apply.
+example : parseBinderExample r#"fn main() -> u8 { return 0xff * 1; }"# =
+    .error (.parser ⟨.nonDecimal, ⟨25, 29, 1, 26, ⟨0⟩⟩⟩) ∧
+    parseBinderExample r#"fn main() -> u8 { return 1 * 0xff; }"# =
+    .error (.parser ⟨.outsideProduction, ⟨27, 28, 1, 28, ⟨0⟩⟩⟩) := ⟨rfl, rfl⟩
+
+example : parseBinderExample r#"fn main() -> u8 { return 42; } 42"# =
+    .error (.parser ⟨.trailingTokens, ⟨31, 33, 1, 32, ⟨0⟩⟩⟩) := rfl
+
+example : parseBinderExample (r"fn main() -> u8 {" ++ "\r\n  ") =
+    .error (.parser ⟨.unexpectedEnd, ⟨21, 21, 2, 3, ⟨0⟩⟩⟩) := rfl
 
 example : ∃ ast, mainBinderParse = .ok ast ∧
     Admission.prepareParsed .admission ast = .error (.checker "binding shadows 'main' at byte 22") ∧
@@ -1288,7 +1321,7 @@ theorem answerTerminates : SourceTerminates answerInput.path answerOutput.core a
 private def trapInput := overflowInput "// x"
 
 private def trapCore : Elab.Output :=
-  (do Admission.prepareParsed .eligibility (← Parse.parse (← Lex.lex trapInput.source trapInput.fileId)) :
+  (do Admission.prepareParsed .eligibility (← Parse.parseForDriver trapInput.eof (← Lex.lex trapInput.source trapInput.fileId)) :
     Except Refusal Elab.Output).toOption.get (by rfl)
 
 private def trapBIR : BIR.Program :=

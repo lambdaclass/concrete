@@ -343,6 +343,12 @@ private structure FixtureEntries (profile : Profile) where
   emitLLVM : Stage (BIR testLowering profile) StageFailure (LLVMInput profile)
   emitLCB : Stage (BIR testLowering profile) StageFailure (LCBInput profile)
 
+-- A fixed parser entry also fixes the entire refusal, including its rule and span.
+example {count : Nat} {g : SharedGrammar count} (engine : ParserEngine g) (stream : TokenStream)
+    (first second : ParseRefusal) (h₁ : (parserEntry engine).refusal stream first)
+    (h₂ : (parserEntry engine).refusal stream second) : first = second :=
+  Except.error.inj (Option.some.inj (h₁.1.symm.trans h₂.1))
+
 private def fixtureEntries {profile : Profile} (parser : Parser grammar)
     (passes : PassFunctions grammar testLanguage testLowering profile) : FixtureEntries profile :=
   ⟨passes.lexer, parserEntry parser.engine, (passes.admissionEntry early).toStage, passes.lowerUncheckedEntry,
@@ -591,7 +597,8 @@ private theorem returnedCoreWF (n : Nat) : (elaboratedReturn n).WF := by
     exact ⟨⟨⟨0⟩, 25, 27, by decide, 1, 26, by decide, by decide⟩, _, rfl, rfl, by decide, rfl, rfl, rfl, rfl⟩
 
 example :
-    ((Concrete.Lex.lex elaborationSourceText.toUTF8).bind Concrete.Parse.parse) = .ok returnProgram :=
+    (Concrete.Lex.lex elaborationSourceText.toUTF8).bind
+      (Concrete.Parse.parseForDriver (Concrete.Parse.eofSpan elaborationSourceText.toUTF8)) = .ok returnProgram :=
   rfl
 
 private def returnView (n : Nat := 42) : ParserView :=

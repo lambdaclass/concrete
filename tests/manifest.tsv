@@ -47,6 +47,7 @@ source_answer	con:tests/slice0/answer.con	exit 42 -	slice0
 source_overflow	con:tests/slice0/overflow.con	pending-refusal 1 checker	slice0
 source_trap	con:tests/slice0/trap.con	trap arithmeticOverflow 1 636f6e63726574653a20747261703a206f766572666c6f772061742074657374732f736c696365302f747261702e636f6e3a343a31342028736974652031290a	slice0
 source_reserved_binder_trap	con:tests/slice0/reserved_binder_trap.con	refuse 1 reserved_binder OD67@2 22:28:1:23 -	slice0
+source_legal_binder_trap	con:tests/slice0/legal_binder_trap.con	trap arithmeticOverflow 0 636f6e63726574653a20747261703a206f766572666c6f772061742074657374732f736c696365302f6c6567616c5f62696e6465725f747261702e636f6e3a313a35352028736974652030290a	slice0
 source_zero	con:tests/slice0/zero.con	exit 0 -	slice0
 source_syntax	con:tests/slice0/syntax_error.con	pending-refusal 1 syntax	slice0
 source_unsupported	con:tests/slice0/unsupported.con	pending-refusal 1 unsupported_form	slice0

@@ -39,7 +39,7 @@ example :
 
 private def sourceKeys (sourceText : String) : Option SiteKeyTable := do
   let tokens ← (Lex.lex sourceText.toUTF8).toOption
-  let ast ← (Parse.parse tokens).toOption
+  let ast ← (Parse.parse (Parse.eofSpan sourceText.toUTF8) tokens).toOption
   let program ← (SurfacePreparation.prepareSurface0 ast).toOption
   return AList.map Origin.evidenceKey (AdmissionView.zero program).execution.origins
 
@@ -486,7 +486,7 @@ example :
     (Exec.run machine.body (fun _ prim => nomatch prim) 32 machine.initial).ending = .stuck := by
   with_unfolding_all exact ⟨rfl, rfl⟩
 
-private def parseSource (text : String) := (Lex.lex text.toUTF8).bind Parse.parse
+private def parseSource (text : String) := (Lex.lex text.toUTF8).bind (Parse.parseForDriver (Parse.eofSpan text.toUTF8))
 
 example :
     ((parseSource r"fn main() -> u8 { return 42; let Option: u8 = 1; }").bind

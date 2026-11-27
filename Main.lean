@@ -76,7 +76,8 @@ private def buildNative (lib dir : System.FilePath) (backend : Option String)
 
 private def report (refusal : Refusal) : IO UInt32 := do
   let message := match refusal with
-    | .syntaxError detail => s!"{refusal.code.toLower} error: {detail}"
+    | .syntaxError _ | .parser ⟨.unexpectedToken, _⟩ | .parser ⟨.unexpectedEnd, _⟩
+    | .parser ⟨.trailingTokens, _⟩ => s!"{refusal.code.toLower} error: {refusal.message}"
     | _ => refusal.message
   match ← (writeOutput "stderr" IO.getStderr s!"{refusal.code}: {message}\n").run with
   | .ok () => return refusal.exitCode

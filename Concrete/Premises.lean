@@ -29,7 +29,7 @@ theorem Backend.LLVM.Width.ofCore_bits (t : ConcreteSpec.Core.IntTy) :
 
 open ConcreteSpec.Surface0 in
 structure FrontendPremises where
-  parse : ∀ toks ast, Parse.parse toks = .ok ast → Derives toks ast
+  parse : ∀ eof toks ast, Parse.parse eof toks = .ok ast → Derives toks ast
   elaborate : ∀ purpose ast out, Admission.prepareParsed purpose ast = .ok out →
     let p := Core.toCore out.program
     Elab.eval ast = Core.run p (p.body.length + 1)

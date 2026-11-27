@@ -31,6 +31,13 @@ def Input.load (path : String) (bytes : ByteArray) : Except Refusal Input := do
     | throw (.syntaxError "expected a canonical project-relative source path")
   Input.resolve (.singleton path (.ofBytes bytes.data.toList)) ⟨0⟩
 
+/-- Use the loaded file's coordinate index, including for a trivia-only source. -/
+def fileEnd (file : File) (id : FileId) : ConcreteSpec.Surface0.Span :=
+  let pos := file.positionAt file.length (Nat.le_refl _)
+  ConcreteSpec.Surface0.Position.span pos pos id
+
+def Input.eof (input : Input) := fileEnd input.file input.fileId
+
 structure Output where
   private mk ::
   project : Project
@@ -46,7 +53,7 @@ structure Output where
   provenance : ∃ file,
     project.fileAt fileId = some file ∧
     Lex.lex ⟨file.source.toBytes.toArray⟩ fileId = .ok tokens ∧
-    Parse.parse tokens = .ok ast ∧ Admission.prepareParsed .admission ast = .ok core
+    Parse.parse (fileEnd file fileId) tokens = .ok ast ∧ Admission.prepareParsed .admission ast = .ok core
 
 /-- Resolve an actual elaborated operator site against the table used to compile it. -/
 def Output.operatorSpan (out : Output) (index : Nat) : Option (ScopedSpan out.project) := do
@@ -83,7 +90,7 @@ private def Pipeline.run {A C : Type} (stages : Pipeline A C) (input : A) : Exce
 
 private def stages (path : String) :=
   Pipeline.next lex <|
-  .next (fun v => Parse.parse v.2) <|
+  .next (fun v => Parse.parseForDriver v.1.eof v.2) <|
   .next (fun v => Admission.prepareParsed .admission v.2) <|
   .next (fun v => Admission.check v.2) <|
   .next (fun v => MIR.lower v.2) <|
@@ -94,7 +101,7 @@ private theorem edges_of_run {input : Input} {resolved tokens ast core admitted 
     (h : (stages input.path).run input =
       .ok (((((((resolved, tokens), ast), core), admitted), mir), mem), bir)) :
     Lex.lex input.source input.fileId = .ok tokens ∧
-    Parse.parse tokens = .ok ast ∧ Admission.prepareParsed .admission ast = .ok core ∧
+    Parse.parse input.eof tokens = .ok ast ∧ Admission.prepareParsed .admission ast = .ok core ∧
     Admission.check core = .ok admitted ∧ MIR.lower admitted = .ok mir ∧
     Memory.lower mir = mem ∧ SSA.lower input.path mem = .ok bir := by
   simp only [stages, Pipeline.run, lex, memory, bind, Except.bind] at h
@@ -111,7 +118,7 @@ private theorem edges_of_run {input : Input} {resolved tokens ast core admitted 
             split at h <;> try contradiction
             next loweredSSA hSSA =>
               cases Except.ok.inj h
-              exact ⟨hLex, hParse, hElab, hAdmit, hLower, rfl, hSSA⟩
+              exact ⟨hLex, Parse.parseForDriver_ok.mp hParse, hElab, hAdmit, hLower, rfl, hSSA⟩
 
 def compile (input : Input) : Except Refusal Output :=
   match h : (stages input.path).run input with
@@ -148,7 +155,7 @@ theorem compile_of_edges (input : Input) (tokens : List ConcreteSpec.Surface0.To
     (ast : ConcreteSpec.Surface0.Program) (core : Elab.Output) (admitted : Admission.Output)
     (mir : MIR.Program) (mem : Memory.Program) (bir : BIR.Program)
     (hLex : Lex.lex input.source input.fileId = .ok tokens)
-    (hParse : Parse.parse tokens = .ok ast)
+    (hParse : Parse.parse input.eof tokens = .ok ast)
     (hElab : Admission.prepareParsed .admission ast = .ok core)
     (hAdmit : Admission.check core = .ok admitted)
     (hLower : MIR.lower admitted = .ok mir)
@@ -159,7 +166,7 @@ theorem compile_of_edges (input : Input) (tokens : List ConcreteSpec.Surface0.To
   have runEq : (stages input.path).run input =
       .ok (((((((input, tokens), ast), core), admitted), mir), mem), bir) := by
     simp [stages, Pipeline.run, lex, memory, bind, Except.bind,
-      hLex, hParse, hElab, hAdmit, hLower, hMem, hSSA]
+      hLex, Parse.parseForDriver_ok.mpr hParse, hElab, hAdmit, hLower, hMem, hSSA]
   unfold compile
   split
   · next failed h => rw [runEq] at h; contradiction
@@ -205,7 +212,7 @@ theorem prepareLCB_of_edges (bir : BIR.Program)
 parser, elaborator and lowering stages, with every static rule and residual arithmetic checks. -/
 def unchecked (input : Input) : Except Refusal BIR.Program := do
   let tokens ← lex input
-  let ast ← Parse.parse tokens
+  let ast ← Parse.parseForDriver input.eof tokens
   let core ← Admission.prepareParsed .eligibility ast
   let _ ← (ConcreteSpec.checkProgramWith .runtime (Core.toCore core.program)).mapError
     fun _ => Refusal.checker "Core check rejected the program"

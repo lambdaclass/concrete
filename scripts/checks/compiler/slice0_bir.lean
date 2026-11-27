@@ -267,6 +267,9 @@ def emit (name : String) (dir : System.FilePath) (expectation : List String)
 -- pipeline still drops the rule and origins when wrapping the spec error in Refusal.checker.
 def pendingRefusalMatches (kind : String) (refusal : Concrete.Refusal) : Bool :=
   match kind, refusal with
+  | "syntax", .parser ⟨.unexpectedToken, _⟩ | "syntax", .parser ⟨.unexpectedEnd, _⟩
+  | "syntax", .parser ⟨.trailingTokens, _⟩
+  | "unsupported_form", .parser ⟨.outsideProduction, _⟩ | "unsupported_form", .parser ⟨.nonDecimal, _⟩
   | "syntax", .syntaxError _ | "unsupported_form", .unsupported _ | "checker", .checker _ => true
   | _, _ => false
 
@@ -298,7 +301,7 @@ def checkSourceRefusal (input : Concrete.Stages.Input) (expected : RefusalExpect
     (actual : Concrete.Refusal) :
     IO UInt32 := do
   let .ok tokens := Concrete.Lex.lex input.source input.fileId | return 13
-  let .ok ast := Concrete.Parse.parse tokens | return 13
+  let .ok ast := Concrete.Parse.parse input.eof tokens | return 13
   if expected.kind == "reserved_binder" then
     let .error issue@(.reservedBinder name span) :=
         ConcreteSpec.StageInterface.SurfacePreparation.prepareSurface0 ast | return 13
@@ -353,7 +356,7 @@ def emitSource (path actual : String) (dir : System.FilePath) (expectation : Lis
     | _ => return 15
   | ["trap", kind, _, _], .error (.checker _) =>
     let .ok tokens := Concrete.Lex.lex input.source input.fileId | IO.eprintln "lex failed"; return 1
-    let .ok ast := Concrete.Parse.parse tokens | IO.eprintln "parse failed"; return 1
+    let .ok ast := Concrete.Parse.parse input.eof tokens | IO.eprintln "parse failed"; return 1
     let .ok core := Concrete.Admission.prepareParsed .eligibility ast | IO.eprintln "elaboration failed"; return 1
     let p := Concrete.Core.toCore core.program
     let .trap actualKind := Concrete.Core.run p (p.body.length + 1)

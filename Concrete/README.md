@@ -342,7 +342,7 @@ The premises fall into two separate structures, because they are different kinds
     The certificate checks parsing and elaboration for each compilation (below). -/
 structure FrontendPremises : Prop where
   /-- P_parse (implementation), until the generic table-parser theorem lands. -/
-  parse : ∀ toks ast, Parse.parse toks = .ok ast → Surface0.Derives toks ast
+  parse : ∀ eof toks ast, Parse.parse eof toks = .ok ast → Surface0.Derives toks ast
 
 /-- The target profile: the pinned triple, the toolchain store paths, the stack budget, and
     `maxSlots`, the largest BIR frame the profile vouches for under that budget. `compile` refuses
@@ -559,7 +559,7 @@ def srcBytes : ByteArray := ...      -- the exact input
 def expected : Stages.Output := ...  -- the exact tokens, AST, Core, evidence, MIR, Memory and BIR
 -- one entry per edge, each checked by `decide` on that ONE stage function:
 theorem e_lex   : Lex.lex srcBytes = .ok expected.toks := by decide
-theorem e_parse : Parse.parse expected.toks = .ok expected.ast := by decide
+theorem e_parse : Parse.parse input.eof expected.toks = .ok expected.ast := by decide
 -- … e_elab, e_admit, e_lower, e_memory, e_ssa
 theorem cert_compile : Stages.compile input = .ok expected :=
   Stages.compile_of_edges input … e_lex e_parse e_elab e_admit e_lower e_memory e_ssa
