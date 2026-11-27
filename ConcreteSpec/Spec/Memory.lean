@@ -83,12 +83,12 @@ structure Ptr where
   prov : Option BlockId
   deriving DecidableEq, Repr
 
-/-- A pointer's numeric address and space belong to this target. Provenance is checked
-separately by nonempty accesses. -/
-def Ptr.Valid (tgt : Target) (p : Ptr) : Prop :=
-  p.addr < 2 ^ tgt.addrBits ∧ p.space ∈ tgt.spaces
+/-- The address is below the memory's exclusive ceiling and in a target space.
+Physical execution defaults to the target's address width. -/
+def Ptr.Valid (tgt : Target) (p : Ptr) (ceiling : Nat := tgt.addressCeiling) : Prop :=
+  p.addr < ceiling ∧ p.space ∈ tgt.spaces
 
-instance (tgt : Target) (p : Ptr) : Decidable (p.Valid tgt) := by
+instance (tgt : Target) (p : Ptr) (ceiling : Nat) : Decidable (p.Valid tgt ceiling) := by
   unfold Ptr.Valid; infer_instance
 
 /-- A byte of memory. An initialized byte is an octet, and may also be byte `index` of a stored
@@ -135,14 +135,14 @@ instance (x y : Block) : Decidable (x.Overlaps y) := by unfold Block.Overlaps; i
 bytes as many as its size, its space among the target spaces, its one-past address an address
 of the target, its base aligned, and no
 two live blocks overlapping. -/
-structure Memory.WellFormed (tgt : Target) (m : Memory) : Prop where
+structure Memory.WellFormed (tgt : Target) (m : Memory) (ceiling : Nat := tgt.addressCeiling) : Prop where
   /-- Every stored entry agrees with lookup; shadowed contradictory blocks are forbidden. -/
   canonical : ∀ e ∈ m.blocks, m.block e.1 = some e.2
   /-- A block identity has exactly one entry, so first-entry updates preserve canonicality. -/
   unique : (List.map Prod.fst m.blocks).Nodup
   fresh : ∀ b x, m.block b = some x → b.id < m.next
   sized : ∀ b x, m.block b = some x → x.bytes.length = x.size
-  fits : ∀ b x, m.block b = some x → x.base + x.size ≤ 2 ^ tgt.addrBits - 1
+  fits : ∀ b x, m.block b = some x → x.base + x.size < ceiling
   spaces : ∀ b x, m.block b = some x → x.space ∈ tgt.spaces
   aligned : ∀ b x, m.block b = some x → IsPow2 x.align ∧ x.base % x.align = 0
   disjoint : ∀ b x c y, m.block b = some x → m.block c = some y → b ≠ c → x.live = true →
@@ -164,20 +164,21 @@ def candidate (space : AddrSpace) (base size align : Nat) : Block :=
 
 /-- The chosen address can hold a new block: aligned, its one-past address an address, not null
 when nonempty, and overlapping no live block. -/
-def Memory.Fits (tgt : Target) (m : Memory) (x : Block) : Prop :=
-  IsPow2 x.align ∧ x.base % x.align = 0 ∧ x.base + x.size ≤ 2 ^ tgt.addrBits - 1 ∧
+def Memory.Fits (tgt : Target) (m : Memory) (x : Block) (ceiling : Nat := tgt.addressCeiling) : Prop :=
+  IsPow2 x.align ∧ x.base % x.align = 0 ∧ x.base + x.size < ceiling ∧
     x.size ≤ tgt.maxObject ∧ (0 < x.size → x.base ≠ tgt.null) ∧
     (∀ e ∈ m.blocks, e.2.live = true → ¬ e.2.Overlaps x) ∧ x.space ∈ tgt.spaces
 
-instance (tgt : Target) (m : Memory) (x : Block) : Decidable (m.Fits tgt x) := by
+instance (tgt : Target) (m : Memory) (x : Block) (ceiling : Nat) : Decidable (m.Fits tgt x ceiling) := by
   unfold Memory.Fits; infer_instance
 
 /-- Allocate `size` bytes aligned to `align` in `space`, at the address `base` the allocator chose:
 a fresh, live, unexposed block of uninitialized bytes, or a failure that leaves memory as it was. -/
-def Memory.alloc (tgt : Target) (m : Memory) (space : AddrSpace) (base size align : Nat) :
+def Memory.alloc (tgt : Target) (m : Memory) (space : AddrSpace) (base size align : Nat)
+    (ceiling : Nat := tgt.addressCeiling) :
     Except AllocError (BlockId × Memory) :=
   let x := candidate space base size align
-  if m.Fits tgt x then .ok (⟨m.next⟩, ⟨(⟨m.next⟩, x) :: m.blocks, m.next + 1⟩)
+  if m.Fits tgt x ceiling then .ok (⟨m.next⟩, ⟨(⟨m.next⟩, x) :: m.blocks, m.next + 1⟩)
   else .error .unavailable
 
 /-- Release a live block: it is no longer live, nor exposed (Q3.9), and its identity is kept, so it
@@ -193,9 +194,10 @@ def Memory.free (m : Memory) (b : BlockId) : Option Memory :=
 /-- A target-valid pointer `p` may access `n` bytes aligned to `a`: for `n = 0`, an aligned non-null address
 (Q3.7's exception); otherwise a live block of `p`'s provenance, in `p`'s space, holding all `n`
 bytes, with `p` aligned. The block and the offset of the first byte, or `none`. -/
-def Memory.access (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat) : Option (Option (BlockId × Nat)) :=
+def Memory.access (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat)
+    (ceiling : Nat := tgt.addressCeiling) : Option (Option (BlockId × Nat)) :=
   if n = 0 then
-    if p.addr % a = 0 ∧ p.addr ≠ tgt.null ∧ p.Valid tgt then some none else none
+    if p.addr % a = 0 ∧ p.addr ≠ tgt.null ∧ p.Valid tgt ceiling then some none else none
   else
     match p.prov with
     | none => none
@@ -208,17 +210,19 @@ def Memory.access (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat) : Option (Op
 
 /-- Read `n` bytes through `p` (aligned to `a`): the bytes, which may be uninitialized (decoding
 decides whether they hold a value), or `none` when the access is not valid. -/
-def Memory.load (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat) : Option (List MByte) :=
-  match m.access tgt p n a with
+def Memory.load (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat)
+    (ceiling : Nat := tgt.addressCeiling) : Option (List MByte) :=
+  match m.access tgt p n a ceiling with
   | some none => some []
   | some (some (b, off)) => (m.block b).map fun x => (x.bytes.drop off).take n
   | none => none
 
 /-- Write bytes `bs` through `p` (aligned to `a`): the memory with those bytes replaced, or `none`
 when the access is not valid. Write permission is a premise (authority, C5), not checked here. -/
-def Memory.store (tgt : Target) (m : Memory) (p : Ptr) (bs : List MByte) (a : Nat) :
+def Memory.store (tgt : Target) (m : Memory) (p : Ptr) (bs : List MByte) (a : Nat)
+    (ceiling : Nat := tgt.addressCeiling) :
     Option Memory :=
-  match m.access tgt p bs.length a with
+  match m.access tgt p bs.length a ceiling with
   | some none => some m
   | some (some (b, off)) => some (m.modify b fun x =>
       { x with bytes := x.bytes.take off ++ bs ++ x.bytes.drop (off + bs.length) })

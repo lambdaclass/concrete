@@ -14,9 +14,11 @@ inductive Observation where
   | returned (status : UInt8) (stderr : ByteArray)
   | trapped (status : UInt8) (kind : TrapKind) (site : FileSpan) (stderr : ByteArray)
   | startupRefused (status : UInt8) (stderr : ByteArray)
+  | resourceExhausted
 
 def Observation.stderr : Observation → ByteArray
   | .returned _ bytes | .trapped _ _ _ bytes | .startupRefused _ bytes => bytes
+  | .resourceExhausted => ByteArray.empty
 
 open Concrete.Contracts (Steps)
 
@@ -265,6 +267,10 @@ def Memory.SignatureMatches {Ty : Type} {lang : LoweringLanguage Ty} {profile : 
             args.map Sigma.fst = target.parameters ∧ destination.map Sigma.fst = target.result
         | _ => True
 
+def Memory.LayoutsWF {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    (memory : Memory lang profile) : Prop :=
+  ∀ table ∈ memory.layouts, ∀ slot ∈ table.2, slot.2.WellFormed profile.memoryTarget
+
 def Memory.TablesWF {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
     (memory : Memory lang profile) : Prop :=
   (List.map Prod.fst memory.functions).Nodup ∧ (List.map Prod.fst memory.signatures).Nodup ∧
@@ -324,14 +330,17 @@ def layoutAt (memory : Memory lang profile) (fn : FnId) (place : PlaceId) : Opti
   let layouts ← AList.lookup memory.layouts fn
   AList.lookup layouts place
 
+/-- A materialized handle covers the live block of its provenance in full. -/
+abbrev CoversBlock (range : Hybrid.Range) (block : Mem.Block) : Prop :=
+  block.live = true ∧ block.space = range.ptr.space ∧ block.base = range.ptr.addr ∧
+    block.size = range.extent ∧ block.align = range.align
+
 def rootRange (memory : Memory lang profile) (state : MemoryRegisters language profile)
     (place : PlaceId) (range : Hybrid.Range) : Prop :=
   ∃ layout blockId block,
     memory.layoutAt state.frame place = some layout ∧ range.extent = layout.size ∧
     range.align = layout.align ∧ range.ptr.prov = some blockId ∧
-    state.bytes.block blockId = some block ∧ block.live = true ∧
-    block.space = range.ptr.space ∧ block.base = range.ptr.addr ∧
-    block.size = range.extent ∧ block.align = range.align
+    state.bytes.block blockId = some block ∧ CoversBlock range block
 
 def rootType (memory : Memory lang profile) (fn : FnId) (place : PlaceId) :
     Option language.operands.Ty := do
@@ -346,15 +355,21 @@ def validPlace (memory : Memory lang profile) (state : MemoryRegisters language 
       let rootType ← memory.rootType state.frame place.logical.root
       place.logical.path.foldlM language.fieldType rootType) = some ty)
 
+def atOffset (ptr : Mem.Ptr) (off : Nat) : Mem.Ptr :=
+  {ptr with addr := ptr.addr + off}
+
+def fieldRange (r : Hybrid.Range) (off : Nat) (leaf : Layout) : Hybrid.Range :=
+  ⟨atOffset r.ptr off, leaf.size, leaf.align⟩
+
 def rangeAt (memory : Memory lang profile)
     (state : MemoryRegisters language profile) {ty : language.operands.Ty} (place : Place _ ty) :
     Option Hybrid.Range := do
   let root ← AList.lookup state.materialized place.root
   if place.path.isEmpty then return root
-  let rootType ← memory.rootType state.frame place.root
-  let (offset, field) ← language.fieldRange rootType place.path ⟨root.extent, root.align⟩
+  let layout ← memory.layoutAt state.frame place.root
+  let (offset, field) ← layout.project place.path
   if offset + field.size ≤ root.extent then
-    some ⟨{root.ptr with addr := root.ptr.addr + offset}, field.size, field.align⟩
+    some (fieldRange root offset field)
   else none
 
 def zeroRoot (memory : Memory lang profile) (frame : FnId) (root : PlaceId) : Bool :=
@@ -401,10 +416,11 @@ private def commitOwner (state : MemoryRegisters language profile) (root : Place
 /-- Read the projected byte range of a nonempty materialized place at the
 resolved target. This also covers spec targets without a hosted backend. -/
 def loadMaterialized (memory : Memory lang profile) (state : MemoryRegisters language profile)
-    {ty : language.operands.Ty} (place : MemoryPlace _ ty) (target : Target) :
+    {ty : language.operands.Ty} (place : MemoryPlace _ ty) (target : Target)
+    (ceiling : Nat := target.addressCeiling) :
     Option language.operands.Val := do
-  let range ← memory.rangeAt state place.logical
-  let bytes ← state.bytes.load target range.ptr range.extent range.align
+  let bytes ← (memory.rangeAt state place.logical).bind fun range =>
+    state.bytes.load target range.ptr range.extent range.align ceiling
   match language.scalarType ty with
   | some scalar =>
     let value ← Hybrid.decode target scalar bytes
@@ -413,9 +429,9 @@ def loadMaterialized (memory : Memory lang profile) (state : MemoryRegisters lan
     let value ← language.decodeOther target ty bytes
     return language.valueShape.symm ▸ CoreValue.other value
 
-private def loadBacking (memory : Memory lang profile)
+def loadBacking (memory : Memory lang profile)
     (state : MemoryRegisters language profile) {ty : language.operands.Ty}
-    (place : MemoryPlace _ ty) : Option language.operands.Val := do
+    (place : MemoryPlace _ ty) (ceiling : Nat := profile.memoryTarget.addressCeiling) : Option language.operands.Val := do
   if !(memory.validPlace state place) then none else
   if !state.live.contains place.logical.root then none else
   match place.storage with
@@ -427,12 +443,12 @@ private def loadBacking (memory : Memory lang profile)
       let root ← AList.lookup state.zeroValues place.logical.root
       if place.logical.path.isEmpty then some root else language.field root place.logical.path
     else do
-      memory.loadMaterialized state place profile.memoryTarget
+      memory.loadMaterialized state place profile.memoryTarget ceiling
 
 def loadValue (memory : Memory lang profile)
     (state : MemoryRegisters language profile) {ty : language.operands.Ty}
-    (place : MemoryPlace _ ty) : Option language.operands.Val :=
-  if initializedAt state place.logical.root place.logical.path then memory.loadBacking state place
+    (place : MemoryPlace _ ty) (ceiling : Nat := profile.memoryTarget.addressCeiling) : Option language.operands.Val :=
+  if initializedAt state place.logical.root place.logical.path then memory.loadBacking state place ceiling
   else none
 
 def byteRuns
@@ -442,10 +458,10 @@ def byteRuns
   | .scalar scalar => (Hybrid.encode target scalar).map fun bytes => [(0, bytes)]
   | .other other => language.encodeOther target ty other
 
-private def StoresValue (memory : Memory lang profile)
+def StoresValue (memory : Memory lang profile)
     (state : MemoryRegisters language profile) {ty : language.operands.Ty}
-    (place : MemoryPlace _ ty) (value : language.operands.Val) : Prop :=
-  memory.loadValue state place = some value ∧
+    (place : MemoryPlace _ ty) (value : language.operands.Val) (ceiling : Nat := profile.memoryTarget.addressCeiling) : Prop :=
+  memory.loadValue state place ceiling = some value ∧
   (place.storage = .materialized →
     memory.zeroRoot state.frame place.logical.root = true ∨
     ∃ range runs, memory.rangeAt state place.logical = some range ∧
@@ -453,8 +469,8 @@ private def StoresValue (memory : Memory lang profile)
       (0 < range.extent → ∃ offset bytes, (offset, bytes) ∈ runs ∧ bytes ≠ []) ∧
       ∀ offset bytes, (offset, bytes) ∈ runs →
         offset + bytes.length ≤ range.extent ∧ (∀ byte ∈ bytes, byte ≠ .uninit) ∧
-        state.bytes.load profile.memoryTarget {range.ptr with addr := range.ptr.addr + offset}
-          bytes.length 1 = some bytes)
+        state.bytes.load profile.memoryTarget (atOffset range.ptr offset)
+          bytes.length 1 ceiling = some bytes)
 
 /-- Ignore moved subtrees when checking for live linear fields at lifetime end or replacement. -/
 private def canDiscard (language : CoreLanguage) (env : Declarations) (allowCopy : Bool := true) :
@@ -480,17 +496,17 @@ private def movedBelow (state : MemoryRegisters language profile)
   state.movedFields.filterMap fun (owner, moved) =>
     if owner == root && path.isPrefixOf moved then some (moved.drop path.length) else none
 
-private def discardRemainder (memory : Memory lang profile)
+def discardRemainder (memory : Memory lang profile)
     (state : MemoryRegisters language profile) {ty : language.operands.Ty}
-    (place : MemoryPlace _ ty) (allowCopy : Bool) : Bool :=
+    (place : MemoryPlace _ ty) (allowCopy : Bool) (ceiling : Nat := profile.memoryTarget.addressCeiling) : Bool :=
   let moved := movedBelow state place.logical.root place.logical.path
-  !moved.isEmpty && (memory.loadBacking state place).any fun value =>
+  !moved.isEmpty && (memory.loadBacking state place ceiling).any fun value =>
     canDiscard language memory.declarations allowCopy (moved.foldl (fun depth suffix => max depth suffix.length) 0)
       ty value moved
 
 def mayInitialize (memory : Memory lang profile)
     (state : MemoryRegisters language profile) {ty : language.operands.Ty}
-    (place : MemoryPlace _ ty) : Bool :=
+    (place : MemoryPlace _ ty) (ceiling : Nat := profile.memoryTarget.addressCeiling) : Bool :=
   let root := place.logical.root
   let path := place.logical.path
   if !state.initialized.contains root then path.isEmpty
@@ -498,63 +514,73 @@ def mayInitialize (memory : Memory lang profile)
   else if state.movedFields.any (fun (owner, moved) =>
       owner == root && moved != path && moved.isPrefixOf path) then false
   else if state.movedFields.contains (root, path) then true
-  else memory.discardRemainder state place true
+  else memory.discardRemainder state place true ceiling
 
 /-- A write's owner view records whether any active part of the destination
 still holds a value. A partially moved destination can have a discardable
 remainder, but replacing that remainder requires mutable owner access. -/
 def writeOwnerView (memory : Memory lang profile)
     (state : MemoryRegisters language profile) {ty : language.operands.Ty}
-    (place : MemoryPlace _ ty) : Own.State × Hybrid.Place :=
+    (place : MemoryPlace _ ty) (ceiling : Nat := profile.memoryTarget.addressCeiling) : Own.State × Hybrid.Place :=
   let root := place.logical.root
   let path := place.logical.path
   let empty := !state.initialized.contains root ||
     state.movedFields.any (fun (owner, moved) => owner == root && moved.isPrefixOf path) ||
-    memory.discardRemainder state place false
+    memory.discardRemainder state place false ceiling
   memory.ownerView state root ty (if empty then .moved else .owned)
 
 /-- A normal reinitialization uses the selected slot directly. Replacing a
 live remainder requires both fieldwise discharge and mutable owner access. -/
 def authorizeWrite (memory : Memory lang profile)
     (state : MemoryRegisters language profile) {ty : language.operands.Ty}
-    (place : MemoryPlace _ ty) : Option Own.State :=
-  let (owners, id) := memory.writeOwnerView state place
-  if memory.discardRemainder state place true && Own.ownerAccess owners id .mutable then
+    (place : MemoryPlace _ ty) (ceiling : Nat := profile.memoryTarget.addressCeiling) : Option Own.State :=
+  let (owners, id) := memory.writeOwnerView state place ceiling
+  if memory.discardRemainder state place true ceiling && Own.ownerAccess owners id .mutable then
     some owners
   else Own.reinitialize owners id
 
+def markWritten (state : MemoryRegisters language profile) {ty : language.operands.Ty}
+    (place : MemoryPlace _ ty) (owners : Own.State) : MemoryRegisters language profile :=
+  {state with
+    ownership := if place.logical.path.isEmpty then commitOwner state place.logical.root owners else state.ownership
+    initialized := if state.initialized.contains place.logical.root then state.initialized else place.logical.root :: state.initialized
+    movedFields := state.movedFields.filter (fun (owner, moved) =>
+      owner != place.logical.root || !place.logical.path.isPrefixOf moved)}
+
+def storeRuns (target : Target) (ceiling : Nat) (range : Hybrid.Range)
+    (runs : List (Nat × List Mem.MByte)) (heap : Mem.Memory) : Option Mem.Memory :=
+  runs.foldlM (fun mem (offset, bytes) =>
+    if offset + bytes.length ≤ range.extent then
+      mem.store target (atOffset range.ptr offset) bytes 1 ceiling
+    else none) heap
+
+def replaceLocal (table : AList PlaceId language.operands.Val) {ty : language.operands.Ty}
+    (place : Place _ ty) (value : language.operands.Val) : Option (AList PlaceId language.operands.Val) := do
+  let stored ← if place.path.isEmpty then some value else do
+    let before ← AList.lookup table place.root
+    language.replaceField before place.path value
+  return (place.root, stored) :: AList.erase table place.root
+
 def writeValue (memory : Memory lang profile)
     (state : MemoryRegisters language profile) {ty : language.operands.Ty}
-    (place : MemoryPlace _ ty) (value : language.operands.Val) :
+    (place : MemoryPlace _ ty) (value : language.operands.Val) (ceiling : Nat := profile.memoryTarget.addressCeiling) :
     Option (MemoryRegisters language profile) := do
   let root := place.logical.root
-  let path := place.logical.path
-  if !state.live.contains root || !memory.mayInitialize state place then none else
-  let owners ← memory.authorizeWrite state place
-  let state := {state with
-    ownership := if path.isEmpty then commitOwner state root owners else state.ownership
-    initialized := if state.initialized.contains root then state.initialized else root :: state.initialized
-    movedFields := state.movedFields.filter (fun (owner, moved) =>
-      owner != root || !path.isPrefixOf moved)}
+  if !state.live.contains root || !memory.mayInitialize state place ceiling then none else
+  let owners ← memory.authorizeWrite state place ceiling
+  let state := markWritten state place owners
   match place.storage with
   | .virtual =>
-    let stored ← if place.logical.path.isEmpty then some value else do
-      let before ← AList.lookup state.virtualValues root
-      language.replaceField before place.logical.path value
-    return {state with virtualValues := (root, stored) :: AList.erase state.virtualValues root}
+    let table ← replaceLocal (language := language) state.virtualValues place.logical value
+    return {state with virtualValues := table}
   | .materialized =>
-    if memory.zeroRoot state.frame root then
-      let stored ← if place.logical.path.isEmpty then some value else do
-        let before ← AList.lookup state.zeroValues root
-        language.replaceField before place.logical.path value
-      return {state with zeroValues := (root, stored) :: AList.erase state.zeroValues root}
+    if memory.zeroRoot state.frame root then do
+      let table ← replaceLocal (language := language) state.zeroValues place.logical value
+      return {state with zeroValues := table}
     else do
       let range ← memory.rangeAt state place.logical
       let runs ← byteRuns profile.memoryTarget ty value
-      let bytes ← runs.foldlM (fun mem (offset, bytes) =>
-        if offset + bytes.length ≤ range.extent then
-          mem.store profile.memoryTarget {range.ptr with addr := range.ptr.addr + offset} bytes 1
-        else none) state.bytes
+      let bytes ← storeRuns profile.memoryTarget ceiling range runs state.bytes
       return {state with bytes := bytes}
 
 def readValue (memory : Memory lang profile)
@@ -616,16 +642,16 @@ theorem moveRead_iff (memory : Memory lang profile) (state : MemoryRegisters lan
   split <;> rfl
 
 theorem write_authorized (memory : Memory lang profile) (state : MemoryRegisters language profile)
-    {ty : language.operands.Ty} (place : MemoryPlace _ ty) (value : language.operands.Val) {next} :
-    memory.writeValue state place value = some next →
-      let (owners, id) := memory.writeOwnerView state place
+    {ty : language.operands.Ty} (place : MemoryPlace _ ty) (value : language.operands.Val) {next} {ceiling : optParam Nat profile.memoryTarget.addressCeiling} :
+    memory.writeValue state place value ceiling = some next →
+      let (owners, id) := memory.writeOwnerView state place ceiling
       (Own.reinitialize owners id).isSome = true ∨
-        (memory.discardRemainder state place true = true ∧ Own.ownerAccess owners id .mutable = true) := by
+        (memory.discardRemainder state place true ceiling = true ∧ Own.ownerAccess owners id .mutable = true) := by
   simp only [writeValue]
   split
   · simp
   · simp only [authorizeWrite]
-    generalize memory.writeOwnerView state place = view
+    generalize memory.writeOwnerView state place ceiling = view
     obtain ⟨owners, id⟩ := view
     dsimp only
     split
@@ -636,15 +662,15 @@ theorem write_authorized (memory : Memory lang profile) (state : MemoryRegisters
 def Writes (memory : Memory lang profile)
     (state : MemoryRegisters language profile) {ty : language.operands.Ty}
     (place : MemoryPlace _ ty) (value : language.operands.Val)
-    (next : MemoryRegisters language profile) : Prop :=
+    (next : MemoryRegisters language profile) (ceiling : Nat := profile.memoryTarget.addressCeiling) : Prop :=
   (memory.validPlace state place = true ∧
     (initializedAt state place.logical.root place.logical.path = true →
       language.operands.isCopy ty = true)) ∧
   (place.storage = .materialized → ∃ layout,
     memory.layoutAt state.frame place.logical.root = some layout ∧
     (layout.size = 0 ↔ (AList.lookup state.materialized place.logical.root).isNone)) ∧
-  memory.writeValue state place value = some next ∧
-  memory.StoresValue next place value
+  memory.writeValue state place value ceiling = some next ∧
+  memory.StoresValue next place value ceiling
 
 def Represents (memory : Memory lang profile)
     (logical : LogicalFrame language.operands.Val) (state : MemoryRegisters language profile)
@@ -696,8 +722,50 @@ def readArgs (memory : Memory lang profile) :
     let (tail, state) ← memory.readArgs rest state
     return (value :: tail, state)
 
+/-- Walk in allocation order. A root enters the live set at its first use,
+including virtual and zero-byte roots. -/
+def freshLayoutsFrom (memory : Memory lang profile) (fn : FnId) (live : List PlaceId) :
+    List PlaceId → List Layout
+  | [] => []
+  | root :: rest =>
+    if root ∈ live then memory.freshLayoutsFrom fn live rest
+    else
+      let tail := memory.freshLayoutsFrom fn (root :: live) rest
+      if memory.classAt fn root = some .materialized then
+        match memory.layoutAt fn root with
+        | some layout => if layout.size = 0 then tail else layout :: tail
+        | none => tail
+      else tail
+
+def freshLayouts (memory : Memory lang profile) (state : MemoryRegisters language profile)
+    (roots : List PlaceId) : List Layout :=
+  memory.freshLayoutsFrom state.frame state.live roots
+
+/-- Start at the first address beyond the physical space. Each fresh root needs
+at most align - 1 bytes of padding and size bytes of payload. The final + 1
+includes the last one-past address under the exclusive ceiling. -/
+def transferCeiling (memory : Memory lang profile) (state : MemoryRegisters language profile)
+    (roots : List PlaceId) : Nat :=
+  profile.memoryTarget.addressCeiling + 1 +
+    ((memory.freshLayouts state roots).map fun l => (l.align - 1) + l.size).sum
+
+/-- Can the allocator reserve all the bytes needed by this transfer? Each fresh
+materialized root consumes its nonempty layout once. Class and layout come from
+the frame tables, regardless of the destination annotation or value to write. -/
+def ReservationsFit (target : Target) (ceiling : Nat) (layouts : List Layout) (heap : Mem.Memory) : Prop :=
+  layouts.foldr (fun layout fits bytes =>
+    ∃ space base block reserved,
+      bytes.alloc target space base layout.size layout.align ceiling = .ok (block, reserved) ∧
+      fits reserved) (fun _ : Mem.Memory => True) heap
+
+def ParamSpaceFits (memory : Memory lang profile)
+    (params : List (Sigma (MemoryPlace language.operands.Ty)))
+    (state : MemoryRegisters language profile) (ceiling : Nat := profile.memoryTarget.addressCeiling) : Prop :=
+  ReservationsFit profile.memoryTarget ceiling
+    (memory.freshLayouts state (params.map fun p => p.2.logical.root)) state.bytes
+
 def Begins (memory : Memory lang profile) (state : MemoryRegisters language profile)
-    (place : PlaceId) (next : MemoryRegisters language profile) : Prop :=
+    (place : PlaceId) (next : MemoryRegisters language profile) (ceiling : Nat := profile.memoryTarget.addressCeiling) : Prop :=
   place ∉ state.live ∧
   let live := {state with live := place :: state.live}
   (memory.classAt state.frame place = some .virtual ∧ next = live) ∨
@@ -705,9 +773,39 @@ def Begins (memory : Memory lang profile) (state : MemoryRegisters language prof
     ∃ layout, memory.layoutAt state.frame place = some layout ∧
     ((layout.size = 0 ∧ next = live) ∨
     (0 < layout.size ∧ ∃ space base block bytes,
-      state.bytes.alloc profile.memoryTarget space base layout.size layout.align = .ok (block, bytes) ∧
+      state.bytes.alloc profile.memoryTarget space base layout.size layout.align ceiling = .ok (block, bytes) ∧
       next = {live with bytes := bytes, materialized :=
         (place, ⟨⟨space, base, some block⟩, layout.size, layout.align⟩) :: state.materialized})))
+
+/-- Test the same begin with space for this one fresh layout. -/
+def BeginValid (memory : Memory lang profile) (state : MemoryRegisters language profile)
+    (place : PlaceId) : Prop :=
+  ∃ next, memory.Begins state place next (memory.transferCeiling state [place])
+
+structure BeginExhausted (memory : Memory lang profile) (state : MemoryRegisters language profile)
+    (place : PlaceId) : Prop where
+  valid : memory.BeginValid state place
+  unavailable : ¬ ∃ next, memory.Begins state place next
+
+theorem BeginExhausted.fresh {memory : Memory lang profile} {q : MemoryRegisters language profile}
+    {root} (h : memory.BeginExhausted q root) : root ∉ q.live := by
+  obtain ⟨_, fresh, _⟩ := h.valid
+  exact fresh
+
+/-- A virtual begin in a widened execution is already possible on the
+actual target. Only a materialized root can therefore exhaust. -/
+theorem BeginExhausted.materialized {memory : Memory lang profile} {q : MemoryRegisters language profile}
+    {root} (h : memory.BeginExhausted q root) : memory.classAt q.frame root = some .materialized := by
+  obtain ⟨_, fresh, ⟨virtual, _⟩ | ⟨cls, _⟩⟩ := h.valid
+  · exact (h.unavailable ⟨_, fresh, .inl ⟨virtual, rfl⟩⟩).elim
+  · exact cls
+
+theorem BeginExhausted.nonemptyLayout {memory : Memory lang profile} {q : MemoryRegisters language profile}
+    {root} (h : memory.BeginExhausted q root) : ∃ layout, memory.layoutAt q.frame root = some layout ∧ 0 < layout.size := by
+  obtain ⟨_, fresh, ⟨virtual, _⟩ | ⟨cls, layout, found, zero | placed⟩⟩ := h.valid
+  · exact (h.unavailable ⟨_, fresh, .inl ⟨virtual, rfl⟩⟩).elim
+  · exact (h.unavailable ⟨_, fresh, .inr ⟨cls, layout, found, .inl ⟨zero.1, rfl⟩⟩⟩).elim
+  · exact ⟨layout, found, placed.1⟩
 
 def endOwnerView (memory : Memory lang profile) (state : MemoryRegisters language profile)
     (place : PlaceId) : Option (Own.State × Hybrid.Place) :=
@@ -766,16 +864,86 @@ def readOperands (memory : Memory lang profile) :
     let (values, next) ← memory.readOperands rest afterRead
     return (value :: values, next)
 
+/-- One placement sequence for a parameter list. The flag records whether this
+sequence encountered an infeasible joint reservation. The allocator may
+check the remaining batch at any prefix, including before its first write. -/
 inductive WriteParams (memory : Memory lang profile) :
     List (Sigma (MemoryPlace language.operands.Ty)) → List language.operands.Val →
-      MemoryRegisters language profile → MemoryRegisters language profile → Prop
-  | nil (state) : WriteParams memory [] [] state state
-  | cons {ty} {place : MemoryPlace _ ty} {params value values state started stored next} :
+      MemoryRegisters language profile → MemoryRegisters language profile → (exhausting : optParam Bool false) →
+      (ceiling : optParam Nat profile.memoryTarget.addressCeiling) → Prop
+  | nil (state) {ceiling} : WriteParams memory [] [] state state false ceiling
+  | cons {ty} {place : MemoryPlace _ ty} {params value values state started stored next exhausting ceiling} :
       (if state.live.contains place.logical.root then started = state
-        else memory.Begins state place.logical.root started) →
-      memory.Writes started place value stored →
-      WriteParams memory params values stored next →
-      WriteParams memory (⟨ty, place⟩ :: params) (value :: values) state next
+        else memory.Begins state place.logical.root started ceiling) →
+      memory.Writes started place value stored ceiling →
+      WriteParams memory params values stored next exhausting ceiling →
+      WriteParams memory (⟨ty, place⟩ :: params) (value :: values) state next exhausting ceiling
+  | exhausted {ty} {place : MemoryPlace _ ty} {params value values state} :
+      (¬ memory.ParamSpaceFits (⟨ty, place⟩ :: params) state) →
+      WriteParams memory (⟨ty, place⟩ :: params) (value :: values) state state true
+
+/-- Materialized handles at the checkpoint name existing live allocations.
+A hypothetical transfer changes the address budget for fresh reservations.
+Its incoming handles and occupied intervals must already be physical. -/
+def resident (memory : Memory lang profile) (q : MemoryRegisters language profile)
+    (key : PlaceId) (r : Hybrid.Range) : Bool := (do
+  let l ← memory.layoutAt q.frame key
+  let id ← r.ptr.prov
+  let b ← q.bytes.block id
+  return decide (CoversBlock r b ∧ r.extent = l.size ∧ r.align = l.align ∧
+    l.align ∣ r.ptr.addr ∧ profile.memoryTarget.null < r.ptr.addr ∧
+    r.ptr.space ∈ profile.memoryTarget.spaces ∧ id.id < q.bytes.next)).getD false
+
+def Inside (heap : Mem.Memory) (ceiling : Nat) : Prop :=
+  ∀ e ∈ heap.blocks, e.2.live = true → e.2.base + e.2.size < ceiling
+
+def TransferCheckpoint (memory : Memory lang profile) (q : MemoryRegisters language profile) (ceiling : Nat) : Prop :=
+  (∀ e ∈ q.materialized, memory.resident q e.1 e.2 = true) ∧
+    Inside q.bytes (min profile.memoryTarget.addressCeiling ceiling)
+
+instance (memory : Memory lang profile) (q : MemoryRegisters language profile) (ceiling : Nat) :
+    Decidable (memory.TransferCheckpoint q ceiling) := by
+  unfold TransferCheckpoint Inside
+  infer_instance
+
+/-- The checkpoint and every write fit the given ceiling. The default budgets
+for the complete transfer. Codecs and layout limits always use the physical target. -/
+def ParamsValid (memory : Memory lang profile)
+    (params : List (Sigma (MemoryPlace language.operands.Ty))) (values : List language.operands.Val)
+    (state : MemoryRegisters language profile)
+    (ceiling : Nat := memory.transferCeiling (language := language) state (params.map fun p => p.2.logical.root)) : Prop :=
+  memory.TransferCheckpoint state ceiling ∧ ∃ next, memory.WriteParams params values state next false ceiling
+
+/-- A failed physical prefix rolls back only when the complete transfer is
+valid and no joint placement was available at the original checkpoint. -/
+def ParamOutcome (memory : Memory lang profile)
+    (params : List (Sigma (MemoryPlace language.operands.Ty))) (values : List language.operands.Val)
+    (state next : MemoryRegisters language profile) (exhausting : Bool) : Prop :=
+  if exhausting then
+    memory.WriteParams params values state next true ∧
+      memory.ParamsValid params values state ∧ ¬ memory.ParamSpaceFits params state
+  else memory.WriteParams params values state next false
+
+theorem ParamOutcome.valid_of_exhausted {memory : Memory lang profile} {params values}
+    {state next : MemoryRegisters language profile} (h : memory.ParamOutcome params values state next true) :
+    memory.ParamsValid params values state := h.2.1
+
+/-- Joint space alone excludes exhaustion, in particular for every valid transfer. -/
+theorem ParamSpaceFits.not_exhausted {memory : Memory lang profile} {params values}
+    {state next : MemoryRegisters language profile} (fits : memory.ParamSpaceFits params state) :
+    ¬ memory.ParamOutcome params values state next true := fun h => h.2.2 fits
+
+/-- A valid transfer without a physical joint placement can abort atomically
+at the checkpoint, before committing any of its writes. -/
+theorem ParamsValid.exhausted_of_no_space {memory : Memory lang profile} {params values}
+    {state : MemoryRegisters language profile} (valid : memory.ParamsValid params values state)
+    (unavailable : ¬ memory.ParamSpaceFits params state) :
+    memory.ParamOutcome params values state state true := by
+  refine ⟨?_, valid, unavailable⟩
+  obtain ⟨_, path⟩ := valid.2
+  cases path with
+  | nil => exact (unavailable trivial).elim
+  | cons => exact .exhausted unavailable
 
 inductive EndLocals (memory : Memory lang profile) :
     List PlaceId → MemoryRegisters language profile → MemoryRegisters language profile → Prop
@@ -787,36 +955,36 @@ inductive EndLocals (memory : Memory lang profile) :
 def Call (memory : Memory lang profile) (callee : FnId)
     (dst : Option (Sigma (MemoryPlace language.operands.Ty)))
     (args : List (Sigma (MemoryRead _ lang.literal)))
-    (state next : MemoryRegisters language profile) : Prop :=
+    (state next : MemoryRegisters language profile) (exhausting : Bool := false) : Prop :=
   ∃ values afterRead graph entry,
     memory.readOperands args state = some (values, afterRead) ∧
     memory.graphAt callee = some graph ∧ graph.blocks.find? (·.id == graph.entry) = some entry ∧
     args.map Sigma.fst = entry.params.map Sigma.fst ∧
-    memory.WriteParams entry.params values
+    memory.ParamOutcome entry.params values
       { toMemoryFrame := ⟨callee, graph.entry, 0, [], [], [], [], [], [], []⟩
         bytes := afterRead.bytes
         ownership := afterRead.ownership
         nextAddressId := afterRead.nextAddressId
         effects := afterRead.effects
-        callers := ⟨afterRead.advance.toMemoryFrame, dst⟩ :: afterRead.callers } next
+        callers := ⟨afterRead.advance.toMemoryFrame, dst⟩ :: afterRead.callers } next exhausting
 
 def Return (memory : Memory lang profile) (operand : Option (Sigma (MemoryRead _ lang.literal)))
-    (state next : MemoryRegisters language profile) : Prop :=
+    (state next : MemoryRegisters language profile) (exhausting : Bool := false) : Prop :=
   ∃ caller rest values afterRead ended,
     state.callers = caller :: rest ∧
     memory.readOperands operand.toList state = some (values, afterRead) ∧
     memory.EndLocals afterRead.live afterRead ended ∧
     operand.toList.map Sigma.fst = caller.destination.toList.map Sigma.fst ∧
-    memory.WriteParams caller.destination.toList values
-      { toMemoryFrame := caller.caller, bytes := ended.bytes, callers := rest, effects := ended.effects, ownership := ended.ownership, nextAddressId := ended.nextAddressId } next
+    memory.ParamOutcome caller.destination.toList values
+      { toMemoryFrame := caller.caller, bytes := ended.bytes, callers := rest, effects := ended.effects, ownership := ended.ownership, nextAddressId := ended.nextAddressId } next exhausting
 
 def Transfer (memory : Memory lang profile) (edge : CFGEdge (Sigma (MemoryRead _ lang.literal)))
-    (state next : MemoryRegisters language profile) : Prop :=
+    (state next : MemoryRegisters language profile) (exhausting : Bool := false) : Prop :=
   ∃ values afterRead block,
     memory.readOperands edge.arguments state = some (values, afterRead) ∧
     memory.blockAt {state with block := edge.target} = some block ∧
     edge.arguments.map Sigma.fst = block.params.map Sigma.fst ∧
-    memory.WriteParams block.params values {afterRead with block := edge.target, instruction := 0} next
+    memory.ParamOutcome block.params values {afterRead with block := edge.target, instruction := 0} next exhausting
 
 /-- Splitting a value transfers each bound field once. An omitted active field
 must be Copy, and every destination has the declared type of its field. -/
@@ -871,9 +1039,8 @@ def resolveAddress (memory : Memory lang profile)
     if place.storage != .materialized then none else
     if memory.zeroRoot state.frame place.logical.root then
       if !place.logical.path.isEmpty then
-        let rootType ← memory.rootType state.frame place.logical.root
         let layout ← memory.layoutAt state.frame place.logical.root
-        let (offset, field) ← language.fieldRange rootType place.logical.path layout
+        let (offset, field) ← layout.project place.logical.path
         if offset + field.size != 0 then none else
           some ⟨operand.1, place.logical.root, place.logical.path, none, provenance, .zero⟩
       else some ⟨operand.1, place.logical.root, place.logical.path, none, provenance, .zero⟩
@@ -915,12 +1082,13 @@ def applyOperation (state : MemoryRegisters language profile) (logical : Bool)
     ownership := store.ownership}
 
 def InstructionStepWith (memory : Memory lang profile)
-    (state next : MemoryRegisters language profile) (logical startDefinitions : Bool) : MemoryInst lang → Prop
+    (state next : MemoryRegisters language profile) (logical startDefinitions : Bool) (instruction : MemoryInst lang)
+    (exhausting : Bool := false) : Prop := match instruction with
   | .bind dst src =>
     ∃ value afterRead stored, memory.readValue state src = some (value, afterRead) ∧
-      (if logical || startDefinitions then memory.WriteParams [⟨_, dst⟩] [value] afterRead stored
-        else memory.Writes afterRead dst value stored) ∧ next = stored.advance
-  | .assign dst src =>
+      (if logical || startDefinitions then memory.ParamOutcome [⟨_, dst⟩] [value] afterRead stored exhausting
+        else if exhausting then False else memory.Writes afterRead dst value stored) ∧ next = stored.advance
+  | .assign dst src => if exhausting then False else
     ∃ value afterRead stored, memory.readValue state src = some (value, afterRead) ∧
       memory.Writes afterRead dst value stored ∧ next = stored.advance
   | @MemoryInst.op _ _ opcode types ty dst _ args checks addresses =>
@@ -932,43 +1100,57 @@ def InstructionStepWith (memory : Memory lang profile)
       language.operation memory.declarations opcode types ty values profile.memoryTarget operands before result effects changed ∧
       List.map Prod.fst changed.addressedValues = List.map Prod.fst before.addressedValues ∧
       let afterOperation := applyOperation ready logical changed
-      (if logical || startDefinitions then memory.WriteParams [⟨_, dst⟩] [result] afterOperation stored
-        else memory.Writes afterOperation dst result stored) ∧
+      (if logical || startDefinitions then memory.ParamOutcome [⟨_, dst⟩] [result] afterOperation stored exhausting
+        else if exhausting then False else memory.Writes afterOperation dst result stored) ∧
       next = {stored.advance with effects := stored.effects ++ effects}
-  | .beginLifetime place => ∃ started, memory.Begins state place started ∧ next = started.advance
-  | .endLifetime place => ∃ ended, memory.Ends state place ended ∧ next = ended.advance
+  | .beginLifetime place => if exhausting then memory.BeginExhausted state place else
+    ∃ started, memory.Begins state place started ∧ next = started.advance
+  | .endLifetime place => if exhausting then False else
+    ∃ ended, memory.Ends state place ended ∧ next = ended.advance
   | @MemoryInst.destructure _ _ ty src bindings =>
     ∃ value afterRead fields stored,
       memory.readValue state (if language.operands.isCopy ty then .copy src else .move src) =
         some (value, afterRead) ∧
       DestructureFields language memory.declarations ty value (bindings.map fun (field, dst) => (field, dst.1)) ∧
       bindings.mapM (fun binding => language.field value [binding.1]) = some fields ∧
-      memory.WriteParams (bindings.map Prod.snd) fields afterRead stored ∧ next = stored.advance
+      memory.ParamOutcome (bindings.map Prod.snd) fields afterRead stored exhausting ∧ next = stored.advance
   | .call callee dst args checks =>
     memory.instructionTrap state (.call callee dst args checks) = none ∧
-      memory.Call callee dst args state next
+      memory.Call callee dst args state next exhausting
 
 def InstructionStep (memory : Memory lang profile)
-    (state next : MemoryRegisters language profile) (logical : Bool := false) : MemoryInst lang → Prop :=
-  memory.InstructionStepWith state next logical false
+    (state next : MemoryRegisters language profile) (logical : Bool := false) (op : MemoryInst lang)
+    (exhausting : Bool := false) : Prop :=
+  memory.InstructionStepWith state next logical false op exhausting
 
 def ControlStep (memory : Memory lang profile)
-    (state next : MemoryRegisters language profile) :
-    Terminator (Sigma (MemoryRead _ lang.literal)) (MemoryRead _ lang.literal lang.bool) → Prop
-  | .jump edge => memory.Transfer edge state next
+    (state next : MemoryRegisters language profile)
+    (ending : MemoryTerm lang) (exhausting : Bool := false) : Prop := match ending with
+  | .jump edge => memory.Transfer edge state next exhausting
   | .branch test yes no =>
     ∃ value afterRead flag, memory.readValue state test = some (value, afterRead) ∧
       language.operands.test value = some flag ∧
-      memory.Transfer (if flag then yes else no) afterRead next
-  | .ret value => memory.Return value state next
+      memory.Transfer (if flag then yes else no) afterRead next exhausting
+  | .ret value => memory.Return value state next exhausting
   | .trap .. | .invalid => False
 
-def Step (memory : Memory lang profile)
-    (state next : MemoryRegisters language profile) : Prop :=
+/-- Both outcomes share instruction fetch and all guards preceding a reservation.
+Only a normal outcome supplies the successor registers to commit. -/
+def StepOutcome (memory : Memory lang profile)
+    (state next : MemoryRegisters language profile) (exhausting : Bool) (startDefinitions : Bool := false) : Prop :=
   ∃ block, memory.blockAt state = some block ∧
     match block.body[state.instruction]? with
-    | some op => memory.InstructionStep state next false op.instruction
-    | none => state.instruction = block.body.length ∧ memory.ControlStep state next block.ending
+    | some op => memory.InstructionStepWith state next false startDefinitions op.instruction exhausting
+    | none => state.instruction = block.body.length ∧ memory.ControlStep state next block.ending exhausting
+
+/-- An instruction commits its ordinary successor or aborts at its original PC.
+A failed reservation inside a compound transfer commits no partial writes or effects. -/
+def Step (memory : Memory lang profile) (state next : MemoryRegisters language profile)
+    (startDefinitions : Bool := false) : Prop :=
+  if state.resourceExhausted then False else if next.resourceExhausted then
+    next = {state with resourceExhausted := true} ∧
+      ∃ partialState, memory.StepOutcome state partialState true startDefinitions
+  else memory.StepOutcome state next false startDefinitions
 
 def Initial (memory : Memory lang profile) (state : MemoryRegisters language profile) : Prop :=
   state.frame = memory.entry ∧ state.callers = [] ∧
@@ -977,7 +1159,7 @@ def Initial (memory : Memory lang profile) (state : MemoryRegisters language pro
   state.instruction = 0 ∧ state.virtualValues = [] ∧
   state.materialized = [] ∧ state.live = [] ∧ state.initialized = [] ∧ state.zeroValues = [] ∧
   state.bytes = Mem.Memory.empty ∧ state.effects = [] ∧ state.ownership = {} ∧
-  state.addressIds = [] ∧ state.nextAddressId = 0 ∧ state.movedFields = []
+  state.addressIds = [] ∧ state.nextAddressId = 0 ∧ state.movedFields = [] ∧ state.resourceExhausted = false
 
 end Memory
 
@@ -1003,6 +1185,7 @@ instead steps back to its caller. -/
 def Memory.terminalObservation {language : CoreLanguage} {lang : LoweringLanguage language.operands.Ty}
     {profile : Profile} (memory : Memory lang profile)
     (state : MemoryRegisters language profile) : Option Observation := do
+  if state.resourceExhausted then return .resourceExhausted
   let block ← memory.blockAt state
   if let some op := block.body[state.instruction]? then
     let kind ← memory.instructionTrap state op.instruction
@@ -1117,7 +1300,7 @@ private def entryStateFor (memory : Memory lang profile) (arity : Nat := 0) :
   let block := graph.bind (·.blocks.find? (·.id == id))
   let pc := (block.map fun block =>
     if block.params.length = arity then 0 else block.body.length + 1).getD 0
-  ⟨⟨memory.entry, id, pc, [], [], [], [], [], [], []⟩, Mem.Memory.empty, [], [], {}, 0⟩
+  ⟨⟨memory.entry, id, pc, [], [], [], [], [], [], []⟩, Mem.Memory.empty, [], [], {}, 0, false⟩
 
 private def hostedResultFor (memory : Memory lang profile) (state : MemoryRegisters language profile) :
     Option Concrete.Contracts.Observation := do
@@ -1133,6 +1316,7 @@ private def hostedResultFor (memory : Memory lang profile) (state : MemoryRegist
     let file ← memory.project.files[span.file.index]?
     return .trapped status kind ⟨⟨origin.operation.id⟩, ⟨file.path.render.text, span.line, span.col⟩⟩ bytes
   | .startupRefused status bytes => return .startupRefused status bytes
+  | .resourceExhausted => return .resourceExhausted
 
 private def traceFor {A S E : Type}
     (effects : S → List E)
@@ -1301,7 +1485,29 @@ def MIR.Execution : Semantics (MIR lang profile) language.operands.Event :=
     (fun mir => hostedResultFor mir.logicalView)
 
 def Memory.Execution : Semantics (Memory lang profile) language.operands.Event :=
-  graphExecution Memory.Step (fun memory => entryStateFor memory) hostedResultFor
+  graphExecution (fun memory state next => memory.Step state next) (fun memory => entryStateFor memory) hostedResultFor
+
+/-- Ordinary hosted results carry the MIR matching obligation. A failed physical
+reservation has its own typed observation in Execution. -/
+def Memory.MatchingResult (memory : Memory lang profile) (q : MemoryRegisters language profile)
+    (o : Concrete.Contracts.Observation) : Prop :=
+  if q.resourceExhausted then False else Memory.Execution.result memory q o
+
+theorem Memory.silent_step {memory : Memory lang profile} {q next : MemoryRegisters language profile}
+    (ready : memory.terminalObservation q = none) (tick : memory.Step q next)
+    (effects : next.effects = q.effects) : Memory.Execution.step memory q next := by
+  have absent : hostedResultFor memory q = none := by simp [hostedResultFor, ready]
+  refine ⟨absent, tick, ?_⟩
+  change Concrete.Contracts.TracePrefix (traceFor _ _ memory q) (traceFor _ _ memory next)
+  unfold traceFor
+  rw [absent]
+  simp only [Option.map_none, Option.getD_none, List.append_nil]
+  exact ⟨_, by rw [effects]⟩
+
+theorem Memory.exhausted_result (memory : Memory lang profile) {q : MemoryRegisters language profile}
+    (h : q.resourceExhausted = true) : Memory.Execution.result memory q .resourceExhausted := by
+  change hostedResultFor memory q = _
+  simp [hostedResultFor, Memory.terminalObservation, h]
 
 private def bindsOwner {O : Exec.Operands} (owner : ConcreteSpec.Var) : Exec.Stmt O → Bool
   | .bind var .. => var == owner
@@ -1345,7 +1551,7 @@ def Memory.RepresentsActivation (memory : Memory lang profile)
     (logical physical : MemoryFrame language.operands.Val) (bytes : Mem.Memory)
     (ranges : AList Hybrid.Place (Option Hybrid.Range) := []) : Prop :=
   memory.Represents ⟨logical.frame, logical.live, logical.virtualValues, logical.movedFields⟩
-    ⟨physical, bytes, [], [], {}, 0⟩ ranges
+    ⟨physical, bytes, [], [], {}, 0, false⟩ ranges
 
 def MemoryFrame.backingRanges (frame : MemoryFrame language.operands.Val) :
     AList Hybrid.Place (Option Hybrid.Range) :=
@@ -1379,11 +1585,11 @@ def LowersMemory (mir : MIR lang profile) (memory : Memory lang profile) : Prop 
   memory.TablesWF ∧ mir.logicalView.TablesWF ∧
   let source := MIR.Execution (language := language)
   let target := Memory.Execution (language := language)
-  BehaviorRefinement source target source.result target.result mir memory ∧
+  BehaviorRefinement source target source.result (Memory.MatchingResult (language := language)) mir memory ∧
   (ProgramSafe source mir →
-    ∃ sim : CheckpointSimulation source target source.result target.result mir memory,
+    ∃ sim : CheckpointSimulation source target source.result (Memory.MatchingResult (language := language)) mir memory,
       ∀ p q, source.finite mir p → target.finite memory q → sim.related p q →
-        memory.RepresentsCheckpoint p q)
+        memory.RepresentsCheckpoint p q ∧ p.effects = q.effects)
 
 def BIR.TrapsMatch {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
     (ssa : SSA lang profile) (bir : BIR lang profile) : Prop :=
@@ -1523,10 +1729,7 @@ def entryState (bir : BIR lang profile) : MemoryRegisters language profile :=
   entryStateFor (bir.memoryView (language := language))
 
 private def stepFor (memory : Memory lang profile) (state next : MemoryRegisters language profile) : Prop :=
-  ∃ block, memory.blockAt state = some block ∧
-    match block.body[state.instruction]? with
-    | some op => memory.InstructionStepWith state next false true op.instruction
-    | none => state.instruction = block.body.length ∧ memory.ControlStep state next block.ending
+  memory.Step state next (startDefinitions := true)
 
 def step (bir : BIR lang profile) (state next : MemoryRegisters language profile) : Prop :=
   stepFor (bir.memoryView (language := language)) state next

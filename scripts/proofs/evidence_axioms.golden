@@ -735,13 +735,13 @@ ConcreteSpec.Core.Mem.Audit.access_zero_planted_alignedNonNull_badLoadNone	prope
 ConcreteSpec.Core.Mem.Audit.access_zero_planted_alignedNonNull_badStoreNone	propext
 ConcreteSpec.Core.Mem.Audit.alloc_block_example_first	propext
 ConcreteSpec.Core.Mem.Audit.alloc_block_planted_first_badAllocEmpty	
-ConcreteSpec.Core.Mem.Audit.alloc_failure_example_align	propext
-ConcreteSpec.Core.Mem.Audit.alloc_failure_example_bound	propext
-ConcreteSpec.Core.Mem.Audit.alloc_failure_example_maxObject	propext
-ConcreteSpec.Core.Mem.Audit.alloc_failure_example_null	propext
-ConcreteSpec.Core.Mem.Audit.alloc_failure_example_overlap	propext
-ConcreteSpec.Core.Mem.Audit.alloc_failure_example_pow2	propext
-ConcreteSpec.Core.Mem.Audit.alloc_failure_example_space	propext
+ConcreteSpec.Core.Mem.Audit.alloc_failure_example_align	Quot.sound propext
+ConcreteSpec.Core.Mem.Audit.alloc_failure_example_bound	Quot.sound propext
+ConcreteSpec.Core.Mem.Audit.alloc_failure_example_maxObject	Quot.sound propext
+ConcreteSpec.Core.Mem.Audit.alloc_failure_example_null	Quot.sound propext
+ConcreteSpec.Core.Mem.Audit.alloc_failure_example_overlap	Quot.sound propext
+ConcreteSpec.Core.Mem.Audit.alloc_failure_example_pow2	Quot.sound propext
+ConcreteSpec.Core.Mem.Audit.alloc_failure_example_space	Quot.sound propext
 ConcreteSpec.Core.Mem.Audit.alloc_failure_planted_align_mutatedAllocAlign	propext
 ConcreteSpec.Core.Mem.Audit.alloc_failure_planted_bound_mutatedAllocBound	propext
 ConcreteSpec.Core.Mem.Audit.alloc_failure_planted_maxObject_mutatedAllocMaxObj	propext
