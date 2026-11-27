@@ -245,6 +245,7 @@ Body = continue @LabelOpt ; @Body
 Body =
 Loop = @LoopLabel @LoopForm
 AttributedBody = @Loop @Body
+# isPostfixCall checks that the operand carrying termination permission is a call.
 AttributedBody = @Atom @ExprContinuation @ExprEnd
 LoopLabel = LABEL :
 LoopLabel =
@@ -288,6 +289,7 @@ Params = @Binder : @Type @ParamTail
 Params =
 ParamTail = , @Params
 ParamTail =
+# From slice 5, ArgTail permits a trailing comma after the last ordinary call operand.
 CallArgs = @TargetArgument , @Expr @ArgTail
 CallArgs = @Args
 
@@ -368,6 +370,7 @@ Initializers =
 InitializerTail = , @Initializers
 InitializerTail =
 LetHead = IDENT @LetTail
+# LetTail admits both an annotated mutable binding and PAT-11 mutable destructuring.
 LetHead = mut IDENT @LetTail
 LetHead = WILDCARD : @Type
 LetTail = : @Type
@@ -385,6 +388,7 @@ BlockItem = @BlockStmt @Body
 BlockItem = @Match @MatchEnd
 # A trailing match can continue on binary-only tokens. Minus starts the next body item.
 MatchEnd = @Body
+# Slice 7 removes these two alternatives when * and & can begin the next body item.
 MatchEnd = * @Unary @ExprContinuation
 MatchEnd = & @Shift @AfterShift
 MatchEnd = @MatchContinuation
@@ -543,6 +547,7 @@ ConstNameTail = ( @ConstArgs )
 ConstNameTail =
 ConstPathTail = :: IDENT @ConstPathTail
 ConstPathTail =
+# In a constant call, a comma after the first operand requires a second operand.
 ConstArgs = @TargetArgument , @ConstExpr @ConstSecondArg
 ConstSecondArg = , @ConstExpr
 ConstSecondArg =
@@ -607,11 +612,13 @@ ImplMembers =
 ImplHeader = @Type @ImplTarget
 ImplHeader = < @ImplParams
 ImplParams = IDENT @Bound @ImplTypeParamTail
-ImplParams = cap IDENT @CapParamTail > @Type
+ImplParams = cap IDENT @CapParamTail @ImplCapClose
 ImplTypeParamTail = , @ImplAfterComma
-ImplTypeParamTail = > @Type @ImplTarget
+ImplTypeParamTail = @ImplTypeClose
 ImplAfterComma = @ImplParams
-ImplAfterComma = > @Type @ImplTarget
+ImplAfterComma = @ImplTypeClose
+ImplTypeClose = > @Type @ImplTarget
+ImplCapClose = > @Type
 ImplTarget = for @Type
 ImplTarget =
 Generics = < @GenericParams >
@@ -721,7 +728,7 @@ Body = @AttributePrefix @AttributedBody
 Body = break @LabelOpt ; @Body
 Body = continue @LabelOpt ; @Body
 Body = defer @Path @NameCall ; @Body
-Body = ghost let IDENT : @Type = @Expr ; @Body
+Body = ghost let IDENT : @Type = @ProofExpr ; @Body
 Body = assert ( @ProofExpr ) @By ; @Body
 Body = assume @ProofExpr ; @Body
 Body =

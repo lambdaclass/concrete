@@ -20,8 +20,11 @@ def main : IO Unit := do
     | _ => throw (IO.userError s!"elaborator did not refuse shadowing {name}")
   for name in ["u8", "i8", "i16", "i32", "i64", "u16", "u32", "u64", "bool", "Unit", "char", "Copy"] do
     unless builtinTypeNames.contains name do throw (IO.userError s!"missing builtin {name}")
-    let .ok tokens := Lex.lex (bindingSource name).toUTF8 | throw (IO.userError s!"lexing {name}")
-    if (Parse.parse tokens).isOk then throw (IO.userError s!"keyword accepted as a binder: {name}")
+    let source := s!"fn main() -> u8 \{ let {name}: u8 = 1; return 1; }"
+    let .ok tokens := Lex.lex source.toUTF8 | throw (IO.userError s!"lexing {name}")
+    match Parse.parse tokens with
+    | .error (.syntaxError "unexpected token at byte 22") => pure ()
+    | _ => throw (IO.userError s!"expected syntax refusal at the keyword binder {name} (byte 22)")
   for name in ["StaticStrValue", "arithmeticError", "Local"] do
     let result := ((Lex.lex (bindingSource name).toUTF8).bind Parse.parse).bind Elab.elaborate
     unless result.isOk do throw (IO.userError s!"ordinary binder refused: {name}")

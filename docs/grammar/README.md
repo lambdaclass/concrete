@@ -44,7 +44,9 @@ LEAN_NUM_THREADS=2 nix develop -c bash -c '
 '
 ```
 
-For each cumulative slice, the checker checks every written rule for definedness and productivity, then builds the prediction table from the rules reachable from `Program`. It reports the reachable production count and replays each accept and refuse example from its first slice onward. It projects each word from the terminal returned by the spec lexer. Reservations apply even before the corresponding construct is admitted. The literal controls preserve raw NUL and U+FEFF refusal, check the spec's raw string predicate, and check redundant suffixes in typed programs. Separate literal controls exercise the cases with and without an expected type.
+For each cumulative slice, the checker checks every written rule for definedness and productivity, then builds the prediction table from the rules reachable from `Program`. It reports the reachable production count and replays each accept and refuse example from its first slice onward. An independent list checks the terminal that the spec lexer returns for each decided word. The recognizer projects that emitted terminal to its grammar column. Reservations apply even before the corresponding construct is admitted. The literal controls preserve raw NUL and U+FEFF refusal, check the spec's raw string predicate, and check redundant suffixes in typed programs.
+
+The suffix checker follows each operand through the parsed operators and block endings. A field or parameter declared in the module supplies an expected type at its initializer or argument. Comparison operands and counted-loop bounds obtain their integer width from each other. When both are literals, exactly one supplies the suffix. The controls check that each source parses before checking its suffix verdict. [Literal typing](../decisions.md#decided-2026-11-08-language-literals) · [Counted bounds](../decisions.md#od48)
 
 The controls exercise slice 1 lets, head braces and shielded literals, block
 statements and trailing values, assignment places, patterns and nonempty enum
@@ -95,7 +97,7 @@ a bare name, so `*r = 1` works directly and `(*r).field = 1` or
 `(*r)[0] = 1` use a grouped place. Call, literal, qualified-name and operator
 continuations lead to an expression ending. [OD77](../decisions.md#od77) · [OD121](../decisions.md#od121)
 
-Planted productions exercise duplicate attribute prefixes, unshielded head literals, the statement/operand boundary and unmarked expression generics. A cumulative recognition control also detects removal of a destructuring let that leaves prediction conflict-free. The reserved `type` marker starts the numeric target argument. The parsed call supplies the callee and the number of value arguments at that level. The checker requires the marker for each bare target-typed intrinsic and checks its arity and first slice. [Token ballot](TOKEN-BALLOT.md)
+The same prediction-table builder must reject each planted conflict, including two identical integer alternatives. The other planted productions exercise duplicate attribute prefixes, unshielded head literals, the statement/operand boundary and unmarked expression generics. A cumulative recognition control also detects removal of a destructuring let that leaves prediction conflict-free. The reserved `type` marker starts the numeric target argument. The parsed call supplies the callee and the number of value arguments at that level. The checker requires the marker for each bare target-typed intrinsic and checks its arity and first slice. [Token ballot](TOKEN-BALLOT.md)
 
 The draft token adapter exercises source-level maximal munch for `>>`.
 The recognizer preserves a shift and splits the token when consuming generic
@@ -108,7 +110,7 @@ results fail the projection controls. The production checker still needs
 name resolution and typing to establish the identity and validity of the
 place. [OD121](../decisions.md#od121)
 
-Slice 4 introduces `exact { expr }` in loop contracts. Function contracts, struct invariants, spec function bodies, assertions, theorem arguments and assumptions reuse the same production. The reserved keyword consumes its own braced operand, so a contract can contain `if exact { x + 1 } > x { true } else { false }`. Exact arithmetic can also start a branch or a braced match arm in a proof expression. [Exact arithmetic](../decisions.md#decided-2026-11-27-token-ballot)
+Slice 4 introduces `exact { expr }` in loop contracts. Function contracts, struct invariants, spec function bodies, ghost initializers, assertions, theorem arguments and assumptions reuse the same production. A ghost initializer ends at its semicolon and the following statement resumes the enclosing proof or runtime context. The reserved keyword consumes its own braced operand, so a contract can contain `if exact { x + 1 } > x { true } else { false }`. Exact arithmetic can also start a branch or a braced match arm in a proof expression. [Exact arithmetic](../decisions.md#decided-2026-11-27-token-ballot)
 
 Production qualification still needs resolution of attribute targets and
 confirmation of the trailing-comma policy for fixed-arity numeric and constant
