@@ -11,10 +11,6 @@
 #                                   CONTROL-FILE, the enumerator runs on a temporary copy with that
 #                                   file's declarations inserted at its marker (negative controls).
 #   spec_modules                    every module the ConcreteSpec sources declare (from file paths).
-#   prune_orphans [BUILD-DIR]       delete spec, evidence and compiler build files (.olean, .ilean, .trace, .hash, IR)
-#                                   of modules with no source, and print each one (ISS-0016). Run before
-#                                   the build below, so a build directory restored from an older cache
-#                                   cannot carry a deleted or renamed module into any check.
 
 PROOFS_DIR="$ROOT_DIR/scripts/proofs"
 ENUMERATOR="$PROOFS_DIR/theorems.lean"
@@ -36,36 +32,6 @@ source_modules() {
 spec_modules() { source_modules ConcreteSpec; }
 evidence_modules() { source_modules ConcreteSpecEvidence; }
 
-prune_orphans() {
-  local build="${1:-.lake/build}"
-  local d
-  local f
-  local rel
-  local m
-  # Deletion keys on this list, so a partial list must stop the prune before anything is removed:
-  # the enumeration must succeed, include the root module, and name only modules whose source exists.
-  spec_modules > "$TMP/prune-modules.txt" || { echo "prune_orphans: listing spec modules failed" >&2; return 1; }
-  evidence_modules >> "$TMP/prune-modules.txt" || return 1
-  grep -qxF ConcreteSpecEvidence "$TMP/prune-modules.txt" || return 1
-  [ -f Concrete.lean ] && [ -d Concrete ] || return 1
-  source_modules Concrete >> "$TMP/prune-modules.txt" \
-    || { echo "prune_orphans: listing compiler modules failed" >&2; return 1; }
-  grep -qxF ConcreteSpec "$TMP/prune-modules.txt" || { echo "prune_orphans: the source list lacks ConcreteSpec" >&2; return 1; }
-  grep -qxF Concrete "$TMP/prune-modules.txt" || return 1
-  while read -r m; do [ -f "${m//.//}.lean" ] || { echo "prune_orphans: listed module $m has no source" >&2; return 1; }; done < "$TMP/prune-modules.txt"
-  for d in "$build/lib/lean" "$build/ir"; do
-    [ -d "$d" ] || continue
-    find "$d" -type f \( -path "$d/ConcreteSpec/*" -o -name 'ConcreteSpec.*' -o -path "$d/ConcreteSpecEvidence/*" -o -name 'ConcreteSpecEvidence.*' -o -path "$d/Concrete/*" -o -name 'Concrete.*' \) > "$TMP/prune-files.txt" || return 1
-    while read -r f; do
-      rel="${f#"$d"/}"; m="$(dirname "$rel")/$(basename "$rel" | cut -d. -f1)"; m="${m#./}"; m="${m//\//.}"
-      if ! grep -qxF "$m" "$TMP/prune-modules.txt"; then
-        rm -f "$f" || return 1
-        echo "pruned orphan build file $f (no source module $m)"
-      fi
-    done < "$TMP/prune-files.txt"
-  done
-}
-prune_orphans >&2 || { echo "error: $CHECK_NAME: pruning orphaned build files failed" >&2; exit 2; }
 "$LAKE" build ConcreteSpec ConcreteSpecEvidence Concrete > "$TMP/lake-build.log" 2>&1 \
   || { tail -20 "$TMP/lake-build.log" >&2; echo "error: $CHECK_NAME: lake build of specification, evidence and compiler failed" >&2; exit 2; }
 
@@ -73,16 +39,29 @@ MARKER='-- CONTROL DECLARATIONS (negative controls are inserted here, in a tempo
 [ "$(grep -cxF -- "$MARKER" "$ENUMERATOR")" = 1 ] \
   || { echo "error: $ENUMERATOR must carry the control marker line exactly once" >&2; exit 2; }
 
+# Resolve the file's imports from the current Lake configuration and sources. Lean
+# can fall back to its toolchain for core modules, but a retired library on the
+# workspace search path must never satisfy an import missing from the setup.
+run_enumerator() {
+  local src=$1
+  local setup
+  setup=$(mktemp "$TMP/enumerator-setup.XXXXXX") || return 1
+  "$LAKE" setup-file "$src" > "$setup" || return 1
+  "$LAKE" env env -u LEAN_PATH PROOF_SETUP="$setup" lean --setup="$setup" "$src"
+}
+
 population() {
   local mode=$1
   local control=${2:-}
   local src=$ENUMERATOR
   if [ -n "$control" ]; then
     src="$TMP/control-$RANDOM-$RANDOM.lean"
-    awk -v m="$MARKER" -v c="$control" '{ print } $0 == m { while ((getline l < c) > 0) print l }' \
-      "$ENUMERATOR" > "$src"
+    # The trust controls must elaborate deliberate sorry declarations to inspect their axioms.
+    awk -v m="$MARKER" -v c="$control" '{ print } $0 == m {
+      print "section\nset_option warningAsError false"; while ((getline l < c) > 0) print l; print "end"
+    }' "$ENUMERATOR" > "$src" || return 1
   fi
-  PROOF_MODE=$mode "$LAKE" env lean "$src"
+  PROOF_MODE=$mode run_enumerator "$src"
 }
 
 # closure_gap IMPORTED PACKAGE [SOURCES_OUT]: source modules absent from the environment or root.
