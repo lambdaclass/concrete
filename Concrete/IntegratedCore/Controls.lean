@@ -27,6 +27,45 @@ private def returnTokens : ParserView :=
 private def expected : CoreInput (sliceLanguage slice0) :=
   ⟨source.project, slice0, .straightLine (.zero ⟨[], .lit 42, ⟨18, 28, 1, 19, ⟨0⟩⟩, ⟨25, 27, 1, 26, ⟨0⟩⟩⟩) rfl⟩
 
+-- The source locals 9 and 4 occupy operation positions 0 and 1. C9 indexes their unnamed siblings.
+example :
+    let span : ConcreteSpec.Surface0.Span := ⟨25, 27, 1, 26, ⟨0⟩⟩
+    let program : EarlyProgram := ⟨[⟨⟨⟨9⟩, .atom (.lit 1)⟩, span, span, (), .unnamed none⟩,
+      ⟨⟨⟨4⟩, .atom (.lit 2)⟩, span, span, (), .unnamed none⟩], .var ⟨4⟩, span, span⟩
+    (AList.map Origin.evidenceKey (AdmissionView.zero program).execution.origins) =
+      [(⟨0⟩, ⟨.function earlyEntry, ⟨[⟨.binding, .ordinal 0⟩]⟩⟩),
+       (⟨1⟩, ⟨.function earlyEntry, ⟨[⟨.binding, .ordinal 1⟩]⟩⟩),
+       (⟨2⟩, ⟨.function earlyEntry, ⟨[⟨.return, .ordinal 0⟩]⟩⟩)] := by decide
+
+private def sourceKeys (sourceText : String) : Option SiteKeyTable := do
+  let tokens ← (Lex.lex sourceText.toUTF8).toOption
+  let ast ← (Parse.parse tokens).toOption
+  let program ← (SurfacePreparation.prepareSurface0 ast).toOption
+  return AList.map Origin.evidenceKey (AdmissionView.zero program).execution.origins
+
+-- Inserting y changes x's lexical site. Both source programs issue the spec's full table,
+-- and looking up x at either site yields the very same named key.
+example :
+    let old := sourceKeys r"fn main() -> u8 { let x: u8 = 1; return x; }"
+    let new := sourceKeys r"fn main() -> u8 { let y: u8 = 1; let x: u8 = 1; return x; }"
+    let bind := fun (n : String) => (⟨.binding, .named ⟨n⟩, []⟩ : KeyConstruct)
+    let ret : KeyConstruct := ⟨.return, .unnamed none, []⟩
+    let x : StableKey := ⟨.function earlyEntry, ⟨[⟨.binding, .named ⟨"x"⟩⟩]⟩⟩
+    old = some (KeyConstruct.assignFunctionTable earlyEntry 0 [bind "x", ret]) ∧
+    new = some (KeyConstruct.assignFunctionTable earlyEntry 0 [bind "y", bind "x", ret]) ∧
+    (old.bind (AList.lookup · ⟨0⟩)) = some x ∧ (new.bind (AList.lookup · ⟨1⟩)) = some x := by
+  with_unfolding_all exact ⟨rfl, rfl, rfl, rfl⟩
+
+-- A nested addition creates a temporary before y. The return addition creates another
+-- after y. Only those temporaries occupy binding ordinals.
+example :
+    let src := r"fn main() -> u8 { let x: u8 = 1; let y: u8 = (x + 1) + 1; return y + x; }"
+    let temp : KeyConstruct := ⟨.binding, .unnamed none, []⟩
+    sourceKeys src = some (KeyConstruct.assignFunctionTable earlyEntry 0
+      [⟨.binding, .named ⟨"x"⟩, []⟩, temp, ⟨.binding, .named ⟨"y"⟩, []⟩, temp,
+       ⟨.return, .unnamed none, []⟩]) := by
+  with_unfolding_all rfl
+
 private def parseAndElaborate (tokens : ParserView) : Option (CoreInput (sliceLanguage slice0)) := do
   let parsed ← ((sliceParser slice0).run tokens).2
   let ast ← parsed.toOption
@@ -126,9 +165,9 @@ private def tokenId : DeclId := ⟨earlyEntry.module, tokenName⟩
 private def binderSpan : ConcreteSpec.Surface0.Span := ⟨3, 7, 1, 4, ⟨0⟩⟩
 private def useSpan : ConcreteSpec.Surface0.Span := ⟨25, 27, 1, 26, ⟨0⟩⟩
 private def introToken : LocatedStraightBinding :=
-  ⟨.bind (.name ⟨0⟩) (.nominal tokenName) (.construct tokenName), useSpan, binderSpan⟩
+  ⟨.bind (.name ⟨0⟩) (.nominal tokenName) (.construct tokenName), useSpan, binderSpan, .unnamed none⟩
 private def takeToken : LocatedStraightBinding :=
-  ⟨.destructure tokenName (.move ⟨0⟩), useSpan, useSpan⟩
+  ⟨.destructure tokenName (.move ⟨0⟩), useSpan, useSpan, .unnamed none⟩
 private def tokenView (bindings : List LocatedStraightBinding) : AdmissionView :=
   .one ⟨[(tokenName, binderSpan)], bindings, .ret (.lit 42), useSpan⟩
 private def tokenInput (bindings : List LocatedStraightBinding) : CoreInput (sliceLanguage sliceOne) :=
@@ -148,10 +187,10 @@ example : (ConcreteSpec.Admission.admitInput (tokenInput [introToken, takeToken]
   with_unfolding_all exact ⟨rfl, rfl, rfl, rfl⟩
 
 private def wildToken : LocatedStraightBinding :=
-  ⟨.bind .wild (.nominal tokenName) (.construct tokenName), useSpan, binderSpan⟩
+  ⟨.bind .wild (.nominal tokenName) (.construct tokenName), useSpan, binderSpan, .unnamed none⟩
 
 private def wildByte : LocatedStraightBinding :=
-  ⟨.bind .wild .u8 (.scalar (.atom (.lit 1))), useSpan, binderSpan⟩
+  ⟨.bind .wild .u8 (.scalar (.atom (.lit 1))), useSpan, binderSpan, .unnamed none⟩
 
 -- Retain the source declarations and both operation origins in a one-block
 -- candidate whose only executable operation returns the chosen byte.
@@ -349,7 +388,7 @@ example :
 -- This unbound return names the ID a wildcard used to acquire.
 example :
     let wildcard : LocatedStraightBinding :=
-      ⟨.bind .wild .u8 (.scalar (.atom (.lit 42))), binderSpan, binderSpan⟩
+      ⟨.bind .wild .u8 (.scalar (.atom (.lit 42))), binderSpan, binderSpan, .unnamed none⟩
     let view := AdmissionView.one ⟨[], [wildcard], .ret (.var ⟨0⟩), useSpan⟩
     let machine := view.execution
     ConcreteSpec.run view.program 8 = .stuck .unbound ∧
@@ -359,9 +398,9 @@ example :
 -- A later RHS can also read an unbound ID. The terminator here contains no variables.
 example :
     let wildcard : LocatedStraightBinding :=
-      ⟨.bind .wild .u8 (.scalar (.atom (.lit 42))), binderSpan, binderSpan⟩
+      ⟨.bind .wild .u8 (.scalar (.atom (.lit 42))), binderSpan, binderSpan, .unnamed none⟩
     let useMissing : LocatedStraightBinding :=
-      ⟨.bind .wild .u8 (.scalar (.add (.lit 0) (.var ⟨0⟩))), useSpan, useSpan⟩
+      ⟨.bind .wild .u8 (.scalar (.add (.lit 0) (.var ⟨0⟩))), useSpan, useSpan, .unnamed none⟩
     let view := AdmissionView.one ⟨[], [wildcard, useMissing], .ret (.lit 42), useSpan⟩
     let machine := view.execution
     ConcreteSpec.run view.program 8 = .stuck .unbound ∧

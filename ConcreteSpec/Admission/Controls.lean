@@ -43,12 +43,11 @@ theorem duplicate_refused : batch.validates [issued, issued] = false := by decid
 example (project : Core.SourcePathSpan.Project) :
     let span := return42.returnSpan
     let view := StageInterface.AdmissionView.zero
-      ⟨[⟨⟨⟨0⟩, .add (.lit 19) (.lit 23)⟩, span, span, (span, span)⟩], .var ⟨0⟩, span, span⟩
+      ⟨[⟨⟨⟨0⟩, .add (.lit 19) (.lit 23)⟩, span, span, (span, span), .unnamed none⟩], .var ⟨0⟩, span, span⟩
     let input : StageInterface.CoreInput (StageInterface.sliceLanguage view.slice) :=
       ⟨project, view.slice, .straightLine view rfl⟩
     let exactBatch : InputBatch input := ⟨view, ⟨rfl, rfl, rfl⟩, batch⟩
-    let origin := (view.located.bindings.head?.map fun b =>
-      (StageInterface.StraightProgram.bindingOrigin b 0).2)
+    let origin := view.originAt 0
     let encoded := exactBatch.encode [issued]
     (encoded.bind List.head?).map Prod.fst = some ⟨0⟩ ∧
     (((encoded.bind List.head?).bind fun row => row.2.head?).map (·.key)) = origin.map (·.evidenceKey) ∧

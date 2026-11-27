@@ -524,11 +524,12 @@ structure LocatedBinding where
   operandSpans : match statement.e with
     | .atom _ => Unit
     | .add .. => Surface0.Span × Surface0.Span
+  name : ConstructName := .unnamed none
 
 private def LocatedBinding.readSpans (b : LocatedBinding) : List (ConcreteSpec.Atom × Surface0.Span) :=
   match b with
-  | ⟨⟨_, .atom a⟩, span, _, _⟩ => [(a.toCore, span)]
-  | ⟨⟨_, .add l r⟩, _, _, (ls, rs)⟩ => [(l.toCore, ls), (r.toCore, rs)]
+  | ⟨⟨_, .atom a⟩, span, _, _, _⟩ => [(a.toCore, span)]
+  | ⟨⟨_, .add l r⟩, _, _, (ls, rs), _⟩ => [(l.toCore, ls), (r.toCore, rs)]
 
 structure EarlyProgram where
   bindings : List LocatedBinding
@@ -573,15 +574,15 @@ private inductive Rhs where
   | add (lhs rhs : LocatedAtom) (site : Surface0.Span)
 
 private def Rhs.bind (rhs : Rhs) (s : State)
-    (decl : Option Surface0.Span := none) : (Var × Surface0.Span) × State :=
+    (decl : Option Surface0.Span := none) (name : ConstructName := .unnamed none) : (Var × Surface0.Span) × State :=
   let x : Var := ⟨s.next⟩
   let b : LocatedBinding := match rhs with
-    | .atom a => ⟨⟨x, .atom a.atom⟩, a.span, decl.getD a.span, ()⟩
-    | .add l r site => ⟨⟨x, .add l.atom r.atom⟩, site, decl.getD site, l.span, r.span⟩
+    | .atom a => ⟨⟨x, .atom a.atom⟩, a.span, decl.getD a.span, (), name⟩
+    | .add l r site => ⟨⟨x, .add l.atom r.atom⟩, site, decl.getD site, (l.span, r.span), name⟩
   ((x, b.operationSpan), ⟨s.next + 1, b :: s.bindings⟩)
 
-private theorem Rhs.bind_fresh (rhs : Rhs) (s : State) (decl : Option Surface0.Span)
-    (x : Var) (below : x.id < s.next) : (rhs.bind s decl).1.1 ≠ x := by
+private theorem Rhs.bind_fresh (rhs : Rhs) (s : State) (decl : Option Surface0.Span) (name : ConstructName)
+    (x : Var) (below : x.id < s.next) : (rhs.bind s decl name).1.1 ≠ x := by
   intro same
   exact (Nat.ne_of_lt below) (congrArg Var.id same).symm
 
@@ -620,7 +621,7 @@ private def binding (purpose : Purpose) (acc : Scope × State) (b : Binding) :
     if b.name ∈ scope.map Prod.fst then throw (.duplicateBinder b.name b.span)
     unless Slice0Rules.AvailableBinder b.name do throw (.reservedBinder b.name b.span)
   let (rhs, s) ← expr purpose scope b.rhs s
-  let ((x, _), s) := rhs.bind s (some b.span)
+  let ((x, _), s) := rhs.bind s (some b.span) (.named ⟨b.name⟩)
   return ((b.name, x) :: scope, s)
 
 /-- Body shape is established before visiting any binding. The two routes
@@ -649,10 +650,9 @@ private def earlyExpression : ConcreteSpec.Slice0.Expr → EarlyExpr
   | .atom atom => .read (earlyOperand atom)
   | .add left right => .add .u8 (earlyOperand left) (earlyOperand right)
 
-private def earlyOrigin (entry : FnId) (site : SiteId) (kind : ConstructKind)
-    (ordinal : Nat) (span : ConcreteSpec.Surface0.Span) : SiteId × Origin :=
-  (site, ⟨site, ⟨span.fileId, span.start, span.stop, span.line, span.column⟩,
-    ⟨.function entry, ⟨[⟨kind, .ordinal ordinal⟩]⟩⟩⟩)
+private def earlyOrigin (site : SiteId) (span : Surface0.Span) (entry : FnId)
+    (key : FunctionRelativeKey) : SiteId × Origin :=
+  (site, ⟨site, ⟨span.fileId, span.start, span.stop, span.line, span.column⟩, ⟨.function entry, key⟩⟩)
 
 /-- The standalone Slice 0 program has one internal function identity. -/
 def earlyEntry : FnId :=
@@ -682,6 +682,7 @@ structure LocatedStraightBinding where
   statement : StraightBinding
   operationSpan : Surface0.Span
   declarationSpan : Surface0.Span
+  name : ConstructName := .unnamed none
 
 structure StraightProgram where
   declarations : List (Name × Surface0.Span)
@@ -700,7 +701,7 @@ def AdmissionView.slice : AdmissionView → Slice
 def AdmissionView.located : AdmissionView → StraightProgram
   | .one p => p
   | .zero p => ⟨[], p.bindings.map (fun b =>
-      ⟨.slice0 b.statement, b.operationSpan, b.declarationSpan⟩),
+      ⟨.slice0 b.statement, b.operationSpan, b.declarationSpan, b.name⟩),
       .ret p.ret, p.returnSpan⟩
 
 private def StraightType.toCore : StraightType → Ty
@@ -729,15 +730,16 @@ def AdmissionView.program : AdmissionView → ConcreteSpec.Program
       | .abort => .abort ⟨p.bindings.length⟩⟩
 
 def StraightProgram.endingOrigin (p : StraightProgram) : SiteId × Origin :=
-  earlyOrigin earlyEntry ⟨p.bindings.length⟩ (match p.ending with | .ret _ => .return | .abort => .abort)
-    0 p.endSpan
+  let endKey : KeyConstruct := ⟨(match p.ending with | .ret _ => .return | .abort => .abort), .unnamed none, []⟩
+  earlyOrigin ⟨p.bindings.length⟩ p.endSpan earlyEntry (endKey.key [])
 
-def StraightProgram.bindingOrigin (b : LocatedStraightBinding) (position : Nat) : SiteId × Origin :=
-  earlyOrigin earlyEntry ⟨position⟩ .binding position b.operationSpan
+def StraightProgram.bindingOrigins (p : StraightProgram) : AList SiteId Origin :=
+  KeyConstruct.mapSiblingKeys .binding (fun row => row.1.name)
+    (fun (b, position) => earlyOrigin ⟨position⟩ b.operationSpan earlyEntry) [] p.bindings.zipIdx
 
 def AdmissionView.originAt (v : AdmissionView) (position : Nat) : Option Origin :=
   if position = v.located.bindings.length then some v.located.endingOrigin.2 else
-    v.located.bindings[position]?.map fun b => (StraightProgram.bindingOrigin b position).2
+    v.located.bindingOrigins[position]?.map Prod.snd
 
 private def StraightBinding.destination : StraightBinding → Option Var
   | .slice0 s => some s.x
@@ -784,14 +786,14 @@ def AdmissionView.execution (v : AdmissionView) : MachineProgram (sliceLanguage 
     let expr : EarlyExpr := match b.statement with
       | .destructure name _ => .consumeEmpty ⟨earlyEntry.module, name⟩ rhs
       | _ => rhs
-    (x, b.statement.descriptor, expr, StraightProgram.bindingOrigin b i)
+    (x, b.statement.descriptor, expr, (⟨i⟩ : SiteId))
   let ownership := rows.map fun (x, desc, _) => (x, desc)
   let ending : Exec.Stmt ((sliceLanguage v.slice).instrumented ownership p.decls) := match p.ending with
     | .ret a => .ret (.inl (.read (earlyOperand a))) p.endingOrigin.1
     | .abort => .abort p.endingOrigin.1
-  let body := rows.foldr (fun (x, _, e, site, _) rest => .seq (.bind x (.inl e) site) rest) ending
+  let body := rows.foldr (fun (x, _, e, site) rest => .seq (.bind x (.inl e) site) rest) ending
   ⟨ownership, p.decls, ⟨[(earlyEntry, ⟨[], .inl (.scalar (.int .u8)), ⟨0⟩, body⟩)]⟩,
-    earlyEntry, rows.map (·.2.2.2) ++ [p.endingOrigin]⟩
+    earlyEntry, p.bindingOrigins ++ [p.endingOrigin]⟩
 
 /-- A fragment carries its canonical syntax once. General Exec functions use
 the integrated constructor and need their own slice's admission rules. -/
