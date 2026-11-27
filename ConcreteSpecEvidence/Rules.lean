@@ -696,6 +696,34 @@ private def ret : Terminator := .ret (.int .u8 0)
 private def live (used : Bool) : Ctx :=
   [(⟨0⟩, { ty := sTy, live := true, used, known := none })]
 
+theorem freshBinder : RuleAccepted OwnershipRule.FreshBinder (live false, ⟨1⟩) := rfl
+
+theorem duplicateBinder : RuleRefused OwnershipRule.FreshBinder (live false, ⟨0⟩) := nofun
+
+theorem freshPattern : RuleAccepted OwnershipRule.FreshPattern ([], [(⟨"f"⟩, .name ⟨0⟩)]) := by
+  exact ⟨by decide, fun _ _ => rfl⟩
+
+theorem reusedPattern : RuleRefused OwnershipRule.FreshPattern (live false, [(⟨"f"⟩, .name ⟨0⟩)]) :=
+  fun h => nomatch h.2 ⟨0⟩ (.head _)
+
+theorem moveLinear : RuleAccepted OwnershipRule.ReadAllowed (decls, live false, .move ⟨0⟩) :=
+  ⟨_, .move rfl rfl rfl⟩
+
+theorem copyLinear : RuleRefused OwnershipRule.ReadAllowed (decls, live false, .copy ⟨0⟩) := by
+  rintro ⟨_, h⟩
+  cases h with
+  | copy found _ mode => cases Option.some.inj found; contradiction
+
+theorem emptyReturn : RuleAccepted OwnershipRule.ReturnDischarged (decls, []) := fun _ => nofun
+
+theorem liveReturn : RuleRefused OwnershipRule.ReturnDischarged (decls, live true) := by
+  intro h
+  rcases (h _ (.head _)).1 with copy | moved <;> contradiction
+
+theorem discardByte : RuleAccepted WildcardPermitted (decls, .scalar (.int .u8)) := rfl
+
+theorem discardLinear : RuleRefused WildcardPermitted (decls, sTy) := nofun
+
 theorem usedAbort : RuleAccepted AbortReady (live true) := by
   unfold RuleAccepted AbortReady
   decide
@@ -825,6 +853,16 @@ end ProjectRegistry
 def registeredRuleExamples : List RuleExample :=
   [⟨``ConstsPermitted, ``ConstRegistry.accepted⟩,
    ⟨``ConstsPermitted, ``ConstRegistry.refused⟩,
+   ⟨``OwnershipRule.FreshBinder, ``Slice1Registry.freshBinder⟩,
+   ⟨``OwnershipRule.FreshBinder, ``Slice1Registry.duplicateBinder⟩,
+   ⟨``OwnershipRule.FreshPattern, ``Slice1Registry.freshPattern⟩,
+   ⟨``OwnershipRule.FreshPattern, ``Slice1Registry.reusedPattern⟩,
+   ⟨``OwnershipRule.ReadAllowed, ``Slice1Registry.moveLinear⟩,
+   ⟨``OwnershipRule.ReadAllowed, ``Slice1Registry.copyLinear⟩,
+   ⟨``OwnershipRule.ReturnDischarged, ``Slice1Registry.emptyReturn⟩,
+   ⟨``OwnershipRule.ReturnDischarged, ``Slice1Registry.liveReturn⟩,
+   ⟨``WildcardPermitted, ``Slice1Registry.discardByte⟩,
+   ⟨``WildcardPermitted, ``Slice1Registry.discardLinear⟩,
    ⟨``AbortReady, ``Slice1Registry.usedAbort⟩,
    ⟨``AbortReady, ``Slice1Registry.unusedAbort⟩,
    ⟨``ProgramPermitted, ``Slice1Registry.consumeThenAbort⟩,

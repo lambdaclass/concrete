@@ -334,7 +334,6 @@ private def testPasses {profile : Profile} (checks : List OperationCheck) :
     PassFunctions grammar testLanguage testLowering profile where
   lex _ := .error (.malformed "control")
   elaborate _ := .error (.diagnostic rule span [])
-  typeCore _ := .ok ()
   checkCore _ := .ok unsafeDischarges
   lowerCore input := .ok (testMIR input.core.project checks)
   lowerUnchecked input := .ok (testMIR input.project checks)
@@ -631,7 +630,6 @@ private def returnPasses (elaborate : Parsed (SyntaxTree ⊕ Bool) → Except El
     Passes slice0 testProfile where
   lex _ := .ok returnStream
   elaborate := elaborate
-  typeCore _ := .ok ()
   checkCore := ConcreteSpec.Admission.checkInput
   lowerCore _ := .error (.invalidInput rule)
   lowerUnchecked _ := .error (.invalidInput rule)
@@ -712,7 +710,7 @@ set_option maxRecDepth 4096 in
 example :
     let registered := registry (returnPasses fixtureElaborate)
     registered.typing.outputInvariant (elaboratedReturn 42) := by
-  exact ⟨rfl, returnedCoreWF 42, typedReturn⟩
+  exact ⟨rfl, (ConcreteSpec.Admission.checkStatic_iff (returnedCoreWF 42)).1 rfl⟩
 
 set_option maxRecDepth 4096 in
 private theorem return256IllTyped : ¬ (elaboratedReturn 256).StaticallyTyped := by
@@ -723,29 +721,24 @@ private theorem return256IllTyped : ¬ (elaboratedReturn 256).StaticallyTyped :=
 
 set_option maxRecDepth 4096 in
 example :
-    let failure : StageFailure := .invalidInput ⟨``CoreInput.StaticallyTyped, 1⟩
-    let passes := {returnPasses fixtureElaborate with typeCore := fun _ => .error failure}
+    let failure : StageFailure := .invalidInput ⟨``ConcreteSpec.Core.Slice0Rules.LiteralTyped, 1⟩
+    let passes := returnPasses fixtureElaborate
     let edge := (registry passes).typing
     edge.inputInvariant (elaboratedReturn 256) ∧
     edge.run (elaboratedReturn 256) = .error failure ∧
     edge.refusal (elaboratedReturn 256) failure ∧
     ¬ edge.refusal (elaboratedReturn 42) failure := by
   refine ⟨⟨rfl, returnedCoreWF 256, ⟨_, representsReturn 256⟩⟩,
-    rfl, ⟨rfl, return256IllTyped⟩, ?_⟩
-  exact fun refused => refused.2 typedReturn
+    rfl, ⟨_, rfl, rfl⟩, ?_⟩
+  rintro ⟨_, h, _⟩
+  cases h
 
 -- Exercise the exact registered parse and elaboration calls before the unchecked
 -- typing refusal. A literal-only checker suffices for this fixture.
 set_option maxRecDepth 4096 in
 example :
-    let failure : StageFailure := .invalidInput ⟨``CoreInput.StaticallyTyped, 1⟩
-    let typeLiteral (core : CoreInput earlyFixtureLanguage) :=
-      match core.machineProgram.operations with
-      | [(_, .expression (.inl (.read (.literal (.int .u8 value)))))] =>
-        if ConcreteSpec.IntTy.u8.inRange value then .ok () else .error failure
-      | _ => .error failure
-    let passes := {returnPasses fixtureElaborate with
-      lex := fun _ => .ok (returnStream 256), typeCore := typeLiteral}
+    let failure : StageFailure := .invalidInput ⟨``ConcreteSpec.Core.Slice0Rules.LiteralTyped, 1⟩
+    let passes := {returnPasses fixtureElaborate with lex := fun _ => .ok (returnStream 256)}
     ((registry passes).lcbPipeline true).run (literalSource 256) = .error ⟨StageFailure, failure⟩ := by
   with_unfolding_all rfl
 
@@ -760,8 +753,9 @@ example :
     typing.run core = .ok core ∧
     ConcreteSpec.run (AdmissionView.zero program).program 3 = .trap .arithmeticOverflow ∧
     ∀ failure, ¬ typing.refusal core failure := by
-  refine ⟨rfl, rfl, fun _ refusal => refusal.2 ?_⟩
-  exact ⟨_, ⟨rfl, rfl, rfl⟩, ⟨by decide, .letName (.add (.int rfl) (.int rfl)) (.ret (.copy rfl))⟩⟩
+  refine ⟨rfl, rfl, ?_⟩
+  rintro _ ⟨_, impossible, _⟩
+  cases impossible
 
 set_option maxRecDepth 4096 in
 private theorem fixtureElaboratorValidated : (registry (returnPasses fixtureElaborate)).elaborator.Validated :=
@@ -843,9 +837,9 @@ private theorem returnAdmissionContract :
     ∀ failure, ¬ (elaboratedReturn 42).CheckerRefuses failure := by
   have fragment := representsReturn 42
   have accepted : (elaboratedReturn 42).Accepted := by
-    refine ⟨_, fragment, ?_⟩
+    refine ⟨(ConcreteSpec.Admission.checkStatic_iff (returnedCoreWF 42)).1 rfl, _, fragment, ?_⟩
     exact (ConcreteSpec.check_iff _).mp rfl
-  refine ⟨⟨rfl, accepted, typedReturn, rfl, by simp, ?_, ?_⟩, ?_⟩
+  refine ⟨⟨rfl, accepted, rfl, by simp, ?_, ?_⟩, ?_⟩
   · simp
   · rintro _ _ ⟨_, h, _⟩
     simp at h
@@ -987,7 +981,7 @@ example (project : Project) (m : LoweringModels testLanguage testLowering testPr
     ¬ (r m parser).admission.success (.core (testCore project)) ⟨testCore project, unsafeDischarges⟩ := by
   rintro ⟨_, _, prepared, success⟩
   cases Except.ok.inj prepared
-  have valid := success.2.2.2
+  have valid : ValidDischarges (testCore project) unsafeDischarges := success.2.2
   have member : unsafeDischarges.Contains testSite unsafeDischarge :=
     ⟨[unsafeDischarge], List.mem_cons_self .., List.mem_cons_self ..⟩
   have safety := (valid.2.2.2 testSite unsafeDischarge member).2.2.2.2.2
@@ -1956,17 +1950,9 @@ private def ssaLiteral (ssa : SSA returnLowering testProfile) :
     Except StageFailure (List UInt8 × List Origin) :=
   memoryLiteral (ssa.memoryView (language := earlyFixtureLanguage))
 
-private def typeLiteralReturn (core : CoreInput earlyFixtureLanguage) : Except StageFailure Unit :=
-  match core.machineProgram.operations with
-  | [(_, .expression (.inl (.read (.literal (.int .u8 value)))))] =>
-    if ConcreteSpec.IntTy.u8.inRange value then .ok ()
-    else .error (.invalidInput ⟨``CoreInput.StaticallyTyped, 1⟩)
-  | _ => .error (.invalidInput ⟨``CoreInput.StaticallyTyped, 1⟩)
-
 private def literalReturnPasses : Passes slice0 testProfile :=
   { returnPasses fixtureElaborate with
     checkCore := ConcreteSpec.Admission.checkInput
-    typeCore := typeLiteralReturn
     lowerCore := fun input => lowerLiteralReturn input.core
     lowerUnchecked := lowerLiteralReturn
     lowerMemory := fun mir => .ok (mir.logicalView (language := earlyFixtureLanguage))
@@ -1994,9 +1980,7 @@ example :
       ∃ failure, edge.run (.core core) = .error failure ∧ edge.refusal (.core core) failure := by
   let reason := ConcreteSpec.Admission.Refusal.atPosition 0 (.literalOutOfRange .u8 256)
   refine ⟨⟨rfl, returnedCoreWF 256, _, representsReturn 256⟩, _, rfl, rfl, ?_, _, reason, representsReturn 256, rfl, rfl⟩
-  rintro ⟨v, represented, accepted⟩
-  cases v.unique represented (representsReturn 256)
-  exact Bool.noConfusion ((ConcreteSpec.check_iff _).mpr accepted)
+  exact fun accepted => return256IllTyped accepted.1.2.1
 
 -- Compose both registered routes through LCB job validation, then observe the exact
 -- emitted body with the fixed LCB semantics. This control exercises a single source.
@@ -2893,7 +2877,7 @@ private theorem literalUnchecked :
     LowersUnchecked (language := earlyFixtureLanguage) literalCore literalMIR := by
   with_unfolding_all
     obtain ⟨reached, finite, result, trace⟩ := literalCoreReaches
-    refine ⟨rfl, rfl, rfl, ⟨fun _ h => h, fun _ h => h⟩, literalConsumes, ⟨⟨?_, nofun⟩, rfl⟩, ?_⟩
+    refine ⟨(ConcreteSpec.Admission.checkStatic_iff (returnedCoreWF 42)).1 rfl, rfl, rfl, ⟨fun _ h => h, fun _ h => h⟩, literalConsumes, ⟨⟨?_, nofun⟩, rfl⟩, ?_⟩
     · intro fn locals graph present
       cases List.mem_singleton.mp present
       exact nofun
@@ -2987,10 +2971,10 @@ set_option maxRecDepth 4096 in
 example (unchecked : Bool) :
     let pipeline := (registry literalReturnPasses).lcbPipeline unchecked
     pipeline.Ready elaborationSource ∧ pipeline.Corresponds elaborationSource (lcbReturnJob 42) := by
-  have typed := returnAdmissionContract.1.2.2.1
+  have static := returnAdmissionContract.1.2.1.1
   have checked := returnAdmissionContract.1
   have admitted : (⟨literalCore, []⟩ : Admitted earlyFixtureLanguage).Valid :=
-    ⟨returnedCoreWF 42, checked.2⟩
+    checked.2
   have fragment : literalCore.InFragment := ⟨_, representsReturn 42⟩
   have elaborates : (registry literalReturnPasses).elaborator.success parsedReturn pendingReturn :=
     ⟨returnProgram, rfl, rfl⟩
@@ -3020,7 +3004,7 @@ example (unchecked : Bool) :
       parsedReturn, by with_unfolding_all rfl, parsedReturnDomain, parse, trivial,
       pendingReturn, rfl, parsedReturnDomain.2.2.2.2 _ elaborates, elaborates, trivial,
       literalCore, rfl, ⟨rfl, returnedCoreWF 42, fragment⟩, ⟨rfl, rfl⟩, trivial,
-      literalCore, by with_unfolding_all rfl, ⟨rfl, returnedCoreWF 42, typed⟩, rfl, trivial,
+      literalCore, by with_unfolding_all rfl, ⟨rfl, static⟩, rfl, trivial,
       literalMIR, rfl, literalHandoff, literalUnchecked, trivial,
       literalMemory, rfl, literalHandoff, ⟨literalMemoryContract, rfl⟩, trivial,
       literalSSA, by with_unfolding_all rfl, by with_unfolding_all exact literalHandoff, ⟨literalSSAContract, rfl⟩, trivial, back⟩
@@ -4532,8 +4516,8 @@ private def wrongCoreMIR : MIR testLowering testProfile :=
   let block : Block _ _ _ := ⟨⟨0⟩, [], [], .ret (some ⟨(), .literal ⟨[42]⟩⟩), [testOrigin]⟩
   {(returningMIR tabProject) with functions := [(Exec.Demo.mainF, [], ⟨⟨0⟩, #[block]⟩)]}
 
-private theorem coreWrongBody : ¬ LowersUnchecked (language := testLanguage) abortingCore wrongCoreMIR := by
-  rintro ⟨_, lowered⟩
+private theorem coreWrongBody : ¬ LowersCore (language := testLanguage) ⟨abortingCore, []⟩ wrongCoreMIR := by
+  intro lowered
   have terminal : coreExecution.result abortingCore coreTrapped (helperTrap .abort) := by
     with_unfolding_all rfl
   have reached : ∀ q, coreExecution.finite abortingCore q → q = coreStart ∨ q = coreTrapped := by
@@ -4574,8 +4558,8 @@ private abbrev mirExecution := MIR.Execution (language := testLanguage)
   (lang := testLowering) (profile := testProfile)
 
 private theorem abortLowering :
-    LowersUnchecked (language := testLanguage) abortingCore (abortMIR .abort) := by
-  refine ⟨rfl, rfl, rfl, ⟨fun _ h => h, fun _ h => h⟩, ?_, ⟨⟨?_, nofun⟩, rfl⟩, ?_⟩
+    LowersCore (language := testLanguage) ⟨abortingCore, []⟩ (abortMIR .abort) := by
+  refine ⟨rfl, rfl, ⟨fun _ h => h, fun _ h => h⟩, ?_, ⟨⟨?_, nofun⟩, rfl⟩, ?_⟩
   · refine ⟨List.nodup_nil, ?_, nofun, ?_, ?_⟩
     · rintro site _ _ ⟨op, present, notAbort, _, _⟩ _
       have member : (testSite, CoreOperation.abort) = (site, op) := by
@@ -4617,9 +4601,7 @@ private theorem abortLowering :
 example :
     LowersCore (language := testLanguage) ⟨abortingCore, []⟩ (abortMIR .abort) ∧
     ¬ LowersCore (language := testLanguage) ⟨abortingCore, []⟩ wrongCoreMIR := by
-  refine ⟨abortLowering.2, ?_⟩
-  intro lowered
-  exact coreWrongBody ⟨rfl, lowered⟩
+  exact ⟨abortLowering, coreWrongBody⟩
 
 private def unsafeMIR : MIR testLowering testProfile :=
   let block : Block _ _ _ := ⟨⟨0⟩, [], [], .invalid, []⟩

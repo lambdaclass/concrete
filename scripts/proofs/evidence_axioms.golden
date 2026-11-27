@@ -1313,8 +1313,18 @@ ConcreteSpec.Core.Slice0Rules.suffixAccepted
 ConcreteSpec.Core.Slice0Rules.suffixRefused	
 ConcreteSpec.Core.Slice1Registry.consumeThenAbort	propext
 ConcreteSpec.Core.Slice1Registry.consumeThenReturn	propext
+ConcreteSpec.Core.Slice1Registry.copyLinear	
+ConcreteSpec.Core.Slice1Registry.discardByte	
+ConcreteSpec.Core.Slice1Registry.discardLinear	
+ConcreteSpec.Core.Slice1Registry.duplicateBinder	
+ConcreteSpec.Core.Slice1Registry.emptyReturn	
+ConcreteSpec.Core.Slice1Registry.freshBinder	
+ConcreteSpec.Core.Slice1Registry.freshPattern	
 ConcreteSpec.Core.Slice1Registry.liveLinearAtReturn	propext
+ConcreteSpec.Core.Slice1Registry.liveReturn	
+ConcreteSpec.Core.Slice1Registry.moveLinear	
 ConcreteSpec.Core.Slice1Registry.overflow	propext
+ConcreteSpec.Core.Slice1Registry.reusedPattern	
 ConcreteSpec.Core.Slice1Registry.unusedAbort	
 ConcreteSpec.Core.Slice1Registry.useAfterMove	propext
 ConcreteSpec.Core.Slice1Registry.usedAbort	

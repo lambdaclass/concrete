@@ -1,4 +1,5 @@
 import Concrete.Interfaces.Pipeline
+import Concrete.IntegratedCore.Agreement
 
 /-! The elaboration implementation for the frozen slice-indexed Core handoff. -/
 

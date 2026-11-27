@@ -127,29 +127,33 @@ def readAtoms (Δ : Decls) (Γ : Ctx) : List Atom → Except Reason Ctx
     | .error reason => .error reason
 
 /-- Check typing and reads before testing arithmetic evidence in the pre-read context. -/
-def checkStmtExpr (Δ : Decls) (Γ : Ctx) (t : Ty) (e : Expr) : Except Reason Ctx := do
+def checkStmtExprWith (evidence : Ctx → Expr → Bool) (Δ : Decls) (Γ : Ctx) (t : Ty) (e : Expr) : Except Reason Ctx := do
   requireExprType Δ Γ.tys t e
   let next ← readAtoms Δ Γ e.atoms
-  if admitted Γ e then .ok next
+  if evidence Γ e then .ok next
   else .error .additionOverflowUnproven
 
+abbrev checkStmtExpr := checkStmtExprWith admitted
+
 /-- Check one statement, retaining its output context for the next statement. -/
-def checkStmt (Δ : Decls) (Γ : Ctx) : Stmt → Except Reason Ctx
+def checkStmtWith (evidence : Ctx → Expr → Bool) (Δ : Decls) (Γ : Ctx) : Stmt → Except Reason Ctx
   | .let_ (.name x) t e => do
-    let next ← checkStmtExpr Δ Γ t e
+    let next ← checkStmtExprWith evidence Δ Γ t e
     if Fresh next x then
       .ok ((x, { ty := t, live := true, used := false, known := knownExpr Γ e,
                  kfields := knownFields Γ e }) :: next)
     else .error (.duplicateBinding x)
   | .let_ .wild t e => do
-    let next ← checkStmtExpr Δ Γ t e
+    let next ← checkStmtExprWith evidence Δ Γ t e
     if t.isCopy Δ then .ok next else .error (.discardLinear t)
   | .letStruct s pat e => do
-    let next ← checkStmtExpr Δ Γ (.struct s) e
+    let next ← checkStmtExprWith evidence Δ Γ (.struct s) e
     let some d := findDecl Δ s | .error (.unknownStruct s)
     checkPattern d pat
     checkPatternBinders next pat
     .ok (bindPat d (knownFields Γ e) pat next)
+
+abbrev checkStmt := checkStmtWith admitted
 
 /-- Check the obligations that remain at a return or abort. -/
 def finishChecks (Δ : Decls) (atReturn : Bool) : Ctx → Except Reason Unit
@@ -172,18 +176,25 @@ def stmtDischarge (position : Nat) (Γ : Ctx) : Stmt → Option Discharge
   | .let_ _ (.scalar (.int t)) (.add l r) => some ⟨position, t, l, r, Γ⟩
   | _ => none
 
+/-- A runtime check issues no evidence that could remove itself. -/
+def ArithmeticPolicy.discharge : ArithmeticPolicy → Nat → Ctx → Stmt → Option Discharge
+  | .static => stmtDischarge
+  | .runtime => fun _ _ _ => none
+
 /-- Visit each statement once. Discharges are returned in operation order and
 only on whole-body success. -/
-def checkCoreBody (Δ : Decls) (Γ : Ctx) (position : Nat) :
+def checkCoreBodyWith (policy : ArithmeticPolicy) (Δ : Decls) (Γ : Ctx) (position : Nat) :
     List Stmt → Terminator → Except Refusal (List Discharge)
   | [], ending => match checkEnd Δ Γ ending with
     | .ok () => .ok []
     | .error reason => .error (.atPosition position reason)
-  | s :: ss, ending => match checkStmt Δ Γ s with
+  | s :: ss, ending => match checkStmtWith policy.permits Δ Γ s with
     | .error reason => .error (.atPosition position reason)
-    | .ok Γ₁ => match checkCoreBody Δ Γ₁ (position + 1) ss ending with
+    | .ok Γ₁ => match checkCoreBodyWith policy Δ Γ₁ (position + 1) ss ending with
       | .error refusal => .error refusal
-      | .ok tail => .ok ((stmtDischarge position Γ s).toList ++ tail)
+      | .ok tail => .ok ((policy.discharge position Γ s).toList ++ tail)
+
+abbrev checkCoreBody := checkCoreBodyWith .static
 
 /-- Check declaration-local rules in source order. -/
 def checkDeclFields : Decls → Except Refusal Unit
@@ -199,10 +210,12 @@ def checkDecls (Δ : Decls) : Except Refusal Unit := do
   checkDeclFields Δ
 
 /-- The sole executable Core checker for the straight-line fragment. -/
-def checkProgram (p : Program) : Except Refusal (List Discharge) :=
+def checkProgramWith (policy : ArithmeticPolicy) (p : Program) : Except Refusal (List Discharge) :=
   match checkDecls p.decls with
-  | .ok () => checkCoreBody p.decls [] 0 p.body p.ending
+  | .ok () => checkCoreBodyWith policy p.decls [] 0 p.body p.ending
   | .error reason => .error reason
+
+abbrev checkProgram := checkProgramWith .static
 
 /-- Boolean view of admission for existing spec examples. -/
 def bodyOkB (Δ : Decls) (Γ : Ctx) (ss : List Stmt) (r : Terminator) : Bool :=

@@ -1191,17 +1191,20 @@ private abbrev CoreState (language : CoreLanguage) :=
   (Σ env : AList ConcreteSpec.Var Own.Descriptor × Declarations, Exec.Config (language.instrumented env.1 env.2)) ×
     List language.operands.Event
 
-private def coreHostedResult (core : CoreInput language) (state : CoreState language) :
-    Option Concrete.Contracts.Observation := do
-  let outcome ← state.1.2.final?
-  match ← language.hostedResult outcome with
-  | .returned status => return .returned status ByteArray.empty
-  | .trapped status kind site =>
+/-- Render a Core result using the source location on the executing input. -/
+def CoreInput.observeHosted (core : CoreInput language) : HostedResult → Option Concrete.Contracts.Observation
+  | .returned status => some <| .returned status ByteArray.empty
+  | .trapped status kind site => do
     let origin ← AList.lookup core.machineProgram.origins site
     let file ← core.project.files[origin.lexical.file.index]?
     return .trapped status kind ⟨⟨site.id⟩,
       ⟨file.path.render.text, origin.lexical.line, origin.lexical.col⟩⟩
       (coreTrapDiagnostic core kind site)
+
+private def coreHostedResult (core : CoreInput language) (state : CoreState language) :
+    Option Concrete.Contracts.Observation := do
+  let outcome ← state.1.2.final?
+  CoreInput.observeHosted core (← language.hostedResult outcome)
 
 private def coreStep (core : CoreInput language) (state next : CoreState language) : Prop :=
   ∃ p q label, state.1 = ⟨(core.machineProgram.ownership, core.machineProgram.declarations), p⟩ ∧
@@ -1217,6 +1220,81 @@ def CoreInput.Execution : Semantics (CoreInput language) language.operands.Event
           fun result => result.stderr.data.toList.map ProcessEvent.stderr).getD [] ∨
         ∃ label next, Exec.Step core.machineProgram.body state label next ∧
           event ∈ label.events.map ProcessEvent.effect) }
+
+private abbrev coreStateAt (core : CoreInput language) (q : Exec.Config core.machineProgram.machine) :
+    CoreState language := (⟨(core.machineProgram.ownership, core.machineProgram.declarations), q⟩, [])
+
+private theorem silent_progress {core : CoreInput language} {p q : Exec.Config core.machineProgram.machine}
+    (tick : Exec.step core.machineProgram.body p = some (.next q)) :
+    CoreInput.Execution.step core (coreStateAt core p) (coreStateAt core q) ∧
+    ∀ r, CoreInput.Execution.step core (coreStateAt core p) r → r = coreStateAt core q := by
+  have unfinished : p.final? = none := by
+    unfold Exec.Config.final?
+    split <;> first | rfl | contradiction | (simp [Exec.step, Exec.stepExit] at tick)
+  have unseen : coreHostedResult core (coreStateAt core p) = none := by simp [coreHostedResult, unfinished, coreStateAt]
+  constructor
+  · exact ⟨unseen, ⟨p, q, .silent, rfl, rfl, .silent tick, rfl⟩,
+      by simp [Concrete.Contracts.TracePrefix, traceFor, unseen, coreStateAt]⟩
+  · rintro r ⟨_, ⟨before, after, label, start, stop, step, effects⟩, _⟩
+    have eq : p = before := by simpa using start
+    subst before
+    cases step with
+    | silent h =>
+      rw [tick] at h
+      cases Exec.Out.next.inj (Option.some.inj h)
+      exact Prod.ext stop effects
+    | prim h => rw [tick] at h; cases h
+
+/-- A finite path of deterministic dispatcher steps to a hosted result supplies
+progress at every reachable state and fixes the unique process observation. -/
+theorem CoreInput.safe_of_silent_path {core : CoreInput language} {q : Exec.Config core.machineProgram.machine}
+    (path : Steps (fun p q => Exec.step core.machineProgram.body p = some (.next q)) core.machineProgram.initial q)
+    {f hosted result} (final : q.final? = some f) (host : language.hostedResult f = some hosted)
+    (render : CoreInput.observeHosted core hosted = some result) :
+    ProgramSafe CoreInput.Execution core ∧
+    ∀ o, CoreInput.Execution.observes core o ↔ o = result := by
+  let S := CoreInput.Execution (language := language)
+  have last : S.result core (coreStateAt core q) result := by
+    change coreHostedResult _ _ = _
+    simp [coreHostedResult, coreStateAt, final, host, render]
+  have lift {p r} (h : Steps (fun p r => Exec.step core.machineProgram.body p = some (.next r)) p r) :
+      Steps (S.step core) (coreStateAt core p) (coreStateAt core r) := by
+    induction h with
+    | nil => exact .nil _
+    | cons tick _ ih => exact .cons (silent_progress tick).1 ih
+  have progress {p r} (h : Steps (fun p r => Exec.step core.machineProgram.body p = some (.next r)) p r)
+      (done : S.result core (coreStateAt core r) result) {s}
+      (reached : Steps (S.step core) (coreStateAt core p) s) :
+      S.result core s result ∨ ∃ next, S.step core s next := by
+    induction h generalizing s with
+    | nil =>
+      cases reached with
+      | nil => exact .inl done
+      | cons tick _ => exact (S.terminal _ _ _ done _ tick).elim
+    | cons tick _ ih =>
+      obtain ⟨go, unique⟩ := silent_progress tick
+      cases reached with
+      | nil => exact .inr ⟨_, go⟩
+      | cons first rest => exact ih done ((unique _ first) ▸ rest)
+  have allStates {s} (finite : S.finite core s) :
+      S.result core s result ∨ ∃ next, S.step core s next := by
+    obtain ⟨start, init, steps⟩ := finite
+    change start = coreStateAt core core.machineProgram.initial at init
+    rw [init] at steps
+    exact progress path last steps
+  constructor
+  · rintro s ⟨finite, noStep, noResult⟩
+    rcases allStates finite with observed | ⟨next, tick⟩
+    · exact noResult _ observed
+    · exact noStep _ tick
+  · intro o
+    constructor
+    · rintro ⟨s, finite, observed⟩
+      rcases allStates finite with same | ⟨next, tick⟩
+      · exact Option.some.inj (observed.symm.trans same)
+      · exact (S.terminal _ _ _ observed _ tick).elim
+    · rintro rfl
+      exact ⟨_, ⟨_, rfl, lift path⟩, last⟩
 
 def MIR.Execution : Semantics (MIR lang profile) language.operands.Event :=
   graphExecution MIR.Step (fun mir => entryStateFor mir.logicalView)
@@ -1261,7 +1339,7 @@ def LowersCore
 
 def LowersUnchecked
     (input : CoreInput language) (mir : MIR lang profile) : Prop :=
-  input.wildcardsCopy = true ∧ LowersCore (language := language) ⟨input, []⟩ mir
+  input.UncheckedWF ∧ LowersCore (language := language) ⟨input, []⟩ mir
 
 def Memory.RepresentsActivation (memory : Memory lang profile)
     (logical physical : MemoryFrame language.operands.Val) (bytes : Mem.Memory)

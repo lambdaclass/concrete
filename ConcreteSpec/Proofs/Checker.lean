@@ -263,9 +263,9 @@ theorem checkPatternBinders_iff {Γ : Ctx} {pat : List (Name × Binder)} :
   simp [checkPatternBinders, bind_unit_ok_iff, rejectFound_ok_iff, firstRepeated_eq_none,
     List.find?_eq_none, PatFresh, Fresh]
 
-private theorem checkStmtExpr_iff {Δ : Decls} {Γ Γ' : Ctx} {t : Ty} {e : Expr} :
-    checkStmtExpr Δ Γ t e = .ok Γ' ↔
-      HasType Δ Γ.tys e t ∧ Uses Δ Γ e Γ' ∧ admitted Γ e = true := by
+private theorem checkStmtExpr_iff {evidence : Ctx → Expr → Bool} {Δ : Decls} {Γ Γ' : Ctx} {t : Ty} {e : Expr} :
+    checkStmtExprWith evidence Δ Γ t e = .ok Γ' ↔
+      HasType Δ Γ.tys e t ∧ Uses Δ Γ e Γ' ∧ evidence Γ e = true := by
   constructor
   · intro h
     obtain ⟨⟨⟩, ht, h⟩ := bind_ok_iff.mp h
@@ -275,10 +275,10 @@ private theorem checkStmtExpr_iff {Δ : Decls} {Γ Γ' : Ctx} {t : Ty} {e : Expr
       exact ⟨requireExprType_iff.mp ht, reads_iff.mp hu, by assumption⟩
     · cases h
   · rintro ⟨ht, hu, ha⟩
-    simp [checkStmtExpr, requireExprType_iff.mpr ht, reads_iff.mpr hu, ha, Bind.bind, Except.bind]
+    simp [checkStmtExprWith, requireExprType_iff.mpr ht, reads_iff.mpr hu, ha, Bind.bind, Except.bind]
 
-theorem checkStmt_iff {Δ : Decls} {Γ Γ' : Ctx} {s : Stmt} :
-    checkStmt Δ Γ s = .ok Γ' ↔ StmtOk Δ Γ s Γ' := by
+theorem checkStmtWith_iff {evidence : Ctx → Expr → Bool} {Δ : Decls} {Γ Γ' : Ctx} {s : Stmt} :
+    checkStmtWith evidence Δ Γ s = .ok Γ' ↔ StmtOkWith evidence Δ Γ s Γ' := by
   constructor
   · intro h
     cases s with
@@ -311,13 +311,17 @@ theorem checkStmt_iff {Δ : Decls} {Γ Γ' : Ctx} {s : Stmt} :
   · intro h
     cases h with
     | let_ ht hk hu hf =>
-      simp [checkStmt, checkStmtExpr_iff.mpr ⟨ht, hu, hk⟩, hf, Bind.bind, Except.bind]
+      simp [checkStmtWith, checkStmtExpr_iff.mpr ⟨ht, hu, hk⟩, hf, Bind.bind, Except.bind]
     | letWild ht hk hcopy hu =>
-      simp [checkStmt, checkStmtExpr_iff.mpr ⟨ht, hu, hk⟩, hcopy, Bind.bind, Except.bind]
+      unfold WildcardPermitted at hcopy
+      simp [checkStmtWith, checkStmtExpr_iff.mpr ⟨ht, hu, hk⟩, hcopy, Bind.bind, Except.bind]
     | letStruct ht hk hd hp hu hf =>
-      simp [checkStmt, checkStmtExpr_iff.mpr ⟨ht, hu, hk⟩, hd, checkPattern_iff.mpr hp,
+      simp [checkStmtWith, checkStmtExpr_iff.mpr ⟨ht, hu, hk⟩, hd, checkPattern_iff.mpr hp,
         checkPatternBinders_iff.mpr hf,
         Bind.bind, Except.bind]
+
+theorem checkStmt_iff {Δ : Decls} {Γ Γ' : Ctx} {s : Stmt} :
+    checkStmt Δ Γ s = .ok Γ' ↔ StmtOk Δ Γ s Γ' := checkStmtWith_iff
 
 theorem finishChecks_iff (Δ : Decls) (atReturn : Bool) (Γ : Ctx) :
     finishChecks Δ atReturn Γ = .ok () ↔
@@ -329,12 +333,12 @@ theorem finishChecks_iff (Δ : Decls) (atReturn : Bool) (Γ : Ctx) :
     cases atReturn <;> cases hu : e.used <;> cases hl : e.live <;> cases h : e.ty.isCopy Δ <;>
       simp_all [finishChecks, Discharged, AbortReady]
 
-theorem checkEnd_iff {Δ : Decls} {Γ : Ctx} {r : Terminator} :
-    checkEnd Δ Γ r = .ok () ↔ BodyOk Δ Γ [] r := by
+theorem checkEndWith_iff {evidence : Ctx → Expr → Bool} {Δ : Decls} {Γ : Ctx} {r : Terminator} :
+    checkEnd Δ Γ r = .ok () ↔ BodyOkWith evidence Δ Γ [] r := by
   cases r with
   | abort site =>
     rw [checkEnd, finishChecks_iff]
-    exact ⟨BodyOk.abort, fun h => by cases h; assumption⟩
+    exact ⟨BodyOkWith.abort, fun h => by cases h; assumption⟩
   | ret r =>
     constructor
     · intro h
@@ -349,33 +353,39 @@ theorem checkEnd_iff {Δ : Decls} {Γ : Ctx} {r : Terminator} :
           simp [checkEnd, requireExprType_iff.mpr ht, useAtom_iff.mpr hu, finishChecks_iff, hd,
             Bind.bind, Except.bind]
 
-theorem checkBody_iff {Δ : Decls} {Γ : Ctx} {ss : List Stmt} {r : Terminator} (position : Nat) :
-    (∃ ds, checkCoreBody Δ Γ position ss r = .ok ds) ↔ BodyOk Δ Γ ss r := by
+theorem checkEnd_iff {Δ : Decls} {Γ : Ctx} {r : Terminator} :
+    checkEnd Δ Γ r = .ok () ↔ BodyOk Δ Γ [] r := checkEndWith_iff
+
+theorem checkBodyWith_iff {policy : ArithmeticPolicy} {Δ : Decls} {Γ : Ctx} {ss : List Stmt} {r : Terminator} (position : Nat) :
+    (∃ ds, checkCoreBodyWith policy Δ Γ position ss r = .ok ds) ↔ BodyOkWith policy.permits Δ Γ ss r := by
   induction ss generalizing Γ position with
   | nil =>
     constructor
     · rintro ⟨ds, h⟩
-      simp only [checkCoreBody] at h
+      simp only [checkCoreBodyWith] at h
       split at h
-      · exact checkEnd_iff.mp (by assumption)
+      · exact checkEndWith_iff.mp (by assumption)
       · cases h
     · intro h
-      exact ⟨[], by simp [checkCoreBody, checkEnd_iff.mpr h]⟩
+      exact ⟨[], by simp [checkCoreBodyWith, checkEndWith_iff.mpr h]⟩
   | cons s ss ih =>
     constructor
     · rintro ⟨ds, h⟩
-      simp only [checkCoreBody] at h
+      simp only [checkCoreBodyWith] at h
       split at h
       · cases h
       · rename_i Γ₁ hs
         split at h
         · cases h
-        · exact .cons (checkStmt_iff.mp hs) ((ih _).mp ⟨_, by assumption⟩)
+        · exact .cons (checkStmtWith_iff.mp hs) ((ih _).mp ⟨_, by assumption⟩)
     · intro h
       cases h with
       | cons hs hb =>
         obtain ⟨ds, hds⟩ := (ih (position + 1)).mpr hb
-        exact ⟨(stmtDischarge position Γ s).toList ++ ds, by simp [checkCoreBody, checkStmt_iff.mpr hs, hds]⟩
+        exact ⟨(policy.discharge position Γ s).toList ++ ds, by simp [checkCoreBodyWith, checkStmtWith_iff.mpr hs, hds]⟩
+
+theorem checkBody_iff {Δ : Decls} {Γ : Ctx} {ss : List Stmt} {r : Terminator} (position : Nat) :
+    (∃ ds, checkCoreBody Δ Γ position ss r = .ok ds) ↔ BodyOk Δ Γ ss r := checkBodyWith_iff (policy := .static) position
 
 private theorem checkDeclFields_iff (Δ : Decls) :
     checkDeclFields Δ = .ok () ↔
@@ -390,18 +400,22 @@ theorem checkDecls_iff (Δ : Decls) : checkDecls Δ = .ok () ↔ DeclsOk Δ := b
   simp [checkDecls, DeclsOk, bind_unit_ok_iff, rejectFound_ok_iff, firstRepeated_eq_none,
     checkDeclFields_iff]
 
-theorem checkProgram_iff (p : Program) :
-    (∃ ds, checkProgram p = .ok ds) ↔ Checked p := by
-  unfold checkProgram
+theorem checkProgramWith_iff (policy : ArithmeticPolicy) (p : Program) :
+    (∃ ds, checkProgramWith policy p = .ok ds) ↔
+    DeclsOk p.decls ∧ BodyOkWith policy.permits p.decls [] p.body p.ending := by
+  unfold checkProgramWith
   split
   · rename_i hd
-    simp [Checked, (checkDecls_iff p.decls).mp hd, checkBody_iff]
+    simp [(checkDecls_iff p.decls).mp hd, checkBodyWith_iff]
   · rename_i failure hd
     have h : ¬ DeclsOk p.decls := by
       intro h
       rw [(checkDecls_iff p.decls).mpr h] at hd
       cases hd
-    simp [Checked, h]
+    simp [h]
+
+theorem checkProgram_iff (p : Program) :
+    (∃ ds, checkProgram p = .ok ds) ↔ Checked p := checkProgramWith_iff .static p
 
 theorem except_isOk_iff {ε α : Type} (r : Except ε α) :
     r.isOk = true ↔ ∃ a, r = .ok a := by

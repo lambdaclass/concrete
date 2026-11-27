@@ -13,7 +13,7 @@ open ConcreteSpec.Surface0 (Token Derives Lexes Program Expr Span Binding Binder
 records the origin of each introduced operation and permits any fresh binder IDs. -/
 inductive ElaboratesExpr (purpose : Purpose) (scope : Scope) :
     Expr → Core.Atom → List Core.Stmt → List Elab.SourceSite → Prop where
-  | integer (n span) {suffix} : purpose.AllowsSuffix suffix →
+  | integer (n span) {suffix} : ConcreteSpec.Core.Slice0Rules.ExpectedTypeLiteral suffix →
       ElaboratesExpr purpose scope (.integer n suffix span) (.lit n) [] []
   | local {name span x} : scope.lookup name = some x →
       ElaboratesExpr purpose scope (.local name span) (.var x) [] []
@@ -22,30 +22,23 @@ inductive ElaboratesExpr (purpose : Purpose) (scope : Scope) :
       ElaboratesExpr purpose scope (.add lhs rhs site) (.var x)
         (left ++ right ++ [⟨x, .add a b⟩]) (ls ++ rs ++ [⟨x, site⟩])
 
-/-- Eligibility needs a name to resolve. Checked elaboration also enforces the
-surface binder rules before those names disappear from Core. -/
-def BinderAllowed (purpose : Purpose) (locals : List String) (name : String) : Prop :=
-  match purpose with
-  | .admission => BinderLegal locals name
-  | .eligibility => ConcreteSpec.Core.Slice0Rules.NamedBinding name
-
 inductive ElaboratesBindings (purpose : Purpose) :
     Scope → List Binding → Scope → List Core.Stmt → List Elab.SourceSite → Prop where
   | nil (scope) : ElaboratesBindings purpose scope [] scope [] []
   | atom {scope binding rest final x a body sites} :
-      BinderAllowed purpose (scope.map Prod.fst) binding.name →
+      BinderLegal (scope.map Prod.fst) binding.name →
       ElaboratesExpr purpose scope binding.rhs a [] [] →
       ElaboratesBindings purpose ((binding.name, x) :: scope) rest final body sites →
       ElaboratesBindings purpose scope (binding :: rest) final (⟨x, .atom a⟩ :: body) sites
   | operation {scope binding rest final x head tail hs ts} :
-      BinderAllowed purpose (scope.map Prod.fst) binding.name →
+      BinderLegal (scope.map Prod.fst) binding.name →
       ElaboratesExpr purpose scope binding.rhs (.var x) head hs → head ≠ [] →
       ElaboratesBindings purpose ((binding.name, x) :: scope) rest final tail ts →
       ElaboratesBindings purpose scope (binding :: rest) final (head ++ tail) (hs ++ ts)
 
 theorem ElaboratesBindings.headLegal {purpose} {scope : Scope} {binding : Binding}
     {rest final body sites} (h : ElaboratesBindings purpose scope (binding :: rest) final body sites) :
-    BinderAllowed purpose (scope.map Prod.fst) binding.name := by
+    BinderLegal (scope.map Prod.fst) binding.name := by
   cases h with
   | atom legal _ _ => exact legal
   | operation legal _ _ _ => exact legal
@@ -98,23 +91,9 @@ theorem Elaborates.originWellFormed {purpose} {ast : Program} {core : Elab.Outpu
   rw [body, sites, List.map_append, additionBinders_append]
   rw [elaboratesBindings_origins bindings, elaboratesExpr_origins expr]
 
-private def atomFits (scope : List ConcreteSpec.Var) : Core.Atom → Prop
-  | .lit n => n < 256
-  | .var x => x ∈ scope
-
-private def bodyFits (scope : List ConcreteSpec.Var) (result : Core.Atom) :
-    List Core.Stmt → Prop
-  | [] => atomFits scope result
-  | stmt :: rest =>
-    (match stmt.e with
-      | .atom a => atomFits scope a
-      | .add a b => atomFits scope a ∧ atomFits scope b) ∧
-    bodyFits (stmt.x :: scope) result rest
-
-/-- Slice-0 static typing and scope for the empty-evidence path. Checked addition need
-only have typed operands here, so an overflowing operation remains eligible. -/
+/-- Conformance uses the same static checker as the registered Core entry. -/
 def ConformanceStatic (core : Elab.Output) : Prop :=
-  bodyFits [] core.program.ret core.program.body
+  (ConcreteSpec.checkProgramWith .runtime (Core.toCore core.program)).isOk = true
 
 /-- A lexical operation is found by binder. The selected residual layout determines its
 runtime index. The empty-evidence Core execution uses every origin in the layout. -/
@@ -677,7 +656,7 @@ def UncheckedHandoffs (input : Stages.Input) (core : Elab.Output) : Prop :=
     Admission.prepareParsed .eligibility ast = .ok core
 
 /-- Every successful unchecked run exposes the frontend handoff used by the
-correctness obligation, including sources accepted only in eligibility mode. -/
+correctness obligation, including operations guarded at runtime. -/
 theorem unchecked_handoffs_of_run {input : Stages.Input} {bir : BIR.Program}
     (ran : Stages.unchecked input = .ok bir) : ∃ core, UncheckedHandoffs input core := by
   simp only [Stages.unchecked, bind, Except.bind] at ran
@@ -917,27 +896,20 @@ example : ∃ out, Stages.compile answerInput = .ok out ∧
     exact returnAtTwo rfl rfl rfl
 
 example : ¬ ConformanceStatic ⟨⟨[], .lit 256⟩, []⟩ := by
-  with_unfolding_all
-    change ¬ (256 < 256)
-    decide
+  exact Bool.noConfusion
 
--- A checked-only binder refusal cannot exclude this typed compilation from
--- unchecked correctness or its independent frontend judgment.
+-- Source binder rules must be enforced before the spelling disappears from Core.
 example :
     let input := (Stages.Input.load "main.con"
       r"fn main() -> u8 { let main: u8 = 42; return main; }".toUTF8).toOption.get (by rfl)
-    let core : Elab.Output := ⟨⟨[⟨⟨0⟩, .atom (.lit 42)⟩], .var ⟨0⟩⟩, []⟩
-    ∃ bir, UncheckedHandoffs input core ∧ ConformanceStatic core ∧
-      Stages.unchecked input = .ok bir ∧ UncheckedFrontend input core := by
-  with_unfolding_all
-    refine ⟨_, ⟨_, _, rfl, rfl, rfl⟩, ⟨by change 42 < 256; decide, List.Mem.head _⟩, rfl,
-      _, _, rfl, rfl, rfl, Lex.lex_correct rfl, ?_, ?_⟩
-    · exact .main _ _ _ _ _ _ _ _
-        (.bind _ _ _ _ _ _ (.expr (.integer 42 none _) (.nil _))
-          (.ret _ _ (.expr (.local "main" _) (.nil _)) .nil))
-    · refine ⟨rfl, by decide, _, _, [("main", ⟨0⟩)], [⟨⟨0⟩, .atom (.lit 42)⟩], [], [], [],
-        rfl, ?_, .local rfl, rfl, rfl⟩
-      exact .atom (show "main" ≠ "_" by decide) (.integer 42 _ (Or.inl rfl)) (.nil _)
+    Stages.unchecked input = .error (.checker "binding shadows 'main' at byte 22") := by
+  with_unfolding_all rfl
+
+example :
+    let input := (Stages.Input.load "main.con"
+      r"fn main() -> u8 { let x: u8 = 42; return 0; }".toUTF8).toOption.get (by rfl)
+    Stages.unchecked input = .error (.checker "Core check rejected the program") := by
+  with_unfolding_all rfl
 
 private def overflowInput (comment : String) : Stages.Input :=
   (Stages.Input.load "src/a.con"
@@ -954,7 +926,7 @@ example : ∃ core bir,
     coreSemantics.observes ("src/b.con", core) (overflowObservation "src/b.con") := by
   with_unfolding_all
     refine ⟨_, _, ⟨_, _, rfl, rfl, rfl⟩, ?_, rfl, ?_, ?_⟩
-    · exact ⟨⟨by change 200 < 256; decide, by change 56 < 256; decide⟩, List.Mem.head _⟩
+    · rfl
     · exact returnAtOne rfl rfl
     · exact returnAtOne rfl rfl
 
@@ -1324,7 +1296,7 @@ private def trapBIR : BIR.Program :=
 
 private theorem trapStatic : ConformanceStatic trapCore := by
   with_unfolding_all
-    exact ⟨⟨by change 200 < 256; decide, by change 56 < 256; decide⟩, List.Mem.head _⟩
+    rfl
 
 private theorem trapTerminates : SourceTerminates trapInput.path trapCore :=
   coreTerminates _ _ (overflowObservation trapInput.path) 1 rfl (returnAtOne rfl rfl)

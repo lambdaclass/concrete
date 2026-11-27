@@ -294,11 +294,21 @@ def parseRefusal (fileId : ConcreteSpec.Core.FileId) (kind rule primary related 
   if rev == 0 || (origins.map Prod.fst).eraseDups.length != origins.length then none
   else return ⟨kind, name, rev, ← parseOrigin fileId primary, origins⟩
 
-def checkBodyRefusal (input : Concrete.Stages.Input) (expected : RefusalExpectation)
+def checkSourceRefusal (input : Concrete.Stages.Input) (expected : RefusalExpectation)
     (actual : Concrete.Refusal) :
     IO UInt32 := do
   let .ok tokens := Concrete.Lex.lex input.source input.fileId | return 13
   let .ok ast := Concrete.Parse.parse tokens | return 13
+  if expected.kind == "reserved_binder" then
+    let .error issue@(.reservedBinder name span) :=
+        ConcreteSpec.StageInterface.SurfacePreparation.prepareSurface0 ast | return 13
+    let some diagnostic := actual.diagnosticAt issue.render.rule | return 13
+    unless diagnostic.rule.val.name == ``ConcreteSpec.Core.Slice0Rules.AvailableBinder &&
+        expected.rule == "OD67" && expected.revision == diagnostic.rule.val.rev &&
+        expected.primary == span && expected.related.isEmpty do return 14
+    let refusal := Concrete.Refusal.checker s!"binding shadows '{name}' at byte {span.start}"
+    let .error unchecked := Concrete.Stages.unchecked input | return 13
+    return if actual == refusal && unchecked == refusal then 0 else 18
   let .error (.unreachable span) := ConcreteSpec.Surface0.checkBody ast.body | return 13
   let some diagnostic := actual.diagnostic ``ConcreteSpec.Core.Slice0Rules.ReachableBody
     | return 13
@@ -327,7 +337,7 @@ def emitSource (path actual : String) (dir : System.FilePath) (expectation : Lis
   | ["refuse", status, kind, rule, primary, related], .error (actual@(.checker _)) =>
     unless toString actual.exitCode == status do return 13
     let some expected := parseRefusal input.fileId kind rule primary related | return 2
-    checkBodyRefusal input expected actual
+    checkSourceRefusal input expected actual
   | "refuse" :: _, _ | "pending-refusal" :: _, _ => return 13
   | ["llvm", "exit", status, "lcb", "resource", resource, bound, measurement], .ok out =>
     let p := Concrete.Core.toCore out.core.program
@@ -442,7 +452,7 @@ def main (args : List String) : IO UInt32 := do
       | IO.eprintln s!"invalid project path: {path}"; return 1
     let some expected := parseRefusal input.fileId "unreachable_statement" "STMT-14@1" "28:37:1:29" "-"
       | return 2
-    checkBodyRefusal input expected (.checker "unreachable code (STMT-14) at 1:19, bytes 18..27")
+    checkSourceRefusal input expected (.checker "unreachable code (STMT-14) at 1:19, bytes 18..27")
   | ["loop", dir, t] => withTarget t (emitLoop dir)
   | ["invalid", dir, t] => withTarget t (emitInvalid dir)
   | _ => IO.eprintln "usage: slice0_bir.lean list | backend-profile | emit NAME DIR TARGET EXPECT... | source PATH FILE DIR TARGET EXPECT... | (loop | invalid) DIR TARGET"; return 2

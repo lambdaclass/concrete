@@ -109,11 +109,10 @@ example :
 
 private def profile : Profile := ⟨.lcb, .x86_64Linux, 3, 4096⟩
 
--- Keep the real elaborator and checker, with a type pass that always succeeds.
+-- Keep the real elaborator and checker, and the shared static traversal.
 private def fragmentPasses (slice : Slice) : Passes slice profile where
   lex input := .error (.missingFile input.entryFile)
   elaborate := elaborate slice
-  typeCore _ := .ok ()
   checkCore := ConcreteSpec.Admission.checkInput
   lowerCore _ := .error (.invalidInput ⟨``elaborate, 1⟩)
   lowerUnchecked _ := .error (.invalidInput ⟨``elaborate, 1⟩)
@@ -202,40 +201,120 @@ private def wildcardMIR (status : UInt8) : MIR (sliceLoweringLanguage sliceOne) 
   ⟨core.project, earlyEntry, [(earlyEntry, ⟨[], some u8⟩)],
     [(earlyEntry, [], ⟨⟨0⟩, #[block]⟩)], [], core.machineProgram.declarations⟩
 
--- Independent typing succeeds. The stage refuses the discard even with an
--- always-successful lowerer, and every candidate fails the lowering relation.
-example (candidate : MIR (sliceLoweringLanguage sliceOne) profile) :
-    let core := tokenInput [wildToken]
-    let edge := (registry {fragmentPasses sliceOne with lowerUnchecked := fun _ => .ok candidate}).lowerUnchecked
-    let failure := StageFailure.invalidInput ⟨``CoreInput.wildcardsCopy, 1⟩
-    core.StaticallyTyped ∧ edge.run core = .error failure ∧ edge.refusal core failure ∧
-      ¬ LowersUnchecked core candidate := by
-  refine ⟨⟨tokenView [wildToken], ⟨rfl, rfl, rfl⟩, by decide, .letWild ?_ (.ret (.int rfl))⟩,
-    rfl, ⟨rfl, rfl⟩, fun success => Bool.noConfusion success.1⟩
-  exact .mk rfl ⟨.nil, nofun, fun _ _ => nofun⟩
+private def inputOf (v : AdmissionView) : CoreInput (sliceLanguage v.slice) :=
+  ⟨source.project, v.slice, .straightLine v rfl⟩
 
-example :
-    let mir := wildcardMIR 7
-    let entry : MemoryRegisters (sliceLanguage sliceOne) profile :=
-      {frame := earlyEntry, block := ⟨0⟩, instruction := 0, virtualValues := [], materialized := [],
-        live := [], initialized := [], bytes := Mem.Memory.empty}
-    mir.terminalObservation entry = some (.returned 7 ByteArray.empty) ∧
-      ¬ (registry (fragmentPasses sliceOne)).lowerUnchecked.success (tokenInput [wildToken]) mir :=
-  ⟨by with_unfolding_all rfl, fun success => Bool.noConfusion success.1⟩
+/-- Check the first offending operation and rule, and exclude *every* MIR.
+These programs satisfy the independent value-typing judgment. -/
+private def RefusedStatic (v : AdmissionView) (pos : Nat) (why : ConcreteSpec.Admission.Reason)
+    (rule : RuleId) : Prop :=
+  let core := inputOf v
+  let edge := (registry (fragmentPasses v.slice)).typing
+  (core.StaticallyTyped ∧ rule ∈ registeredRules) ∧
+  ConcreteSpec.checkProgramWith .runtime v.program = .error (.atPosition pos why) ∧
+  edge.run core = .error (.invalidInput rule) ∧ edge.refusal core (.invalidInput rule) ∧
+  ∀ {target : Profile} (mir : MIR (sliceLoweringLanguage v.slice) target), ¬ LowersUnchecked core mir
 
--- A Copy wildcard still reaches the lowerer and both executions return 42.
+private theorem refusedStatic {v pos why rule} (typed : ConcreteSpec.Admission.StaticallyTyped v.program)
+    (failed : ConcreteSpec.checkProgramWith .runtime v.program = .error (.atPosition pos why))
+    (cited : v.staticRule (.atPosition pos why) = rule) (registered : rule ∈ registeredRules := by decide) : RefusedStatic v pos why rule := by
+  have rejected : (inputOf v).checkStatic = .error rule := by
+    simp [CoreInput.checkStatic, inputOf, CoreInput.decode, failed, cited, Except.mapError,
+      Except.bind, Bind.bind]
+  refine ⟨⟨⟨v, ⟨rfl, rfl, rfl⟩, typed⟩, registered⟩, failed, ?_, ?_, ?_⟩
+  · change (if v.slice = v.slice then _ else _) = Except.error (StageFailure.invalidInput rule)
+    simp [rejected, Except.map, Except.mapError]
+  · change (if v.slice = v.slice then _ else _)
+    rw [ite_eq_left rfl]
+    exact ⟨rule, rejected, rfl⟩
+  · intro target mir lowered
+    have ok := (ConcreteSpec.Admission.checkStatic_iff lowered.1.1).2 lowered.1
+    rw [rejected] at ok
+    contradiction
+
+private def byteBinding (x value : Nat) : LocatedStraightBinding :=
+  ⟨.bind (.name ⟨x⟩) .u8 (.scalar (.atom (.lit value))), useSpan, binderSpan, .unnamed none⟩
+
+private def moveByte : LocatedStraightBinding :=
+  ⟨.bind (.name ⟨1⟩) .u8 (.move ⟨0⟩), useSpan, binderSpan, .unnamed none⟩
+
+private def duplicateView : AdmissionView :=
+  let bind (n : Nat) : LocatedBinding := ⟨⟨⟨0⟩, .atom (.lit n)⟩, useSpan, binderSpan, (), .unnamed none⟩
+  .zero ⟨[bind 1, bind 42], .var ⟨0⟩, useSpan, useSpan⟩
+
+private def converseView : AdmissionView :=
+  .one ⟨[(tokenName, binderSpan)], [introToken, takeToken, byteBinding 0 42, moveByte],
+    .ret (.var ⟨1⟩), useSpan⟩
+
+private def copyToken : LocatedStraightBinding :=
+  ⟨.bind (.name ⟨1⟩) (.nominal tokenName) (.scalar (.atom (.var ⟨0⟩))), useSpan, binderSpan, .unnamed none⟩
+
+private theorem typedTokenConstruct :
+    ConcreteSpec.HasType [⟨tokenName, false, []⟩] [] (.mk tokenName []) (.struct tokenName) :=
+  .mk rfl ⟨.nil, nofun, fun _ _ => nofun⟩
+
+example : RefusedStatic (tokenView [introToken]) 1 (.liveLinearBinding ⟨0⟩) ⟨``ConcreteSpec.Core.OwnershipRule.ReturnDischarged, 1⟩ :=
+  refusedStatic ⟨by decide, .letName typedTokenConstruct (.ret (.int rfl))⟩ rfl rfl
+
+example : RefusedStatic duplicateView 1 (.duplicateBinding ⟨0⟩) ⟨``ConcreteSpec.Core.OwnershipRule.FreshBinder, 1⟩ :=
+  refusedStatic ⟨by decide, .letName (.int rfl) (.letName (.int rfl) (.ret (.copy rfl)))⟩ rfl rfl
+
+private theorem tokenPattern : ConcreteSpec.PatOk ⟨tokenName, false, []⟩ [] :=
+  ⟨.nil, nofun, fun _ _ => nofun⟩
+
+example : RefusedStatic converseView 2 (.duplicateBinding ⟨0⟩) ⟨``ConcreteSpec.Core.OwnershipRule.FreshBinder, 1⟩ :=
+  refusedStatic ⟨by decide, .letName typedTokenConstruct (.letStruct (.move rfl) rfl tokenPattern
+    (.letName (.int rfl) (.letName (.move rfl) (.ret (.copy rfl)))))⟩ rfl rfl
+
+example : RefusedStatic (tokenView [introToken, takeToken, takeToken]) 2 (.movedBinding ⟨0⟩)
+    ⟨``ConcreteSpec.Core.OwnershipRule.ReadAllowed, 1⟩ :=
+  refusedStatic ⟨by decide, .letName typedTokenConstruct (.letStruct (.move rfl) rfl tokenPattern
+    (.letStruct (.move rfl) rfl tokenPattern (.ret (.int rfl))))⟩ rfl rfl
+
+example : RefusedStatic (tokenView [byteBinding 0 42, moveByte]) 1 (.moveOfCopy ⟨0⟩)
+    ⟨``ConcreteSpec.Core.OwnershipRule.ReadAllowed, 1⟩ :=
+  refusedStatic ⟨by decide, .letName (.int rfl) (.letName (.move rfl) (.ret (.int rfl)))⟩ rfl rfl
+
+example : RefusedStatic (tokenView [introToken, copyToken]) 1 (.copyOfLinear ⟨0⟩)
+    ⟨``ConcreteSpec.Core.OwnershipRule.ReadAllowed, 1⟩ :=
+  refusedStatic ⟨by decide, .letName typedTokenConstruct (.letName (.copy rfl) (.ret (.int rfl)))⟩ rfl rfl
+
+private theorem wildcardRefused : RefusedStatic (tokenView [wildToken]) 0 (.discardLinear (.struct tokenName))
+    ⟨``ConcreteSpec.WildcardPermitted, 1⟩ :=
+  refusedStatic ⟨by decide, .letWild typedTokenConstruct (.ret (.int rfl))⟩ rfl rfl
+
+private theorem exitSeven :
+    (MIR.Execution (language := sliceLanguage sliceOne)).observes (wildcardMIR 7)
+      (.returned 7 ByteArray.empty) := by
+  exact ⟨_, ⟨_, rfl, .nil _⟩, by with_unfolding_all rfl⟩
+
+example : ¬ (registry (fragmentPasses sliceOne)).lowerUnchecked.success
+    (tokenInput [wildToken]) (wildcardMIR 7) := wildcardRefused.2.2.2.2 _
+
+-- On an eligible source the behavioral obligation itself excludes the wrong byte.
+example : ¬ LowersUnchecked (tokenInput [wildByte]) (wildcardMIR 7) := by
+  intro lowered
+  obtain ⟨_, o, agrees, only⟩ := Agreement.unchecked_agreement lowered.1
+    (tokenView [wildByte]) ⟨rfl, rfl, rfl⟩
+  have correct : o = .returned 42 ByteArray.empty := by with_unfolding_all exact agrees
+  have wrong := (only _).1 ((Agreement.lowered_observations lowered).2 _ exitSeven)
+  rw [correct] at wrong
+  cases wrong
+
+-- A Copy wildcard crosses typing and both executions return 42.
 example (candidate : MIR (sliceLoweringLanguage sliceOne) profile) :
     let core := tokenInput [wildByte]
-    let edge := (registry {fragmentPasses sliceOne with lowerUnchecked := fun _ => .ok candidate}).lowerUnchecked
-    edge.run core = .ok candidate ∧ ConcreteSpec.run (tokenView [wildByte]).program 10 = .exit 42 ∧
+    let stages := registry {fragmentPasses sliceOne with lowerUnchecked := fun _ => .ok candidate}
+    stages.typing.run core = .ok core ∧ stages.lowerUnchecked.run core = .ok candidate ∧
+      ConcreteSpec.run (tokenView [wildByte]).program 10 = .exit 42 ∧
       (runTokens [wildByte]).ending = .final (.returned (.scalar (.int .u8 42))) := by
-  with_unfolding_all exact ⟨rfl, rfl, rfl⟩
+  with_unfolding_all exact ⟨rfl, rfl, rfl, rfl⟩
 
 -- The terminator and the variable's declaration have distinct coordinates.
 example :
     let why := ConcreteSpec.Admission.Refusal.atPosition 1 (.liveLinearBinding ⟨0⟩)
     ConcreteSpec.checkProgram (tokenView [introToken]).program = .error why ∧
-    (tokenView [introToken]).render why = some ⟨⟨``ConcreteSpec.ProgramPermitted, 1⟩,
+    (tokenView [introToken]).render why = some ⟨⟨``OwnershipRule.ReturnDischarged, 1⟩,
       surfaceFileSpan useSpan, [(⟨"binding"⟩, surfaceFileSpan binderSpan)], none, .core why⟩ :=
   ⟨rfl, rfl⟩
 
@@ -361,7 +440,7 @@ example :
     ¬ (registry (fragmentPasses slice2)).admission.inputInvariant (.core abortOnly) := by
   refine ⟨rfl, rfl, rfl, ?_, ?_⟩ <;> intro h <;> cases h.1
 
--- A direct typing call also rejects an off-slice Core before invoking typeCore.
+-- A direct typing call also rejects an off-slice Core.
 example :
     let typing := (registry (fragmentPasses slice0)).typing
     let failure := StageFailure.invalidInput ⟨``CoreInput.slice, 1⟩
@@ -420,16 +499,15 @@ private def pendingSource (text : String) : Option (AdmissionInput (sliceLanguag
   return .pending (Project.singleton mainSourcePath (SourceText.ofBytes text.toUTF8.data.toList))
     (.zero ast) rfl
 
--- A source spelling erased by resolution cannot affect the unchecked Core type pass.
-example :
-    let parsed := pendingSource r"fn main() -> u8 { let main: u8 = 42; return main; }"
-    let r := registry elaborationPasses
-    (parsed.bind fun input => (r.eligibility.run input).toOption.bind (fun i =>
-      (r.typing.run i).toOption.map (fun out => out.decode.toOption.map AdmissionView.program))) =
-      some (some (ConcreteSpec.Slice0.toCore ⟨[⟨⟨0⟩, .atom (.lit 42)⟩], .var ⟨0⟩⟩)) ∧
-    (parsed.map fun input => r.admission.run input) = some (.error (.refused
-      (Surface0Issue.reservedBinder "main" ⟨22, 26, 1, 23, ⟨0⟩⟩).render)) := by
-  with_unfolding_all exact ⟨rfl, rfl⟩
+-- These spellings and suffixes must be checked before Core erases them.
+example (purpose : SurfacePreparation.Purpose) :
+    let ret := ConcreteSpec.Surface0.Statement.ret (.integer 42 none useSpan) useSpan
+    (sourceBody [binding "main", ret]).prepare purpose = .error (.reservedBinder "main" binderSpan : Surface0Issue).render ∧
+    (sourceBody [binding "x", binding "x", ret]).prepare purpose =
+      .error (.duplicateBinder "x" binderSpan : Surface0Issue).render ∧
+    (sourceReturn (.integer 42 (some .u8) useSpan)).prepare purpose =
+      .error (.integerSuffix useSpan : Surface0Issue).render := by
+  with_unfolding_all exact ⟨rfl, rfl, rfl⟩
 
 private def sourceDiagnostic (text : String) : Option CheckerRefusal := do
   let input ← pendingSource text
@@ -482,5 +560,189 @@ example :
     mem.loadMaterialized state place big = some (.scalar (.int .i16 (-257))) ∧
     mem.loadValue state place = some (.scalar (.int .i16 (-2))) := by
   with_unfolding_all exact ⟨rfl, rfl, rfl, rfl⟩
+
+-- 255 + 1 reaches the residual add instruction at site zero. The independent
+-- Core evaluator, hosted dispatcher and MIR all retain the defined overflow.
+private def overflowSource := r"fn main() -> u8 { return 255 + 1; }"
+private def overflowProject := Project.singleton mainSourcePath
+  (SourceText.ofBytes overflowSource.toUTF8.data.toList)
+private def plus : ConcreteSpec.Surface0.Span := ⟨29, 30, 1, 30, ⟨0⟩⟩
+private def overflowView : AdmissionView := .zero
+  ⟨[⟨⟨⟨0⟩, .add (.lit 255) (.lit 1)⟩, plus, plus, (⟨25, 28, 1, 26, ⟨0⟩⟩, ⟨31, 32, 1, 32, ⟨0⟩⟩), .unnamed none⟩],
+    .var ⟨0⟩, ⟨18, 33, 1, 19, ⟨0⟩⟩, plus⟩
+private def overflowCore : CoreInput (sliceLanguage slice0) := ⟨overflowProject, slice0, .straightLine overflowView rfl⟩
+private def plusOrigin : Origin := overflowView.located.bindingOrigins[0].2
+private def returnOrigin := overflowView.located.endingOrigin.2
+private abbrev byteTy : (sliceLanguage slice0).operands.Ty := .inl (.scalar (.int .u8))
+private abbrev overflowMachine := overflowCore.machineProgram
+private def nextConfig (q : Exec.Config overflowMachine.machine) :=
+  match Exec.step overflowMachine.body q with
+  | some (.next next) => next
+  | _ => q
+
+private def overflowMIR : MIR (sliceLoweringLanguage slice0) profile :=
+  let dst : Place _ byteTy := ⟨⟨0⟩, []⟩
+  let op : MIRInst (sliceLoweringLanguage slice0) :=
+    .op (opcode := .arithmetic (.plain .add)) (types := [byteTy, byteTy]) dst ()
+      (.cons (.literal ⟨[255]⟩) (.cons (.literal ⟨[1]⟩) .nil)) [⟨0, .overflow, .residual⟩]
+  let block : Block _ _ _ := ⟨⟨0⟩, [], [⟨plusOrigin, op⟩], .ret (some ⟨byteTy, .copy dst⟩), [returnOrigin]⟩
+  ⟨overflowProject, earlyEntry, [(earlyEntry, ⟨[], some byteTy⟩)],
+    [(earlyEntry, [(⟨0⟩, byteTy)], ⟨⟨0⟩, #[block]⟩)], [], []⟩
+
+private abbrev overflowAnswer : Concrete.Contracts.Observation :=
+  .trapped 134 .overflow ⟨⟨0⟩, ⟨"main.con", 1, 30⟩⟩
+    "concrete: trap: overflow at main.con:1:30 (site 0)\n".toUTF8
+
+private def addOp : CoreOperation (sliceLanguage slice0).operands :=
+  .expression (.inl (.add .u8 (.literal (.int .u8 255)) (.literal (.int .u8 1))))
+private def retOp : CoreOperation (sliceLanguage slice0).operands := .expression (.inl (.read (.copy ⟨0⟩)))
+
+private theorem overflowWF : overflowCore.WF := by
+  have plusBinds : ∃ span, plusOrigin.lexical.Binds overflowProject span :=
+    ⟨⟨⟨0⟩, 29, 30, by decide, 1, 30, by decide, by decide⟩, _, rfl, rfl, by decide, rfl, rfl, rfl, rfl⟩
+  have retBinds : ∃ span, returnOrigin.lexical.Binds overflowProject span :=
+    ⟨⟨⟨0⟩, 18, 33, by decide, 1, 19, by decide, by decide⟩, _, rfl, rfl, by decide, rfl, rfl, rfl, rfl⟩
+  refine ⟨⟨by decide, by decide, by decide, ?_, ?_, ?_⟩, ?_, ?_⟩
+  · intro site op member
+    change (site, op) ∈ [(⟨0⟩, addOp), (⟨1⟩, retOp)] at member
+    rcases List.mem_cons.mp member with h | h
+    · cases h; exact ⟨plusOrigin, rfl⟩
+    · cases List.mem_singleton.mp h; exact ⟨returnOrigin, rfl⟩
+  · intro state events kind site path trapped
+    have peel {p : Exec.Config overflowMachine.machine}
+        (tick : Exec.step overflowMachine.body p = some (.next (nextConfig p))) (active : p.final? = none)
+        {ev} (path : Exec.Steps overflowMachine.body p ev state) :
+        ∃ ev', Exec.Steps overflowMachine.body (nextConfig p) ev' state := by
+      cases path with
+      | refl => rw [active] at trapped; contradiction
+      | step step rest =>
+        cases step with
+        | silent h => rw [tick] at h; cases Option.some.inj h; exact ⟨_, rest⟩
+        | prim h => rw [tick] at h; contradiction
+    let p := overflowMachine.initial
+    obtain ⟨_, p1⟩ := peel (p := p) rfl rfl path
+    obtain ⟨_, p2⟩ := peel (p := nextConfig p) rfl rfl p1
+    have endStep : Exec.step overflowMachine.body (nextConfig (nextConfig p)) = none := by with_unfolding_all rfl
+    cases p2 with
+    | refl =>
+      change some (.trapped .overflow ⟨0⟩) = some (Exec.Final.trapped kind site) at trapped
+      cases trapped
+      exact ⟨_, rfl⟩
+    | step tick _ => cases tick <;> rename_i h _ <;> first | contradiction | (simp_all)
+  · intro site org mem
+    change (site, org) ∈ [(⟨0⟩, plusOrigin), (⟨1⟩, returnOrigin)] at mem
+    rcases List.mem_cons.mp mem with eq | mem
+    · cases eq; exact ⟨rfl, plusBinds⟩
+    · cases List.mem_singleton.mp mem; exact ⟨rfl, retBinds⟩
+  · intro site op mem
+    change (site, op) ∈ [(⟨0⟩, addOp), (⟨1⟩, retOp)] at mem
+    rcases List.mem_cons.mp mem with eq | mem
+    · cases eq; trivial
+    · cases List.mem_singleton.mp mem; trivial
+  · intro span mem
+    change span ∈ [plus, plus, ⟨25, 28, 1, 26, ⟨0⟩⟩, ⟨31, 32, 1, 32, ⟨0⟩⟩] at mem
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at mem
+    rcases mem with rfl | rfl | rfl | rfl
+    · exact plusBinds
+    · exact plusBinds
+    · exact ⟨⟨⟨0⟩, 25, 28, by decide, 1, 26, by decide, by decide⟩, _, rfl, rfl, by decide, rfl, rfl, rfl, rfl⟩
+    · exact ⟨⟨⟨0⟩, 31, 32, by decide, 1, 32, by decide, by decide⟩, _, rfl, rfl, by decide, rfl, rfl, rfl, rfl⟩
+
+private theorem overflowHandoff : overflowMIR.logicalView.HandoffWF := by
+  refine ⟨?_, List.mem_singleton_self _, ?_⟩
+  · with_unfolding_all
+      refine ⟨.cons nofun .nil, .cons nofun .nil, .cons nofun .nil, .nil, ?_, nofun, ?_⟩
+      · intro fn classes member
+        cases List.mem_singleton.mp member
+        exact .cons nofun .nil
+      · intro fn locals graph member
+        cases List.mem_singleton.mp member
+        refine ⟨.cons nofun .nil, ⟨.cons nofun .nil, ⟨_, List.mem_singleton_self _, rfl⟩, ?_⟩,
+          ⟨_, rfl, ⟨_, List.mem_singleton_self _, rfl, rfl⟩, ?_⟩⟩
+        · intro block member edge follows
+          cases List.mem_singleton.mp member
+          cases follows
+        · intro block member
+          cases List.mem_singleton.mp member
+          refine ⟨rfl, ?_⟩
+          intro op member
+          cases List.mem_singleton.mp member
+          trivial
+  · intro org member
+    have origins : org ∈ [plusOrigin, returnOrigin] := by with_unfolding_all exact member
+    rcases List.mem_cons.mp origins with rfl | last
+    · exact (overflowWF.1.2.2.2.2.2 _ _ (.head _)).2
+    · cases List.mem_singleton.mp last
+      exact (overflowWF.1.2.2.2.2.2 _ _ (.tail _ (.head _))).2
+
+private theorem overflowConsumes : ConsumesEvidence overflowCore [] overflowMIR := by
+  refine ⟨by decide, ?_, ?_, ?_, overflowWF.2.1⟩
+  · rintro site opcode conditions ⟨op, mem, _, rfl, rfl⟩ nonempty
+    change (site, op) ∈ [(⟨0⟩, addOp), (⟨1⟩, retOp)] at mem
+    rcases List.mem_cons.mp mem with eq | mem
+    · cases eq; exact ⟨_, List.mem_singleton_self _, rfl, rfl⟩
+    · cases List.mem_singleton.mp mem; exact (nonempty rfl).elim
+  · intro op member
+    cases List.mem_singleton.mp member
+    refine ⟨_, ⟨addOp, .head _, trivial, rfl, rfl⟩, by decide, rfl, ?_, ?_⟩
+    · exact fun _ => nofun
+    · intro check mem
+      cases List.mem_singleton.mp mem
+      exact nofun
+  · rintro _ _ ⟨_, h, _⟩; cases h
+
+private abbrev overflowSem := MIR.Execution (language := sliceLanguage slice0)
+  (lang := sliceLoweringLanguage slice0) (profile := profile)
+
+private theorem overflowLowers : LowersUnchecked overflowCore overflowMIR := by
+  have eligible := (ConcreteSpec.Admission.checkStatic_iff overflowWF).1 (by rfl)
+  refine ⟨eligible, rfl, rfl, ⟨fun _ h => h, fun _ h => h⟩, overflowConsumes, ⟨⟨?_, nofun⟩, rfl⟩, ?_⟩
+  · intro fn ls graph member root ty found
+    cases List.mem_singleton.mp member
+    cases List.mem_singleton.mp found
+    rfl
+  · intro _
+    let S := CoreInput.Execution (language := sliceLanguage slice0)
+    let finish := nextConfig (nextConfig overflowMachine.initial)
+    have path : Concrete.Contracts.Steps (fun p q => Exec.step overflowMachine.body p = some (.next q))
+        overflowMachine.initial finish := .cons rfl (.cons rfl (.nil _))
+    have actual := CoreInput.safe_of_silent_path (core := overflowCore) (q := finish)
+      (f := .trapped .overflow ⟨0⟩) (hosted := .trapped 134 .overflow ⟨0⟩) (result := overflowAnswer)
+      path rfl rfl rfl
+    obtain ⟨p, finite, result⟩ := (actual.2 _).2 rfl
+    obtain ⟨entry, initial⟩ := overflowSem.initialized overflowMIR
+    have observed : overflowSem.result overflowMIR entry overflowAnswer := by
+      cases initial; with_unfolding_all rfl
+    have here {q} (h : overflowSem.finite overflowMIR q) : q = entry := by
+      obtain ⟨start, starts, reach⟩ := h
+      have eq : start = entry := starts.trans initial.symm
+      rw [eq] at reach
+      cases reach with
+      | nil => rfl
+      | cons step _ => exact (overflowSem.terminal _ _ _ observed _ step).elim
+    refine ⟨?_, ?_, ?_⟩
+    · intro q o reached value
+      obtain rfl := here reached
+      cases Option.some.inj (value.symm.trans observed)
+      refine ⟨p, finite, result, ?_⟩
+      change p.2.map _ ++ (Option.map _ _).getD [] = _
+      rw [show _ = some overflowAnswer from result]
+      have silent : p.2 = [] := by cases p.2 with | nil => rfl | cons e _ => exact nomatch e
+      rw [silent]
+      cases initial; with_unfolding_all rfl
+    · intro run inf
+      exact (overflowSem.terminal _ _ _ observed _ ((inf.1.trans initial.symm) ▸ inf.2 0)).elim
+    · intro q stuck
+      obtain rfl := here stuck.1
+      exact stuck.2.2 _ observed
+
+example :
+    let r := registry {fragmentPasses slice0 with lowerUnchecked := fun _ => .ok overflowMIR}
+    ConcreteSpec.checkProgram overflowView.program = .error (.atPosition 0 .additionOverflowUnproven) ∧
+    ConcreteSpec.checkProgramWith .runtime overflowView.program = .ok [] ∧
+    r.typing.run overflowCore = .ok overflowCore ∧ r.lowerUnchecked.run overflowCore = .ok overflowMIR ∧
+    r.lowerUnchecked.outputInvariant overflowMIR ∧
+    r.lowerUnchecked.success overflowCore overflowMIR ∧ overflowSem.observes overflowMIR overflowAnswer := by
+  exact ⟨rfl, rfl, rfl, rfl, overflowHandoff, overflowLowers, _, ⟨_, rfl, .nil _⟩, by with_unfolding_all rfl⟩
 
 end Concrete.IntegratedCore

@@ -18,10 +18,38 @@ structure InputBatch {language : CoreLanguage} (input : CoreInput language) wher
   represents : view.Represents input
   batch : Batch view.program
 
-theorem InputBatch.accepted {language} {i : CoreInput language} (result : InputBatch i) :
-    i.Accepted ∧ i.StaticallyTyped :=
-  ⟨⟨_, result.represents, (checkProgram_iff _).mp ⟨_, result.batch.issued⟩⟩,
-    ⟨_, result.represents, result.batch.staticallyTyped⟩⟩
+theorem InputBatch.accepted {language} {i : CoreInput language} (result : InputBatch i) (wf : i.WF) :
+    i.Accepted := by
+  have checked := (checkProgram_iff _).mp ⟨_, result.batch.issued⟩
+  exact ⟨⟨wf, ⟨_, result.represents, result.batch.staticallyTyped⟩,
+    _, result.represents, checked.2.runtime⟩, _, result.represents, checked⟩
+
+/-- The shared traversal decides every static obligation on a well-located input. -/
+theorem checkStatic_iff {language} {input : CoreInput language} (wf : input.WF) :
+    input.checkStatic = .ok () ↔ input.UncheckedWF := by
+  cases h : input.decode with
+  | error reason =>
+    constructor
+    · simp [CoreInput.checkStatic, h, Except.mapError, Bind.bind, Except.bind]
+    · rintro ⟨_, _, v, hv, _⟩
+      rw [(input.decode_iff v).2 hv] at h
+      contradiction
+  | ok v =>
+    have represented := (input.decode_iff v).1 h
+    cases ran : checkProgramWith .runtime v.program with
+    | ok ds =>
+      obtain ⟨decls, body⟩ := (checkProgramWith_iff .runtime _).1 ⟨_, ran⟩
+      exact ⟨fun _ => ⟨wf, ⟨v, represented, decls, body_staticallyTyped body⟩, v, represented, body⟩,
+        fun _ => by simp [CoreInput.checkStatic, h, ran, Except.mapError, Bind.bind, Except.bind, Pure.pure, Except.pure]⟩
+    | error reason =>
+      constructor
+      · simp [CoreInput.checkStatic, h, ran, Except.mapError, Bind.bind, Except.bind]
+      · rintro ⟨_, ⟨t, ht, decls, _⟩, w, hw, body⟩
+        cases t.unique ht represented
+        cases w.unique hw represented
+        obtain ⟨_, good⟩ := (checkProgramWith_iff .runtime _).2 ⟨decls, body⟩
+        rw [ran] at good
+        contradiction
 
 /-- The bridge can fail structurally before checking. Every language refusal is
 rendered from the same traversal and canonical view. -/
@@ -56,7 +84,7 @@ theorem admitInput_refused {language} {input : CoreInput language} {failure}
           · contradiction
           · cases rejected; assumption
         refine ⟨?_, view, reason, exactView, checked, rendered⟩
-        rintro ⟨other, represents, accepted⟩
+        rintro ⟨_, other, represents, accepted⟩
         cases view.unique exactView represents
         obtain ⟨_, ok⟩ := (checkProgram_iff _).mpr accepted
         rw [checked] at ok

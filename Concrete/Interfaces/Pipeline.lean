@@ -1,5 +1,6 @@
 import Concrete.Interfaces.Contracts
 import ConcreteSpec.StageGrammar
+import ConcreteSpec.Admission.Early
 
 namespace Concrete.Interfaces
 
@@ -15,7 +16,6 @@ structure PassFunctions {count : Nat} (grammar : SharedGrammar count) (language 
     (lang : LoweringLanguage language.operands.Ty) (profile : Profile) where
   lex : Source → Except LexRefusal TokenStream
   elaborate : Parsed (grammar.value grammar.start) → Except ElabRefusal (AdmissionInput language)
-  typeCore : CoreInput language → Except StageFailure Unit
   checkCore : CoreInput language → Except AdmissionFailure (Discharges language)
   lowerCore : Admitted language → Except StageFailure (MIR lang profile)
   lowerUnchecked : CoreInput language → Except StageFailure (MIR lang profile)
@@ -94,17 +94,41 @@ theorem eligibilityEntry_validated (language : CoreLanguage) (slice : Slice) :
     cases prepared : input.prepare .eligibility <;> simp [prepared, Except.mapError] at ran
     exact ⟨ran.symm, .inr ⟨_, prepared⟩⟩
 
-def PassFunctions.typingEntry (passes : PassFunctions grammar language lang profile) (slice : Slice) :
+def typingEntry (language : CoreLanguage) (slice : Slice) :
     Stage (CoreInput language) StageFailure (CoreInput language) where
-  run input := if input.slice = slice then (passes.typeCore input).map fun _ => input
+  run input := if input.slice = slice then
+      (input.checkStatic.map (fun _ => input)).mapError StageFailure.invalidInput
     else .error (.invalidInput ⟨``CoreInput.slice, 1⟩)
   kind := .directProof
   inputInvariant input := input.slice = slice ∧ input.WF ∧ input.InFragment
-  outputInvariant input := input.slice = slice ∧ input.WF ∧ input.StaticallyTyped
+  outputInvariant input := input.slice = slice ∧ input.UncheckedWF
   success input output := input = output
   refusal input failure := if input.slice = slice then
-      failure = .invalidInput ⟨``CoreInput.StaticallyTyped, 1⟩ ∧ ¬ input.StaticallyTyped
+      ∃ rule, input.checkStatic = .error rule ∧ failure = .invalidInput rule
     else failure = .invalidInput ⟨``CoreInput.slice, 1⟩
+
+theorem typingEntry_validated (language : CoreLanguage) (slice : Slice) :
+    (typingEntry language slice).Validated := by
+  constructor
+  · intro i o ready ran
+    change (if i.slice = slice then (i.checkStatic.map (fun _ => i)).mapError StageFailure.invalidInput
+      else .error (.invalidInput ⟨``CoreInput.slice, 1⟩)) = Except.ok o at ran
+    rw [ite_eq_left ready.1] at ran
+    cases h : i.checkStatic with
+    | error r => simp [h, Except.map, Except.mapError] at ran
+    | ok u =>
+      cases u
+      simp [h, Except.map, Except.mapError] at ran
+      exact ⟨ran ▸ ⟨ready.1, (ConcreteSpec.Admission.checkStatic_iff ready.2.1).1 h⟩, ran⟩
+  · intro i failure ready ran
+    change (if i.slice = slice then (i.checkStatic.map (fun _ => i)).mapError StageFailure.invalidInput
+      else .error (.invalidInput ⟨``CoreInput.slice, 1⟩)) = Except.error failure at ran
+    rw [ite_eq_left ready.1] at ran
+    change (if i.slice = slice then _ else _)
+    rw [ite_eq_left ready.1]
+    cases h : i.checkStatic with
+    | error r => exact ⟨r, rfl, by simpa [h, Except.map, Except.mapError] using ran.symm⟩
+    | ok u => simp [h, Except.map, Except.mapError] at ran
 
 /-- Registration requires rejection of every input tagged for a different slice,
 including off-domain inputs passed directly to the stage. -/
@@ -197,13 +221,12 @@ def PassFunctions.emitSingleLCB (passes : PassFunctions grammar language lang pr
 
 def PassFunctions.lowerUncheckedEntry (passes : PassFunctions grammar language lang profile) :
     Stage (CoreInput language) StageFailure (MIR lang profile) where
-  run input := if input.wildcardsCopy then passes.lowerUnchecked input
-    else .error (.invalidInput ⟨``CoreInput.wildcardsCopy, 1⟩)
+  run := passes.lowerUnchecked
   kind := .directProof
-  inputInvariant input := input.WF ∧ input.StaticallyTyped
+  inputInvariant := CoreInput.UncheckedWF
   outputInvariant mir := mir.logicalView.HandoffWF
   success := LowersUnchecked (language := language)
-  refusal input failure := input.wildcardsCopy = false ∧ failure = .invalidInput ⟨``CoreInput.wildcardsCopy, 1⟩
+  refusal _ _ := False
 
 def PassFunctions.emitLLVMEntry (passes : PassFunctions grammar language lang profile) :
     Stage (BIR lang profile) StageFailure (LLVMInput profile) :=
@@ -265,7 +288,7 @@ def registry {slice : Slice} (passes : Passes slice profile) : Registry slice pr
       refusal := fun ast failure =>
         SliceElaboration slice ast.source.project (cast (sliceGrammarStartShape slice) ast.tree) (.error failure) }
   eligibility := eligibilityEntry _ slice
-  typing := passes.typingEntry slice
+  typing := typingEntry _ slice
   admission := passes.admissionEntry slice
   lowerCore := ⟨passes.lowerCore, .directProof, Admitted.Valid,
     fun mir => mir.logicalView.HandoffWF, LowersCore (language := sliceLanguage slice), fun _ _ => False, fun _ _ => True⟩

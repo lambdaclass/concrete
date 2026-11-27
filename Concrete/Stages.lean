@@ -202,11 +202,13 @@ theorem prepareLCB_of_edges (bir : BIR.Program)
   simp [prepareLCB, bind, Except.bind, Except.mapError, hEmit, hProfile] <;> rfl
 
 /-- Conformance entry point for the residual check path. It goes through the same lexer,
-parser, elaborator and lowering stages, with no admission or discharged evidence. -/
+parser, elaborator and lowering stages, with every static rule and residual arithmetic checks. -/
 def unchecked (input : Input) : Except Refusal BIR.Program := do
   let tokens ← lex input
   let ast ← Parse.parse tokens
   let core ← Admission.prepareParsed .eligibility ast
+  let _ ← (ConcreteSpec.checkProgramWith .runtime (Core.toCore core.program)).mapError
+    fun _ => Refusal.checker "Core check rejected the program"
   let mir ← MIR.lowerUnchecked core
   let mem ← memory mir
   SSA.lower input.path mem
