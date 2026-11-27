@@ -54,7 +54,7 @@ example :
     old = some (KeyConstruct.assignFunctionTable earlyEntry 0 [bind "x", ret]) ∧
     new = some (KeyConstruct.assignFunctionTable earlyEntry 0 [bind "y", bind "x", ret]) ∧
     (old.bind (AList.lookup · ⟨0⟩)) = some x ∧ (new.bind (AList.lookup · ⟨1⟩)) = some x := by
-  with_unfolding_all exact ⟨rfl, rfl, rfl, rfl⟩
+  decide +kernel
 
 -- A nested addition creates a temporary before y. The return addition creates another
 -- after y. Only those temporaries occupy binding ordinals.
@@ -64,7 +64,7 @@ example :
     sourceKeys src = some (KeyConstruct.assignFunctionTable earlyEntry 0
       [⟨.binding, .named ⟨"x"⟩, []⟩, temp, ⟨.binding, .named ⟨"y"⟩, []⟩, temp,
        ⟨.return, .unnamed none, []⟩]) := by
-  with_unfolding_all rfl
+  decide +kernel
 
 private def parseAndElaborate (tokens : ParserView) : Option (CoreInput (sliceLanguage slice0)) := do
   let parsed ← ((sliceParser slice0).run tokens).2
@@ -85,17 +85,17 @@ example :
 
 example :
     elaborate slice0 ⟨source, .inl (.node .body [])⟩ =
-      .error (.diagnostic ⟨``Elab.surfaceProgram, 1⟩ ⟨⟨0⟩, 0, 0, 1, 1⟩ []) := rfl
+      .error (.invalidTree ⟨0⟩) := rfl
 
 -- An empty body crosses elaboration intact and receives its refusal at preparation.
 example :
     ((elaborate slice0 ⟨source, .inl (.node .program [
       .leaf ⟨⟨⟨0⟩, 3, 7, 1, 4⟩, .name "main"⟩, .node .body []])⟩).toOption.map (·.prepare)) =
-      some (.error (Surface0Issue.fallthrough ⟨3, 7, 1, 4, ⟨0⟩⟩).render) := rfl
+      some (.error (.surface (.fallthrough ⟨3, 7, 1, 4, ⟨0⟩⟩) : RefusalCause)) := rfl
 
 example :
     elaborate slice0 ⟨source, .inr true⟩ =
-      .error (.diagnostic ⟨``SliceElaboration, 1⟩ ⟨⟨0⟩, 0, 0, 1, 1⟩ []) := rfl
+      .error (.unexpectedExtension ⟨0⟩) := rfl
 
 private def slice1 : Slice := ⟨⟨1, by decide⟩⟩
 
@@ -105,7 +105,7 @@ example :
 
 example :
     elaborate slice0 ⟨{source with slice := slice1}, .inr true⟩ =
-      .error (.diagnostic ⟨``Parsed.ElaborationDomain, 1⟩ ⟨⟨0⟩, 0, 0, 1, 1⟩ []) := rfl
+      .error (.sliceMismatch slice0 sliceOne) := rfl
 
 private def profile : Profile := ⟨.lcb, .x86_64Linux, 3, 4096⟩
 
@@ -212,21 +212,23 @@ private def RefusedStatic (v : AdmissionView) (pos : Nat) (why : ConcreteSpec.Ad
   let edge := (registry (fragmentPasses v.slice)).typing
   (core.StaticallyTyped ∧ rule ∈ registeredRules) ∧
   ConcreteSpec.checkProgramWith .runtime v.program = .error (.atPosition pos why) ∧
-  edge.run core = .error (.invalidInput rule) ∧ edge.refusal core (.invalidInput rule) ∧
+  (∃ cause, cause.rule = rule ∧ edge.run core = .error (.admission (.refused cause)) ∧
+    edge.refusal core (.admission (.refused cause))) ∧
   ∀ {target : Profile} (mir : MIR (sliceLoweringLanguage v.slice) target), ¬ LowersUnchecked core mir
 
 private theorem refusedStatic {v pos why rule} (typed : ConcreteSpec.Admission.StaticallyTyped v.program)
     (failed : ConcreteSpec.checkProgramWith .runtime v.program = .error (.atPosition pos why))
-    (cited : v.staticRule (.atPosition pos why) = rule) (registered : rule ∈ registeredRules := by decide) : RefusedStatic v pos why rule := by
-  have rejected : (inputOf v).checkStatic = .error rule := by
-    simp [CoreInput.checkStatic, inputOf, CoreInput.decode, failed, cited, Except.mapError,
+    {cause : RefusalCause} (rendered : v.render (.atPosition pos why) = some cause)
+    (cited : cause.rule = rule := by rfl) (registered : rule ∈ registeredRules := by decide) : RefusedStatic v pos why rule := by
+  have rejected : (inputOf v).checkStatic = .error (.refused cause) := by
+    simp [CoreInput.checkStatic, inputOf, CoreInput.decode, failed, AdmissionView.failure, rendered, Except.mapError,
       Except.bind, Bind.bind]
-  refine ⟨⟨⟨v, ⟨rfl, rfl, rfl⟩, typed⟩, registered⟩, failed, ?_, ?_, ?_⟩
-  · change (if v.slice = v.slice then _ else _) = Except.error (StageFailure.invalidInput rule)
+  refine ⟨⟨⟨v, ⟨rfl, rfl, rfl⟩, typed⟩, registered⟩, failed, ⟨cause, cited, ?_, ?_⟩, ?_⟩
+  · change (if v.slice = v.slice then _ else _) = Except.error (StageFailure.admission (.refused cause))
     simp [rejected, Except.map, Except.mapError]
   · change (if v.slice = v.slice then _ else _)
     rw [ite_eq_left rfl]
-    exact ⟨rule, rejected, rfl⟩
+    exact ⟨_, rejected, rfl⟩
   · intro target mir lowered
     have ok := (ConcreteSpec.Admission.checkStatic_iff lowered.1.1).2 lowered.1
     rw [rejected] at ok
@@ -289,7 +291,7 @@ private theorem exitSeven :
   exact ⟨_, ⟨_, rfl, .nil _⟩, by with_unfolding_all rfl⟩
 
 example : ¬ (registry (fragmentPasses sliceOne)).lowerUnchecked.success
-    (tokenInput [wildToken]) (wildcardMIR 7) := wildcardRefused.2.2.2.2 _
+    (tokenInput [wildToken]) (wildcardMIR 7) := wildcardRefused.2.2.2 _
 
 -- On an eligible source the behavioral obligation itself excludes the wrong byte.
 example : ¬ LowersUnchecked (tokenInput [wildByte]) (wildcardMIR 7) := by
@@ -314,8 +316,8 @@ example (candidate : MIR (sliceLoweringLanguage sliceOne) profile) :
 example :
     let why := ConcreteSpec.Admission.Refusal.atPosition 1 (.liveLinearBinding ⟨0⟩)
     ConcreteSpec.checkProgram (tokenView [introToken]).program = .error why ∧
-    (tokenView [introToken]).render why = some ⟨⟨``OwnershipRule.ReturnDischarged, 1⟩,
-      surfaceFileSpan useSpan, [(⟨"binding"⟩, surfaceFileSpan binderSpan)], none, .core why⟩ :=
+    (tokenView [introToken]).render why = some (.core .returning
+      (surfaceFileSpan useSpan) [(⟨"binding"⟩, surfaceFileSpan binderSpan)] why) :=
   ⟨rfl, rfl⟩
 
 example :
@@ -327,7 +329,7 @@ private def sourceReturn (e : ConcreteSpec.Surface0.Expr) : AdmissionInput (slic
 
 example :
     let valid := sourceReturn (.integer 42 none useSpan)
-    let forged := (Surface0Issue.unknownLocal "absent" useSpan).render
+    let forged := (.surface (.unknownLocal "absent" useSpan) : RefusalCause)
     ¬ valid.CheckerRefuses forged := by
   intro _ _ refusal
   obtain ⟨_, v, reason, represents, checked, _⟩ := refusal
@@ -338,12 +340,12 @@ example :
 
 example :
     let unknown := sourceReturn (.local "absent" useSpan)
-    let issue := (Surface0Issue.unknownLocal "absent" useSpan).render
+    let issue := (.surface (.unknownLocal "absent" useSpan) : RefusalCause)
     (registry elaborationPasses).admission.run unknown = .error (.refused issue) ∧
     (registry elaborationPasses).admission.refusal unknown (.refused issue) ∧
-    (registry elaborationPasses).eligibility.run unknown = .error .unpreparable ∧
-    (registry elaborationPasses).eligibility.refusal unknown .unpreparable :=
-  ⟨rfl, ⟨rfl, rfl⟩, rfl, rfl, .inr ⟨_, rfl⟩⟩
+    (registry elaborationPasses).eligibility.run unknown = .error (.admission (.refused issue)) ∧
+    (registry elaborationPasses).eligibility.refusal unknown (.admission (.refused issue)) :=
+  ⟨rfl, ⟨rfl, rfl⟩, rfl, ⟨_, rfl, rfl⟩⟩
 
 private def binding (name : String) : ConcreteSpec.Surface0.Statement :=
   .bind ⟨name, binderSpan, .integer 42 none useSpan⟩ useSpan
@@ -351,31 +353,51 @@ private def binding (name : String) : ConcreteSpec.Surface0.Statement :=
 private def sourceBody (body : List ConcreteSpec.Surface0.Statement) : AdmissionInput (sliceLanguage slice0) :=
   .pending source.project (.zero ⟨"main", binderSpan, body⟩) rfl
 
--- The same located syntax crosses elaboration in every case. Body shape
--- precedes name resolution, and duplicate/reserved binders have distinct rules.
+/-- Both routes preserve the same cause. Substituting any other rule, revision
+or primary range fails the registered eligibility contract. -/
+private def ExactEligibility (input : AdmissionInput (sliceLanguage slice0))
+    (expected : RefusalCause) (rule : RuleId) (span : FileSpan) : Prop :=
+  let edge := (registry elaborationPasses).eligibility
+  edge.run input = .error (.admission (.refused expected)) ∧ expected.rule = rule ∧
+    expected.primary = span ∧ ∀ actual,
+      edge.refusal input (.admission (.refused actual)) ↔ actual = expected
+
+example :
+    let ret := ConcreteSpec.Surface0.Statement.ret (.integer 0 none useSpan) useSpan
+    ExactEligibility (sourceBody [binding "main", ret]) (.surface (.reservedBinder "main" binderSpan))
+      ⟨``Slice0Rules.UnreservedLocal, 2⟩ (surfaceFileSpan binderSpan) ∧
+    ExactEligibility (sourceReturn (.local "absent" useSpan)) (.surface (.unknownLocal "absent" useSpan))
+      ⟨``Slice0Rules.LocalBound, 1⟩ (surfaceFileSpan useSpan) := by
+  constructor <;> refine ⟨rfl, rfl, rfl, fun actual => ⟨?_, ?_⟩⟩
+  all_goals first
+    | (rintro ⟨_, h, eq⟩; cases h; cases eq; rfl)
+    | (rintro rfl; exact ⟨_, rfl, rfl⟩)
+
+-- The same located syntax crosses elaboration in every case. Each visited
+-- statement retains its own source rule and span.
 example :
     let ret := ConcreteSpec.Surface0.Statement.ret (.integer 42 none useSpan) useSpan
-    (sourceBody [binding "x"]).prepare = .error (.fallthrough useSpan : Surface0Issue).render ∧
+    (sourceBody [binding "x"]).prepare = .error (.surface (.fallthrough useSpan)) ∧
     (sourceBody [ret, .ret (.local "missing" binderSpan) binderSpan]).prepare =
-      .error (.unreachable binderSpan : Surface0Issue).render ∧
+      .error (.surface (.unreachable binderSpan)) ∧
     (sourceReturn (.integer 42 (some .u8) useSpan)).prepare =
-      .error (.integerSuffix useSpan : Surface0Issue).render ∧
+      .error (.surface (.integerSuffix useSpan)) ∧
     (sourceBody [binding "x", binding "x", ret]).prepare =
-      .error (.duplicateBinder "x" binderSpan : Surface0Issue).render ∧
+      .error (.surface (.duplicateBinder "x" binderSpan)) ∧
     (sourceBody [binding "main", ret]).prepare =
-      .error (.reservedBinder "main" binderSpan : Surface0Issue).render :=
+      .error (.surface (.reservedBinder "main" binderSpan)) :=
   ⟨rfl, rfl, rfl, rfl, rfl⟩
 
 -- Reject forged coordinates even when the underlying source really is invalid.
 example :
     ¬ (sourceReturn (.local "absent" useSpan)).CheckerRefuses
-      (.unknownLocal "absent" binderSpan : Surface0Issue).render := by
+      (.surface (.unknownLocal "absent" binderSpan)) := by
   intro h
   cases h
 
 example :
     let reason := ConcreteSpec.Admission.Refusal.atPosition 0 (.literalOutOfRange .u8 256)
-    let failure := CheckerRefusal.mk ⟨``Slice0Rules.LiteralTyped, 1⟩ (surfaceFileSpan useSpan) [] none (.core reason)
+    let failure := RefusalCause.core .slice0 (surfaceFileSpan useSpan) [] reason
     (registry elaborationPasses).admission.run (sourceReturn (.integer 256 none useSpan)) =
       .error (.refused failure) := rfl
 
@@ -460,8 +482,8 @@ example :
     let badEntry : AdmissionInput (sliceLanguage slice0) :=
       .pending source.project (.zero ⟨"other", binderSpan, []⟩) rfl
     let ret := ConcreteSpec.Surface0.Statement.ret (.integer 42 none useSpan) useSpan
-    badEntry.prepare = .error (Surface0Issue.unexpectedEntry binderSpan).render ∧
-    (sourceBody [binding "_", ret]).prepare = .error (Surface0Issue.wildcard binderSpan).render :=
+    badEntry.prepare = .error (.surface (.unexpectedEntry binderSpan) : RefusalCause) ∧
+    (sourceBody [binding "_", ret]).prepare = .error (.surface (.wildcard binderSpan) : RefusalCause) :=
   ⟨rfl, rfl⟩
 
 -- This unbound return names the ID a wildcard used to acquire.
@@ -491,7 +513,7 @@ private def parseSource (text : String) := (Lex.lex text.toUTF8).bind (Parse.par
 example :
     ((parseSource r"fn main() -> u8 { return 42; let Option: u8 = 1; }").bind
       (Admission.prepareParsed .admission)) =
-      .error (.checker "unreachable code (STMT-14) at 1:30, bytes 29..48") := by
+      .error (.source (.surface (.unreachable ⟨29, 48, 1, 30, ⟨0⟩⟩))) := by
   with_unfolding_all rfl
 
 private def pendingSource (text : String) : Option (AdmissionInput (sliceLanguage slice0)) := do
@@ -502,14 +524,14 @@ private def pendingSource (text : String) : Option (AdmissionInput (sliceLanguag
 -- These spellings and suffixes must be checked before Core erases them.
 example (purpose : SurfacePreparation.Purpose) :
     let ret := ConcreteSpec.Surface0.Statement.ret (.integer 42 none useSpan) useSpan
-    (sourceBody [binding "main", ret]).prepare purpose = .error (.reservedBinder "main" binderSpan : Surface0Issue).render ∧
+    (sourceBody [binding "main", ret]).prepare purpose = .error (.surface (.reservedBinder "main" binderSpan)) ∧
     (sourceBody [binding "x", binding "x", ret]).prepare purpose =
-      .error (.duplicateBinder "x" binderSpan : Surface0Issue).render ∧
+      .error (.surface (.duplicateBinder "x" binderSpan)) ∧
     (sourceReturn (.integer 42 (some .u8) useSpan)).prepare purpose =
-      .error (.integerSuffix useSpan : Surface0Issue).render := by
-  with_unfolding_all exact ⟨rfl, rfl, rfl⟩
+      .error (.surface (.integerSuffix useSpan)) := by
+  cases purpose <;> with_unfolding_all exact ⟨rfl, rfl, rfl⟩
 
-private def sourceDiagnostic (text : String) : Option CheckerRefusal := do
+private def sourceDiagnostic (text : String) : Option RefusalCause := do
   let input ← pendingSource text
   let .error (.refused diagnostic) := (registry elaborationPasses).admission.run input | none
   return diagnostic
@@ -518,7 +540,7 @@ example :
     let reason := ConcreteSpec.Admission.Refusal.atPosition 0
       (.additionOperandType (.int .u8 256) (.atomFailure (.outOfRange .u8 256)))
     let literalAt := fun start =>
-      some (CheckerRefusal.mk ⟨``Slice0Rules.LiteralTyped, 1⟩ ⟨⟨0⟩, start, start + 3, 1, start + 1⟩ [] none (.core reason))
+      some (RefusalCause.core .slice0 ⟨⟨0⟩, start, start + 3, 1, start + 1⟩ [] reason)
     sourceDiagnostic r"fn main() -> u8 { return 256 + 1; }" = literalAt 25 ∧
     sourceDiagnostic r"fn main() -> u8 { return 1 + 256; }" = literalAt 29 ∧
     sourceDiagnostic r"fn main() -> u8 { return 256 + 256; }" = literalAt 25 := by
@@ -527,8 +549,8 @@ example :
 example :
     let why := ConcreteSpec.Admission.Refusal.atPosition 2 (.unusedBinding ⟨0⟩)
     sourceDiagnostic r"fn main() -> u8 { let x: u8 = 1; return 20 + 22; }" =
-      some ⟨⟨``Slice0Rules.LocalsUsed, 1⟩, ⟨⟨0⟩, 33, 48, 1, 34⟩,
-        [(⟨"binding"⟩, ⟨⟨0⟩, 22, 23, 1, 23⟩)], none, .core why⟩ := by
+      some (.core .slice0 ⟨⟨0⟩, 33, 48, 1, 34⟩
+        [(⟨"binding"⟩, ⟨⟨0⟩, 22, 23, 1, 23⟩)] why) := by
   with_unfolding_all rfl
 
 example :
@@ -592,6 +614,15 @@ private def overflowMIR : MIR (sliceLoweringLanguage slice0) profile :=
 private abbrev overflowAnswer : Concrete.Contracts.Observation :=
   .trapped 134 .overflow ⟨⟨0⟩, ⟨"main.con", 1, 30⟩⟩
     "concrete: trap: overflow at main.con:1:30 (site 0)\n".toUTF8
+
+-- Site one is a real origin (the return). The old existential accepted its
+-- hosted rendering as an overflow observation for this same program.
+example :
+    let wrong := CoreInput.observeHosted overflowCore (.trapped 134 .overflow ⟨1⟩)
+    Agreement.Observable overflowCore overflowView.program (.trap .arithmeticOverflow) overflowAnswer ∧
+      ∃ obs, wrong = some obs ∧
+        ¬ Agreement.Observable overflowCore overflowView.program (.trap .arithmeticOverflow) obs := by
+  with_unfolding_all exact ⟨rfl, _, rfl, fun h => by cases h⟩
 
 private def addOp : CoreOperation (sliceLanguage slice0).operands :=
   .expression (.inl (.add .u8 (.literal (.int .u8 255)) (.literal (.int .u8 1))))

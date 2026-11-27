@@ -472,7 +472,7 @@ def punctuation : List (String × Terminal) :=
 inductive Nonterminal where
   | program | body | expr | more | atom
   | decls | letHead | letTail | localTy | nameTail | headExpr | headMore | headAtom
-  | ty | binder | product | factors | conditional | alternative | elseBody | identifier
+  | resultTy | product | factors | conditional | alternative | elseBody | headProduct | headFactors
   deriving DecidableEq, Repr
 
 /-- Table projections retain slice 0's production shapes for its parser proof.
@@ -483,55 +483,90 @@ inductive GrammarView where
 
 private abbrev Production := Nonterminal × List (Sym Terminal Nonterminal)
 
-def surfaceProductions : List (Production × List GrammarView) :=
+/-- A production is marked at the symbol that first leaves Slice 0. Factoring nodes
+and epsilon alternatives carry no restriction of their own. -/
+private structure SurfaceProduction where
+  production : Production
+  views : List GrammarView
+  outside : Bool
+
+private def surfaceProductions : List SurfaceProduction :=
   let all := [.slice0, .slice1, .shared]
   let from1 := [.slice1, .shared]
   [
-    ((.program, [.t .fn, .t .ident, .t .lparen, .t .rparen, .t .arrow, .t .u8,
-                 .t .lbrace, .n .body, .t .rbrace]), [.slice0]),
-    ((.program, [.n .decls, .t .fn, .t .ident, .t .lparen, .t .rparen, .t .arrow,
-                 .t .u8, .t .lbrace, .n .body, .t .rbrace]), from1),
-    ((.decls, [.t .struct_, .t .ident, .t .lbrace, .t .rbrace, .n .decls]), from1),
-    ((.decls, []), from1),
-    ((.body, [.t .let_, .t .ident, .t .colon, .t .u8, .t .equal, .n .expr, .t .semi, .n .body]), [.slice0]),
-    ((.body, [.t .let_, .n .letHead, .t .equal, .n .expr, .t .semi, .n .body]), from1),
-    ((.letHead, [.t .ident, .n .letTail]), from1),
-    ((.letHead, [.t .wildcard, .t .colon, .n .localTy]), from1),
-    ((.letHead, [.t .mut_, .t .ident, .t .colon, .n .localTy]), [.shared]),
-    ((.body, [.t .return_, .n .expr, .t .semi, .n .body]), all),
-    ((.body, [.t .ident, .t .lparen, .t .rparen, .t .semi, .n .body]), from1),
-    ((.body, []), all),
-    ((.letTail, [.t .colon, .n .localTy]), from1),
-    ((.letTail, [.t .lbrace, .t .rbrace]), from1),
-    ((.localTy, [.t .u8]), from1),
-    ((.localTy, [.t .ident]), from1),
-    ((.expr, [.n .atom, .n .more]), all),
-    ((.more, [.t .plus, .n .atom, .n .more]), all),
-    ((.more, []), all),
-    ((.atom, [.t .integer]), all),
-    ((.atom, [.t .ident]), [.slice0]),
-    ((.atom, [.t .ident, .n .nameTail]), from1),
-    ((.atom, [.t .lparen, .n .expr, .t .rparen]), all),
-    ((.atom, [.t .move_, .t .ident]), from1),
-    ((.nameTail, [.t .lbrace, .t .rbrace]), from1),
-    ((.nameTail, []), from1),
-    ((.body, [.n .conditional, .n .body]), [.shared]),
-    ((.conditional, [.t .if_, .n .headExpr, .t .lbrace, .n .body, .t .rbrace, .n .alternative]), [.shared]),
-    ((.alternative, [.t .else_, .n .elseBody]), [.shared]),
-    ((.alternative, []), [.shared]),
-    ((.elseBody, [.t .lbrace, .n .body, .t .rbrace]), [.shared]),
-    ((.elseBody, [.n .conditional]), [.shared]),
-    ((.headExpr, [.n .headAtom, .n .headMore]), [.shared]),
-    ((.headMore, [.t .plus, .n .headAtom, .n .headMore]), [.shared]),
-    ((.headMore, []), [.shared]),
-    ((.headAtom, [.t .integer]), [.shared]),
-    ((.headAtom, [.t .ident]), [.shared]),
-    ((.headAtom, [.t .lparen, .n .expr, .t .rparen]), [.shared]),
-    ((.headAtom, [.t .move_, .t .ident]), [.shared])]
+    ⟨(.program, [.t .fn, .t .ident, .t .lparen, .t .rparen, .t .arrow, .t .u8,
+                 .t .lbrace, .n .body, .t .rbrace]), [.slice0], false⟩,
+    ⟨(.program, [.n .decls, .t .fn, .t .ident, .t .lparen, .t .rparen, .t .arrow,
+                 .n .resultTy, .t .lbrace, .n .body, .t .rbrace]), from1, false⟩,
+    ⟨(.resultTy, [.t .u8]), from1, false⟩,
+    ⟨(.resultTy, [.t .ident]), [.shared], true⟩,
+    ⟨(.decls, [.t .struct_, .t .ident, .t .lbrace, .t .rbrace, .n .decls]), from1, true⟩,
+    ⟨(.decls, []), from1, false⟩,
+    ⟨(.body, [.t .let_, .t .ident, .t .colon, .t .u8, .t .equal, .n .expr, .t .semi, .n .body]), [.slice0], false⟩,
+    ⟨(.body, [.t .let_, .n .letHead, .t .equal, .n .expr, .t .semi, .n .body]), from1, false⟩,
+    ⟨(.letHead, [.t .ident, .n .letTail]), from1, false⟩,
+    ⟨(.letHead, [.t .wildcard, .t .colon, .n .localTy]), from1, true⟩,
+    ⟨(.letHead, [.t .mut_, .t .ident, .t .colon, .n .localTy]), [.shared], true⟩,
+    ⟨(.body, [.t .return_, .n .expr, .t .semi, .n .body]), all, false⟩,
+    ⟨(.body, [.t .ident, .t .lparen, .t .rparen, .t .semi, .n .body]), from1, true⟩,
+    ⟨(.body, []), all, false⟩,
+    ⟨(.letTail, [.t .colon, .n .localTy]), from1, false⟩,
+    ⟨(.letTail, [.t .lbrace, .t .rbrace]), from1, true⟩,
+    ⟨(.localTy, [.t .u8]), from1, false⟩,
+    ⟨(.localTy, [.t .ident]), from1, true⟩,
+    ⟨(.expr, [.n .atom, .n .more]), [.slice0], false⟩,
+    ⟨(.expr, [.n .product, .n .more]), from1, false⟩,
+    ⟨(.more, [.t .plus, .n .atom, .n .more]), [.slice0], false⟩,
+    ⟨(.more, [.t .plus, .n .product, .n .more]), from1, false⟩,
+    ⟨(.more, []), all, false⟩,
+    ⟨(.atom, [.t .integer]), all, false⟩,
+    ⟨(.atom, [.t .ident]), [.slice0], false⟩,
+    ⟨(.atom, [.t .ident, .n .nameTail]), from1, false⟩,
+    ⟨(.atom, [.t .lparen, .n .expr, .t .rparen]), all, false⟩,
+    ⟨(.atom, [.t .move_, .t .ident]), from1, true⟩,
+    ⟨(.nameTail, [.t .lbrace, .t .rbrace]), from1, true⟩,
+    ⟨(.nameTail, []), from1, false⟩,
+    ⟨(.body, [.n .conditional, .n .body]), [.shared], false⟩,
+    ⟨(.conditional, [.t .if_, .n .headExpr, .t .lbrace, .n .body, .t .rbrace, .n .alternative]), [.shared], true⟩,
+    ⟨(.alternative, [.t .else_, .n .elseBody]), [.shared], false⟩,
+    ⟨(.alternative, []), [.shared], false⟩,
+    ⟨(.elseBody, [.t .lbrace, .n .body, .t .rbrace]), [.shared], false⟩,
+    ⟨(.elseBody, [.n .conditional]), [.shared], false⟩,
+    ⟨(.headExpr, [.n .headProduct, .n .headMore]), [.shared], false⟩,
+    ⟨(.headMore, [.t .plus, .n .headProduct, .n .headMore]), [.shared], false⟩,
+    ⟨(.headMore, []), [.shared], false⟩,
+    ⟨(.headAtom, [.t .integer]), [.shared], false⟩,
+    ⟨(.headAtom, [.t .ident]), [.shared], false⟩,
+    ⟨(.headAtom, [.t .lparen, .n .expr, .t .rparen]), [.shared], false⟩,
+    ⟨(.headAtom, [.t .move_, .t .ident]), [.shared], false⟩,
+    ⟨(.product, [.n .atom, .n .factors]), from1, false⟩,
+    ⟨(.more, [.t .minus, .n .product, .n .more]), [.shared], true⟩,
+    ⟨(.factors, []), from1, false⟩,
+    ⟨(.factors, [.t .star, .n .atom, .n .factors]), [.shared], true⟩,
+    ⟨(.factors, [.t .slash, .n .atom, .n .factors]), [.shared], true⟩,
+    ⟨(.factors, [.t .percent, .n .atom, .n .factors]), [.shared], true⟩,
+    ⟨(.atom, [.t .true_]), [.shared], true⟩,
+    ⟨(.atom, [.t .false_]), [.shared], true⟩,
+    ⟨(.atom, [.t .stringLiteral]), [.shared], true⟩,
+    ⟨(.atom, [.t .byteLiteral]), [.shared], true⟩,
+    ⟨(.headProduct, [.n .headAtom, .n .headFactors]), [.shared], false⟩,
+    ⟨(.headMore, [.t .minus, .n .headProduct, .n .headMore]), [.shared], true⟩,
+    ⟨(.headFactors, []), [.shared], false⟩,
+    ⟨(.headFactors, [.t .star, .n .headAtom, .n .headFactors]), [.shared], true⟩,
+    ⟨(.headFactors, [.t .slash, .n .headAtom, .n .headFactors]), [.shared], true⟩,
+    ⟨(.headFactors, [.t .percent, .n .headAtom, .n .headFactors]), [.shared], true⟩,
+    ⟨(.headAtom, [.t .true_]), [.shared], true⟩,
+    ⟨(.headAtom, [.t .false_]), [.shared], true⟩,
+    ⟨(.headAtom, [.t .stringLiteral]), [.shared], true⟩,
+    ⟨(.headAtom, [.t .byteLiteral]), [.shared], true⟩] ++
+  ([.i8, .i16, .i32, .i64, .u16, .u32, .u64, .bool_, .Unit_, .char_] : List Terminal).flatMap
+    fun t => [⟨(.localTy, [.t t]), [.shared], true⟩, ⟨(.resultTy, [.t t]), [.shared], true⟩]
+
+def projectedProductions (view : GrammarView) : List (Production × Bool) :=
+  (surfaceProductions.filter fun p => p.views.contains view).map fun p => (p.production, p.outside)
 
 def projectGrammar (view : GrammarView) : Grammar Terminal Nonterminal :=
-  { start := .program
-    prods := (surfaceProductions.filter fun p => p.2.contains view).map Prod.fst }
+  { start := .program, prods := (projectedProductions view).map Prod.fst }
 
 def grammar0 := projectGrammar .slice0
 def grammar1 := projectGrammar .slice1
@@ -551,62 +586,10 @@ theorem grammar1_predicts_unique {i j : Nat} {lhs : Nonterminal} {look : Option 
 def checkedGrammar0 : CheckedGrammar Terminal Nonterminal :=
   ⟨grammar0, grammar0_ll1⟩
 
-/-- Productions recognized for the slice refusal, with a flag marking forms outside slice 0
-(decisions.md#decided-slice0-surface-2026-11-06). The unmarked productions also recognize
-the slice grammar. -/
-def refusalProductions : List ((Nonterminal × List (Sym Terminal Nonterminal)) × Bool) :=
-  [
-    ((.program, [.t .fn, .n .identifier, .t .lparen, .t .rparen, .t .arrow, .n .ty,
-                 .t .lbrace, .n .body, .t .rbrace]), false),
-    ((.ty, [.t .u8]), false),
-    ((.ty, [.n .identifier]), true),
-    ((.ty, [.t .i8]), true),
-    ((.ty, [.t .i16]), true),
-    ((.ty, [.t .i32]), true),
-    ((.ty, [.t .i64]), true),
-    ((.ty, [.t .u16]), true),
-    ((.ty, [.t .u32]), true),
-    ((.ty, [.t .u64]), true),
-    ((.ty, [.t .bool_]), true),
-    ((.ty, [.t .Unit_]), true),
-    ((.ty, [.t .char_]), true),
-    ((.body, [.t .let_, .n .binder, .t .colon, .n .ty, .t .equal, .n .expr, .t .semi, .n .body]), false),
-    ((.body, [.t .return_, .n .expr, .t .semi, .n .body]), false),
-    ((.body, [.n .conditional, .n .body]), false),
-    ((.body, []), false),
-    ((.binder, [.n .identifier]), false),
-    ((.binder, [.t .wildcard]), true),
-    ((.binder, [.t .mut_, .n .identifier]), true),
-    ((.identifier, [.t .ident]), false),
-    ((.conditional, [.t .if_, .n .expr, .t .lbrace, .n .body, .t .rbrace, .n .alternative]), true),
-    ((.alternative, [.t .else_, .n .elseBody]), false),
-    ((.elseBody, [.t .lbrace, .n .body, .t .rbrace]), false),
-    ((.elseBody, [.n .conditional]), false),
-    ((.alternative, []), false),
-    ((.expr, [.n .product, .n .more]), false),
-    ((.more, [.t .plus, .n .product, .n .more]), false),
-    ((.more, [.t .minus, .n .product, .n .more]), true),
-    ((.more, []), false),
-    ((.product, [.n .atom, .n .factors]), false),
-    ((.factors, [.t .star, .n .atom, .n .factors]), true),
-    ((.factors, [.t .slash, .n .atom, .n .factors]), true),
-    ((.factors, [.t .percent, .n .atom, .n .factors]), true),
-    ((.factors, []), false),
-    ((.atom, [.t .integer]), false),
-    ((.atom, [.n .identifier]), false),
-    ((.atom, [.t .true_]), true),
-    ((.atom, [.t .false_]), true),
-    ((.atom, [.t .stringLiteral]), true),
-    ((.atom, [.t .byteLiteral]), true),
-    ((.atom, [.t .lparen, .n .expr, .t .rparen]), false)]
-
-def refusalGrammar : Grammar Terminal Nonterminal :=
-  { start := .program, prods := refusalProductions.map Prod.fst }
-
-theorem refusalGrammar_ll1 : ll1 refusalGrammar = true := by decide
-
-def checkedRefusalGrammar : CheckedGrammar Terminal Nonterminal :=
-  ⟨refusalGrammar, refusalGrammar_ll1⟩
+/-- Every Slice 1 prediction row, including its slice restriction, is present
+unchanged in the widest admitted syntax used for classification. -/
+theorem shared_includes_slice1 : (projectedProductions .slice1).Sublist (projectedProductions .shared) := by
+  decide
 
 /-- The builtin spellings reserved by OD153 and checked for local shadowing under OD67.
 Item recovered-59-32 defines a single catalog with no aliases. The spellings remain lexer identifiers.
@@ -649,14 +632,21 @@ structure Span where
   fileId : ConcreteSpec.Core.FileId
   deriving DecidableEq, Repr
 
+def Terminal.IsFixed (kind : Terminal) : Prop := kind ≠ .ident ∧ kind ≠ .integer
+
+instance (kind : Terminal) : Decidable kind.IsFixed := inferInstanceAs (Decidable (_ ∧ _))
+
+theorem punctuation_fixed {entry : String × Terminal} (member : entry ∈ punctuation) : entry.2.IsFixed :=
+  (show ∀ e ∈ punctuation, e.2.IsFixed by decide) entry member
+
 inductive TokenValue where
-  | fixed (kind : Terminal)
+  | fixed (kind : Terminal) (plain : kind.IsFixed := by decide)
   | name (text : String)
   | integer (value : Nat) (radix : Radix) (suffix : Option ConcreteSpec.IntTy)
   deriving DecidableEq, Repr
 
 def TokenValue.kind : TokenValue → Terminal
-  | .fixed kind => kind
+  | .fixed kind _ => kind
   | .name _ => .ident
   | .integer .. => .integer
 
@@ -740,8 +730,10 @@ def Position.span (start stop : Position) (fileId : ConcreteSpec.Core.FileId := 
 def scalarText (cs : List Nat) : String := String.ofList (cs.map Char.ofNat)
 
 def wordValue (name : String) : TokenValue :=
-  let kind := word name
-  if kind == .ident then .name name else .fixed kind
+  match found : wordTokens.find? (fun entry => entry.1 == name) with
+  | none => .name name
+  | some entry => .fixed entry.2 ((show ∀ e ∈ wordTokens, e.2.IsFixed by decide)
+      entry (List.mem_of_find?_eq_some found))
 
 def punctuationScalars : List (List Nat) :=
   punctuation.map fun (s, _) => s.toList.map Char.toNat
@@ -767,7 +759,8 @@ inductive Tokenizes : List Nat → List Nat → List Nat → TokenValue → Prop
       Tokenizes input spelling rest (.fixed .label)
   | punct {input spelling rest : List Nat} {kind : Terminal} :
       LongestMatch punctuationScalars input (some (spelling, rest)) →
-      (scalarText spelling, kind) ∈ punctuation → Tokenizes input spelling rest (.fixed kind)
+      (member : (scalarText spelling, kind) ∈ punctuation) →
+      Tokenizes input spelling rest (.fixed kind (punctuation_fixed member))
 
 inductive TokenStream (fileId : ConcreteSpec.Core.FileId) : Position → List Nat → List Token → Prop
   | eof {pos : Position} {input : List Nat} : Trivia input [] → TokenStream fileId pos input []
@@ -785,7 +778,7 @@ def Lexes (source : ByteArray) (tokens : List Token)
   ∃ scalars, Utf8.Decodes source.data.toList scalars ∧
     (∀ c ∈ scalars, c ≠ 0 ∧ c ≠ 0xFEFF) ∧ TokenStream fileId {} scalars tokens
 
-private def fixed (kind : Terminal) (span : Span) : Token := ⟨.fixed kind, span⟩
+private def fixed (kind : Terminal) (span : Span) (plain : kind.IsFixed := by decide) : Token := ⟨.fixed kind plain, span⟩
 private def named (name : String) (span : Span) : Token := ⟨.name name, span⟩
 
 mutual

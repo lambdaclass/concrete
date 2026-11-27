@@ -57,6 +57,9 @@ theorem lexRefused : RuleRefused Lexed ([0], []) := by
       subst c
       exact (good 0 (by simp)).1 rfl
 
+theorem parserStepAccepted : RuleAccepted ParserCanStep (.reduce true) := rfl
+theorem parserStepRefused : RuleRefused ParserCanStep (.reduce false) := by intro h; cases h
+
 theorem grammarAccepted : RuleAccepted Predictive grammar0 := grammar0_ll1
 
 theorem grammarRefused : RuleRefused Predictive
@@ -972,6 +975,8 @@ def registeredRuleExamples : List RuleExample :=
    ⟨``Project.Manifest.SyntaxAccepted, ``ProjectRegistry.syntaxRefused⟩] ++
   [⟨``Slice0Rules.Lexed, ``Slice0Rules.lexAccepted⟩,
    ⟨``Slice0Rules.Lexed, ``Slice0Rules.lexRefused⟩,
+   ⟨``Slice0Rules.ParserCanStep, ``Slice0Rules.parserStepAccepted⟩,
+   ⟨``Slice0Rules.ParserCanStep, ``Slice0Rules.parserStepRefused⟩,
    ⟨``Slice0Rules.Predictive, ``Slice0Rules.grammarAccepted⟩,
    ⟨``Slice0Rules.Predictive, ``Slice0Rules.grammarRefused⟩,
    ⟨``Slice0Rules.Parsed, ``Slice0Rules.parseAccepted⟩,

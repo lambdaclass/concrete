@@ -10,19 +10,19 @@ def main : IO Unit := do
   | .ok [⟨.integer 0 .hexadecimal (some .u8), _⟩] => pure ()
   | _ => throw (IO.userError "the digit limit rejected an integer exactly at the bound")
   match Lex.lex ("0x" ++ digits ++ "gSuffix").toUTF8 with
-  | .error (.syntaxError _) => pure ()
+  | .error (.source (.lexical .integer _)) => pure ()
   | _ => throw (IO.userError "expected a malformed suffix at the digit bound")
   -- Both leading zeroes and the suffix would be malformed if the scan reached those checks.
   match Lex.lex ("// note\r\n" ++ digits ++ "0bad").toUTF8 with
-  | .error (.lexerDigitLimit offset bound) =>
-    unless offset == 9 && bound == limit do
+  | .error (.source (.lexical (.digitLimit bound) span)) =>
+    unless span.start == 9 && bound == limit do
       throw (IO.userError "wrong byte offset or reported digit limit")
   | _ => throw (IO.userError "expected a digit resource refusal before malformed-token refusal")
 
   -- These are otherwise valid digit runs, with and without a radix prefix.
   for (radixPrefix, digit) in [("", '7'), ("0b", '1'), ("0o", '7'), ("0x", 'f')] do
     let source := ("// note\r\n" ++ radixPrefix ++ String.ofList (List.replicate (limit + 1) digit)).toUTF8
-    let expected := Refusal.lexerDigitLimit 9 limit
+    let expected := Refusal.source (.lexical (.digitLimit limit) ⟨9, 10, 2, 1, ⟨0⟩⟩)
     let .ok input := Stages.Input.load "digit-limit.con" source
       | throw (IO.userError "failed to load the digit-limit fixture")
     match Lex.lexLossless source, Stages.compile input with

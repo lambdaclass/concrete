@@ -5,7 +5,8 @@ open Concrete ConcreteSpec.Core
 open ConcreteSpec.Project
 open Slice0Layout
 
-private def refusal : Refusal := .checker "unreachable code"
+private def span : ConcreteSpec.Surface0.Span := ⟨0, 1, 1, 1, ⟨0⟩⟩
+private def refusal : Refusal := .source (.surface (.unreachable span))
 example : ((refusal.diagnostic ``Slice0Rules.ReachableBody).map (fun d => d.rule.val.name)) =
     some ``Slice0Rules.ReachableBody := by decide
 example : (refusal.diagnostic `unregistered).isNone = true := by decide
@@ -16,17 +17,17 @@ example : (refusal.diagnosticAt ⟨``Slice0Rules.ReachableBody, 1⟩).isSome = t
 example : (refusal.diagnostic ``Slice0Rules.Lexed).isNone = true := by decide
 example : (refusal.diagnosticAt ⟨``Slice0Rules.Lexed, 2⟩).isNone = true := by decide
 
-example : ((Refusal.syntaxError "invalid source").diagnostic ``Slice0Rules.Lexed).isSome =
+example : ((Refusal.source (.lexical (.encoding .nul) span)).diagnostic ``Slice0Rules.Lexed).isSome =
     true := by decide
 
-example : ((Refusal.syntaxError "invalid source").diagnosticAt ⟨``Slice0Rules.Lexed, 1⟩).isNone =
+example : ((Refusal.source (.lexical (.encoding .nul) span)).diagnosticAt ⟨``Slice0Rules.Lexed, 1⟩).isNone =
     true := by decide
-example : (refusal.diagnosticAt ⟨``Slice0Rules.UnreservedLocal, 2⟩).isSome = true := by decide
+example : (refusal.diagnosticAt ⟨``Slice0Rules.UnreservedLocal, 2⟩).isNone = true := by decide
 example : (refusal.diagnosticAt ⟨``Slice0Rules.UnreservedLocal, 1⟩).isNone = true := by decide
 
-example : ((Refusal.lexerDigitLimit 0 1024).diagnostic ``Slice0Rules.WithinLimit).isSome =
+example : ((Refusal.source (.lexical (.digitLimit 1024) span)).diagnostic ``Slice0Rules.WithinLimit).isSome =
     true := by decide
-example : ((Refusal.lexerDigitLimit 0 1024).diagnostic ``Slice0Rules.Lexed).isNone =
+example : ((Refusal.source (.lexical (.digitLimit 1024) span)).diagnostic ``Slice0Rules.Lexed).isNone =
     true := by decide
 
 example : ((Refusal.manifest .size).diagnosticAt Manifest.sizeRule).isSome = true :=

@@ -5,16 +5,7 @@ namespace Concrete.Admission
 /-- Compose structural elaboration and spec preparation for the pre-cutover driver. -/
 def prepareParsed (purpose : ConcreteSpec.StageInterface.SurfacePreparation.Purpose)
     (ast : ConcreteSpec.Surface0.Program) : Except Refusal Elab.Output := do
-  let prepared ← (ConcreteSpec.StageInterface.SurfacePreparation.prepareSurface0 ast purpose).mapError fun
-    | .unexpectedEntry span => .unsupported s!"expected the entry point 'main' at byte {span.start}"
-    | .wildcard span => .unsupported s!"wildcard binding at byte {span.start}"
-    | .fallthrough _ => .checker "reachable end of a u8 function (STMT-9)"
-    | .unreachable span =>
-      .checker s!"unreachable code (STMT-14) at {span.line}:{span.column}, bytes {span.start}..{span.stop}"
-    | .integerSuffix span => .checker s!"integer suffix in an expected-type position at byte {span.start}"
-    | .unknownLocal name span => .checker s!"unknown local '{name}' at byte {span.start}"
-    | .duplicateBinder name span | .reservedBinder name span =>
-      .checker s!"binding shadows '{name}' at byte {span.start}"
+  let prepared ← (ConcreteSpec.StageInterface.SurfacePreparation.prepareSurface0 ast purpose).mapError Refusal.source
   return Elab.LocatedOutput.erase prepared
 
 /-- The statically known result of an addition, indexed by the Core binder for that operation. -/
@@ -39,25 +30,33 @@ private def record (acc : ConcreteSpec.Ctx × List Token) (stmt : Core.Stmt) :
 
 def evidence (p : Core.Program) : List Token := (p.body.foldl record ([], [])).2.reverse
 
-def check (out : Elab.Output) : Except Refusal Output :=
-  if Core.check (Core.toCore out.program) then .ok ⟨out, evidence out.program⟩
-  else .error (.checker "Core check rejected the program")
+private def refusal (out : Elab.Output) (reason : ConcreteSpec.Admission.Refusal) : Refusal :=
+  match (ConcreteSpec.StageInterface.AdmissionView.zero out.located).render reason with
+  | some cause => .source cause
+  | none => .missingLocation reason
 
-theorem admit_checked {src : Elab.Output} {out : Output} (h : check src = .ok out) :
-    Core.Checked (Core.toCore out.core.program) := by
-  unfold check at h
-  split at h
-  · cases h
-    exact (Core.check_iff _).mp (by assumption)
-  · contradiction
+def checkWith (policy : ConcreteSpec.ArithmeticPolicy) (out : Elab.Output) :=
+  (ConcreteSpec.checkProgramWith policy (Core.toCore out.program)).mapError (refusal out)
+
+def check (out : Elab.Output) : Except Refusal Output := do
+  let _ ← checkWith .static out
+  return ⟨out, evidence out.program⟩
 
 theorem check_evidence {src : Elab.Output} {out : Output} (h : check src = .ok out) :
     out.core = src ∧ out.tokens = evidence src.program := by
-  unfold check at h
-  split at h
-  · cases h
-    exact ⟨rfl, rfl⟩
-  · contradiction
+  cases ran : checkWith .static src <;> simp [check, ran, Bind.bind, Except.bind] at h
+  cases h
+  exact ⟨rfl, rfl⟩
+
+theorem admit_checked {src : Elab.Output} {out : Output} (h : check src = .ok out) :
+    Core.Checked (Core.toCore out.core.program) := by
+  rw [(check_evidence h).1]
+  apply (ConcreteSpec.checkProgram_iff _).1
+  cases ran : ConcreteSpec.checkProgram (Core.toCore src.program) with
+  | ok evidence => exact ⟨_, rfl⟩
+  | error r => simp [check, checkWith, ConcreteSpec.checkProgram] at h ran
+               rw [ran] at h
+               cases h
 
 theorem admit_never_traps {src : Elab.Output} {out : Output} (h : check src = .ok out)
     (fuel : Nat) (trap : ConcreteSpec.Trap) :

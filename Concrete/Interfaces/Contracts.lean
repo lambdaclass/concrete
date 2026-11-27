@@ -80,7 +80,7 @@ private def fileSpan (span : ConcreteSpec.Surface0.Span) : FileSpan :=
   ⟨span.fileId, span.start, span.stop, span.line, span.column⟩
 
 private def decodedValue : Concrete.Lex.LosslessValue → Option TokenValue
-  | .parsed (.fixed kind) => if h : Terminal.HasPayload kind = false then some (.fixed kind h) else none
+  | .parsed (.fixed kind _) => if h : Terminal.HasPayload kind = false then some (.fixed kind h) else none
   | .parsed (.name name) => some (.name name)
   | .parsed (.integer value radix suffix) => some (.integer value radix suffix)
   | .stringLiteral text => some (.stringLiteral text.toUTF8.data.toList)
@@ -114,10 +114,7 @@ def LexRefuses (source : Source) (failure : LexRefusal) : Prop :=
     let bytes : ByteArray := ⟨file.source.toBytes.toArray⟩
     match failure with
     | .missingFile _ => False
-    | .malformed diagnostic =>
-      Concrete.Lex.lexLossless bytes source.entryFile = .error (.syntaxError diagnostic)
-    | .digitLimit offset limit =>
-      Concrete.Lex.lexLossless bytes source.entryFile = .error (.lexerDigitLimit offset limit)
+    | .source cause => Concrete.Lex.lexLossless bytes source.entryFile = .error (.source cause)
 
 /-- Each slice contributes a repository rule over that member of the AST and Core
 families. Slice 0 uses the canonical injections of the shared carriers. -/

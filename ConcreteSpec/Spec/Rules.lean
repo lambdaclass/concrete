@@ -46,38 +46,27 @@ structure RuleExample where
   rule : Lean.Name
   declaration : Lean.Name
 
-/-- Refusal categories that can cite a slice-0 rule. -/
-inductive RuleRefusalCategory where
-  | malformed | unsupported | checker | resource | internal
-  deriving DecidableEq
-
-/-- Slice 0's required rule identities and the categories that may cite them.
-Proof links live in the evidence inventory. -/
-def slice0RuleEntries : List (RuleId × RuleRefusalCategory) :=
-  [⟨⟨``Slice0Rules.Lexed, 2⟩, .malformed⟩,
-   ⟨⟨``Slice0Rules.Predictive, 1⟩, .internal⟩,
-   ⟨⟨``Slice0Rules.Parsed, 1⟩, .malformed⟩,
-   ⟨⟨``Slice0Rules.EntryName, 1⟩, .unsupported⟩,
-   ⟨⟨``Slice0Rules.Returns, 1⟩, .checker⟩,
-   ⟨⟨``Slice0Rules.ReachableBody, 1⟩, .checker⟩,
-   ⟨⟨``Slice0Rules.ExpectedTypeLiteral, 1⟩, .checker⟩,
-   ⟨⟨``Slice0Rules.LocalBound, 1⟩, .checker⟩,
-   ⟨⟨``Slice0Rules.FreshLocal, 1⟩, .checker⟩,
-   ⟨⟨``Slice0Rules.UnreservedLocal, 2⟩, .checker⟩,
-   ⟨⟨``Slice0Rules.NamedBinding, 1⟩, .unsupported⟩,
-   ⟨⟨``Slice0Rules.DecimalLiteral, 1⟩, .unsupported⟩,
-   ⟨⟨``Slice0Rules.AdmittedProduction, 2⟩, .unsupported⟩,
-   ⟨⟨``Slice0Rules.LiteralTyped, 1⟩, .checker⟩,
-   ⟨⟨``Slice0Rules.Admitted, 1⟩, .checker⟩,
-   ⟨⟨``Slice0Rules.LocalsUsed, 1⟩, .checker⟩,
-   ⟨⟨``Slice0Rules.AdditionFits, 1⟩, .checker⟩,
-   ⟨⟨``Slice0Rules.WithinLimit, 1⟩, .resource⟩]
-
-def slice0Rules : List RuleId := slice0RuleEntries.map Prod.fst
-
-/-- The refusal category of an exact slice-0 rule reference. -/
-def RuleId.refusalCategory (rule : RuleId) : Option RuleRefusalCategory :=
-  (slice0RuleEntries.find? fun entry => entry.1 == rule).map Prod.snd
+/-- Slice 0 rule identities, including their revisions. -/
+def slice0Rules : List RuleId :=
+  [⟨``Slice0Rules.Lexed, 2⟩,
+   ⟨``Slice0Rules.ParserCanStep, 1⟩,
+   ⟨``Slice0Rules.Predictive, 1⟩,
+   ⟨``Slice0Rules.Parsed, 1⟩,
+   ⟨``Slice0Rules.EntryName, 1⟩,
+   ⟨``Slice0Rules.Returns, 1⟩,
+   ⟨``Slice0Rules.ReachableBody, 1⟩,
+   ⟨``Slice0Rules.ExpectedTypeLiteral, 1⟩,
+   ⟨``Slice0Rules.LocalBound, 1⟩,
+   ⟨``Slice0Rules.FreshLocal, 1⟩,
+   ⟨``Slice0Rules.UnreservedLocal, 2⟩,
+   ⟨``Slice0Rules.NamedBinding, 1⟩,
+   ⟨``Slice0Rules.DecimalLiteral, 1⟩,
+   ⟨``Slice0Rules.AdmittedProduction, 2⟩,
+   ⟨``Slice0Rules.LiteralTyped, 1⟩,
+   ⟨``Slice0Rules.Admitted, 1⟩,
+   ⟨``Slice0Rules.LocalsUsed, 1⟩,
+   ⟨``Slice0Rules.AdditionFits, 1⟩,
+   ⟨``Slice0Rules.WithinLimit, 1⟩]
 
 /-- Diagnostic rule identities, in specification order. Each judgment delegates to its owning
 definition; registration adds no language policy. -/

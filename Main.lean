@@ -75,10 +75,10 @@ private def buildNative (lib dir : System.FilePath) (backend : Option String)
     cleanup
 
 private def report (refusal : Refusal) : IO UInt32 := do
+  let message := if refusal.code == "SYNTAX" then s!"{refusal.code.toLower} error: {refusal.message}" else refusal.message
   let message := match refusal with
-    | .syntaxError _ | .parser ⟨.unexpectedToken, _⟩ | .parser ⟨.unexpectedEnd, _⟩
-    | .parser ⟨.trailingTokens, _⟩ => s!"{refusal.code.toLower} error: {refusal.message}"
-    | _ => refusal.message
+    | .source cause => s!"{message} [rule {cause.rule.name}@{cause.rule.rev}, file {cause.primary.file.index}, bytes {cause.primary.startOffset}..{cause.primary.endOffset}]"
+    | _ => message
   match ← (writeOutput "stderr" IO.getStderr s!"{refusal.code}: {message}\n").run with
   | .ok () => return refusal.exitCode
   | .error outputFailure => return outputFailure.exitCode

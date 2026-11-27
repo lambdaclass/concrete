@@ -27,8 +27,8 @@ def Input.resolve (project : Project) (fileId : FileId) : Except Refusal Input :
 
 /-- Load a single source file using the same table representation as multi-file builds. -/
 def Input.load (path : String) (bytes : ByteArray) : Except Refusal Input := do
-  let .ok path := SourcePath.parse (.ofBytes path.toUTF8.data.toList)
-    | throw (.syntaxError "expected a canonical project-relative source path")
+  let path ← (SourcePath.parse (.ofBytes path.toUTF8.data.toList)).mapError fun r =>
+    Refusal.path r.violation.reason r.violation.location.offset
   Input.resolve (.singleton path (.ofBytes bytes.data.toList)) ⟨0⟩
 
 /-- Use the loaded file's coordinate index, including for a trivia-only source. -/
@@ -124,9 +124,9 @@ def compile (input : Input) : Except Refusal Output :=
   match h : (stages input.path).run input with
   | .error e => .error e
   | .ok ((((((( _, tokens), ast), core), admitted), mir), mem), bir) =>
-    have ⟨hLex, hParse, hElab, _, _, _, _⟩ := edges_of_run h
+    have edges := edges_of_run h
     .ok ⟨input.project, input.fileId, tokens, ast, core, admitted.tokens, mir, mem, bir,
-      ⟨input.file, input.loaded, hLex, hParse, hElab⟩⟩
+      ⟨input.file, input.loaded, edges.1, edges.2.1, edges.2.2.1⟩⟩
 
 /-- Compile the exact bytes in a resolved slot of the shared project table. -/
 def compileFile (project : Project) (fileId : FileId) : Except Refusal Output := do
@@ -212,10 +212,9 @@ theorem prepareLCB_of_edges (bir : BIR.Program)
 parser, elaborator and lowering stages, with every static rule and residual arithmetic checks. -/
 def unchecked (input : Input) : Except Refusal BIR.Program := do
   let tokens ← lex input
-  let ast ← Parse.parseForDriver input.eof tokens
+  let ast ← Parse.parseForEntry .eligibility input.eof tokens
   let core ← Admission.prepareParsed .eligibility ast
-  let _ ← (ConcreteSpec.checkProgramWith .runtime (Core.toCore core.program)).mapError
-    fun _ => Refusal.checker "Core check rejected the program"
+  let _ ← Admission.checkWith .runtime core
   let mir ← MIR.lowerUnchecked core
   let mem ← memory mir
   SSA.lower input.path mem

@@ -324,8 +324,8 @@ private def unsafeDischarges : Discharges testLanguage := [(testSite, [unsafeDis
 
 private def testPasses {profile : Profile} (checks : List OperationCheck) :
     PassFunctions grammar testLanguage testLowering profile where
-  lex _ := .error (.malformed "control")
-  elaborate _ := .error (.diagnostic rule span [])
+  lex _ := .error (.source (.lexical .integer span.surface))
+  elaborate _ := .error (.source (.parser .unexpectedToken span.surface))
   checkCore _ := .ok unsafeDischarges
   lowerCore input := .ok (testMIR input.core.project checks)
   lowerUnchecked input := .ok (testMIR input.project checks)
@@ -372,7 +372,7 @@ private def testParser (verifier : TableVerifier grammar) (size : proposal.size 
     change ∃ word, proposal[i.val]? = some word ∧ cells[i.val]? = _
     simp only [proposal, cells, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds,
       Array.getElem?_replicate, Array.size_replicate, fits, hi, ↓reduceIte]
-    split <;> first | exact ⟨1, rfl, rfl⟩ | exact ⟨0, rfl, rfl⟩, stepsPerToken, rule, rule⟩
+    split <;> first | exact ⟨1, rfl, rfl⟩ | exact ⟨0, rfl, rfl⟩, stepsPerToken⟩
 
 section
 variable (verifier : TableVerifier grammar) (size : proposal.size = verifier.words)
@@ -447,7 +447,7 @@ example (m : LoweringModels testLanguage testLowering testProfile) :
     (r m parser).parser.run (tokenStream .decimal) =
       .ok ⟨(tokenStream .decimal).source, .inr true⟩ ∧
     (r m parser).parser.run (tokenStream .hexadecimal) =
-      .error (.unsupported rule span later) ∧
+      .error (.unsupported (.parser .nonDecimal span.surface) later) ∧
     (r m parser).parser.run (tokenStream .hexadecimal later) =
       .ok ⟨(tokenStream .hexadecimal later).source, .inr true⟩ :=
   ⟨rfl, rfl, rfl⟩
@@ -462,7 +462,7 @@ example (m : LoweringModels testLanguage testLowering testProfile) :
       rfl rfl (Nat.le_refl _) (.token rfl (by change 0 ≤ 0; decide) (.nil []))
 
 example (m : LoweringModels testLanguage testLowering testProfile) :
-    (r m parser).parser.refusal (tokenStream .hexadecimal) (.unsupported rule span later) := by
+    (r m parser).parser.refusal (tokenStream .hexadecimal) (.unsupported (.parser .nonDecimal span.surface) later) := by
   refine ⟨rfl, ⟨by change 0 < 2; decide, ⟨.inr true, 3, Derives.apply (g := grammar) production _ _
     (List.mem_cons_self ..) (by decide) (.token rfl (by change 2 ≤ 2; decide) .nil)⟩, ?_⟩, by change 5 ≤ 8; decide⟩
   intro earlier tooEarly
@@ -688,7 +688,7 @@ example :
     edge.inputInvariant empty ∧
       ∃ failure, edge.run empty = .error failure ∧ edge.refusal empty failure := by
   dsimp only
-  let failure : ParseRefusal := .malformed (sliceParser slice0).malformedRule ⟨⟨0⟩, 0, 0, 1, 1⟩
+  let failure : ParseRefusal := .malformed (.parser .unexpectedEnd ⟨30, 30, 1, 31, ⟨0⟩⟩)
   refine ⟨⟨by with_unfolding_all rfl, rfl⟩, failure, by with_unfolding_all rfl,
     by with_unfolding_all rfl, ?_, by with_unfolding_all decide⟩
   rintro ⟨tree, slice, steps, derives⟩
@@ -728,7 +728,8 @@ private theorem return256IllTyped : ¬ (elaboratedReturn 256).StaticallyTyped :=
 
 set_option maxRecDepth 4096 in
 example :
-    let failure : StageFailure := .invalidInput ⟨``ConcreteSpec.Core.Slice0Rules.LiteralTyped, 1⟩
+    let failure : StageFailure := .admission (.refused (.core .slice0 (surfaceFileSpan resultSpan) []
+      (.atPosition 0 (.literalOutOfRange .u8 256))))
     let passes := returnPasses fixtureElaborate
     let edge := (registry passes).typing
     edge.inputInvariant (elaboratedReturn 256) ∧
@@ -744,7 +745,8 @@ example :
 -- typing refusal. A literal-only checker suffices for this fixture.
 set_option maxRecDepth 4096 in
 example :
-    let failure : StageFailure := .invalidInput ⟨``ConcreteSpec.Core.Slice0Rules.LiteralTyped, 1⟩
+    let failure : StageFailure := .admission (.refused (.core .slice0 ⟨⟨0⟩, 25, 28, 1, 26⟩ []
+      (.atPosition 0 (.literalOutOfRange .u8 256))))
     let passes := {returnPasses fixtureElaborate with lex := fun _ => .ok (returnStream 256)}
     ((registry passes).lcbPipeline true).run (literalSource 256) = .error ⟨StageFailure, failure⟩ := by
   with_unfolding_all rfl
@@ -818,7 +820,7 @@ set_option maxRecDepth 4096 in
 example :
     let good := registry (returnPasses fixtureElaborate)
     let mutant := registry (returnPasses (fun _ => .ok (pendingLiteral 43)))
-    let refusing := registry (returnPasses (fun _ => .error (.diagnostic rule span [])))
+    let refusing := registry (returnPasses (fun _ => .error (.source (.parser .unexpectedToken span.surface))))
     good.lexer.success elaborationSource returnStream ∧
     good.lexer.run elaborationSource = .ok returnStream ∧
     good.parser.run returnStream = .ok parsedReturn ∧
@@ -831,7 +833,7 @@ example :
   · exact wrongLiteralElaboratorInvalid _ rfl
   · intro validated
     have matching := validated.2 parsedReturn _ parsedReturnDomain rfl
-    change SliceElaboration slice0 elaborationSource.project (.inl (returnSyntax 42)) (.error (.diagnostic rule span [])) at matching
+    change SliceElaboration slice0 elaborationSource.project (.inl (returnSyntax 42)) (.error (.source (.parser .unexpectedToken span.surface))) at matching
     obtain ⟨program, decoded, matching⟩ := matching
     obtain rfl := Option.some.inj (show some returnProgram = some program from decoded)
     cases matching

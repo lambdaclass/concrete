@@ -41,7 +41,7 @@ structure SourceProgram where
   body : List Statement
   deriving Repr
 
-private def fixed (kind : Terminal) (span : Span) : Token := ⟨.fixed kind, span⟩
+private def fixed (kind : Terminal) (span : Span) (plain : kind.IsFixed := by decide) : Token := ⟨.fixed kind plain, span⟩
 private def named (name : String) (span : Span) : Token := ⟨.name name, span⟩
 
 mutual

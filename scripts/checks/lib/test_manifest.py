@@ -26,7 +26,7 @@ CLI_CASES = {
     "cli:build-input-write-failure",
 }
 SLICE_RE = re.compile(r"[a-z0-9_]+")
-RULE_RE = re.compile(r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*@[1-9][0-9]*")
+RULE_RE = re.compile(r"[A-Z][a-zA-Z0-9]*(?:-[A-Z0-9]+)*@[1-9][0-9]*")
 TRAP_KINDS = frozenset(("arithmeticOverflow", "division_by_zero", "invalid_shift",
                         "out_of_bounds", "invalid_range", "abort"))
 ORIGIN_RE = re.compile(r"([0-9]+):([0-9]+):([1-9][0-9]*):([1-9][0-9]*)")

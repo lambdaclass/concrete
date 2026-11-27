@@ -665,7 +665,7 @@ theorem unchecked_handoffs_of_run {input : Stages.Input} {bir : BIR.Program}
     split at ran <;> try contradiction
     next ast parsed =>
       split at ran <;> try contradiction
-      next core prepared => exact ⟨core, tokens, ast, lexed, Parse.parseForDriver_ok.mp parsed, prepared⟩
+      next core prepared => exact ⟨core, tokens, ast, lexed, Parse.parseForEntry_ok.mp parsed, prepared⟩
 
 def UncheckedFrontend (input : Stages.Input) (core : Elab.Output) : Prop :=
   ∃ tokens ast, Lex.lex input.source input.fileId = .ok tokens ∧ Parse.parse input.eof tokens = .ok ast ∧
@@ -839,58 +839,154 @@ private def cites (result : Except Refusal Program) (rule : ConcreteSpec.Core.Ru
   | .ok _ => false
 
 open ConcreteSpec.Core in
-example : keywordBinderParse = .error (.parser ⟨.unexpectedToken, ⟨22, 24, 1, 23, ⟨0⟩⟩⟩) ∧
+example : keywordBinderParse = .error (.source (.parser .unexpectedToken ⟨22, 24, 1, 23, ⟨0⟩⟩)) ∧
     cites keywordBinderParse ⟨``Slice0Rules.Parsed, 1⟩ = true ∧
     cites keywordBinderParse ⟨``Slice0Rules.Lexed, 2⟩ = false := ⟨rfl, rfl, rfl⟩
 
 open ConcreteSpec.Core in
-example : wildcardParse = .error (.parser ⟨.outsideProduction, ⟨22, 23, 1, 23, ⟨0⟩⟩⟩) ∧
+example : wildcardParse = .error (.source (.parser .outsideProduction ⟨22, 23, 1, 23, ⟨0⟩⟩)) ∧
     cites wildcardParse ⟨``Slice0Rules.AdmittedProduction, 2⟩ = true ∧
     cites wildcardParse ⟨``Slice0Rules.EntryName, 1⟩ = false := ⟨rfl, rfl, rfl⟩
 
 -- A later malformed expression takes priority over a syntactically complete wildcard binder.
 example : parseBinderExample r#"fn main() -> u8 { let _: u8 = 42; return _; }"# =
-    .error (.parser ⟨.unexpectedToken, ⟨41, 42, 1, 42, ⟨0⟩⟩⟩) := rfl
+    .error (.source (.parser .unexpectedToken ⟨41, 42, 1, 42, ⟨0⟩⟩)) := rfl
 
 open ConcreteSpec.Core in
 example :
     let result := parseBinderExample r#"fn main() -> u8 { return 0xff; }"#
-    result = .error (.parser ⟨.nonDecimal, ⟨25, 29, 1, 26, ⟨0⟩⟩⟩) ∧
+    result = .error (.source (.parser .nonDecimal ⟨25, 29, 1, 26, ⟨0⟩⟩)) ∧
       cites result ⟨``Slice0Rules.DecimalLiteral, 1⟩ = true ∧
       cites result ⟨``Slice0Rules.AdmittedProduction, 2⟩ = false := ⟨rfl, rfl, rfl⟩
 
 -- The complete refusal parse selects the first violation when both rules apply.
 example : parseBinderExample r#"fn main() -> u8 { return 0xff * 1; }"# =
-    .error (.parser ⟨.nonDecimal, ⟨25, 29, 1, 26, ⟨0⟩⟩⟩) ∧
+    .error (.source (.parser .nonDecimal ⟨25, 29, 1, 26, ⟨0⟩⟩)) ∧
     parseBinderExample r#"fn main() -> u8 { return 1 * 0xff; }"# =
-    .error (.parser ⟨.outsideProduction, ⟨27, 28, 1, 28, ⟨0⟩⟩⟩) := ⟨rfl, rfl⟩
+    .error (.source (.parser .outsideProduction ⟨27, 28, 1, 28, ⟨0⟩⟩)) := ⟨rfl, rfl⟩
 
 example : parseBinderExample r#"fn main() -> u8 { return 42; } 42"# =
-    .error (.parser ⟨.trailingTokens, ⟨31, 33, 1, 32, ⟨0⟩⟩⟩) := rfl
+    .error (.source (.parser .trailingTokens ⟨31, 33, 1, 32, ⟨0⟩⟩)) := rfl
 
 example : parseBinderExample (r"fn main() -> u8 {" ++ "\r\n  ") =
-    .error (.parser ⟨.unexpectedEnd, ⟨21, 21, 2, 3, ⟨0⟩⟩⟩) := rfl
+    .error (.source (.parser .unexpectedEnd ⟨21, 21, 2, 3, ⟨0⟩⟩)) := rfl
+
+/-- Check the actual driver result against a fixed source location and every candidate citation. -/
+private def ExactRefusal (text : String) (rule : ConcreteSpec.Core.RuleId)
+    (span : ConcreteSpec.Surface0.Span) : Prop :=
+  ∃ cause, ((Stages.Input.load "main.con" text.toUTF8).bind Stages.compile) = .error (.source cause) ∧
+    cause.primary = ConcreteSpec.StageInterface.surfaceFileSpan span ∧
+    ∀ candidate, ((Refusal.source cause).diagnosticAt candidate).isSome = true ↔ candidate = rule
+
+open ConcreteSpec.Core in
+example : ExactRefusal r"fn main() -> u8 { let _: u8 = 1; abort(); }"
+    ⟨``Slice0Rules.AdmittedProduction, 2⟩ ⟨22, 23, 1, 23, ⟨0⟩⟩ := by
+  with_unfolding_all exact ⟨_, rfl, rfl, Refusal.source_diagnosticAt_iff _⟩
+
+open ConcreteSpec.Core in
+example : ExactRefusal r"fn main() -> u8 { let _: u8 = 1; abort(; }"
+    ⟨``Slice0Rules.Parsed, 1⟩ ⟨39, 40, 1, 40, ⟨0⟩⟩ := by
+  with_unfolding_all exact ⟨_, rfl, rfl, Refusal.source_diagnosticAt_iff _⟩
+
+open ConcreteSpec.Core in
+example : ExactRefusal r"fn main() -> u8 { let Option: u8 = 1; return Option; }"
+    ⟨``Slice0Rules.UnreservedLocal, 2⟩ ⟨22, 28, 1, 23, ⟨0⟩⟩ := by
+  with_unfolding_all exact ⟨_, rfl, rfl, Refusal.source_diagnosticAt_iff _⟩
+
+open ConcreteSpec.Core in
+example : ExactRefusal r"fn main() -> u8 { let x: u8 = 1; let x: u8 = 2; return x; }"
+    ⟨``Slice0Rules.FreshLocal, 1⟩ ⟨37, 38, 1, 38, ⟨0⟩⟩ := by
+  with_unfolding_all exact ⟨_, rfl, rfl, Refusal.source_diagnosticAt_iff _⟩
+
+open ConcreteSpec.Core in
+example : ExactRefusal r"fn bad() -> u8 { return 0xff; }"
+    ⟨``Slice0Rules.EntryName, 1⟩ ⟨3, 6, 1, 4, ⟨0⟩⟩ := by
+  with_unfolding_all exact ⟨_, rfl, rfl, Refusal.source_diagnosticAt_iff _⟩
+
+open ConcreteSpec.Core in
+example : ExactRefusal r"fn main() -> u8 { let x: u8 = 256; let Option: u8 = 1; return x; }"
+    ⟨``Slice0Rules.LiteralTyped, 1⟩ ⟨30, 33, 1, 31, ⟨0⟩⟩ := by
+  with_unfolding_all exact ⟨_, rfl, rfl, Refusal.source_diagnosticAt_iff _⟩
+
+open ConcreteSpec.Core in
+example : ExactRefusal r"fn main() -> u8 { return (256 + missing); }"
+    ⟨``Slice0Rules.LiteralTyped, 1⟩ ⟨26, 29, 1, 27, ⟨0⟩⟩ := by
+  with_unfolding_all exact ⟨_, rfl, rfl, Refusal.source_diagnosticAt_iff _⟩
+
+open ConcreteSpec.Core in
+example : ExactRefusal r"fn main() -> u8 { let x: u8 = 255 + 1; abort(); }"
+    ⟨``Slice0Rules.AdditionFits, 1⟩ ⟨34, 35, 1, 35, ⟨0⟩⟩ := by
+  with_unfolding_all exact ⟨_, rfl, rfl, Refusal.source_diagnosticAt_iff _⟩
+
+open ConcreteSpec.Core in
+example : ExactRefusal r"fn main() -> u8 { let Option: u8 = 1; let _: u8 = 1; abort(); }"
+    ⟨``Slice0Rules.UnreservedLocal, 2⟩ ⟨22, 28, 1, 23, ⟨0⟩⟩ := by
+  with_unfolding_all exact ⟨_, rfl, rfl, Refusal.source_diagnosticAt_iff _⟩
+
+open ConcreteSpec.Core in
+example : ExactRefusal r"fn main() -> u8 { return 0; let _: u8 = 1; abort(); }"
+    ⟨``Slice0Rules.ReachableBody, 1⟩ ⟨28, 42, 1, 29, ⟨0⟩⟩ := by
+  with_unfolding_all exact ⟨_, rfl, rfl, Refusal.source_diagnosticAt_iff _⟩
+
+open ConcreteSpec.Core in
+example : ExactRefusal r"fn main() -> u8 { return 256 + (255 + 1); }"
+    ⟨``Slice0Rules.LiteralTyped, 1⟩ ⟨25, 28, 1, 26, ⟨0⟩⟩ := by
+  with_unfolding_all exact ⟨_, rfl, rfl, Refusal.source_diagnosticAt_iff _⟩
+
+-- Unchecked arithmetic can continue through this prefix to the later call.
+example :
+    let text := r"fn main() -> u8 { let x: u8 = 255 + 1; abort(); }"
+    (do Stages.unchecked (← Stages.Input.load "main.con" text.toUTF8)) =
+      .error (.source (.parser .outsideProduction ⟨39, 44, 1, 40, ⟨0⟩⟩)) := by
+  with_unfolding_all rfl
+
+-- A parser token advertising either payload-bearing terminal must supply its value.
+example (t : ConcreteSpec.Surface0.TokenValue) (ident : t.kind = .ident) : ∃ name, t = .name name := by
+  cases t with
+  | fixed k plain => exact False.elim (plain.1 ident)
+  | name n => exact ⟨n, rfl⟩
+  | integer => cases ident
+
+example (t : ConcreteSpec.Surface0.TokenValue) (integer : t.kind = .integer) : ∃ n r suff, t = .integer n r suff := by
+  cases t with
+  | fixed k plain => exact False.elim (plain.2 integer)
+  | name => cases integer
+  | integer => exact ⟨_, _, _, rfl⟩
+
+-- Exhausting an explicitly supplied interpreter budget is a transition failure.
+-- It retains the lookahead location even on a grammar proved predictive.
+open ConcreteSpec.Core in
+example :
+    let pos : ConcreteSpec.Surface0.Span := ⟨12, 14, 2, 3, ⟨0⟩⟩
+    let cause := ConcreteSpec.StageInterface.RefusalCause.parser (.internal (.advance 0)) pos
+    Parse.run Parse.table0 (·.value.kind) (fun _ => ())
+        (fun _ _ _ _ => .ok ()) pos 0 [⟨.fixed .fn, pos⟩] = .error cause ∧
+      cause.rule = ⟨``Slice0Rules.ParserCanStep, 1⟩ ∧
+      cause.primary = ConcreteSpec.StageInterface.surfaceFileSpan pos ∧
+      ∀ candidate, ((Refusal.source cause).diagnosticAt candidate).isSome = true ↔
+        candidate = ⟨``Slice0Rules.ParserCanStep, 1⟩ :=
+  ⟨rfl, rfl, rfl, Refusal.source_diagnosticAt_iff _⟩
 
 example : ∃ ast, mainBinderParse = .ok ast ∧
-    Admission.prepareParsed .admission ast = .error (.checker "binding shadows 'main' at byte 22") ∧
+    Admission.prepareParsed .admission ast = .error (.source (.surface (.reservedBinder "main" ⟨22, 26, 1, 23, ⟨0⟩⟩))) ∧
     ∀ core, ¬ Elaborates .admission ast core := by
   refine ⟨_, rfl, rfl, ?_⟩
   exact refusesFirstBinder rfl (by decide)
 
 example : ∃ ast, intrinsicBinderParse = .ok ast ∧
-    Admission.prepareParsed .admission ast = .error (.checker "binding shadows 'discard' at byte 22") ∧
+    Admission.prepareParsed .admission ast = .error (.source (.surface (.reservedBinder "discard" ⟨22, 29, 1, 23, ⟨0⟩⟩))) ∧
     ∀ core, ¬ Elaborates .admission ast core := by
   refine ⟨_, rfl, rfl, ?_⟩
   exact refusesFirstBinder rfl (by decide)
 
 example : ∃ ast, builtinTypeBinderParse = .ok ast ∧
-    Admission.prepareParsed .admission ast = .error (.checker "binding shadows 'Option' at byte 22") ∧
+    Admission.prepareParsed .admission ast = .error (.source (.surface (.reservedBinder "Option" ⟨22, 28, 1, 23, ⟨0⟩⟩))) ∧
     ∀ core, ¬ Elaborates .admission ast core := by
   refine ⟨_, rfl, rfl, ?_⟩
   exact refusesFirstBinder rfl (by decide)
 
 example : ∃ ast, duplicateBinderParse = .ok ast ∧
-    Admission.prepareParsed .admission ast = .error (.checker "binding shadows 'x' at byte 37") ∧
+    Admission.prepareParsed .admission ast = .error (.source (.surface (.duplicateBinder "x" ⟨37, 38, 1, 38, ⟨0⟩⟩))) ∧
     ∀ core, ¬ Elaborates .admission ast core := by
   refine ⟨_, rfl, rfl, ?_⟩
   intro core h
@@ -930,20 +1026,21 @@ example : ∃ out, Stages.compile answerInput = .ok out ∧
     refine ⟨_, rfl, ?_⟩
     exact returnAtTwo rfl rfl rfl
 
-example : ¬ ConformanceStatic ⟨⟨[], .lit 256⟩, []⟩ := by
+example : ¬ ConformanceStatic ⟨⟨[], .lit 256, bindingSpan, bindingSpan⟩, []⟩ := by
   exact Bool.noConfusion
 
 -- Source binder rules must be enforced before the spelling disappears from Core.
 example :
     let input := (Stages.Input.load "main.con"
       r"fn main() -> u8 { let main: u8 = 42; return main; }".toUTF8).toOption.get (by rfl)
-    Stages.unchecked input = .error (.checker "binding shadows 'main' at byte 22") := by
+    Stages.unchecked input = .error (.source (.surface (.reservedBinder "main" ⟨22, 26, 1, 23, ⟨0⟩⟩))) := by
   with_unfolding_all rfl
 
 example :
     let input := (Stages.Input.load "main.con"
       r"fn main() -> u8 { let x: u8 = 42; return 0; }".toUTF8).toOption.get (by rfl)
-    Stages.unchecked input = .error (.checker "Core check rejected the program") := by
+    Stages.unchecked input = .error (.source (.core .slice0
+      ⟨⟨0⟩, 34, 43, 1, 35⟩ [(⟨"binding"⟩, ⟨⟨0⟩, 22, 23, 1, 23⟩)] (.atPosition 1 (.unusedBinding ⟨0⟩)))) := by
   with_unfolding_all rfl
 
 private def overflowInput (comment : String) : Stages.Input :=
@@ -1521,8 +1618,11 @@ example :
 
 private def firstOrigin : Elab.SourceSite := ⟨⟨0⟩, ⟨3, 4, 1, 4, ⟨0⟩⟩⟩
 private def secondOrigin : Elab.SourceSite := ⟨⟨1⟩, ⟨9, 10, 1, 10, ⟨0⟩⟩⟩
+private def locatedAdd (x left right : Nat) (site : Elab.SourceSite) : ConcreteSpec.StageInterface.LocatedBinding :=
+  ⟨⟨⟨x⟩, .add (.lit left) (.lit right)⟩, site.operator, site.operator, (site.operator, site.operator), .unnamed none⟩
+
 private def mixedCore : Elab.Output :=
-  ⟨⟨[⟨⟨0⟩, .add (.lit 1) (.lit 2)⟩, ⟨⟨1⟩, .add (.lit 200) (.lit 56)⟩], .var ⟨1⟩⟩,
+  ⟨⟨[locatedAdd 0 1 2 firstOrigin, locatedAdd 1 200 56 secondOrigin], .var ⟨1⟩, bindingSpan, bindingSpan⟩,
     [firstOrigin, secondOrigin]⟩
 
 example : ¬ OriginWellFormed { mixedCore with sites := [secondOrigin, firstOrigin] } :=
@@ -1532,8 +1632,8 @@ example : ¬ OriginWellFormed { mixedCore with sites := [secondOrigin, firstOrig
     contradiction
 
 example : ¬ OriginWellFormed
-    ⟨⟨[⟨⟨0⟩, .add (.lit 1) (.lit 2)⟩, ⟨⟨0⟩, .add (.lit 200) (.lit 56)⟩],
-      .var ⟨0⟩⟩, [firstOrigin, firstOrigin]⟩ := by
+    ⟨⟨[locatedAdd 0 1 2 firstOrigin, locatedAdd 0 200 56 firstOrigin],
+      .var ⟨0⟩, bindingSpan, bindingSpan⟩, [firstOrigin, firstOrigin]⟩ := by
   intro h
   exact (by decide : ¬ ([⟨0⟩, ⟨0⟩] : List ConcreteSpec.Var).Nodup) h.1
 

@@ -9,8 +9,10 @@ structure SourceSite where
   operator : Span
 
 structure Output where
-  program : ConcreteSpec.Slice0.Program
+  located : ConcreteSpec.StageInterface.EarlyProgram
   sites : List SourceSite
+
+def Output.program (out : Output) := out.located.eraseLocations
 
 abbrev LocatedOutput := ConcreteSpec.StageInterface.EarlyProgram
 
@@ -19,7 +21,7 @@ def LocatedOutput.erase (out : LocatedOutput) : Output :=
     match binding.statement.e with
     | .atom _ => none
     | .add .. => some (⟨binding.statement.x, binding.operationSpan⟩ : SourceSite)
-  ⟨out.eraseLocations, sites⟩
+  ⟨out, sites⟩
 
 private def evalExpr (env : List (String × Int)) : Expr → Except ConcreteSpec.Outcome Int
   | .integer value _ _ => .ok value

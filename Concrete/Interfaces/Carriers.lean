@@ -55,15 +55,17 @@ theorem Profile.targetWF (profile : Profile) : profile.memoryTarget.WellFormed :
 
 inductive LexRefusal where
   | missingFile (entry : ConcreteSpec.Core.FileId)
-  | malformed (diagnostic : String)
-  | digitLimit (offset limit : Nat)
+  | source (cause : RefusalCause)
 
 inductive ElabRefusal where
   | unsupportedSlice (slice : Slice)
-  | diagnostic (rule : RuleId) (primary : FileSpan) (related : List (ConcreteSpec.Name × FileSpan))
+  | invalidTree (file : ConcreteSpec.Core.FileId)
+  | unexpectedExtension (file : ConcreteSpec.Core.FileId)
+  | sliceMismatch (expected actual : Slice)
+  | source (cause : RefusalCause)
 
 inductive StageFailure where
-  | unpreparable
+  | admission (failure : AdmissionFailure)
   | resource (failure : ResourceRefusal)
   | unsupportedProfile (rule : RuleId)
   | invalidInput (rule : RuleId)

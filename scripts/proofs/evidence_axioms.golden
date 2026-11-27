@@ -1298,6 +1298,8 @@ ConcreteSpec.Core.Slice0Rules.namedAccepted
 ConcreteSpec.Core.Slice0Rules.namedRefused	
 ConcreteSpec.Core.Slice0Rules.parseAccepted	
 ConcreteSpec.Core.Slice0Rules.parseRefused	
+ConcreteSpec.Core.Slice0Rules.parserStepAccepted	
+ConcreteSpec.Core.Slice0Rules.parserStepRefused	
 ConcreteSpec.Core.Slice0Rules.productionAccepted	
 ConcreteSpec.Core.Slice0Rules.productionRefused	
 ConcreteSpec.Core.Slice0Rules.radixAccepted	
@@ -2093,6 +2095,15 @@ _private.ConcreteSpecEvidence.Rules.0.ConcreteSpec.Core.Leak.ReportSound.match_1
 _private.ConcreteSpecEvidence.Rules.0.ConcreteSpec.Core.Leak.instReprAction.repr.match_1.eq_1	
 _private.ConcreteSpecEvidence.Rules.0.ConcreteSpec.Core.Leak.instReprAction.repr.match_1.eq_2	
 _private.ConcreteSpecEvidence.Rules.0.ConcreteSpec.Core.Leak.instReprAction.repr.match_1.eq_3	
+_private.ConcreteSpecEvidence.Rules.0.ConcreteSpec.Core.Slice0Rules.parsedTokens._proof_1	
+_private.ConcreteSpecEvidence.Rules.0.ConcreteSpec.Core.Slice0Rules.parsedTokens._proof_2	
+_private.ConcreteSpecEvidence.Rules.0.ConcreteSpec.Core.Slice0Rules.parsedTokens._proof_3	
+_private.ConcreteSpecEvidence.Rules.0.ConcreteSpec.Core.Slice0Rules.parsedTokens._proof_4	
+_private.ConcreteSpecEvidence.Rules.0.ConcreteSpec.Core.Slice0Rules.parsedTokens._proof_5	
+_private.ConcreteSpecEvidence.Rules.0.ConcreteSpec.Core.Slice0Rules.parsedTokens._proof_6	
+_private.ConcreteSpecEvidence.Rules.0.ConcreteSpec.Core.Slice0Rules.parsedTokens._proof_7	
+_private.ConcreteSpecEvidence.Rules.0.ConcreteSpec.Core.Slice0Rules.parsedTokens._proof_8	
+_private.ConcreteSpecEvidence.Rules.0.ConcreteSpec.Core.Slice0Rules.parsedTokens._proof_9	
 _private.ConcreteSpecEvidence.Rules.0.ConcreteSpec.Core.SourcePath.Reference.offsets.match_1.eq_1	
 _private.ConcreteSpecEvidence.Rules.0.ConcreteSpec.Core.SourcePath.probesWith.match_1.eq_1	propext
 _private.ConcreteSpecEvidence.Rules.0.ConcreteSpec.Core.SourcePath.probesWith.match_1.eq_2	propext

@@ -19,6 +19,22 @@ docs/decisions.md#decided-2026-11-25-freeze-and-grammar. -/
 def Predictive (grammar : Concrete.LL1.Grammar Terminal Nonterminal) : Prop :=
   Concrete.LL1.ll1 grammar = true
 
+/-- The table interpreter must have remaining work budget, a defined reduction for
+the completed row, and exactly one start value on completion. A missing transition
+is an implementation failure (Q8.3, docs/decisions.md#decided-2026-11-25-freeze-and-grammar). -/
+inductive ParserTransition where
+  | advance (remaining : Nat)
+  | reduce (actionDefined : Bool)
+  | finish (startValues : Nat)
+  deriving DecidableEq
+
+/-- The interpreter has a defined transition for the current state (Q8.3,
+docs/decisions.md#decided-2026-11-25-freeze-and-grammar). -/
+def ParserCanStep : ParserTransition → Prop
+  | .advance remaining => 0 < remaining
+  | .reduce defined => defined = true
+  | .finish values => values = 1
+
 /-- Payload-level parse derivation. Decision: Q8.3,
 docs/decisions.md#decided-2026-11-25-freeze-and-grammar. -/
 def Parsed (input : List Token × Surface0.Program) : Prop := Derives input.1 input.2
@@ -75,7 +91,7 @@ checks one production; unsupported-form classification requires a complete parse
 Decision: Q8.3, docs/decisions.md#decided-slice0-surface-2026-11-06. -/
 def AdmittedProduction
     (production : Nonterminal × List (Concrete.LL1.Sym Terminal Nonterminal)) : Prop :=
-  refusalProductions.lookup production = some false
+  (projectedProductions .shared).lookup production = some false
 
 /-- Slice-0 literal typing delegates to the Core atom judgment (ARITH-2).
 Decision: Q6.1, docs/decisions.md#decided-project-no-hidden-traps. -/

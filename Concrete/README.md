@@ -302,7 +302,7 @@ This file is spec work (open item O1, slice 0 only). It is a new file, and no ex
   that `ll1` returns `true`. The check in `ConcreteSpec/Spec/LL1.lean` verifies closure of the
   computed nullable, FIRST and FOLLOW sets and disjointness of the prediction sets.
   `ll1_sound` shows that at most one production of a nonterminal is predicted for any lookahead.
-  Both the slice-0 grammar and the refusal grammar discharge the check by `decide`.
+  The Slice 0, Slice 1 and shared recognition projections discharge the check by `decide`.
   The parser starts at the grammar's start symbol and accepts only a `CheckedTable`, whose
   entries must equal `makeTable` of that grammar. The slice-0 table is precomputed, so parsing
   and checking successful slice-0 parse certificates use the constant entries directly.

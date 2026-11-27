@@ -17,8 +17,10 @@ base = (root / 'ConcreteSpec/Spec/Rules.lean').read_text().replace(
     'import ConcreteSpec.Spec.Ident', 'import ConcreteSpec.Spec.Ident\nimport Lean')
 # Isolate synthetic fixtures from production registrations and conformance declarations.
 # Keep the actual registry types and evidence wrappers, so every control exercises them.
-base = re.sub(r'/-- Refusal categories.*?(?=/-- Diagnostic rule identities)', '',
-              base, flags=re.S)
+base, slice_tables = re.subn(r'^def slice0Rules : List RuleId :=.*?(?=\n\n)',
+                      'def slice0Rules : List RuleId := []', base, flags=re.M | re.S)
+if slice_tables != 1:
+    raise ValueError('expected one production slice0Rules declaration')
 base = re.sub(r'def rulesForSlice .*?(?=\n/--)',
               'def rulesForSlice (_ : SliceId) : Option (List RegisteredRule) := none\n',
               base, flags=re.S)
