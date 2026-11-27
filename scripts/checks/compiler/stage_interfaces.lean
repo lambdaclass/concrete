@@ -755,7 +755,7 @@ example :
 set_option maxRecDepth 4096 in
 example :
     let program : EarlyProgram :=
-      ⟨[(⟨⟨0⟩, .add (.lit 255) (.lit 1)⟩, resultSpan)], .var ⟨0⟩, resultSpan⟩
+      ⟨[⟨⟨⟨0⟩, .add (.lit 255) (.lit 1)⟩, resultSpan, .unnamed none⟩], .var ⟨0⟩, resultSpan⟩
     let core : CoreInput earlyFixtureLanguage :=
       ⟨elaborationSource.project, slice0, earlyPayload fixtureEarly program⟩
     let typing := (registry (returnPasses fixtureElaborate)).typing
@@ -1873,7 +1873,7 @@ example :
 
 private def retainedOwnerCore : CoreInput earlyFixtureLanguage :=
   ⟨elaborationSource.project, early, earlyPayload fixtureEarly
-    ⟨[(⟨⟨storeRoot.id⟩, .atom (.lit 42)⟩, resultSpan)], .var ⟨storeRoot.id⟩, resultSpan⟩⟩
+    ⟨[⟨⟨⟨storeRoot.id⟩, .atom (.lit 42)⟩, resultSpan, .unnamed none⟩], .var ⟨storeRoot.id⟩, resultSpan⟩⟩
 
 private def retainedOwnerMIR (substituted : Bool) : MIR ownerFixtureLowering testProfile :=
   let dst : Place _ ownerFixtureType := ⟨storeRoot, []⟩

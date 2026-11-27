@@ -522,6 +522,12 @@ theorem stepRet :
 
 end Exec
 
+theorem siblingInsertion :
+    ∃ (_ : FnId) (_ _ : Nat) (_ : KeyConstruct.ParentContext)
+      (_ _ : List KeyConstruct) (_ : KeyConstruct), True :=
+  ⟨Vacuity.function, 7, 19, .children .body [Vacuity.unnamedLoop] Vacuity.nestedBody [],
+    [], [Vacuity.nestedBody, Vacuity.insertedCall], Vacuity.insertedCall, trivial⟩
+
 theorem keysOutsideEdit :
     ∃ (before after : FnId → List KeyConstruct) (_ _ : FnId → Nat) (edited : FnId)
       (_ : ∀ f, f ≠ edited → after f = before f)
@@ -554,6 +560,7 @@ private def specWitnesses : List (Name × Name) :=
    (``ConcreteSpec.Core.Hybrid.materialize_reuse, ``SpecWitness.materializeReuse),
    (``ConcreteSpec.Core.typeConsts_refuses_nonCopy, ``SpecWitness.nonCopyDeclaration),
    (``ConcreteSpec.Core.Exec.step_ret, ``SpecWitness.stepRet),
+   (``ConcreteSpec.Core.KeyConstruct.assignFunctionTable_insert_locality, ``SpecWitness.siblingInsertion),
    (``ConcreteSpec.Core.KeyConstruct.assignProgramTables_outsideEdit, ``SpecWitness.keysOutsideEdit),
    (``ConcreteSpec.Core.Hybrid.rep_roundtrip, ``SpecWitness.admittedEncoding),
    (``ConcreteSpec.Core.Hybrid.encode_refuses_unadmitted, ``SpecWitness.refusedEncoding),
