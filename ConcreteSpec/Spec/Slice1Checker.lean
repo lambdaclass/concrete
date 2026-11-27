@@ -1,5 +1,5 @@
 import ConcreteSpec.Spec.Slice1Semantics
-import ConcreteSpec.Spec.Slice1Ownership
+import ConcreteSpec.Admission.Types
 
 /-!
 # The executable slice-1 checker
@@ -10,6 +10,7 @@ see `ConcreteSpec/README.md`.
 
 namespace ConcreteSpec
 open Core (AList)
+open Admission (AtomTypeFailure Reason Refusal Discharge)
 
 /-! ### The checker
 
@@ -20,117 +21,195 @@ decided by running `check`. -/
 instance (Γ : Ctx) (x : Var) : Decidable (Fresh Γ x) := by
   unfold Fresh; infer_instance
 
-instance (Γ : Ctx) (pat : List (Name × Binder)) : Decidable (PatFresh Γ pat) := by
-  unfold PatFresh; infer_instance
-
 instance (Δ : Decls) (Γ : Ctx) : Decidable (Discharged Δ Γ) := by
   unfold Discharged; infer_instance
 
 instance (Δ : Decls) : Decidable (DeclsOk Δ) := by
   unfold DeclsOk; infer_instance
 
-/-- The scalar type of an atom, if it has one. -/
-def atomTy (Γ : TyCtx) : Atom → Option STy
-  | .int t n => if t.inRange n then some (.int t) else none
-  | .bool _ => some .bool
+/-- The first entry in source order that also appears later in the list. -/
+def firstRepeated? {α : Type} [DecidableEq α] : List α → Option α
+  | [] => none
+  | x :: rest => if x ∈ rest then some x else firstRepeated? rest
+
+/-- Convert a detected violation to a refusal with the offending item. -/
+def rejectFound {α ε : Type} (found : Option α) (reason : α → ε) : Except ε Unit :=
+  match found with
+  | none => .ok ()
+  | some item => .error (reason item)
+
+/-- Infer an atom's type without erasing the reason it could not be typed. -/
+def inferAtomType (Γ : TyCtx) : Atom → Except AtomTypeFailure Ty
+  | .int t n => if t.inRange n then .ok (.scalar (.int t)) else .error (.outOfRange t n)
+  | .bool _ => .ok (.scalar .bool)
+  | .copy x | .move x => match AList.lookup Γ x with
+    | some ty => .ok ty
+    | none => .error (.unbound x)
+
+def inferAddOperand (Γ : TyCtx) (a : Atom) : Except Reason IntTy :=
+  match inferAtomType Γ a with
+  | .ok (.scalar (.int t)) => .ok t
+  | .ok actual => .error (.additionOperandType a (.wrongType actual))
+  | .error cause => .error (.additionOperandType a (.atomFailure cause))
+
+def checkFieldTypes (Γ : TyCtx) (d : StructDecl) : List (Name × Atom) → Except Reason Unit
+  | [] => .ok ()
+  | (field, atom) :: rest => do
+    let some expected := AList.lookup d.fields field | .error (.unknownStructField d.name field)
+    let actual ← (inferAtomType Γ atom).mapError (fun cause => .structFieldType d.name field atom expected (.atomFailure cause))
+    if actual = .scalar expected then checkFieldTypes Γ d rest
+    else .error (.structFieldType d.name field atom expected (.wrongType actual))
+
+/-- The executable form of `FieldsTy`, with the rejected initializer or shape rule. -/
+def checkFields (Γ : TyCtx) (d : StructDecl) (fs : List (Name × Atom)) : Except Reason Unit := do
+  rejectFound (firstRepeated? (fs.map Prod.fst)) (.duplicateStructInitializer d.name)
+  checkFieldTypes Γ d fs
+  rejectFound (d.fields.find? (fun q => (AList.lookup fs q.1).isNone))
+    (fun q => .missingStructField d.name q.1)
+
+def inferExprType (Δ : Decls) (Γ : TyCtx) : Expr → Except Reason Ty
+  | .atom a => (inferAtomType Γ a).mapError fun
+    | .unbound x => .unknownBinding x
+    | .outOfRange t n => .literalOutOfRange t n
+  | .add l r => do
+    let lt ← inferAddOperand Γ l
+    let rt ← inferAddOperand Γ r
+    if lt = rt then .ok (.scalar (.int lt)) else .error (.additionTypeMismatch l r lt rt)
+  | .mk s fs => do
+    let some d := findDecl Δ s | .error (.unknownStruct s)
+    checkFields Γ d fs
+    .ok (.struct s)
+
+def requireExprType (Δ : Decls) (Γ : TyCtx) (expected : Ty) (e : Expr) : Except Reason Unit := do
+  let actual ← inferExprType Δ Γ e
+  if actual = expected then .ok () else .error (.expressionType expected actual)
+
+/-- Read an atom, distinguishing name, lifetime and read-mode violations. -/
+def useAtom (Δ : Decls) (Γ : Ctx) : Atom → Except Reason Ctx
+  | .int _ _ | .bool _ => .ok Γ
   | .copy x => match AList.lookup Γ x with
-    | some (.scalar st) => some st
-    | _ => none
+    | some e =>
+      if e.live then
+        if e.ty.isCopy Δ then .ok (ctxMark Γ x false) else .error (.copyOfLinear x)
+      else .error (.movedBinding x)
+    | none => .error (.unknownBinding x)
   | .move x => match AList.lookup Γ x with
-    | some (.scalar st) => some st
-    | _ => none
+    | some e =>
+      if e.live then
+        if e.ty.isCopy Δ then .error (.moveOfCopy x) else .ok (ctxMark Γ x true)
+      else .error (.movedBinding x)
+    | none => .error (.unknownBinding x)
 
-/-- The executable form of `FieldsTy`. -/
-def fieldsOkB (Γ : TyCtx) (d : StructDecl) (fs : List (Name × Atom)) : Bool :=
-  decide ((fs.map Prod.fst).Nodup) &&
-  fs.all (fun p => match AList.lookup d.fields p.1 with
-    | some st => atomTy Γ p.2 == some st
-    | none => false) &&
-  d.fields.all (fun q => (AList.lookup fs q.1).isSome)
+/-- Check each of the three field obligations of `PatOk` in order. -/
+def checkPattern (d : StructDecl) (pat : List (Name × Binder)) : Except Reason Unit := do
+  rejectFound (firstRepeated? (pat.map Prod.fst)) (.duplicatePatternField d.name)
+  rejectFound (pat.find? (fun p => (AList.lookup d.fields p.1).isNone))
+    (fun p => .unknownPatternField d.name p.1)
+  rejectFound (d.fields.find? (fun q => (AList.lookup pat q.1).isNone))
+    (fun q => .missingPatternField d.name q.1)
 
-/-- The type of an expression, if it has one. -/
-def tyOf (Δ : Decls) (Γ : TyCtx) : Expr → Option Ty
-  | .atom (.int t n) => if t.inRange n then some (.scalar (.int t)) else none
-  | .atom (.bool _) => some (.scalar .bool)
-  | .atom (.copy x) => AList.lookup Γ x
-  | .atom (.move x) => AList.lookup Γ x
-  | .add l r => match atomTy Γ l, atomTy Γ r with
-    | some (.int t), some (.int t') => if t = t' then some (.scalar (.int t)) else none
-    | _, _ => none
-  | .mk s fs => match findDecl Δ s with
-    | some d => if fieldsOkB Γ d fs then some (.struct s) else none
-    | none => none
+/-- Check uniqueness within the pattern, then freshness against the existing context. -/
+def checkPatternBinders (Γ : Ctx) (pat : List (Name × Binder)) : Except Reason Unit := do
+  let names := patNames pat
+  rejectFound (firstRepeated? names) .repeatedPatternBinder
+  rejectFound (names.find? (fun x => (AList.lookup Γ x).isSome)) .patternBinderAlreadyBound
 
-/-- The context after reading an atom, if the read is allowed. -/
-def useAtom (Δ : Decls) (Γ : Ctx) : Atom → Option Ctx
-  | .int _ _ => some Γ
-  | .bool _ => some Γ
-  | .copy x => match AList.lookup Γ x with
-    | some e => if e.live ∧ e.ty.isCopy Δ = true then some (ctxMark Γ x false) else none
-    | none => none
-  | .move x => match AList.lookup Γ x with
-    | some e => if e.live ∧ e.ty.isCopy Δ = false then some (ctxMark Γ x true) else none
-    | none => none
+def Expr.atoms : Expr → List Atom
+  | .atom a => [a]
+  | .add l r => [l, r]
+  | .mk _ fs => fs.map Prod.snd
 
-/-- The context after reading atoms left to right. -/
-def useAtoms (Δ : Decls) (Γ : Ctx) : List Atom → Option Ctx
-  | [] => some Γ
+/-- Read atoms in evaluation order and report the exact rejected read. -/
+def readAtoms (Δ : Decls) (Γ : Ctx) : List Atom → Except Reason Ctx
+  | [] => .ok Γ
   | a :: as => match useAtom Δ Γ a with
-    | some Γ₁ => useAtoms Δ Γ₁ as
-    | none => none
+    | .ok Γ₁ => readAtoms Δ Γ₁ as
+    | .error reason => .error reason
 
-/-- The context after evaluating an expression, if its reads are allowed. -/
-def uses (Δ : Decls) (Γ : Ctx) : Expr → Option Ctx
-  | .atom a => useAtom Δ Γ a
-  | .add l r => match useAtom Δ Γ l with
-    | some Γ₁ => useAtom Δ Γ₁ r
-    | none => none
-  | .mk _ fs => useAtoms Δ Γ (fs.map Prod.snd)
+/-- Check typing and reads before testing arithmetic evidence in the pre-read context. -/
+def checkStmtExpr (Δ : Decls) (Γ : Ctx) (t : Ty) (e : Expr) : Except Reason Ctx := do
+  requireExprType Δ Γ.tys t e
+  let next ← readAtoms Δ Γ e.atoms
+  if admitted Γ e then .ok next
+  else .error .additionOverflowUnproven
 
-/-- The executable form of `PatOk`. -/
-def patOkB (d : StructDecl) (pat : List (Name × Binder)) : Bool :=
-  decide ((pat.map Prod.fst).Nodup) &&
-  pat.all (fun p => (AList.lookup d.fields p.1).isSome) &&
-  d.fields.all (fun q => (AList.lookup pat q.1).isSome)
+/-- Check one statement, retaining its output context for the next statement. -/
+def checkStmt (Δ : Decls) (Γ : Ctx) : Stmt → Except Reason Ctx
+  | .let_ (.name x) t e => do
+    let next ← checkStmtExpr Δ Γ t e
+    if Fresh next x then
+      .ok ((x, { ty := t, live := true, used := false, known := knownExpr Γ e,
+                 kfields := knownFields Γ e }) :: next)
+    else .error (.duplicateBinding x)
+  | .let_ .wild t e => do
+    let next ← checkStmtExpr Δ Γ t e
+    if t.isCopy Δ then .ok next else .error (.discardLinear t)
+  | .letStruct s pat e => do
+    let next ← checkStmtExpr Δ Γ (.struct s) e
+    let some d := findDecl Δ s | .error (.unknownStruct s)
+    checkPattern d pat
+    checkPatternBinders next pat
+    .ok (bindPat d (knownFields Γ e) pat next)
 
-/-- The context after a statement, if the statement is accepted. -/
-def stmtOut (Δ : Decls) (Γ : Ctx) : Stmt → Option Ctx
-  | .let_ (.name x) t e =>
-    if tyOf Δ Γ.tys e = some t ∧ admitted Γ e = true then
-      match uses Δ Γ e with
-      | some Γ₁ => if Fresh Γ₁ x then
-          some ((x, { ty := t, live := true, used := false, known := knownExpr Γ e,
-                      kfields := knownFields Γ e }) :: Γ₁)
-          else none
-      | none => none
-    else none
-  | .let_ .wild t e =>
-    if tyOf Δ Γ.tys e = some t ∧ admitted Γ e = true ∧ t.isCopy Δ = true then uses Δ Γ e
-    else none
-  | .letStruct s pat e =>
-    if tyOf Δ Γ.tys e = some (.struct s) ∧ admitted Γ e = true then
-      match findDecl Δ s with
-      | some d => if patOkB d pat then
-          match uses Δ Γ e with
-          | some Γ₁ => if PatFresh Γ₁ pat then some (bindPat d (knownFields Γ e) pat Γ₁) else none
-          | none => none
-        else none
-      | none => none
-    else none
+/-- Check the obligations that remain at a return or abort. -/
+def finishChecks (Δ : Decls) (atReturn : Bool) : Ctx → Except Reason Unit
+  | [] => .ok ()
+  | (x, entry) :: rest =>
+    if atReturn && !entry.ty.isCopy Δ && entry.live then .error (.liveLinearBinding x)
+    else if entry.used then finishChecks Δ atReturn rest
+    else .error (.unusedBinding x)
 
-/-- The executable form of `BodyOk`. -/
-def bodyOkB (Δ : Decls) (Γ : Ctx) : List Stmt → Terminator → Bool
-  | [], .abort _ => Γ.all (·.2.used)
-  | [], .ret r => tyOf Δ Γ.tys (.atom r) == some (.scalar (.int .u8)) &&
-      match uses Δ Γ (.atom r) with
-      | some Γ₁ => decide (Discharged Δ Γ₁)
-      | none => false
-  | s :: ss, r => match stmtOut Δ Γ s with
-    | some Γ₁ => bodyOkB Δ Γ₁ ss r
-    | none => false
+def checkEnd (Δ : Decls) (Γ : Ctx) : Terminator → Except Reason Unit
+  | .abort _ => finishChecks Δ false Γ
+  | .ret r => do
+    requireExprType Δ Γ.tys (.scalar (.int .u8)) (.atom r)
+    let next ← useAtom Δ Γ r
+    finishChecks Δ true next
 
-/-- The executable checker. -/
-def check (p : Program) : Bool := decide (DeclsOk p.decls) && bodyOkB p.decls [] p.body p.ending
+/-- Successful statement checks establish the typing and safety of this emission.
+Only addition has a dischargeable condition in this fragment. -/
+def stmtDischarge (position : Nat) (Γ : Ctx) : Stmt → Option Discharge
+  | .let_ _ (.scalar (.int t)) (.add l r) => some ⟨position, t, l, r, Γ⟩
+  | _ => none
+
+/-- Visit each statement once. Discharges are returned in operation order and
+only on whole-body success. -/
+def checkCoreBody (Δ : Decls) (Γ : Ctx) (position : Nat) :
+    List Stmt → Terminator → Except Refusal (List Discharge)
+  | [], ending => match checkEnd Δ Γ ending with
+    | .ok () => .ok []
+    | .error reason => .error (.atPosition position reason)
+  | s :: ss, ending => match checkStmt Δ Γ s with
+    | .error reason => .error (.atPosition position reason)
+    | .ok Γ₁ => match checkCoreBody Δ Γ₁ (position + 1) ss ending with
+      | .error refusal => .error refusal
+      | .ok tail => .ok ((stmtDischarge position Γ s).toList ++ tail)
+
+/-- Check declaration-local rules in source order. -/
+def checkDeclFields : Decls → Except Refusal Unit
+  | [] => .ok ()
+  | d :: rest =>
+    if d.name = ⟨"main"⟩ then .error (.reservedStructName d.name)
+    else do
+      rejectFound (firstRepeated? (d.fields.map Prod.fst)) (.duplicateDeclaredField d.name)
+      checkDeclFields rest
+
+def checkDecls (Δ : Decls) : Except Refusal Unit := do
+  rejectFound (firstRepeated? (Δ.map StructDecl.name)) .duplicateStructName
+  checkDeclFields Δ
+
+/-- The sole executable Core checker for the straight-line fragment. -/
+def checkProgram (p : Program) : Except Refusal (List Discharge) :=
+  match checkDecls p.decls with
+  | .ok () => checkCoreBody p.decls [] 0 p.body p.ending
+  | .error reason => .error reason
+
+/-- Boolean view of admission for existing spec examples. -/
+def bodyOkB (Δ : Decls) (Γ : Ctx) (ss : List Stmt) (r : Terminator) : Bool :=
+  (checkCoreBody Δ Γ 0 ss r).isOk
+
+/-- Boolean view of admission for existing callers. -/
+def check (p : Program) : Bool := (checkProgram p).isOk
 
 /-- Q8.2, OD62, OD84 and OD138. Core admission checks nominal types, ownership,
 binding use, arithmetic evidence and the body's terminator. -/
