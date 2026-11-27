@@ -162,10 +162,10 @@ Both launchers call `concrete_body` and decode its word using the runtime emitte
 | Body word | Runtime action |
 |---|---|
 | Below 256 | Exit with that status. |
-| `256 + i`, with an entry at index `i` | Write the entry's trap line and a newline to fd 2, then exit 134. |
-| `256 + i`, with no entry at index `i` | Write `concrete: runtime: invalid result word` and a newline to fd 2, then call `abort()`. The Lean decoder gives `.stuck`. |
+| `256 + i`, with an entry at index `i` | Attempt to write the entry's trap line and a newline to fd 2, then exit 134 even if the write returns zero or an error. |
+| `256 + i`, with no entry at index `i` | Attempt to write `concrete: runtime: invalid result word` and a newline to fd 2, then call `abort()`. The Lean decoder gives `.stuck`. |
 
-The scalar native premise `P_rt` relates the observed behaviour of a non-killed launch to a result of the body on that launch. The exact diagnostic for a valid trap has its own premise, `P_trap_site`. [Native premise fields](Premises.lean) · [BIR decoder](BIR.lean).
+The scalar native premise `P_rt` relates the observed behaviour of a non-killed launch to a result of the body on that launch. For an admitted, observed launch whose body returns a trap word with a matching table entry, `P_trap_site` supplies the exact bytes on fd 2. [Native premise fields](Premises.lean) · [BIR decoder](BIR.lean).
 
 
 ## Layout (lean root, few cohesive folders)
