@@ -13,67 +13,54 @@ Concrete's existing architecture makes it uniquely easy to solve **both** proble
 
 ---
 
-## 1. Bodyless `InterfaceSummary` and Two-Level Merkle Identity
+## <a id="1-bodyless-interfacesummary-and-two-level-merkle-identity"></a>1. Bodyless `InterfaceSummary`, Derived Facts and Body Identity
 
 ### Current Architecture on `main`
-- [Concrete/Stages.lean](../../../Concrete/Stages.lean) runs a monolithic single-file `compile (input : Input) : Except Refusal Output` returning every intermediate stage (`tokens`, `ast`, `core`, `evidence`, `mir`, `memory`, `bir`) coupled to `fileId` and source spans.
-- [Concrete/Artifact/Encoding.lean](../../../Concrete/Artifact/Encoding.lean) and [Concrete/Artifact/Sha256.lean](../../../Concrete/Artifact/Sha256.lean) already provide canonical binary encoding and SHA-256 digests.
+- `Registry.pipeline` selects the indexed route and emitter. Its stage inputs are the starting point for query dependencies. [Pipeline](../../../Concrete/Interfaces/Pipeline.lean).
+- The artifact modules frame records canonically and compute SHA-256. `Sha256.hash` returns `Option ByteArray`. [Encoding](../../../Concrete/Artifact/Encoding.lean) · [SHA-256](../../../Concrete/Artifact/Sha256.lean).
 - [LANGUAGE_AND_COMPILER_ENHANCEMENTS.md](../LANGUAGE_AND_COMPILER_ENHANCEMENTS.md#comp-merkle-incremental) already proposes two-level declaration Merkle hashing (`interface_hash` vs `body_hash`) for `R-0556` and `R-0149`.
 
 ### Architectural Upgrade: Make `InterfaceSummary` a First-Class Compiler Artifact
 
-For every declaration `d` (function, struct, enum, trait, const), separate its **semantic interface** from its **private implementation body**:
+For every declaration, distinguish three canonical values:
 
-```lean
-structure InterfaceSummary where
-  entityId : StableKey               -- compiler-owned semantic identity (Rule 13, C9)
-  signature : CanonicalType          -- parameter/return types, generic bounds (no spans/whitespace)
-  capabilities : CapabilitySet       -- exact `with(...)` set
-  contracts : List CanonicalContract -- #[requires], #[ensures], struct #[invariant]
-  layoutPolicy : LayoutSummary       -- fixed ABI or abstract internal layout summary
-  facts : ExportedFacts              -- termination, may-abort, allocation, frames, stack/step bounds,
-                                     -- trust/FFI surface, proof status + strength label
-  deps : List (StableKey × Sha256)   -- `interface_hash` of every referenced declaration
-```
+1. **Bodyless declaration header.** Record the stable entity key, signature, capabilities, contracts, layout policy and dependency headers. Hash recursive dependency groups together in canonical order so mutually referring declarations do not require each other's completed hash.
+2. **Derived facts summary.** Derive or validate exported facts using their body dependencies. Collect termination, may-abort, allocation, frames, stack/step bounds, trust and evidence for each recursive group. Record the metric, input domain and premises of each bound so the audit can determine which bounds are comparable. The exported interface comprises its declaration header and exported facts.
+3. **Canonical body.** Record the implementation and body dependencies independently. A private edit preserves interface identity only when every exported field stays equal.
 
-From `InterfaceSummary`, compute two deterministic digests via `Artifact/Encoding.lean` + `Sha256.lean`:
-1. **`interface_hash := sha256 (encode summary)`** — completely invariant to comments, whitespace, local variable spellings, ANF temporary numbering, and private body implementation!
-2. **`body_hash := sha256 (encode canonicalCoreBody ++ interface_hash)`** — changes whenever the implementation body or its internal obligations change.
+A digest indexes candidate records. Validate the exact canonical values on a hit and handle hash failure. A body-independence proof uses equality of canonical inputs and injectivity of the encoding (`encode_injective` for its framed domain), without assuming SHA-256 is injective.
 
 ---
 
 ## 2. Query-Driven, Content-Addressed Compilation (`QueryDB`)
 
-Replace monolithic file-at-a-time compilation in [Concrete/Stages.lean](../../../Concrete/Stages.lean) with a **pure, memoized, Salsa-style query graph** whose keys are semantic identities and content hashes rather than file paths and timestamps:
+Build pure, memoized queries around `Registry.pipeline` in the indexed compiler. Record each input read by the query. [Pipeline](../../../Concrete/Interfaces/Pipeline.lean).
 
 | Query | Depends On | Invalidated By |
 |---|---|---|
-| `parseFile (fileBytesHash)` | Raw file bytes only | Any edit to that file |
-| `extractInterface (entityId)` | Declaration header + `interface_hash` of referenced types/traits | Signature/contract/fact change only |
-| `checkBody (entityId)` | Own `body_hash` + callee **`interface_hash`es ONLY** | Own body change or callee **interface** change (NEVER callee body edits!) |
-| `lowerFunction (entityId, target)` | Own `body_hash` + callee `interface_hash`es (or `body_hash` if inlined/monomorphized) | Own body change, callee interface change, or inlined callee body change |
-| `lookupProof (obligationHash)` | Exact canonical proposition hash + dependency `interface_hash`es | Only when the proposition or an interface dependency changes |
+| `parseFile` | Source bytes, file identity, grammar and versions | Source or parsing input changes |
+| `extractInterface` | Bodyless declaration header and dependency header groups | Any canonical header dependency changes |
+| `deriveFacts` / `checkBody` | Body, checked headers, facts and their recursive dependencies, policy and checker version | Any input read by this derivation changes |
+| `lowerFunction` | Canonical body, specialized/inlined dependencies, target, profile, policy, codegen version and trap-span table | Any lowering input changes, including diagnostic coordinates |
+| `lookupProof` | Exact proposition, environment and declarations read | Recheck the retrieved proof term in the current kernel environment |
 
-### Soundness Guarantee (Preserving `R-0697` Kernel Checking)
-A critical Concrete invariant (`R-0697` in [ROADMAP.md](../../../ROADMAP.md#e-verified-growth)): **caching accelerates lookup and skips redundant re-elaboration/codegen, and NEVER skips Lean kernel checking of proof obligations.**
-- If a callee's body changes while its `interface_hash` stays identical:
-  - Caller typechecking, ownership checking, fact derivation, and non-inlined separate-compilation codegen are **provably identical** (guaranteed by a **body-independence theorem** `checkBody_depends_only_on_interfaces`) and can be reused directly.
-  - Body-dependent artifacts (monomorphized generics, inlined callers, whole-function benchmarks) explicitly record `body_hash` dependencies so stale specializations are **never** reused.
-  - External Lean proof lookup matches by exact `(obligationHash, dependencyInterfaceHashes)` and still runs Lean kernel checking (with `R-0724`'s fast modular replay).
+### Soundness Guarantee (Preserving R-0697 Kernel Checking)
+Reuse a query only after validating all inputs it reads, including versions, target, policy, specialized bodies and source coordinates where relevant. Recheck proof terms against the current declarations. A blank line may preserve typechecking while requiring new trap bytes. Bind BIR/codegen entries to the current trap-span table, or reattach and validate the current spans before emission.
 
-### Parallelism for Free
-Because `checkBody`, `lowerFunction`, and `ValidatedPass` superoptimization ([doc 03](03-joint-solver-and-llm-verified-opt.md)) depend only on immutable `InterfaceSummary` snapshots, **every function in a project can be checked, lowered, validated, and superoptimized in parallel** across cores or build workers with deterministic, order-independent output.
+### Parallelism
+Independent recursive groups can run concurrently once their inputs are available. Check the result against a clean build, including emitted diagnostics.
 
 ---
 
 ## 3. Zero-Boilerplate Semantic-Delta Auditing (`concrete diff`)
 
-With `InterfaceSummary` already canonical and compiler-owned, **`concrete diff <base> <head>`** (`R-0201`) becomes a tiny, exact, trustworthy structural diff over two `Map StableKey InterfaceSummary` tables:
+The proposed `concrete diff <base> <head>` (R-0201) would compare validated declaration headers, exported facts and evidence by stable key, and report changes to the canonical body separately. For example:
 
 ```text
 concrete diff origin/main HEAD
 
-  fn parser::decode_frame (body_hash changed, interface_hash UNCHANGED)
+  fn parser::decode_frame (body hash changed, exported interface changed)
+    declaration header hash unchanged; derived facts summary changed
     capabilities : unchanged  (none)
     allocations  : unchanged  (0 bytes)
     trusted/FFI  : unchanged  (none)
@@ -81,14 +68,14 @@ concrete diff origin/main HEAD
     may-abort    : false      (unchanged)
     stack bound  : 192 B -> 128 B  (-64 B, improved)
     step bound   : 4*n + 12 -> 2*n + 8  (improved)
-    proof status : proved (refines base: YES, verified via BIR validator)
+    proof status : callable refinement proved under the recorded premises
 
-  VERDICT: 0 regressions, 0 new capabilities, 0 new trust premises.
+  No exported bound weakened. No new capability or trust premise was recorded.
 ```
 
 ### Why This Changes Code Review for LLM-Written Code
-- **Empty semantic delta + proved refinement:** If an LLM rewrites a 500-line kernel to be 3× faster and `concrete diff` confirms `interface_hash` unchanged, zero new capabilities/trust premises, improved stack/step bounds, and kernel-checked equivalence (`R-0732`), a human reviewer can audit the PR in **10 seconds** instead of manually tracing 500 lines of bit-twiddling.
-- **Exact regression spotlight:** If a PR quietly adds `with(Fs)`, introduces a `may-abort` path, drops a theorem from `proved` to `not established`, or bumps a loop from `O(n)` to `O(n²)`, `concrete diff` (and `Concrete.toml` ratchets in CI) flags the exact `StableKey` and `FileSpan` immediately.
+- **Changes the audit can establish.** The example tightens two exported upper bounds. The diff identifies the declaration and reports changes to capability requirements, may-abort facts, comparable bounds, premises and proof status. An absent or incomparable bound leaves the cost comparison undetermined.
+- **Limit of an unchanged bound.** A linear loop and a quadratic replacement can both satisfy the same exported quadratic upper bound. For that change the diff should report the edited body, the unchanged upper bound, and that the available cost evidence cannot distinguish the implementations. Establishing an actual cost regression requires evidence that distinguishes their costs on the same metric and domain.
 
 ---
 
@@ -101,8 +88,8 @@ concrete diff origin/main HEAD
 
 | Increment | Slice | Deliverable | Gate |
 |---|---|---|---|
-| **1. Single-function `InterfaceSummary` + `concrete diff` v0** | `B1` / Slice 3 (optional early) or Slice 8 | Canonical `InterfaceSummary` encoder & SHA-256 hash over existing `concrete facts`; minimal `concrete diff` comparing two `.con` files | Formatting/comment/local-renaming invariance test (identical `interface_hash`), planted capability/abort/stack regression caught |
-| **2. Module-level `InterfaceSummary` & body-independence** | Slice 8 (`R-0556`) | Bodyless module interfaces emitting `interface_hash` + `body_hash`; proof that caller checking reads only callee `InterfaceSummary` | Body-only edit leaves downstream `interface_hash` invariant; signature/contract edit invalidates dependents |
-| **3. Full `QueryDB` incremental build & audit dossier** | Slice 10 (`R-0201`) & Phase G (`R-0149`) | Memoized `QueryDB` cache with explicit `body_hash` tracking for inlining/monomorphization + `R-0697` mandatory kernel replay | Clean-vs-incremental equivalence matrix (`R-0149`), planted stale-inlined-body and corrupted-cache refusal controls |
+| **1. Canonical exported summaries** | Slice 8 (R-0556), subject to OD39 | Separate header, derived-facts and canonical-body identities | An unchanged header with a changed exported bound changes the exported interface |
+| **2. Audit diff** | Slice 10 (R-0201) | Compare validated exported summaries, including evidence and bounds | A whitespace edit updates affected trap coordinates. Changed capabilities and bounds appear in the diff. A linear-to-quadratic rewrite under a shared quadratic bound reports a body change and an undetermined cost comparison. |
+| **3. Incremental cache** | Phase G (R-0149) | Record all inputs and replay proofs under R-0697 | Compare clean and incremental results; reject stale spans, specialized bodies and corrupted records |
 
-**Spec impact:** None. Purely inside `Concrete/` and driver/audit tooling. No owner decision required to implement `R-0735`.
+**Spec impact:** The cache is compiler tooling. Public generic-body, layout and ABI guarantees remain subject to OD39 under R-0556.
