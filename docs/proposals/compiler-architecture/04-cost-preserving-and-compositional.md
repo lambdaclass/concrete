@@ -13,37 +13,27 @@ Two deep open problems in verified compilation live right beside [Concrete/Contr
 ## <a id="1-cost-preserving-compilation"></a>1. Cost-Preserving Compilation (`R-0733`)
 
 ### Problem Statement
-CompCert, CakeML, and almost all production compilers prove (at best) **functional equivalence**: target behavior refines source behavior. They make **zero** formal guarantee that lowering or optimization preserves stack depth, heap footprint, or worst-case execution steps (WCET). Real-time, kernel, crypto, and aerospace engineers therefore have to run separate, unverified binary-level static analyzers after compilation and pray that codegen didn't blow a budget.
+Functional refinement alone does not bound resource use. CakeML has a verified space-cost semantics. Concrete proposes cost bounds for matching execution prefixes under the same inputs and environmental choices. [CakeML space-cost theorem](https://cakeml.org/oopsla20.pdf).
 
-Concrete *already* builds half the machinery needed to close this gap:
+The proposed cost model draws on these parts of the specification and roadmap:
 - No hidden runtime, no GC, no hidden allocations ([PHILOSOPHY.md](../../PHILOSOPHY.md#the-rules), Rule 8).
 - Explicit allocators and per-lineage byte accounting (`C7`, `R-0613`, `R-0595`).
-- Mandatory `#[variant]` loop/recursion bounds and abstract step-counting model at Slices 4–5 ([ROADMAP.md](../../../ROADMAP.md#vertical-slices)).
+- Termination evidence and a proposed abstract step model for loops and calls at Slices 4–5. [Vertical slices](../../../ROADMAP.md#vertical-slices).
 - Final-binary stack accounting via LCB (`R-0575`, `R-0505`, `R-0704`).
 - Policy/budget enforcement strictly in `Concrete.toml` ratchets (never source cost syntax, per [2026-11-22 decision](../../decisions.md#decided-2026-11-22-llm-inference-showcase-and-float-order)).
 
 ### Current Architecture on `main`
-In [Concrete/Contracts.lean](../../../Concrete/Contracts.lean), `Semantics A E` tracks `State`, `step`, `result`, `safe`, and `trace`, and `CheckpointSimulation` in [Concrete/Interfaces/Contracts.lean](../../../Concrete/Interfaces/Contracts.lean) proves trace/observation refinement. Neither carries resource cost yet—and we intentionally keep them focused on functional refinement during Slice 0 rather than introducing a vacuous `Unit`-defaulted parameter.
+`Semantics` supplies transitions and observations. The indexed `CheckpointSimulation` relates reachable checkpoints. Quantitative transfer is a separate proof obligation for the slices that have a cost model. [Contracts](../../../Concrete/Interfaces/Contracts.lean).
 
 ### Proposed Architecture (Landing at Slices 4–5 + `LP0`, Non-Vacuous)
-Once Slices 4–5 introduce loops, calls, and the spec's step-counting model, introduce an **explicit, non-vacuous `ResourceCost` contract** layered beside functional `Refines` (never defaulting to "no cost"):
+Distinguish IR frame slots, live native stack bytes, cumulative allocation requests and peak live bytes per lineage. Prove monotone transfer bounds, including bounded stuttering, active caller frames and call fan-out where applicable. Derive native upper bounds from validated machine artifacts.
 
-```lean
-/-- Concrete's quantitative resource vector (never optional/Unit on cost-checked stages). -/
-structure ResourceCost where
-  steps : Nat       -- abstract steps (Core) or instructions (Interfaces.BIR / LCB)
-  peakStack : Nat   -- frame slots (`Interfaces.BIR.frameSlots`) or exact stack bytes (LCB / binary validator)
-  allocBytes : Nat  -- peak requested bytes per lineage (from C7 accounting)
-```
-
-Define a separate **`CostPreserving bound s t a b`** judgment alongside `Refines s t a b` (matching [Doc 01](01-validated-passes-and-ub-free-opt.md)'s rule that functional refinement and resource bounds are separate, independently checked obligations):
-
-- **Core → MIR → Memory → SSA → BIR (Slices 4–5):** Prove `target.allocBytes ≤ source.allocBytes` (zero hidden allocations!), `target.steps ≤ c₁ * source.steps + c₀` (linear step preservation), and `target.frameSlots ≤ bound(source)` over the `Interfaces` carriers in [Concrete/Interfaces/Carriers.lean](../../../Concrete/Interfaces/Carriers.lean).
-- **BIR → LCB → Native (`LP0` + Phase E, `R-0572`, `R-0505`):** Compose BIR's step/slot bounds with LCB's per-instruction machine expansion factor and proved Mach-O/ELF frame-byte decoding (`R-0505`), yielding an **end-to-end theorem from source `#[variant]` down to exact native instruction count and stack bytes**!
-- **Optimizing passes (`R-0730`, `R-0732`):** Resource non-regression (`validateResources`) is checked as its own explicit obligation, preventing a functionally equivalent rewrite from silently regressing stack slots, allocations, or step bounds.
+- **Core → MIR → Memory → SSA → BIR (Slices 4–5).** Compare matched finite prefixes, including prefixes of divergent executions. Count abstract steps at the named level and BIR slots per function. Bound target steps between checkpoints as well as proving the stuttering rank decreases.
+- **Allocation (C7).** Track requested, live, peak and function-peak bytes per lineage. Requests accumulate. Compose peaks using the entry live balance and the greatest increase during each prefix. [Accounting](../../../ConcreteSpec/Spec/Accounting.lean).
+- **BIR → LCB → native (R-0572, R-0505).** Bound live bytes across the active call stack and validate instruction expansion, spills and frames in the machine artifact. A decreasing variant can establish termination. Exact dynamic instruction counts and elapsed worst-case time would require their own models and proofs.
+- **Optimizing passes (R-0730, R-0732).** Check resource non-regression for each declared metric under the same inputs and choices. Monotonicity lets a consumer compose successive upper bounds.
 
 ### Why This Will Work
-- **CerCo / CompCert-Cost precedent, minus the C pain:** Academic cost-preserving C compilers struggled primarily because C has hidden compiler spills, unstructured `goto`/recursion, and opaque allocators. Concrete's structured loops with `#[variant]`, explicit allocators, and direct LCB control make the cost-transfer bound linear and exact.
 - **No source syntax creep:** Cost limits stay strictly in `Concrete.toml` policies/ratchets (`R-0576`, `R-0201`), obeying the 2026-11-22 owner decision.
 
 ---
@@ -56,40 +46,23 @@ Closed whole-program compilation proofs (`main → exit status`) break the momen
 ### Concrete's Structural Advantage (Safe Concrete Modules vs. FFI)
 In Concrete, **safe Concrete module boundaries** are dramatically narrower than C or Rust boundaries:
 1. **No globals (`OD8`):** No hidden mutable global cells shared across modules.
-2. **Second-class references (`REF-1`/`REF-3`):** A safe Concrete callee receives only owned values and scoped borrows (`&T`, `&mut T`) whose memory footprints are lexically bounded at the call site. No safe callee can stash a borrowed reference to mutate after return.
-3. **Explicit dual authority (`with(...)` + linear grants):** If a callee lacks `with(Fs)` or `with(Unsafe)` and receives no grant value, it **structurally cannot** perform I/O or touch unpassed memory.
+2. **Second-class references.** Scoped loans restrict how long a callee may retain access. Their footprints can include dynamically sized heap objects and slices.
+3. **Explicit authority.** The call contract must relate permitted effects and grants, including grants transferred back on return.
 4. **Already planned interfaces (`R-0556`, `R-0582`, `R-0705`):** Slice 8 already introduces bodyless generated module interfaces (`R-0556`) and per-module certificates (`R-0582`), and Phase E already schedules open-module correctness (`R-0705`, proof-order item 5).
 
-**Explicit FFI boundary:** Safe Concrete modules are settled first at Slice 8 before `A2c`. **Re-entrant or state-retaining FFI** (foreign C code that retains pointers, mutates external hidden state, or calls back into Concrete) is explicitly *out of scope* for the safe-module boundary and requires separate owner approval at Slice 17 / Phase E (`R-0705`).
+**Explicit FFI boundary.** Seek the owner's approval for safe Concrete modules at Slice 8, before `A2c`. Re-entrant or state-retaining FFI needs a separate decision.
 
 ### Proposed Architecture: Safe `InteractionSemantics` + Horizontal `link` Composition (Slice 8+, Not in Cutover)
 
 Without disturbing the cutover's closed `Semantics A E` in [Concrete/Contracts.lean](../../../Concrete/Contracts.lean), layer an **open-component `InteractionSemantics`** for safe Concrete modules at Slice 8 (parameterized by an interface signature `Sig` of exported functions, imported functions, and allowed external event kinds):
 
-```lean
-/-- A safe Concrete module transitions internally, invokes an imported function with
-    explicit value/scoped-borrow/grant arguments, or receives an incoming call on an export. -/
-inductive Interaction (CallArg CallRet ExtEvent : Type) where
-  | internal
-  | extEvent (e : ExtEvent)
-  | callOut (callee : FnId) (args : CallArg) (footprint : Footprint)
-  | retIn   (result : CallRet) (updatedFootprint : Footprint)
-```
+Model incoming and outgoing calls and matching returns, including nested call identity, permitted effects, transferred ownership, live loans and grants. The protocol needs `callIn`, `callOut`, `retIn` and `retOut`, internal steps, external events and terminal trap/abort outcomes. A stack of suspended call frames pairs returns with the correct invocation during re-entry.
 
-With two core operations and one central theorem:
+1. **Horizontal composition.** Quantify each module's guarantee over legal contexts satisfying its import contract. Check both endpoints' signatures, permissions, ownership, loans, grants and dynamic footprints. Each endpoint must preserve the unpassed state across a call.
+2. **Closing.** Prove agreement of closing the module graph with the existing closed semantics for the same launcher and environment.
+3. **Linking.** Prove horizontal refinement from compatible endpoint guarantees without assuming the composite theorem. Native linking additionally checks ABI, object identity and applicable premises, including the calling convention and layouts.
 
-1. **Horizontal composition (`link`):** Given two open modules `M₁` and `M₂` whose import/export signatures match (and satisfy `R-0556`'s `InterfaceSummary` contracts), `link M₁ M₂` connects `M₁`'s `callOut` to `M₂`'s entry and hides internal calls.
-2. **Closing (`close`):** Connecting a complete module graph's `main` to a target launcher/environment oracle recovers the **exact** existing closed `Semantics A E` in [Concrete/Contracts.lean](../../../Concrete/Contracts.lean)—preserving all closed Slice 0–7 proofs unchanged!
-3. **Horizontal refinement theorem (`link_refines`):**
-   ```lean
-   theorem link_refines {M₁ M₁' M₂ M₂'} :
-       OpenRefines M₁ M₁' → OpenRefines M₂ M₂' →
-       OpenRefines (link M₁ M₂) (link M₁' M₂')
-   ```
-   **Consequence:** Compile safe module `A` and safe module `B` **separately** (even with different verified optimization passes or cached certificates from `R-0582`). Linking them yields a **free, kernel-checked whole-program theorem** with zero whole-program re-verification.
-
-### Unifying Bonus: `concrete sim` (`R-0717`) Falls Out of the Same Model
-Notice that an **external environment / grant launcher** is just another component `Env` implementing the imported grant operations (`Fs`, `Entropy`, `Alloc`, `Time`, `Network`). Swapping the real OS `Env` for a deterministic fault-injecting `SimEnv` in `link Program SimEnv` gives **`concrete sim` (`R-0717`)** the exact same formal semantics as production execution—zero second semantics!
+At Slice 8 seek owner approval for the safe boundary. R-0705 owns later verified linking and any separately approved FFI extension. A simulated environment under R-0717 could implement the same permitted interface, with its own specified responses.
 
 ---
 
@@ -97,10 +70,10 @@ Notice that an **external environment / grant launcher** is just another compone
 
 | Increment | Slice | Deliverable | Spec Impact | Gate |
 |---|---|---|---|---|
-| **1. Non-vacuous loop/call cost preservation (`R-0733`)** | Slices 4–5 | Separate `CostPreserving` judgment over real `ResourceCost` (no `Unit`-defaulted Slice-0 hook); prove linear step, zero-hidden-alloc, and `BIR.frameSlots` bounds across `MIR → Memory → SSA → BIR` | Uses planned Slice 4–5 step model (no source cost syntax) | Cost-preservation theorems kernel-checked; planted stack-blowup / hidden-alloc lowering mutant rejected |
-| **2. Native cost bounds (`R-0733`)** | `LP0` + Phase E | Compose BIR cost bounds with `LP0` / `R-0505` proved Mach-O/ELF frame-byte and instruction-count bounds | None | Bounds match `concrete facts` (`R-0575`, `R-0576`) |
-| **3. Safe open-module boundary (`R-0734`)** | Slice 8 / before `A2c` (Slice 11) | Define safe Concrete `InteractionSemantics` & `Footprint` boundary in `ConcreteSpec` (`StageInterface`/`C6`/`C10`) and `Concrete/Contracts.lean` without altering the cutover's closed `Semantics` | **Yes** (safe open-module call-boundary relation before `A2c`) | 2-module composition theorem `link_refines` + `close` agreement with closed `Semantics` |
-| **4. Separate-module verified linking & FFI (`R-0734` + `R-0705`)** | Slice 17 / Phase E | Compositional module certificates (`R-0582`) + verified linker step (`R-0505`); separate owner approval before any re-entrant or state-retaining FFI contract | Owner-approved `R-0705` subset & separate FFI approval | Separately compiled 2-module native binary holds composed theorem; incompatible-interface/substituted-object linking refused |
+| **1. Loop/call cost preservation (R-0733)** | Slices 4–5 | Source-to-IR prefix bounds and per-function slots | Uses the slice step model | Check monotone composition, bounded stuttering and nested calls; reject a cost-increasing rewrite |
+| **2. Native-bound composition** | After the source-to-IR increment (R-0572, R-0505) | Validated machine frame and instruction bounds | Compiler and artifact validation | Compare matched prefixes with active caller frames and reject an understated bound from the artifact |
+| **3. Safe open-module boundary (`R-0734`)** | Slice 8 / before `A2c` (Slice 11) | Define safe Concrete `InteractionSemantics` & `Footprint` boundary in `ConcreteSpec` (`StageInterface`/`C6`/`C10`) and `Concrete/Contracts.lean` without altering the cutover's closed `Semantics` | **Yes** (safe open-module call-boundary relation before `A2c`) | Owner-approved safe protocol covers both endpoints and specifies closing agreement |
+| **4. Separate-module verified linking & separately approved FFI (`R-0705`)** | Slice 17 / Phase E | Compositional module certificates (`R-0582`) + verified linker step (`R-0505`); separate owner approval before any re-entrant or state-retaining FFI contract | Owner-approved `R-0705` subset & separate FFI approval | Separately compiled 2-module native binary holds composed theorem; incompatible-interface/substituted-object linking refused |
 
 ### Owner Questions Required Before `R-0734` Enters `ConcreteSpec`
 1. **Safe Concrete module boundary before `A2c` (Slice 8):** Approve the call-boundary contract for **safe Concrete modules** (owned values + lexically scoped borrows + explicit linear grants, zero globals) so Core freezes cleanly at Slice 11 (`A2c`) without undoing the cutover's closed `Semantics`.

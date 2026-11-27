@@ -25,33 +25,21 @@ For any search-heavy step—whether it is an e-graph, a CP-SAT joint instruction
 2. **Exact trap-site correspondence + elimination accounting** (not bare `target ⊆ source` subset, which an adversary can cheat by swapping two existing trap locations `site₁ ↔ site₂`!).
 3. **Explicit resource / stack non-regression** (plain functional refinement allows a candidate that returns the right answer while blowing stack slots, heap allocations, or step budgets!).
 
-Over the current slice-indexed `Interfaces.BIR lang profile` carrier in [Concrete/Interfaces/Carriers.lean](../../../Concrete/Interfaces/Carriers.lean):
+Validate the indexed BIR and its headers under the registered execution semantics, extended with a callable-function entry for every legal argument, store and grant context. Check effects, termination or divergence, exact trap provenance and the stated resource metric separately. In the first increment report the per-function IR slot metric actually checked.
 
-```lean
-theorem bir_validate_sound {lang profile} (b₁ b₂ : Interfaces.BIR lang profile) (w : Witness) :
-    b₁.WF →
-    validateFunctional b₁ b₂ w = true →   -- per-function refinement (all functions, not just `main`)
-    validateTrapSites  b₁ b₂ w = true →   -- exact (TrapKind, Origin) per execution + elimination ledger
-    validateResources  b₁ b₂   = true →   -- frameSlots / stack / alloc / step non-regression
-    b₂.WF ∧ PerFnRefines birSemantics b₁ b₂ ∧ OptProvenance b₁ b₂ w.ledger ∧ ResourceNonRegressing b₁ b₂
-```
-
-Once those validator soundness theorems are proved **once** in Lean:
-- You can swap in a better heuristic, a new SAT/ILP solver, or a frontier LLM tomorrow.
-- If the proposer produces a valid optimization + witness, Lean checks all three obligations under deterministic work budgets (`R-0528`) in milliseconds and admits it under the exact same end-to-end `ImageTheorem.compile_correct`.
-- If the proposer hallucinates or cheats (off-by-one overflow, swapped trap site, corrupted uncalled helper, increased stack frame, swapped live range), the corresponding validator returns `false` and rejects it cleanly with a pinpointed mismatch.
+Use `BIR.Execution` and `BehaviorRefinement` for the indexed IR. Preserve project, entry, declarations, function signatures, mutable locals, layouts and the profile limit. A module-wide maximum can hide a growing helper frame. The registry's composition obligation is `Pipeline.endToEnd` (or `registeredLCBEndToEnd` on its guarded LCB route), under the readiness, validation, trust and successful-run hypotheses that apply there. [Indexed contracts](../../../Concrete/Interfaces/Contracts.lean) · [Registry](../../../Concrete/Interfaces/Pipeline.lean).
 
 ---
 
 ## <a id="2-the-proposal--validator-boundary"></a>2. The Proposal ↔ Validator Boundary (`OptimizationProposal` / `ObligationBundle`)
 
-To let external tools (e-graph engines, CP-SAT solvers, MAP-Elites, LLMs) participate without entering the TCB or scraping prose logs, define a small canonical wire protocol reusing [Concrete/Artifact/Encoding.lean](../../../Concrete/Artifact/Encoding.lean):
+The current artifact encoder supplies canonical framing. Add a bounded canonical decoder under R-0528 / AT 13 for these new wire records. Bind the witness to the exact inputs, route, profile and output, and extend the certificate's fixed obligation inventory before claiming replay. [Encoding](../../../Concrete/Artifact/Encoding.lean) · [Certificate](../../../Concrete/Certificate.lean).
 
 ### Outbound: `ObligationBundle` (Compiler → Untrusted Tool)
 For a selected function (or hot loop/block), the compiler exports a self-contained canonical payload:
 - Typed entity identity & canonical digest (`Artifact/Sha256.lean`),
-- The current slice-indexed IR (`Core` or `Interfaces.BIR lang profile`) plus its `FactTable` ([doc 01](01-validated-passes-and-ub-free-opt.md#3-first-class-facttable-carrier-through-bir)),
-- Target profile & cost metrics (`BIR.frameSlots`, instruction count, spill count, step bound, or target ISA constraints for LCB),
+- The selected IR (`Core` or `Interfaces.BIR lang profile`) plus any checked facts available for that slice ([doc 01](01-validated-passes-and-ub-free-opt.md#3-first-class-facttable-carrier-through-bir)),
+- Target profile & cost metrics (per-function IR slot count in the first increment; later instruction, spill or step metrics need the matching model or artifact),
 - For repair workflows (`R-0593`/`R-0599`): any unproved obligation proposition + concrete failing witness inputs.
 
 ### Inbound: `OptimizationProposal` (Untrusted Tool → Compiler)
@@ -61,33 +49,24 @@ The external tool returns one of three typed proposals:
 3. **Layout or backend schedule (`layoutPlan` / `lcbSchedule`):** A candidate `LayoutPlan` ([doc 02](02-layout-plan-synthesis.md)) or LCB instruction/register schedule.
 
 ### Gate: Multi-Obligation Kernel-Checked Validator
-- **Never trusts the proposer.** Re-parses/re-checks `WF`, runs **all three** proved validators (`validateFunctional`, `validateTrapSites`, `validateResources`) under deterministic work budgets (`R-0528`), and binds the accepted witness into the compilation certificate (`R-0552`, `R-0582`).
+- **Never trusts the proposer.** Re-parses/re-checks `WF`, runs **all three** proved validators (`validateFunctional`, `validateTrapSites`, `validateResources`) under deterministic work budgets (`R-0528`), and binds the accepted witness into the compilation certificate (`R-0552`, `R-0582`) once the corresponding fixed obligation is registered.
 
 ---
 
 ## 3. Three Tiers of Validators (Growing Cumulatively Across Slices)
 
 ### Tier A — `Interfaces.BIR` ↔ `Interfaces.BIR` Symbolic-Execution & Witness Validator (Start in `B0b` / Slice 1)
-How a tiny (~150–300 line) Lean validator verifies a wide class of mid-end optimizations without SMT in the TCB:
-1. **Per-function acyclic / basic-block symbolic equivalence:** For **every** function in the module (not just `main`, blocking the uncalled-helper cheat), symbolically evaluate each block of `b₁` and `b₂` into hash-consed expression DAGs (normalized using a small library of kernel-proved bit-vector algebraic lemmas: commutativity, associativity, identity, strength reduction, constant folding, dead-binding elimination). Verify that every live output value, branch condition, exit word, and exact `TrapEntry` `(kind, origin)` matches under the witness's block/value bijection, and verify `BIR.frameSlots b₂ ≤ BIR.frameSlots b₁` (and allocation/step non-regression when applicable).
-2. **Loop & CFG alignment (Slices 3–5):** The untrusted witness supplies a **lockstep or cut-point correspondence** between CFG cut-points (entry, loop headers, exits) plus a value-relation map (CompCert / Necula translation-validation style). The validator symbolically checks every cut-point-to-cut-point path—linear in the number of blocks, zero fixpoint guessing inside the validator!
-3. **Proof-producing e-graph replay (Slice 3+ / Phase E, `R-0299`):** An external e-graph engine (`egg`-style, untrusted) runs equality saturation and outputs a linear sequence of `(ruleId, site, substitution)` rewrite steps; Lean replays only the chosen steps against kernel-proved rewrite rules.
+1. **Acyclic BIR.** Check symbolic values, effects, branches and trap slots from every callable entry. Compare each function's slot metric and show a nonidentity rewrite passes.
+2. **Loop & CFG alignment (Slices 3–5).** Use local cut-point obligations with entry, preservation, coverage and progress proofs. Compose block verification conditions and require a checked well-founded rank on target-only cycles. Chained diamonds can have exponentially many paths. Measure replay cost and admit at least one nonidentity rewrite.
+3. **Proof-producing e-graphs (R-0299).** Replay each selected rewrite against its rule, occurrence, substitution and side conditions under a deterministic work limit.
 
 ### Tier B — `concrete verify-opt <ref.con> <opt.con> --fn <name>` (Verified LLM-as-Optimizer, Slice 3+)
-Turns any LLM into a **100%-sound domain optimizer**:
-1. Author writes (or keeps) a crystal-clear, obviously-correct reference function `ref.con`.
-2. An LLM (or MAP-Elites search under `R-0727`) generates an aggressively optimized candidate `opt.con` (unrolled, bit-packed, branchless, SIMD-scheduled).
-3. Both compile through `CheckedCore` to `Interfaces.BIR` (checking identical signature, capability set, and no-hidden-traps admission).
-4. Concrete runs **per-function** validation (quantifying over valid inputs to `<name>`, never just closed `main`!) using either:
-   - The fast **Tier A BIR refinement validator** (checking functional equivalence, exact trap-site provenance, and resource non-regression separately), or
-   - **Lean functional-model equivalence** via `concrete extract-lean` (`R-0495` at Slice 10, where the LLM also supplies a Lean proof script checked by Lean's kernel + `nanoda`/`con-leche`), paired with separate trap-site and resource-budget checks.
-5. Only if all three obligations kernel-check does `opt.con` replace `ref.con` in the build, carrying a certificate that `opt` refines `ref`!
+The proposed command compares a reference function and a candidate with matching signatures and capabilities. Authorize source replacement only for a supported callable subset with a theorem connecting both source bodies to the compared executions. Two backward compilation refinements cannot be inverted to obtain source equivalence.
+
+Bind corresponding traps to the reference source or restrict the first version to trap-free functions. Keep the extracted-model route subject to R-0495 approval. Any supplied Lean proof script must pass the R-0509/R-0702 hostile-input audit as well as kernel checking. Check the declared resource metric independently before substitution.
 
 ### Tier C — Joint Backend Solver + Native LCB Validator (Post-`LP0` / Phase E)
-Directly solves the classical **phase-ordering problem** in LCB (`R-0517`):
-- **Untrusted joint solver:** Export hot BIR/LCB functions to a constraint solver (CP-SAT / ILP, in the style of Unison) that **jointly** solves instruction selection, register allocation, coalescing, spilling, and scheduling for AArch64 / x86-64 under exact latency/register-pressure models.
-- **Tiny proved LCB validator:** Instead of proving the CP-SAT solver in Lean, verify the resulting LCB machine function against BIR/LCB-IR using a **CompCert-style symbolic live-range & value-transfer validator** over LCB's imported ISA semantics (`LeanCompilerBackend.Verified`).
-- **Payoff:** Unison-grade / LLVM-beating codegen on hot loops with a **~500-line validator proof** instead of a 50,000-line heuristic-backend proof.
+An untrusted CP-SAT or ILP solver proposes instruction selection, registers and scheduling. For native schedules, validate the exact instructions, ABI, clobbers, spills, relocations and linked bytes against the selected target. The pinned LCB uses different assembly paths on Linux and macOS. Replay a bounded, canonically decoded witness bound to the exact inputs, route, profile and output. Report proof size, replay time and measured speedup. LLVM-relative speed and proof size are experiment results to collect.
 
 ---
 
@@ -95,14 +74,14 @@ Directly solves the classical **phase-ordering problem** in LCB (`R-0517`):
 
 - **Proven precedent:** CompCert's register-allocation validator (Rideau & Leroy), Necula's translation validation, `egg`/Cranelift e-graphs, and Unison's CP-SAT joint backend are each individually battle-tested. Concrete's advantage is **unifying all of them inside one Lean 4 kernel-checked pipeline** where BIR has zero UB and LCB already has formal Lean semantics (`LeanCompilerBackend.Verified.Source`).
 - **Tiny TCB:** External solvers, e-graphs, MAP-Elites, and LLMs have **zero** trust privilege—every candidate passes through a kernel-checked Lean validator before entering the artifact.
-- **Reproducible builds (`R-0577`):** Nondeterministic search runs offline or produces a committed/cached witness file; release builds replay only the deterministic validator, keeping builds 100% bit-for-bit reproducible.
+- **Reproducible builds (`R-0577`):** Nondeterministic search runs offline or produces a committed/cached witness file; release builds must bind the witness to the build inputs and replay the deterministic validator. R-0577 compares the resulting artifacts across independent builds.
 
 ## Slice Staging & Acceptance Gates
 
 | Increment | Slice | Deliverable | Gate |
 |---|---|---|---|
-| **1. Multi-obligation `Interfaces.BIR` validator v1** | `B0b` / Slice 1 | `Concrete/Validator/BIR.lean` over `Interfaces.BIR lang profile` proving separate soundness for per-function equivalence, exact trap-site correspondence + elimination ledger, and `BIR.frameSlots` non-regression | Kernel-checked soundness (only standard 3 axioms), planted (a) wrong-constant, (b) swapped-trap-site, (c) corrupted-uncalled-helper, and (d) stack-slot-increasing candidates each rejected by their respective check |
-| **2. CFG/cut-point validator + `concrete verify-opt` v1** | Slices 3–5 | Cut-point symbolic alignment for branches/loops/calls + per-function `concrete verify-opt ref.con opt.con --fn <name>` CLI + canonical `OptimizationProposal` wire schema | Positive equivalence controls + planted off-by-one/wrong-branch-condition/uncalled-helper/stack-regression mutants rejected + end-to-end `ImageTheorem` integration |
+| **1. Multi-obligation indexed BIR validator** | B0b | Acyclic callable-function validator with header invariants, exact trap occurrences and per-function IR slot counts | Accept a nonidentity rewrite. Reject a wrong constant, swapped trap, corrupted uncalled helper and growth of a smaller frame. Measure replay. |
+| **2. CFG/cut-point validator + source replacement** | Slices 3–5 | Local verification conditions, progress rank and a source correspondence theorem for the supported subset | Refuse an injected silent cycle and mismatched origins. Check composition through `Pipeline.endToEnd` or `registeredLCBEndToEnd` under its premises. |
 | **3. Joint backend solver + LCB validator** | Post-`LP0` / Phase E | External CP-SAT/e-graph solver adapter + proved LCB symbolic regalloc/schedule validator feeding `R-0517` & `R-0727` | Proved LCB validator soundness, cross-backend differential parity, benchmark speedup evidence (`R-0424`) |
 
-**Spec impact:** None. Purely inside `Concrete/` and tooling. No owner decision required to implement `R-0732`.
+**Spec impact:** The validator and wire format are compiler tooling. Extracted-model replacement requires the R-0495 decision. Native validation follows LP0 under R-0299 and R-0517.

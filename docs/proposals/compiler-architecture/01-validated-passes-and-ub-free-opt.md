@@ -9,8 +9,8 @@ Modern optimizing compilers (LLVM, GCC) achieve high code quality by leaning on 
 Concrete does not need to accept this tradeoff. Several of the strongest guarantees that C/C++/LLVM approximate via UB or heuristic alias analysis can be established **soundly** in Concrete—provided each guarantee is backed by an explicit proof obligation:
 
 1. **Scoped exclusivity without global points-to heuristics (requires C5-to-Memory/BIR bridge proof):** References are strictly second-class (`&T`, `&mut T` cannot be stored in aggregates or returned from functions) and linear ownership gives each non-`Copy` value a single owner. **Important qualification:** shared borrows (`&T`, `&T`) **can overlap**, so Concrete does *not* have unconditional O(1) non-aliasing across all borrows. Rather, `&mut` exclusivity and distinct owned roots yield non-aliasing *only* after we prove the explicit **C5 borrow-exclusivity-to-Memory/BIR bridge theorem** connecting `ConcreteSpec`'s loan invariant (`R-0611`) to physical memory disjointness in [Concrete/Interfaces/Carriers.lean](../../../Concrete/Interfaces/Carriers.lean)'s `Memory` / `BIR` carriers. That bridge proof does not exist yet and is an explicit prerequisite before any pass consumes `nonAliasing` facts.
-2. **Checked arithmetic and bounds without UB:** Accepted safe code has no hidden traps ([no hidden traps](../../decisions.md#decided-project-no-hidden-traps)). Every arithmetic operation, shift, division, and array index either carries a **discharged evidence token** proving safety or has an explicit source-level branch.
-3. **Explicit effect boundaries:** Every external effect requires a `with(...)` permission and a linear grant value. Pure/read-only/terminating/non-aborting functions are proved facts in `CheckedCore`, not speculative guesses.
+2. **Checked arithmetic and bounds:** Slice 0 admission discharges known-safe additions. Later operations need evidence appropriate to their slice. [No hidden traps](../../decisions.md#decided-project-no-hidden-traps).
+3. **Explicit effect boundaries:** Later slices may derive purity, write, termination and abort facts for use by validated passes.
 
 To exploit these invariants *inside Concrete's own mid-end* (instead of throwing them away at lowering time and hoping LLVM recovers them), three concrete architectural upgrades are needed in `Concrete/` (two tiny ones in the stage-interfaces cutover, and the `FactTable` carrier once Slice 3 introduces octagon/purity facts).
 
@@ -19,7 +19,7 @@ To exploit these invariants *inside Concrete's own mid-end* (instead of throwing
 ## 1. Pluggable `ValidatedPass` Slots in `Interfaces/Pipeline`
 
 ### Current Architecture on `main`
-In [Concrete/Interfaces/Pipeline.lean](../../../Concrete/Interfaces/Pipeline.lean), `PassFunctions` hardcodes a fixed 10-stage linear funnel over the slice-indexed carriers in [Concrete/Interfaces/Carriers.lean](../../../Concrete/Interfaces/Carriers.lean) (`MIR lang profile`, `Memory lang profile`, `SSA lang profile`, `BIR lang profile`):
+`PassFunctions` collects ten executable fields used by the registry to build checked and unchecked routes with a selected emitter. The thirteen stage entries operate on slice-indexed carriers. [Registry](../../../Concrete/Interfaces/Pipeline.lean) · [Carriers](../../../Concrete/Interfaces/Carriers.lean).
 
 ```lean
 structure PassFunctions ... where
@@ -43,37 +43,11 @@ Introduce a `ValidatedPass` combinator over any IR carrier with a `Semantics`. C
 - **Replacing an uncalled helper function** still passes a closed whole-program (`main`-only) refinement check.
 - **Returning the right answer while blowing stack or allocation budgets** still passes plain functional refinement.
 
-Therefore every `ValidatedPass` carries **explicit, separate obligations**:
+The registry fixes each IR’s semantics, input and output invariants, callable-function relation, provenance rule, resource metric and refusal rule. A proposer returns a candidate and witness. Fixed, work-bounded checkers establish each of the three obligations.
 
-```lean
-structure ValidatedPass (IR Failure : Type) {E : Type} (sem : Semantics IR E) where
-  name : String
-  wf : IR → Prop
-  /-- Safety & progress of well-formed inputs (required even for identity fallback!). -/
-  wf_refines_self : ∀ a, wf a → Refines sem a a
-  /-- Deterministic work budget (never wall-clock timeouts; extends R-0528). -/
-  workLimit : Nat
-  /-- Untrusted proposal: hand-written pass, e-graph rewrite, external solver, or LLM rewrite. -/
-  propose : IR → Except Failure IR
-  /-- Separate kernel-checked validators: functional refinement (per-function when open),
-      exact trap-site correspondence + elimination accounting, and resource non-regression. -/
-  validateFunctional : IR → IR → Bool
-  validateProvenance : IR → IR → EliminationLedger → Bool
-  validateResources  : IR → IR → Bool
-  validate_sound : ∀ a b ledger, wf a →
-    validateFunctional a b = true →
-    validateProvenance a b ledger = true →
-    validateResources a b = true →
-    wf b ∧ Refines sem a b ∧ OptProvenance a b ledger ∧ ResourceNonRegressing a b
-```
-
-From any `ValidatedPass`, a single generic constructor builds a `Stage IR Failure IR`:
-- Execute `b ← propose a` (bounded by `workLimit`).
-- Run **all three** checks (`validateFunctional`, `validateProvenance`, `validateResources`).
-- If any check returns `false`, either fail closed (mandatory validation mode) or fall back to returning `a` unchanged—**which is sound ONLY because `wf_refines_self` proves `wf a → Refines sem a a`!** (Note: `Refines` in [Concrete/Contracts.lean](../../../Concrete/Contracts.lean) includes `PrefixSafety` and `¬ stuck`, so identity refinement is *not* unconditionally reflexive; it requires safety and progress of `a`.)
-- Record `kind := .provedValidator`, `outputInvariant := wf`, and the conjoined postcondition.
-
-**Cutover integration:** Add closed pass-list slots (`optMIR`, `optMemory`, `optSSA`, `optBIR`) to `PassFunctions` in [Concrete/Interfaces/Pipeline.lean](../../../Concrete/Interfaces/Pipeline.lean), kept **empty (`[]`) in Slice 0**. Because `Refines` and `OptProvenance` compose transitively, later slices register proved passes in those slots without reshaping the pipeline or top-level theorem.
+- **Functional refinement.** Use the indexed `BehaviorRefinement sem sem sem.result sem.result a b` at each legal function entry. Check the project, entry, declarations, signatures, mutable locals, layouts and profile's BIR frame-slot limit at the handoff. From Slice 3, a rewrite that reads facts requires `FactTable.Holds` for the input table and transports or re-establishes the facts it passes on.
+- **Identity and composition.** The indexed relation assumes source safety and gives target safety, so identity is reflexive and successive refinements compose. Syntactic IR well-formedness alone cannot establish reachable safety. For the stronger scalar refinement relation the self case is `Refines sem sem a a` and requires reachable safety, permitted events and progress. Identity fallback also needs identity provenance with an empty ledger and resource equality. [Indexed relation](../../../Concrete/Interfaces/Behavior.lean) · [Scalar relation](../../../Concrete/Contracts.lean).
+- **Cutover integration.** Keep the four lists private to the registry and empty in Slice 0. `PassFunctions` supplies only executable proposers for MIR, Memory, SSA and BIR. `Registry` wraps them with repository-owned validators and contracts. Mandatory checks return the specified refusal on failure or exhaustion. Optional passes fall back to their validated input. Prove the wrapper’s success and refusal cases, compatibility with the next stage, and empty-list and composition laws.
 
 ---
 
@@ -87,23 +61,20 @@ def PreservesOrigins (source target : List Origin) : Prop :=
   (∀ o ∈ target, o ∈ source) ∧ (∀ o ∈ source, o ∈ target)
 ```
 
-Exact coverage is right for **plain, non-optimizing lowering**, where every source operation maps directly to emitted IR. However, any real optimization (constant folding, dead-code elimination, CSE, redundant-check elimination) removes operations, violating `source ⊆ target`. Conversely, relaxing it to bare `target ⊆ source` is **too weak**: a cheating optimizer could swap two existing trap locations `site₁ ↔ site₂` (both in `source`) and still satisfy `target ⊆ source`!
+Structural lowering retains exact origin coverage, including origins recorded at block boundaries (`Block.boundaryOrigins`). Removing an instruction can preserve that coverage. Even exact set equality allows two trap slots to be swapped.
 
 ### Proposed Split (Part of the Cutover's Single Interface Change)
 Split provenance into **two distinct stage rules**:
 
-1. **Plain Lowering Rule (`PreservesOrigins`, unchanged):**
-   - Non-optimizing structural lowering passes (`Core → MIR`, `MIR → Memory`, `Memory → SSA`, `SSA → BIR`) keep exact origin coverage (`PreservesOrigins`).
-2. **Optimizing Pass Rule (`OptProvenance`):**
-   - **Exact trap-site correspondence per execution:** Every trapping execution of `target` must trap with the **exact same `(TrapKind, Origin)`** as the corresponding execution of `source` (already enforced dynamically by `Observation.trapped` in `Refines`, and statically checked on every surviving trap site by `validateProvenance`—closing the trap-site-swapping loophole).
-   - **Accounting for every removed value (`EliminationLedger`):** Every origin present in `source` but absent from `target` must be accounted for in `ledger : List (Origin × EliminationReason)` (e.g. `folded_constant`, `dead_binding`, `discharged_check`, `cse_merged`), and every origin in `target` must come from `source` (`origins(target) ∪ ledger.origins = origins(source)`). No origin vanishes silently and no origin is fabricated.
+1. **Plain lowering.** Keep `PreservesOrigins` on the structural lowering edges.
+2. **Optimizing passes.** For an optimizing pass, relate every surviving occurrence to the source occurrences it implements and check a semantic reason for every eliminated occurrence. For matching trapping executions, resolve the actual trap slot and require equality of kind and full origin, including operation, lexical span and evidence key. Preserve the projected diagnostic and its exact bytes. Compose these witnesses across copies, fusions and eliminations, keeping required admission discharges on their exactly-once path. Two occurrences can share an origin, and two different spans or evidence keys can print the same location. The ledger and the trap-slot check must distinguish them.
 
 ---
 
 ## <a id="3-first-class-facttable-carrier-through-bir"></a>3. First-Class `FactTable` Carrier Through BIR (Slice 3+)
 
 ### Current Limitation on `main`
-In the Slice-0 prototype ([Concrete/Stages.lean](../../../Concrete/Stages.lean) and [Concrete/MIR.lean](../../../Concrete/MIR.lean)), `Admission.check` produces `evidence : List Admission.Token`, which `MIR.lower` projects down to `discharged : Option Int` on `MIR.Op.add`; in the newer stage-interface carriers ([Concrete/Interfaces/Carriers.lean](../../../Concrete/Interfaces/Carriers.lean)), `OperationCheck` records `CheckDisposition` per operation, but richer static facts (octagon intervals from Slice 3, bitmasks from `R-0712`, loop iteration bounds from Slice 4, purity/no-writes/termination/non-abort facts from `R-0575`, and C5-proved mutable exclusivity from Slice 7) are not yet carried as a unified side-channel across `MIR → Memory → SSA → BIR`.
+In the scalar prototype, `Admission.Output.tokens : List Admission.Token` records the discharges. `Stages.Output.evidence` retains the list. `MIR.lower` projects the matching token to `discharged : Option Int` on an addition. The indexed carriers use `OperationCheck` and `CheckDisposition`. A unified table for ranges, bitmasks, loops, effects and C5 exclusivity is proposed for later slices.
 
 ### Proposed Architecture: Pass-Preserved `FactTable`
 Define a typed `FactTable` carried alongside `Origin` across `Core → MIR → Memory → SSA → BIR` (starting at Slice 3, not blocking the cutover):
@@ -114,15 +85,14 @@ inductive Fact where
   | intRange (lo hi : Int)              -- from octagon checker (Slice 3)
   | bitMask (knownZero knownOne : Nat)  -- from R-0712 (Slice 7)
   | exclusiveDisjoint (p₁ p₂ : PlaceId) -- ONLY from proved C5 &mut/owned-root exclusivity bridge (Slice 7; NEVER shared &T/&T)
-  | uniqueOwner (p : PlaceId)           -- structural from linear ownership (Slice 1/6)
+  | uniqueOwner (p : PlaceId)           -- requires a proved exclusive footprint for this use
   | pureEffect (reads writes aborts : Bool) (terminates : Bool) -- from Facts (Slice 3/5/11)
   | loopBound (maxIters : Nat)          -- from #[variant] / counted for (Slice 4)
 ```
 
-Each fact entry is keyed by stable entity/site identity (`SiteId` / `PlaceId` / `SSAValue`) and backed by a **soundness predicate** `FactTable.Holds sem program facts` stating that every dynamic state reachable in `sem` satisfies the recorded facts.
+An optimization fact applies to a particular artifact, function, program point and value or place version under stated path and lifetime conditions. In MIR/Memory include the block, instruction index and place version. In SSA/BIR bind the dominating SSA definition. `FactTable.Holds` quantifies over reachable states at that point. Intersect at joins and re-establish facts across writes, moves, calls and back edges, or drop optional facts. Elaboration site numbers alone cannot identify values across artifacts.
 
-- **Admission (`CheckedCore`)** populates the initial `FactTable` with a proof `admission_facts_hold` (and `exclusiveDisjoint` is populated **only** once the C5 borrow-exclusivity bridge theorem is proved).
-- **Each lowering pass** maps keys forward and proves `FactTable.Holds` is preserved (or drops any fact it cannot transport—dropping a fact is always sound!).
+Shared borrows may overlap. Use exclusive-footprint facts only where the C5 bridge proves them, including the conditions on raw or foreign access. Withhold `exclusiveDisjoint` and `uniqueOwner` for materialized roots reachable through raw pointers, trusted/Unsafe code or extern calls. Admission must establish the initial facts and every lowering must justify the keys and facts it transports.
 - **Every mid-end optimization pass and backend (`R-0711` LLVM hints + LCB native optimizations)** reads from this one authoritative `FactTable` ([Rule 5: every fact once](../../PHILOSOPHY.md#the-rules)).
 
 ---
@@ -135,19 +105,18 @@ With closed pass slots, `OptProvenance`, and `FactTable` in place, Concrete's mi
    - Constant folding, algebraic identities (`x + 0 → x`, `x * 2 → x << 1`), and width narrowing strictly gated by `intRange` / `constVal` / `bitMask` entries in `FactTable`.
    - Zero overflow UB: wrapping vs. non-overflowing rewrites only trigger when `FactTable` proves the result is in-range.
 2. **Exclusivity-backed load/store forwarding, GVN, and LICM (Slices 3–7):**
-   - Shared `&T` borrows may alias, so no optimization assumes `&T`/`&T` disjointness. Once the C5-to-Memory/BIR exclusivity bridge proof lands at Slice 7, `exclusiveDisjoint` (`&mut` vs. any other live borrow, or distinct owned roots) enables sound load-store forwarding, redundant load elimination, and LICM without fragile global pointer-escape heuristics.
-   - Speculative hoisting and dead-call elimination are gated strictly on `pureEffect` (`reads = false, writes = false, aborts = false, terminates = true`), matching `R-0711`'s soundness controls.
-3. **Static linear reuse & copy elision (`Perceus`-style without refcounting, Slices 6–12):**
-   - Because ownership is strictly linear (values are consumed at a unique point), MIR knows statically when an owned aggregate's storage is dead immediately before constructing a same-layout aggregate—enabling **proved in-place mutation** without dynamic reference counting.
+   - Require the C5 bridge for the actual footprints and preserve the values read on each path. Hoisting additionally requires safe execution on newly reached paths, with effects, termination and first-trap order preserved.
+3. **Static linear reuse & copy elision (Slices 6–12):**
+   - Reuse a destination only after proving the previous value and all its loans are dead across the write and any calls.
 4. **Vectorization & branch elimination (Slices 4, 7, 18):**
-   - Counted `for` loops with C5-proved `exclusiveDisjoint` slice views and `discharged` bounds checks satisfy the exact preconditions for safe SIMD vectorization without runtime alias-check versioning loops.
+   - Vectorization additionally requires dependence, tail, bounds, effect and first-trap proofs, including loop-carried dependences within a single mutable slice.
 
 ---
 
 ## Why This Will Work
 
 - **Zero TCB bloat:** Untrusted optimization heuristics live in `propose`; only the separate small validators (`validateFunctional`, `validateProvenance`, `validateResources`) and their soundness proofs sit in the proof obligation.
-- **No `poison` soundness traps:** Every `Interfaces.BIR` value is a concrete bit-vector or defined trap—never `undef`/`poison`. Soundness of every rewrite rule is a direct bit-vector/state theorem in Lean 4 (`omega`, `bv_decide`, or structural induction).
+- **Defined values:** IR integer values are in-range mathematical integers. Rewrites must preserve the defined integer, aggregate and trap semantics at the supported slice. Byte and bit-vector representations enter at encoding and the backend.
 - **Composable with `R-0711` and `R-0299`:** The same `FactTable` drives both Concrete's own UB-free mid-end passes and backend metadata emission (`R-0711`) and proof-producing e-graphs (`R-0299`).
 
 ## Slice Staging & Acceptance Gates
@@ -155,7 +124,7 @@ With closed pass slots, `OptProvenance`, and `FactTable` in place, Concrete's mi
 | Increment | Slice | Deliverable | Gate |
 |---|---|---|---|
 | **1. Cutover interface change** | Cutover (`B0b` / Slice 0) | Closed pass slots (`optMIR`/`optMemory`/`optSSA`/`optBIR`, empty in Slice 0) in `Interfaces/Pipeline.lean` + split `PreservesOrigins` (plain lowering) vs. `OptProvenance` (optimizing passes: exact trap-site preservation + elimination ledger) in `Interfaces/Contracts.lean` | Slice-0 end-to-end theorem unchanged with empty pass lists; negative controls rejecting (a) a swapped trap site and (b) an unaccounted dropped origin |
-| **2. UB-free mid-end v1** | Slice 3 | `FactTable` (`constVal`, `intRange`, `pureEffect`) + deterministic work budgets (`R-0528`) + proved constant folding, copy/DCE, redundant-branch pruning over `Interfaces.MIR`/`BIR` with `wf_refines_self` proved | Separate checks for per-function refinement, trap-site provenance, and resource non-regression; planted unsound proposer & stack-regressing proposer refused; opt vs. unopt differential match on LLVM & LCB |
+| **2. UB-free mid-end v1** | Slice 3 | Sound point-scoped facts and budgeted constant folding, copy/DCE and branch pruning | Prove callable refinement, occurrence-level provenance and the per-function resource metric. Accept a nonidentity rewrite and refuse planted semantic and resource regressions. |
 | **3. Exclusivity-backed alias opts** | Slices 4–7 | Prove C5 borrow-exclusivity-to-Memory/BIR bridge theorem; populate `exclusiveDisjoint`, `loopBound`, `bitMask`, `uniqueOwner`; load/store forwarding, LICM, linear in-place reuse | C5 exclusivity bridge proof + negative control refusing assumed non-aliasing of two shared `&T` borrows + adversarial interaction workloads (`R-0573`) |
 
 **Spec impact:** None. Purely inside `Concrete/`. No owner decision required to implement `R-0730`.
