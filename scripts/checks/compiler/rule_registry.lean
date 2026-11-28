@@ -155,4 +155,9 @@ example :
       .error (.source (.lexical (.encoding .nul) ⟨0, 1, 1, 1, ⟨0⟩⟩)) ∧
     ((Concrete.Stages.Input.load "main.con" badUtf8Source).bind Concrete.Stages.compile) =
       .error (.source (.lexical (.encoding .tooLarge) ⟨0, 1, 1, 1, ⟨0⟩⟩)) := by
-  with_unfolding_all exact ⟨rfl, rfl, rfl, rfl, rfl⟩
+  refine ⟨Concrete.Stages.KernelEval.load_compile_isOk_of_sparse (by decide +kernel), ?_,
+    Concrete.Stages.KernelEval.load_compile_eq_error_of_sparse (by decide +kernel),
+    Concrete.Stages.KernelEval.load_compile_eq_error_of_sparse (by decide +kernel),
+    Concrete.Stages.KernelEval.load_compile_eq_error_of_sparse (by decide +kernel)⟩
+  rw [Concrete.Stages.KernelEval.load_unchecked_eq_sparse]
+  decide +kernel

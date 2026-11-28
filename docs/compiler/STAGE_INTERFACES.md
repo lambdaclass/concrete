@@ -1,14 +1,31 @@
 # Stage interfaces
 
-The frozen declarations are [spec carriers](../../ConcreteSpec/StageInterface.lean),
-[compiler carriers](../../Concrete/Interfaces/Carriers.lean),
-[grammar](../../ConcreteSpec/StageGrammar.lean),
-[behavior refinement](../../Concrete/Interfaces/Behavior.lean), [edge propositions](../../Concrete/Interfaces/Contracts.lean),
-[reference elaboration](../../Concrete/Interfaces/SurfaceElaboration.lean),
-[executable signatures and registry](../../Concrete/Interfaces/Pipeline.lean), and the
-[backend observation adapter](../../Concrete/Backend/Observation.lean) and the
-[backend runtime renderer](../../Concrete/Backend/Runtime.lean).
-The root check compares their exact SHA-256 digests with the [recorded manifest](../../scripts/checks/lib/stage_interfaces.sha256). Changing a frozen declaration takes a new interface round. The canonical A-normal syntax also lives in the frozen inventory. The data modules can be imported by both a pass and its caller without importing the pass implementation.
+The frozen inventory pins 22 files byte for byte across three layers:
+
+- **Spec, grammar and verifier leaves (11):** [spec carriers](../../ConcreteSpec/StageInterface.lean),
+  [canonical A-normal syntax](../../ConcreteSpec/Spec/Slice0Syntax.lean),
+  [LL(1) definitions](../../ConcreteSpec/Spec/LL1.lean),
+  [verifier word machine](../../ConcreteSpec/Spec/VerifyMachine.lean),
+  [grammar vocabulary](../../ConcreteSpec/Spec/GrammarVocab.lean),
+  [shared grammar data](../../ConcreteSpec/Spec/GrammarData.lean),
+  [table verifier](../../ConcreteSpec/Spec/TableVerifier.lean),
+  [stage grammar core](../../ConcreteSpec/StageGrammarCore.lean),
+  [early proposal table](../../ConcreteSpec/Spec/EarlyProposal.lean),
+  [slice grammar selector](../../ConcreteSpec/Spec/SliceGrammar.lean), and
+  [stage grammar](../../ConcreteSpec/StageGrammar.lean).
+- **Compiler contract and backend leaves (5):** [compiler contracts](../../Concrete/Contracts.lean),
+  [backend observation adapter](../../Concrete/Backend/Observation.lean),
+  [backend runtime renderer](../../Concrete/Backend/Runtime.lean),
+  [LLVM IR carriers](../../Concrete/Backend/LLVMIR.lean), and
+  [LCB job builder](../../Concrete/Backend/LCBJob.lean).
+- **Compiler interface modules (6):** [behavior refinement](../../Concrete/Interfaces/Behavior.lean),
+  [compiler carriers](../../Concrete/Interfaces/Carriers.lean),
+  [edge propositions](../../Concrete/Interfaces/Contracts.lean),
+  [register formation and occurrence accounting](../../Concrete/Interfaces/Formation.lean),
+  [executable signatures and registry](../../Concrete/Interfaces/Pipeline.lean), and
+  [reference elaboration](../../Concrete/Interfaces/SurfaceElaboration.lean).
+
+The root check compares their exact SHA-256 digests with the [recorded manifest](../../scripts/checks/lib/stage_interfaces.sha256). Changing a frozen declaration takes a new interface round. Proof modules under `ConcreteSpec/Proofs/` close proof-irrelevant obligations without altering the frozen executable surface, and the frozen interface layer carries zero provisional `Concrete/BIR.lean` imports. The data modules can be imported by both a pass and its caller without importing the pass implementation.
 
 ## Source → Tokens
 
@@ -16,13 +33,15 @@ Fix (f) owns the lossless scanner. `Source` carries the admitted project, entry-
 
 ## Tokens → AST
 
-The registry selects the grammar and verification inputs from the slice. The closed bootstrap grammar covers the standalone literal-return fixture. Its checked table has a fixed word program and proposal, with kernel proofs of acceptance and exact row identity. Fix (f) replaces the bootstrap data with the full shared grammar and its certificate-producing verifier. The AST is indexed by the start symbol. First-order actions construct the shared syntax tree from retained token payloads and coordinates. The verifier runs a closed word machine over proposal memory and certifies the exact dense prediction table used by the parser. Its word-operation and memory budgets use a fixed multiplier of grammar positions times the exact number of lookahead columns. The boundary validates file IDs, ranges and exact starting coordinates in one pass over project bytes and tokens. Invalid streams receive a typed refusal before grammar execution. The parser executes the frozen cursor machine with indexed lookups and first-order typed constructor actions. It counts visits and action constructors on the same execution that returns the result. A stage proof must show that execution completes within its linear token budget, including on refusal. The full declarative and predictive derivations check each production and token's slice eligibility, including radix and suffix. The unsupported refusal names the least slice admitting the full stream and the span that raised the requirement. The registered output and elaborator input share `Parsed.ElaborationDomain`. It requires a successful run of the fixed parser on a coordinate-valid stream and a defined reference elaboration result. Every successful handoff must satisfy `AdmissionInput.Ready` in the issuing project. It binds the selected slice, checks Core locations and arguments for each preparation route, and checks the primary and related locations of source refusals. The production parser classifies refused input with the shared grammar. Its annotated Slice 1 rows are a proved sublist of the refusal table’s grammar. Fix (f) also replaces token rewriting and handwritten body derivations.
+The registry selects the grammar, verification inputs, parser, language and elaborator from the slice through the closed six-selector family (`sliceGrammar`, `sliceVerifier`, `sliceProposal`, `sliceParser`, `sliceLanguage`, `elaborate`). The 78-production shared early grammar (`EarlyProposal`, `SliceGrammar`, `TableVerifier`, `VerifyMachine`, `StageGrammarCore`, `StageGrammar`) replaces the bootstrap table with a fixed word-machine verifier and kernel proofs of acceptance and exact row identity. The AST is indexed by the start symbol, and first-order actions construct the shared syntax tree from retained token payloads and coordinates. The verifier runs a closed word machine over proposal memory and certifies the exact dense prediction table used by the parser, with word-operation and memory budgets bounded by a fixed multiplier of grammar positions times the exact number of lookahead columns. The boundary validates file IDs, ranges and exact starting coordinates in one pass over project bytes and tokens (`ParserView.validateCoordinates` / `invalidLocation`), refusing coordinate-invalid streams with `.invalidStream` before grammar execution.
+
+The parser executes the frozen cursor machine with indexed lookups and first-order typed constructor actions, counting visits and action constructors on the same execution that returns the result and anchoring EOF diagnostics at `eofFileSpan`. A stage proof establishes completion within the linear token budget, including on refusal. `ParseCursor` tracks the whole-stream least admitting slice (`required`) separately from the write-once `firstUnsupportedHit` span and cause: malformed syntax, unexpected end and trailing tokens fail under `Parsed@1` ahead of slice eligibility, while a syntactically complete stream outside the active slice fails at `firstUnsupportedHit` under `AdmittedProduction@3` or `DecimalLiteral@1` (first violation in source order within the parser stage) while reporting the least slice admitting the full stream. Authoritative single-pass CST decoders (`decodeSurface0` / `Elab.surfaceProgram` and `decodeSurface1`) decode the start-symbol tree directly into located surface syntax, including `Surface0.Program.closeBrace`, retiring handwritten tables and secondary refusal parsers. Both compiler driver routes (`Concrete/Stages.lean` `compile` and `unchecked`) parse strictly through `Lex.lexStream` → `sliceParser slice0` → `Elab.surfaceProgram` (`Concrete/Parse.lean`), with `Parse.driver_registry_parse_parity` and `Parse.parseStream_derives` proving exact driver-to-registry agreement (including rule revision alignment in `Concrete/Refusal.lean`) and `Surface0.Derives` soundness. The registered output and elaborator input share `Parsed.ElaborationDomain`, and every successful handoff satisfies `AdmissionInput.Ready` in the issuing project.
 
 ## AST → Core → admitted Core
 
 ### ISS-0118, interface revision round 5
 
-For Slice 0, the registered elaborator decodes the grammar tree directly into the project and located surface program carried by `AdmissionInput.pending`. The contract requires that exact program. An unresolved name and an unsupported entry name cross this boundary with their source coordinates. The spec checks the entry, then visits each reachable binding and return expression in source order. In `return 42; let Option: u8 = 1;` it reports the unreachable statement at `let`. The Slice 0 parser reports a keyword in binder position under `Parsed@1` and a syntactically complete wildcard binding under `AdmittedProduction@3`. It retains the offending token’s span. The driver classifies unsupported forms after the shared grammar recognizes the complete input. Refusal precedence follows [stage order, first violation in source order within a stage](../decisions.md#decided-2026-11-28-refusal-precedence): each file reports the refusal of the first stage that fails (lexer, then parser, then checker), and within that stage the earliest primary occurrence wins.
+For Slice 0, the registered elaborator decodes the grammar tree directly into the project and located surface program carried by `AdmissionInput.pending`, including `Surface0.Program.closeBrace` for empty-body and fallthrough locations. The contract requires that exact program. An unresolved name and an unsupported entry name cross this boundary with their source coordinates. Refusal precedence is strictly [stage order, first violation in source order within a stage](../decisions.md#decided-2026-11-28-refusal-precedence): lexer (`Lexed@2`), then stream coordinate validation, then parser (`Parsed@1`, then earliest `AdmittedProduction@3` or `DecimalLiteral@1` on a complete parse), then left-to-right surface preparation (`prepareSurface0`, checking entry name and each reachable binding/return statement in source order without cross-phase Core lookahead), then Core static checking (`CoreInput.checkStatic`). In `return 42; let Option: u8 = 1;` surface preparation reports the unreachable statement at `let`. In `return ; @ }` lexing wins at `@` under `Lexed@2`; in `return missing }` parsing wins at `}` under `Parsed@1`; in `let Option {} = 1; return 0;` parsing classifies the complete stream under `AdmittedProduction@3`. `Concrete/Refusal.lean` transports every typed `ParseRefusal` into the driver's refusal vocabulary while preserving the exact registered rule revision (`Parsed@1`, `AdmittedProduction@3`, `DecimalLiteral@1`) and primary `FileSpan`.
 
 `SurfacePreparation.prepareSurface0` resolves local names to fresh IDs and preserves locations during A-normalization. Both routes need a supported entry, a straight-line body with a final return, named destinations, resolvable reads and operands representable in Slice 0 Core. Both routes enforce source binder availability, uniqueness and the expected-type literal rule before elaboration erases the spelling. Preparation and the registered `Slice0Rules.UnreservedLocal` rule (revision 2) share the ballot’s `Surface0.UnreservedLocalName` predicate for the entry point, builtin types and intrinsics.
 
@@ -57,7 +76,7 @@ block and terminator families and check the types of block arguments. The integr
 determines layouts, literal and operation values, field projections and aggregate codecs.
 Core literal operands have a profile-independent byte encoding. MIR/Memory operand reads call `CoreLanguage.literal`. Materialized scalar storage reads use the selected target's `Hybrid.decode`. For the Core bytes `fe ff`, an i16 literal is −2 under either byte order. The materialized load resolves the backing range and reads those two initialized bytes as −257 at the big-endian spec target.
 
-Core execution, MIR, Memory, SSA and BIR carry the same qualified declaration environment. Independent typing establishes the spec's `DeclsOk`; each lowering contract preserves the exact declarations. Layout, active fields and operation semantics consult that environment. A declared empty linear nominal has size zero and alignment one, the identity for maximum field alignment under foundation C3. It has a logical value and ownership lifetime even without a backing block. Memory lowering queries each materialized root in the MIR declaration environment and carries those declarations into the placed graph. A missing layout or one that fails `Layout.WellFormed` for the physical target produces `MissingLayout`. The controls execute construction and consuming destructure, then try to read the consumed value.
+Core execution, MIR, Memory, SSA and BIR carry the same qualified declaration environment. Independent typing establishes the spec's `DeclsOk`; each lowering contract preserves the exact declarations. Layout, active fields and operation semantics consult that environment. A declared empty linear nominal has size zero and alignment one, the identity for maximum field alignment under foundation C3. It has a logical value and ownership lifetime even without a backing block. Memory lowering queries each materialized root in the MIR declaration environment and carries those declarations into the placed graph. Under ISS-0125, `Layout.WellFormed` enforces the strict alignment ceiling (`align < target.addressCeiling`), relative alignment and containment at every field edge, and pairwise disjointness of sibling fields (`Layout.fields_disjoint`). A missing layout or one that fails `Layout.WellFormed` for the physical target produces `MissingLayout`. The controls execute construction and consuming destructure, then try to read the consumed value.
 
 Each reachable
 projection must execute the instruction fetched at its program counter. Calls push the
@@ -69,7 +88,7 @@ effects and the fetched trap’s diagnostic bytes.
 The logical MIR evaluator holds roots as logical values. Both IRs retain residual operation
 and call checks and evaluate them before performing the instruction. For a safe MIR input, the simulation
 relates reachable activations, including suspended callers, to virtual values or live
-backing ranges and initialized bytes. Target steps and terminal matches extend a related source execution, checking
+backing ranges and initialized bytes. Under ISS-0125, `CoreLanguage.preservesResidentHandles` requires every spec operation transition to preserve resident allocated handles (base address, size, alignment and liveness) across both active and suspended frames, ensuring an operation cannot silently deallocate or relocate backing storage beneath a resident handle. Target steps and terminal matches extend a related source execution, checking
 representation at each intermediate source state. The source path can follow the
 allocation decisions already made by the target. A target step that makes no
 source progress decreases a natural-valued rank. Complete behavior refinement
@@ -146,7 +165,7 @@ identity passed to spec address operations. An unresolved trap slot has neither 
 successor nor a terminal result, including inside a callee. The resolved platform supplies the ISA, byte order and spec memory layout for either backend. Dominance-scoped validation can strengthen the invariant on the same graph before slice 3. Retire SSA's positional site creation and BIR's duplicate diagnostic identity and scalar vocabulary at cutover.
 
 The handoff preserves the exact project used to resolve source locations and
-produce runtime diagnostics, including sites in unreachable blocks. Both backend entries require a duplicate-free BIR function table, a present entry function, project-bound trap sites and well-formed tables in the decoded Memory view.
+produce runtime diagnostics, including sites in unreachable blocks. [Concrete/Interfaces/Formation.lean](../../Concrete/Interfaces/Formation.lean) pins the decidable `RegisterFormation` contract for SSA and BIR register CFGs, the deterministic stored-order backend feature scanner `firstUnsupported`, and the `AccountsFor` intra-IR occurrence-accounting relation, while [Concrete/Interfaces/Carriers.lean](../../Concrete/Interfaces/Carriers.lean) pins `runtimeSite` for runtime diagnostic projection. Both backend entries require a duplicate-free BIR function table, a present entry function, project-bound trap sites and well-formed tables in the decoded Memory view.
 
 ## BIR → LLVM
 
@@ -282,7 +301,7 @@ self-loop, the first oversized trap table and malformed syntax. A planted
 lowering refusal produces no artifact, and an elaborator that changes the
 literal to `43` fails validation.
 
-When an atomic retirement spans owners, each writer prepares the replacement for its own files. The integration writer applies the coordinated deletion and updates the trusted-base inventories and cross-stage fixtures with the cutover. Frozen paths and the digest manifest belong to the interface round. Fixes (e) and (f) provide production definitions in their owned modules before the integration writer replaces the bootstrap instance bodies at cutover.
+The 78-production grammar/verifier selector replacement, authoritative CST decoders, `Formation.lean` contracts, and the driver parser cutover (`Concrete/Parse.lean`, `Concrete/Stages.lean`, `Concrete/Refusal.lean`, `Concrete/Premises.lean`) landed in this single interface freeze against the 22-file pinned boundary. Because each post-freeze stage validator is proved universally over its frozen input invariant, subsequent production stage implementations and provisional retirements proceed independently against the sealed manifest without reopening the interface round.
 
 ISS-0113 tracks D5 controls on the fixed slice
 instances for checked and unchecked Core lowering, Memory lowering, SSA, BIR

@@ -56,10 +56,19 @@ example :
        (⟨2⟩, ⟨.function earlyEntry, ⟨[⟨.return, .ordinal 0⟩]⟩⟩)] := by decide
 
 private def sourceKeys (sourceText : String) : Option SiteKeyTable := do
-  let tokens ← (Lex.lex sourceText.toUTF8).toOption
-  let ast ← (Parse.parse (Parse.eofSpan sourceText.toUTF8) tokens).toOption
+  let ast ← (Parse.parseBytes sourceText.toUTF8).toOption
   let program ← (SurfacePreparation.prepareSurface0 ast).toOption
   return AList.map Origin.evidenceKey (AdmissionView.zero program).execution.origins
+
+private def sourceKeysSparse (sourceText : String) : Option SiteKeyTable := do
+  let ast ← (Parse.KernelEval.parseForDriverSparse (Parse.sourceOfBytes sourceText.toUTF8)).toOption
+  let program ← (SurfacePreparation.prepareSurface0 ast).toOption
+  return AList.map Origin.evidenceKey (AdmissionView.zero program).execution.origins
+
+private theorem sourceKeys_eq_sparse (sourceText : String) :
+    sourceKeys sourceText = sourceKeysSparse sourceText := by
+  unfold sourceKeys sourceKeysSparse
+  rw [Parse.KernelEval.parseBytes_eq_sparse]
 
 -- Inserting y changes x's lexical site. Both source programs issue the spec's full table,
 -- and looking up x at either site yields the very same named key.
@@ -72,6 +81,7 @@ example :
     old = some (KeyConstruct.assignFunctionTable earlyEntry 0 [bind "x", ret]) ∧
     new = some (KeyConstruct.assignFunctionTable earlyEntry 0 [bind "y", bind "x", ret]) ∧
     (old.bind (AList.lookup · ⟨0⟩)) = some x ∧ (new.bind (AList.lookup · ⟨1⟩)) = some x := by
+  simp only [sourceKeys_eq_sparse]
   decide +kernel
 
 -- A nested addition creates a temporary before y. The return addition creates another
@@ -82,6 +92,7 @@ example :
     sourceKeys src = some (KeyConstruct.assignFunctionTable earlyEntry 0
       [⟨.binding, .named ⟨"x"⟩, []⟩, temp, ⟨.binding, .named ⟨"y"⟩, []⟩, temp,
        ⟨.return, .unnamed none, []⟩]) := by
+  simp only [sourceKeys_eq_sparse]
   decide +kernel
 
 private def parseAndElaborate (tokens : ParserView) : Option (CoreInput (sliceLanguage slice0)) := do
@@ -553,18 +564,31 @@ example :
     (Exec.run machine.body (fun _ prim => nomatch prim) 32 machine.initial).ending = .stuck := by
   with_unfolding_all exact ⟨rfl, rfl⟩
 
-private def parseSource (text : String) := (Lex.lex text.toUTF8).bind (Parse.parseForDriver (Parse.eofSpan text.toUTF8))
+private def parseSource (text : String) := Parse.parseBytes text.toUTF8
 
 example :
     ((parseSource r"fn main() -> u8 { return 42; let Option: u8 = 1; }").bind
       (Admission.prepareParsed .admission)) =
       .error (.source (.surface (.unreachable ⟨29, 48, 1, 30, ⟨0⟩⟩))) := by
-  with_unfolding_all rfl
+  apply Parse.KernelEval.eq_error_of_exceptError
+  unfold parseSource
+  rw [Parse.KernelEval.parseBytes_eq_sparse]
+  decide +kernel
 
 private def pendingSource (text : String) : Option (AdmissionInput (sliceLanguage slice0)) := do
   let ast ← (parseSource text).toOption
   return .pending (Project.singleton mainSourcePath (SourceText.ofBytes text.toUTF8.data.toList))
     (.zero ast) rfl
+
+private def pendingSourceSparse (text : String) : Option (AdmissionInput (sliceLanguage slice0)) := do
+  let ast ← (Parse.KernelEval.parseForDriverSparse (Parse.sourceOfBytes text.toUTF8)).toOption
+  return .pending (Project.singleton mainSourcePath (SourceText.ofBytes text.toUTF8.data.toList))
+    (.zero ast) rfl
+
+private theorem pendingSource_eq_sparse (text : String) :
+    pendingSource text = pendingSourceSparse text := by
+  unfold pendingSource pendingSourceSparse parseSource
+  rw [Parse.KernelEval.parseBytes_eq_sparse]
 
 -- These spellings and suffixes must be checked before Core erases them.
 example (purpose : SurfacePreparation.Purpose) :
@@ -589,14 +613,16 @@ example :
     sourceDiagnostic r"fn main() -> u8 { return 256 + 1; }" = literalAt 25 ∧
     sourceDiagnostic r"fn main() -> u8 { return 1 + 256; }" = literalAt 29 ∧
     sourceDiagnostic r"fn main() -> u8 { return 256 + 256; }" = literalAt 25 := by
-  with_unfolding_all exact ⟨rfl, rfl, rfl⟩
+  simp only [sourceDiagnostic, pendingSource_eq_sparse]
+  decide +kernel
 
 example :
     let why := ConcreteSpec.Admission.Refusal.atPosition 2 (.unusedBinding ⟨0⟩)
     sourceDiagnostic r"fn main() -> u8 { let x: u8 = 1; return 20 + 22; }" =
       some (.core .slice0 ⟨⟨0⟩, 33, 48, 1, 34⟩
         [(⟨"binding"⟩, ⟨⟨0⟩, 22, 23, 1, 23⟩)] why) := by
-  with_unfolding_all rfl
+  simp only [sourceDiagnostic, pendingSource_eq_sparse]
+  decide +kernel
 
 example :
     let otherName : ConcreteSpec.Name := ⟨"Other"⟩

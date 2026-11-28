@@ -42,7 +42,8 @@ def ManifestRefusal.message : ManifestRefusal → String
   | .schemaPending => "Concrete.toml requires an approved manifest schema"
 
 
-open ConcreteSpec.StageInterface (RefusalCause ParserIssue Surface0Issue)
+open ConcreteSpec.StageInterface (RefusalCause ParserIssue Surface0Issue ParseRefusal
+  MalformedCause UnsupportedCause FileSpan)
 
 private def RefusalCause.code : RefusalCause → String
   | .lexical (.digitLimit _) _ => "RESOURCE"
@@ -182,10 +183,94 @@ theorem Refusal.source_diagnosticAt_iff (cause : RefusalCause) (rule : RuleId) :
     ((Refusal.source cause).diagnosticAt rule).isSome = true ↔ rule = cause.rule := by
   change (if cause.rule = rule then some ⟨.source cause, cause.citation⟩ else (none : Option Diagnostic)).isSome =
     true ↔ rule = cause.rule
-  by_cases same : cause.rule = rule
-  · rw [ite_eq_left same]
+  cases decEq cause.rule rule with
+  | isTrue same =>
+    rw [ite_eq_left same]
     exact ⟨fun _ => same.symm, fun _ => rfl⟩
-  · rw [ite_eq_right same]
+  | isFalse same =>
+    rw [ite_eq_right same]
     exact ⟨nofun, fun h => (same h.symm).elim⟩
+
+/-- Project a grammar-level `ParseRefusal` into the shared `RefusalCause` carrier.
+Stream-coordinate violations (`ParseRefusal.invalidStream`) precede grammar
+execution and have no `ParserIssue`. -/
+def RefusalCause.ofParseRefusal? (refusal : ParseRefusal) : Option RefusalCause :=
+  refusal.toParserIssue?.map fun issue => .parser issue refusal.span.surface
+
+private def locationRuleLabel : SourcePathSpan.LocationRefusal → String
+  | .unknownFile => "ConcreteSpec.Core.SourcePathSpan.SlotResolves@1"
+  | .reversedRange => "ConcreteSpec.Core.SourcePathSpan.OrderedOffsets@2"
+  | .pastEnd _ => "ConcreteSpec.Core.SourcePathSpan.EndInSource@2"
+  | .wrongLine _ => "ConcreteSpec.Core.SourcePathSpan.LineMatches@2"
+  | .wrongColumn _ => "ConcreteSpec.Core.SourcePathSpan.ColumnMatches@2"
+
+/-- Transport any typed `ParseRefusal` from `ConcreteSpec.StageInterface` into
+the driver's single `Refusal` renderer (`Refusal.render`), retaining the exact
+rule revision (`Parsed@1`, `AdmittedProduction@3`, `DecimalLiteral@1`) and span. -/
+def Refusal.ofParseRefusal : ParseRefusal → Refusal
+  | .invalidStream span reason =>
+    .internal s!"invalid token stream location at file {span.file.index}, bytes {span.startOffset}..{span.endOffset} [rule {locationRuleLabel reason}]"
+  | .malformed _ .unexpectedToken span => .source (.parser .unexpectedToken span.surface)
+  | .malformed _ .unexpectedEnd span => .source (.parser .unexpectedEnd span.surface)
+  | .malformed _ .trailingTokens span => .source (.parser .trailingTokens span.surface)
+  | .unsupported _ (.production _) span _ => .source (.parser .outsideProduction span.surface)
+  | .unsupported _ (.nonDecimal _) span _ => .source (.parser .nonDecimal span.surface)
+
+theorem RefusalCause.ofParseRefusal?_primary {refusal : ParseRefusal} {cause : RefusalCause}
+    (h : RefusalCause.ofParseRefusal? refusal = some cause) :
+    cause.primary = refusal.span := by
+  unfold RefusalCause.ofParseRefusal? at h
+  cases hi : refusal.toParserIssue? with
+  | none => rw [hi] at h; cases h
+  | some issue =>
+    rw [hi] at h
+    cases Option.some.inj h
+    cases refusal.span
+    rfl
+
+theorem RefusalCause.ofParseRefusal?_malformed (rule : RegisteredRule) (cause : MalformedCause)
+    (span : FileSpan) :
+    ∃ issue,
+      RefusalCause.ofParseRefusal? (.malformed rule cause span) = some (.parser issue span.surface) ∧
+      (RefusalCause.parser issue span.surface).rule = ⟨``Slice0Rules.Parsed, 1⟩ ∧
+      (RefusalCause.parser issue span.surface).primary = span := by
+  cases cause with
+  | unexpectedToken => exact ⟨.unexpectedToken, rfl, rfl, by cases span; rfl⟩
+  | unexpectedEnd => exact ⟨.unexpectedEnd, rfl, rfl, by cases span; rfl⟩
+  | trailingTokens => exact ⟨.trailingTokens, rfl, rfl, by cases span; rfl⟩
+
+theorem RefusalCause.ofParseRefusal?_unsupported_production (rule : RegisteredRule)
+    (id : ConcreteSpec.GrammarData.ProductionId) (span : FileSpan)
+    (required : ConcreteSpec.StageInterface.Slice) :
+    RefusalCause.ofParseRefusal? (.unsupported rule (.production id) span required) =
+        some (.parser .outsideProduction span.surface) ∧
+      (RefusalCause.parser .outsideProduction span.surface).rule = ⟨``Slice0Rules.AdmittedProduction, 3⟩ ∧
+      (RefusalCause.parser .outsideProduction span.surface).primary = span :=
+  ⟨rfl, rfl, by cases span; rfl⟩
+
+theorem RefusalCause.ofParseRefusal?_unsupported_nonDecimal (rule : RegisteredRule)
+    (radix : ConcreteSpec.Surface0.Radix) (span : FileSpan)
+    (required : ConcreteSpec.StageInterface.Slice) :
+    RefusalCause.ofParseRefusal? (.unsupported rule (.nonDecimal radix) span required) =
+        some (.parser .nonDecimal span.surface) ∧
+      (RefusalCause.parser .nonDecimal span.surface).rule = ⟨``Slice0Rules.DecimalLiteral, 1⟩ ∧
+      (RefusalCause.parser .nonDecimal span.surface).primary = span :=
+  ⟨rfl, rfl, by cases span; rfl⟩
+
+theorem Refusal.ofParseRefusal_eq_source {refusal : ParseRefusal} {cause : RefusalCause}
+    (h : RefusalCause.ofParseRefusal? refusal = some cause) :
+    Refusal.ofParseRefusal refusal = .source cause := by
+  cases refusal with
+  | invalidStream _ _ => cases h
+  | malformed _ c _ =>
+    cases c <;> cases h <;> rfl
+  | unsupported _ c _ _ =>
+    cases c <;> cases h <;> rfl
+
+theorem Refusal.ofParseRefusal_diagnosticAt_iff {refusal : ParseRefusal} {cause : RefusalCause}
+    (h : RefusalCause.ofParseRefusal? refusal = some cause) (rule : RuleId) :
+    ((Refusal.ofParseRefusal refusal).diagnosticAt rule).isSome = true ↔ rule = cause.rule := by
+  rw [Refusal.ofParseRefusal_eq_source h]
+  exact Refusal.source_diagnosticAt_iff cause rule
 
 end Concrete

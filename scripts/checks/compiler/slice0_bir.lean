@@ -308,8 +308,7 @@ def checkSourceRefusal (input : Concrete.Stages.Input) (expected : RefusalExpect
     | _, _ => false
   unless kindMatches do return 13
   if expected.kind == "unreachable_statement" then
-    let .ok tokens := Concrete.Lex.lex input.source input.fileId | return 13
-    let .ok ast := Concrete.Parse.parse input.eof tokens | return 13
+    let .ok ast := Concrete.Parse.parseForDriver input.stageSource | return 13
     let .error (.unreachable span) := ConcreteSpec.Surface0.checkBody ast.body | return 13
     unless span == expected.primary do
       IO.eprintln s!"{input.path}: spec reports {repr span}, fixture expects {repr expected.primary}"
@@ -351,8 +350,7 @@ def emitSource (path actual : String) (dir : System.FilePath) (expectation : Lis
     | .error (.backendProfile ..) => return 17
     | _ => return 15
   | ["trap", kind, _, _], .error (.source (.core ..)) =>
-    let .ok tokens := Concrete.Lex.lex input.source input.fileId | IO.eprintln "lex failed"; return 1
-    let .ok ast := Concrete.Parse.parse input.eof tokens | IO.eprintln "parse failed"; return 1
+    let .ok ast := Concrete.Parse.parseForDriver input.stageSource | IO.eprintln "parse failed"; return 1
     let .ok core := Concrete.Admission.prepareParsed .eligibility ast | IO.eprintln "elaboration failed"; return 1
     let p := Concrete.Core.toCore core.program
     let .trap actualKind := Concrete.Core.run p (p.body.length + 1)

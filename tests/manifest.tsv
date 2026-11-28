@@ -44,6 +44,7 @@ site1	bir:site1	trap arithmeticOverflow 1 636f6e63726574653a20747261703a206f7665
 site0	bir:site0	trap arithmeticOverflow 0 636f6e63726574653a20747261703a206f766572666c6f77206174207372632f6d61696e2e636f6e3a313a31312028736974652033290a	slice0
 two_sites_ok	bir:two_sites_ok	exit 42 -	slice0
 source_answer	con:tests/slice0/answer.con	exit 42 -	slice0
+source_grouped_answer	con:tests/slice0/grouped_answer.con	exit 42 -	slice0
 source_overflow	con:tests/slice0/overflow.con	pending-refusal 1 checker	slice0
 source_trap	con:tests/slice0/trap.con	trap arithmeticOverflow 1 636f6e63726574653a20747261703a206f766572666c6f772061742074657374732f736c696365302f747261702e636f6e3a343a31342028736974652031290a	slice0
 source_reserved_binder_trap	con:tests/slice0/reserved_binder_trap.con	refuse 1 reserved_binder UnreservedLocal@2 22:28:1:23 -	slice0

@@ -204,8 +204,12 @@ def LexerContract : EdgeContract
   outputInvariant := fun tokens => ∃ bytes fileId, Lexes bytes tokens fileId
   correspondence := fun (bytes, fileId) tokens => Lexes bytes tokens fileId
 
-def ParserContract : EdgeContract (fun tokens ast => ∃ eof, Graph (Parse.parse eof) tokens ast) where
-  kind := .namedPremise "P_parse"
+def ParserContract : EdgeContract
+    (fun tokens ast => ∃ stream : ConcreteSpec.StageInterface.TokenStream,
+      stream.source.slice = ConcreteSpec.StageInterface.slice0 ∧
+      Parse.surfaceTokens stream = tokens ∧
+      Graph Parse.parseStream stream ast) where
+  kind := .directProof
   inputInvariant := LexerContract.outputInvariant
   outputInvariant := fun ast => ∃ tokens, Derives tokens ast
   correspondence := Derives
@@ -304,7 +308,9 @@ def Frontend (input : Stages.Input) (out : Stages.Output) : Prop :=
 
 /-- Successful production exposes the exact intermediate results of the functions it invokes. -/
 def SharedHandoffs (input : Stages.Input) (out : Stages.Output) : Prop :=
-  Lex.lex input.source input.fileId = .ok out.tokens ∧ Parse.parse input.eof out.tokens = .ok out.ast ∧
+  (∃ stream, Lex.lexStream input.stageSource = .ok stream ∧
+    Parse.surfaceTokens stream = out.tokens ∧ Parse.parseStream stream = .ok out.ast) ∧
+  Lex.lex input.source input.fileId = .ok out.tokens ∧
   Admission.prepareParsed .admission out.ast = .ok out.core ∧
   (∃ admitted, Admission.check out.core = .ok admitted ∧ admitted.tokens = out.evidence ∧
     MIR.lower admitted = .ok out.mir) ∧
@@ -660,24 +666,21 @@ def LCBCorrect {Env : Type} {profile : Profile}
     Compiled input out ∧ ImageCorrect n admittedCoreSemantics input.path out.core build.image
 
 def UncheckedHandoffs (input : Stages.Input) (core : Elab.Output) : Prop :=
-  ∃ tokens ast, Lex.lex input.source input.fileId = .ok tokens ∧ Parse.parse input.eof tokens = .ok ast ∧
+  ∃ stream ast, Lex.lexStream input.stageSource = .ok stream ∧ Parse.parseStream stream = .ok ast ∧
     Admission.prepareParsed .eligibility ast = .ok core
 
 /-- Every successful unchecked run exposes the frontend handoff used by the
 correctness obligation, including operations guarded at runtime. -/
 theorem unchecked_handoffs_of_run {input : Stages.Input} {bir : BIR.Program}
     (ran : Stages.unchecked input = .ok bir) : ∃ core, UncheckedHandoffs input core := by
-  simp only [Stages.unchecked, bind, Except.bind] at ran
-  split at ran <;> try contradiction
-  next tokens lexed =>
-    split at ran <;> try contradiction
-    next ast parsed =>
-      split at ran <;> try contradiction
-      next core prepared => exact ⟨core, tokens, ast, lexed, Parse.parseForDriver_ok.mp parsed, prepared⟩
+  obtain ⟨stream, ast, core, hlex, hparse, hprep⟩ := Stages.unchecked_frontend ran
+  exact ⟨core, stream, ast, hlex, hparse, hprep⟩
 
 def UncheckedFrontend (input : Stages.Input) (core : Elab.Output) : Prop :=
-  ∃ tokens ast, Lex.lex input.source input.fileId = .ok tokens ∧ Parse.parse input.eof tokens = .ok ast ∧
-    Admission.prepareParsed .eligibility ast = .ok core ∧ Lexes input.source tokens input.fileId ∧ Derives tokens ast ∧
+  ∃ stream ast, Lex.lexStream input.stageSource = .ok stream ∧ Parse.parseStream stream = .ok ast ∧
+    Admission.prepareParsed .eligibility ast = .ok core ∧
+    Lexes input.source (Parse.surfaceTokens stream) input.fileId ∧
+    Derives (Parse.surfaceTokens stream) ast ∧
     Elaborates .eligibility ast core
 
 def UncheckedOrigins (input : Stages.Input) (core : Elab.Output) (bir : BIR.Program) : Prop :=
@@ -804,24 +807,81 @@ def answerInput : Stages.Input :=
   (Stages.Input.load "tests/slice0/answer.con"
     r#"fn main() -> u8 { return 20 + 22; }"#.toUTF8).toOption.get (by rfl)
 
-def answerOutput : Stages.Output :=
-  (Stages.compile answerInput).toOption.get (by with_unfolding_all rfl)
+private def answerStream : ConcreteSpec.StageInterface.TokenStream :=
+  (Lex.lexStream answerInput.stageSource).toOption.get (by rfl)
 
-theorem answerCompiles : Stages.compile answerInput = .ok answerOutput := by
-  with_unfolding_all rfl
+private def answerAst : Program :=
+  ⟨"main", ⟨3, 7, 1, 4, ⟨0⟩⟩,
+    [.ret (.add (.integer 20 none ⟨25, 27, 1, 26, ⟨0⟩⟩)
+                (.integer 22 none ⟨30, 32, 1, 31, ⟨0⟩⟩)
+                ⟨28, 29, 1, 29, ⟨0⟩⟩)
+          ⟨18, 33, 1, 19, ⟨0⟩⟩],
+    ⟨34, 35, 1, 35, ⟨0⟩⟩⟩
+
+private theorem answerParse : Parse.parseStream answerStream = .ok answerAst :=
+  Parse.KernelEval.parseStream_eq_ok_of_sparse (by decide +kernel)
+
+private def answerCoreVal : Elab.Output :=
+  (Admission.prepareParsed .admission answerAst).toOption.get (by rfl)
+
+private def answerAdmitted : Admission.Output :=
+  (Admission.check answerCoreVal).toOption.get (by rfl)
+
+private def answerMir : MIR.Program :=
+  (MIR.lower answerAdmitted).toOption.get (by rfl)
+
+private def answerMem : Memory.Program :=
+  Memory.lower answerMir
+
+private def answerBirVal : BIR.Program :=
+  ⟨[⟨[], [.bin .add .u8 0 (.imm .u8 20) (.imm .u8 22)], .ret (.reg 0)⟩], []⟩
+
+def answerOutput : Stages.Output :=
+  Stages.Output.ofEdges answerInput answerStream answerAst answerCoreVal answerAdmitted
+    answerMir answerMem answerBirVal rfl answerParse rfl
+
+theorem answerCompiles : Stages.compile answerInput = .ok answerOutput :=
+  Stages.compile_of_edges answerInput answerStream answerAst answerCoreVal answerAdmitted
+    answerMir answerMem answerBirVal rfl answerParse rfl rfl rfl rfl (by decide +kernel)
 
 private def bindingSpan : Span := ⟨0, 1, 1, 1, ⟨0⟩⟩
 
-private def parseBinderExample (source : String) : Except Refusal Program := do
-  Parse.parseForDriver (Parse.eofSpan source.toUTF8) (← Lex.lex source.toUTF8)
+private def parseBinderExample (source : String) : Except Refusal Program :=
+  Parse.parseBytes source.toUTF8
 
-private theorem refusesFirstBinder {ast : Program} {bindings : List Binding} {binding : Binding}
-    {result : Expr} (shape : checkBody ast.body = .ok (binding :: bindings, result))
-    (illegal : ¬ BinderLegal [] binding.name) (core : Elab.Output) : ¬ Elaborates .admission ast core := by
+private theorem refusesFirstBinderName {ast : Program} {name : String}
+    (hhead : ((checkBody ast.body).toOption.bind fun p => p.1.head?.map Binding.name) = some name)
+    (illegal : ¬ BinderLegal [] name) (core : Elab.Output) : ¬ Elaborates .admission ast core := by
   intro h
-  obtain ⟨_, _, _, _, _, _, _, _, _, checked, lowered, _⟩ := h
-  cases Except.ok.inj (shape.symm.trans checked)
-  exact illegal lowered.headLegal
+  obtain ⟨_, _, bindings, _, _, _, _, _, _, checked, lowered, _⟩ := h
+  rw [checked] at hhead
+  cases lowered with
+  | nil => cases hhead
+  | atom hlegal _ _ => cases Option.some.inj hhead; exact illegal hlegal
+  | operation hlegal _ _ _ => cases Option.some.inj hhead; exact illegal hlegal
+
+private theorem refusesDuplicatePair {ast : Program} {name : String}
+    (hpair : ((checkBody ast.body).toOption.map fun p => p.1.map Binding.name) = some [name, name])
+    (core : Elab.Output) : ¬ Elaborates .admission ast core := by
+  intro h
+  obtain ⟨_, _, bindings, _, _, _, _, _, _, checked, lowered, _⟩ := h
+  rw [checked] at hpair
+  cases bindings with
+  | nil => cases hpair
+  | cons first rest =>
+    cases rest with
+    | nil => cases hpair
+    | cons second tail =>
+      cases tail with
+      | cons _ _ => cases Option.some.inj hpair
+      | nil =>
+        have heq := Option.some.inj hpair
+        have h1 : first.name = name := (List.cons.inj heq).1
+        have h2 : second.name = name := (List.cons.inj (List.cons.inj heq).2).1
+        have member : second.name ∈ [first.name] := by rw [h1, h2]; exact List.Mem.head _
+        cases lowered with
+        | atom _ _ restLowered => exact restLowered.headLegal.2.2 member
+        | operation _ _ _ restLowered => exact restLowered.headLegal.2.2 member
 
 private def wildcardParse :=
   parseBinderExample r#"fn main() -> u8 { let _: u8 = 42; return 1; }"#
@@ -849,35 +909,50 @@ private def cites (result : Except Refusal Program) (rule : ConcreteSpec.Core.Ru
 open ConcreteSpec.Core in
 example : keywordBinderParse = .error (.source (.parser .unexpectedToken ⟨22, 24, 1, 23, ⟨0⟩⟩)) ∧
     cites keywordBinderParse ⟨``Slice0Rules.Parsed, 1⟩ = true ∧
-    cites keywordBinderParse ⟨``Slice0Rules.Lexed, 2⟩ = false := ⟨rfl, rfl, rfl⟩
+    cites keywordBinderParse ⟨``Slice0Rules.Lexed, 2⟩ = false := by
+  have hk : keywordBinderParse = .error (.source (.parser .unexpectedToken ⟨22, 24, 1, 23, ⟨0⟩⟩)) :=
+    Parse.KernelEval.parseBytes_eq_error_of_sparse (by decide +kernel)
+  refine ⟨hk, ?_, ?_⟩ <;> (rw [hk]; decide)
 
 open ConcreteSpec.Core in
 example : wildcardParse = .error (.source (.parser .outsideProduction ⟨22, 23, 1, 23, ⟨0⟩⟩)) ∧
     cites wildcardParse ⟨``Slice0Rules.AdmittedProduction, 3⟩ = true ∧
-    cites wildcardParse ⟨``Slice0Rules.EntryName, 1⟩ = false := ⟨rfl, rfl, rfl⟩
+    cites wildcardParse ⟨``Slice0Rules.EntryName, 1⟩ = false := by
+  have hw : wildcardParse = .error (.source (.parser .outsideProduction ⟨22, 23, 1, 23, ⟨0⟩⟩)) :=
+    Parse.KernelEval.parseBytes_eq_error_of_sparse (by decide +kernel)
+  refine ⟨hw, ?_, ?_⟩ <;> (rw [hw]; decide)
 
 -- The shared classification requires a complete parse.
 example : parseBinderExample r#"fn main() -> u8 { let _: u8 = 42; return _; }"# =
-    .error (.source (.parser .unexpectedToken ⟨41, 42, 1, 42, ⟨0⟩⟩)) := rfl
+    .error (.source (.parser .unexpectedToken ⟨41, 42, 1, 42, ⟨0⟩⟩)) :=
+  Parse.KernelEval.parseBytes_eq_error_of_sparse (by decide +kernel)
 
 open ConcreteSpec.Core in
 example :
     let result := parseBinderExample r#"fn main() -> u8 { return 0xff; }"#
     result = .error (.source (.parser .nonDecimal ⟨25, 29, 1, 26, ⟨0⟩⟩)) ∧
       cites result ⟨``Slice0Rules.DecimalLiteral, 1⟩ = true ∧
-      cites result ⟨``Slice0Rules.AdmittedProduction, 3⟩ = false := ⟨rfl, rfl, rfl⟩
+      cites result ⟨``Slice0Rules.AdmittedProduction, 3⟩ = false := by
+  have hr : parseBinderExample r#"fn main() -> u8 { return 0xff; }"# =
+      .error (.source (.parser .nonDecimal ⟨25, 29, 1, 26, ⟨0⟩⟩)) :=
+    Parse.KernelEval.parseBytes_eq_error_of_sparse (by decide +kernel)
+  refine ⟨hr, ?_, ?_⟩ <;> (rw [hr]; decide)
 
 -- The complete refusal parse selects the first violation when both rules apply.
 example : parseBinderExample r#"fn main() -> u8 { return 0xff * 1; }"# =
     .error (.source (.parser .nonDecimal ⟨25, 29, 1, 26, ⟨0⟩⟩)) ∧
     parseBinderExample r#"fn main() -> u8 { return 1 * 0xff; }"# =
-    .error (.source (.parser .outsideProduction ⟨27, 28, 1, 28, ⟨0⟩⟩)) := ⟨rfl, rfl⟩
+    .error (.source (.parser .outsideProduction ⟨27, 28, 1, 28, ⟨0⟩⟩)) :=
+  ⟨Parse.KernelEval.parseBytes_eq_error_of_sparse (by decide +kernel),
+   Parse.KernelEval.parseBytes_eq_error_of_sparse (by decide +kernel)⟩
 
 example : parseBinderExample r#"fn main() -> u8 { return 42; } 42"# =
-    .error (.source (.parser .trailingTokens ⟨31, 33, 1, 32, ⟨0⟩⟩)) := rfl
+    .error (.source (.parser .trailingTokens ⟨31, 33, 1, 32, ⟨0⟩⟩)) :=
+  Parse.KernelEval.parseBytes_eq_error_of_sparse (by decide +kernel)
 
 example : parseBinderExample (r"fn main() -> u8 {" ++ "\r\n  ") =
-    .error (.source (.parser .unexpectedEnd ⟨21, 21, 2, 3, ⟨0⟩⟩)) := rfl
+    .error (.source (.parser .unexpectedEnd ⟨21, 21, 2, 3, ⟨0⟩⟩)) :=
+  Parse.KernelEval.parseBytes_eq_error_of_sparse (by decide +kernel)
 
 /-- Check the actual driver result against a fixed source location and every candidate citation. -/
 private def ExactRefusal (text : String) (rule : ConcreteSpec.Core.RuleId)
@@ -886,65 +961,103 @@ private def ExactRefusal (text : String) (rule : ConcreteSpec.Core.RuleId)
     cause.primary = ConcreteSpec.StageInterface.surfaceFileSpan span ∧
     ∀ candidate, ((Refusal.source cause).diagnosticAt candidate).isSome = true ↔ candidate = rule
 
+private def loadCompileExactRefusal (text : String) (rule : ConcreteSpec.Core.RuleId)
+    (span : ConcreteSpec.Surface0.Span) : Bool :=
+  match Stages.KernelEval.loadCompileErrorSparse "main.con" text.toUTF8 with
+  | some (.source cause) =>
+    cause.primary == ConcreteSpec.StageInterface.surfaceFileSpan span &&
+    cause.rule == rule
+  | _ => false
+
+private theorem exactRefusal_of_sparse {text : String} {rule : ConcreteSpec.Core.RuleId}
+    {span : ConcreteSpec.Surface0.Span}
+    (h : loadCompileExactRefusal text rule span = true) :
+    ExactRefusal text rule span := by
+  unfold loadCompileExactRefusal at h
+  cases herr : Stages.KernelEval.loadCompileErrorSparse "main.con" text.toUTF8 with
+  | none => rw [herr] at h; cases h
+  | some r =>
+    rw [herr] at h
+    cases r with
+    | source cause =>
+      simp only [Bool.and_eq_true, beq_iff_eq] at h
+      refine ⟨cause, Stages.KernelEval.load_compile_eq_error_of_sparse herr, h.1, ?_⟩
+      intro candidate
+      rw [Refusal.source_diagnosticAt_iff, h.2]
+    | path _ | missingLocation _ | backendResource _ _ _ _ | backendProfile _ _
+    | toolFailure _ | manifest _ | usageError _ | internal _ => cases h
+
 open ConcreteSpec.Core in
 example : ExactRefusal r"fn main() -> u8 { let _: u8 = 1; abort(); }"
-    ⟨``Slice0Rules.AdmittedProduction, 3⟩ ⟨22, 23, 1, 23, ⟨0⟩⟩ := by
-  with_unfolding_all exact ⟨_, rfl, rfl, Refusal.source_diagnosticAt_iff _⟩
+    ⟨``Slice0Rules.AdmittedProduction, 3⟩ ⟨22, 23, 1, 23, ⟨0⟩⟩ :=
+  exactRefusal_of_sparse (by decide +kernel)
 
 open ConcreteSpec.Core in
 example : ExactRefusal r"fn main() -> u8 { let Option: u8 = 1; return Option; }"
-    ⟨``Slice0Rules.UnreservedLocal, 2⟩ ⟨22, 28, 1, 23, ⟨0⟩⟩ := by
-  with_unfolding_all exact ⟨_, rfl, rfl, Refusal.source_diagnosticAt_iff _⟩
+    ⟨``Slice0Rules.UnreservedLocal, 2⟩ ⟨22, 28, 1, 23, ⟨0⟩⟩ :=
+  exactRefusal_of_sparse (by decide +kernel)
 
 open ConcreteSpec.Core in
 example : ExactRefusal r"fn main() -> u8 { let x: u8 = 1; let x: u8 = 2; return x; }"
-    ⟨``Slice0Rules.FreshLocal, 1⟩ ⟨37, 38, 1, 38, ⟨0⟩⟩ := by
-  with_unfolding_all exact ⟨_, rfl, rfl, Refusal.source_diagnosticAt_iff _⟩
+    ⟨``Slice0Rules.FreshLocal, 1⟩ ⟨37, 38, 1, 38, ⟨0⟩⟩ :=
+  exactRefusal_of_sparse (by decide +kernel)
 
 -- Stage-order surface preparation checks surface rules left-to-right before Core runs.
 open ConcreteSpec.Core in
 example : ExactRefusal r"fn main() -> u8 { let x: u8 = 256; let Option: u8 = 1; return x; }"
-    ⟨``Slice0Rules.UnreservedLocal, 2⟩ ⟨39, 45, 1, 40, ⟨0⟩⟩ := by
-  with_unfolding_all exact ⟨_, rfl, rfl, Refusal.source_diagnosticAt_iff _⟩
+    ⟨``Slice0Rules.UnreservedLocal, 2⟩ ⟨39, 45, 1, 40, ⟨0⟩⟩ :=
+  exactRefusal_of_sparse (by decide +kernel)
 
 open ConcreteSpec.Core in
 example : ExactRefusal r"fn main() -> u8 { return (256 + missing); }"
-    ⟨``Slice0Rules.LocalBound, 1⟩ ⟨32, 39, 1, 33, ⟨0⟩⟩ := by
-  with_unfolding_all exact ⟨_, rfl, rfl, Refusal.source_diagnosticAt_iff _⟩
+    ⟨``Slice0Rules.LocalBound, 1⟩ ⟨32, 39, 1, 33, ⟨0⟩⟩ :=
+  exactRefusal_of_sparse (by decide +kernel)
 
 open ConcreteSpec.Core in
 example : ExactRefusal r"fn main() -> u8 { return 256 + (255 + 1); }"
-    ⟨``Slice0Rules.LiteralTyped, 1⟩ ⟨25, 28, 1, 26, ⟨0⟩⟩ := by
-  with_unfolding_all exact ⟨_, rfl, rfl, Refusal.source_diagnosticAt_iff _⟩
+    ⟨``Slice0Rules.LiteralTyped, 1⟩ ⟨25, 28, 1, 26, ⟨0⟩⟩ :=
+  exactRefusal_of_sparse (by decide +kernel)
 
 /-- Pin transport through both compiler entries and the parser entry that owns
 the boundary between lexical and syntactic recognition. -/
 private def bothEntriesRefuse (text : String) (cause : ConcreteSpec.StageInterface.RefusalCause)
     (rule : ConcreteSpec.Core.RuleId) : Prop :=
   let bytes := text.toUTF8
-  let parsed := (Lex.lex bytes).bind (Parse.parseForDriver (Parse.eofSpan bytes))
+  let parsed := Parse.parseBytes bytes
   parsed = .error (.source cause) ∧
     ((Stages.Input.load "main.con" bytes).bind Stages.compile) = .error (.source cause) ∧
     ((Stages.Input.load "main.con" bytes).bind Stages.unchecked) = .error (.source cause) ∧
     cause.rule = rule
 
+private theorem bothEntriesRefuse_of_sparse {text : String}
+    {cause : ConcreteSpec.StageInterface.RefusalCause} {rule : ConcreteSpec.Core.RuleId}
+    (hp : Parse.KernelEval.exceptError
+      (Parse.KernelEval.parseForDriverSparse (Parse.sourceOfBytes text.toUTF8)) = some (.source cause))
+    (hc : Stages.KernelEval.loadCompileErrorSparse "main.con" text.toUTF8 = some (.source cause))
+    (hu : Stages.KernelEval.loadUncheckedErrorSparse "main.con" text.toUTF8 = some (.source cause))
+    (hr : cause.rule = rule) :
+    bothEntriesRefuse text cause rule :=
+  ⟨Parse.KernelEval.parseBytes_eq_error_of_sparse hp,
+   Stages.KernelEval.load_compile_eq_error_of_sparse hc,
+   Stages.KernelEval.load_unchecked_eq_error_of_sparse hu, hr⟩
+
 open ConcreteSpec.Core in
 example : bothEntriesRefuse r"fn main() -> u8 { let x: u8 = 1; let x {} = x; return 0; }"
-    (.parser .outsideProduction ⟨39, 40, 1, 40, ⟨0⟩⟩) ⟨``Slice0Rules.AdmittedProduction, 3⟩ := by
-  with_unfolding_all exact ⟨rfl, rfl, rfl, rfl⟩
+    (.parser .outsideProduction ⟨39, 40, 1, 40, ⟨0⟩⟩) ⟨``Slice0Rules.AdmittedProduction, 3⟩ :=
+  bothEntriesRefuse_of_sparse (by decide +kernel) (by decide +kernel) (by decide +kernel) rfl
 
 open ConcreteSpec.Core in
 example : bothEntriesRefuse r"fn main() -> u8 { let Option {} = 1; return 0; }"
-    (.parser .outsideProduction ⟨29, 30, 1, 30, ⟨0⟩⟩) ⟨``Slice0Rules.AdmittedProduction, 3⟩ := by
-  with_unfolding_all exact ⟨rfl, rfl, rfl, rfl⟩
+    (.parser .outsideProduction ⟨29, 30, 1, 30, ⟨0⟩⟩) ⟨``Slice0Rules.AdmittedProduction, 3⟩ :=
+  bothEntriesRefuse_of_sparse (by decide +kernel) (by decide +kernel) (by decide +kernel) rfl
 
 -- Stage order (docs/decisions.md#decided-2026-11-28-refusal-precedence):
 -- parser runs before Core checking on both routes, so both checked and unchecked
 -- report AdmittedProduction@3 on abort() rather than checked arithmetic overflow.
 open ConcreteSpec.Core in
 example : bothEntriesRefuse r"fn main() -> u8 { let x: u8 = 255 + 1; abort(); }"
-    (.parser .outsideProduction ⟨39, 44, 1, 40, ⟨0⟩⟩) ⟨``Slice0Rules.AdmittedProduction, 3⟩ := by
-  with_unfolding_all exact ⟨rfl, rfl, rfl, rfl⟩
+    (.parser .outsideProduction ⟨39, 44, 1, 40, ⟨0⟩⟩) ⟨``Slice0Rules.AdmittedProduction, 3⟩ :=
+  bothEntriesRefuse_of_sparse (by decide +kernel) (by decide +kernel) (by decide +kernel) rfl
 
 -- Stage-order refusal precedence controls across lexer, parser, surface preparation and Core.
 open ConcreteSpec.Core in
@@ -964,10 +1077,15 @@ example :
     bothEntriesRefuse r"fn main() -> u8 { let Option {} = 1"
       (.parser .unexpectedEnd ⟨35, 35, 1, 36, ⟨0⟩⟩) ⟨``Slice0Rules.Parsed, 1⟩ ∧
     bothEntriesRefuse r"let Option {} = 1"
-      (.parser .unexpectedToken ⟨0, 3, 1, 1, ⟨0⟩⟩) ⟨``Slice0Rules.Parsed, 1⟩ := by
-  with_unfolding_all
-    exact ⟨⟨rfl, rfl, rfl, rfl⟩, ⟨rfl, rfl, rfl, rfl⟩, ⟨rfl, rfl, rfl, rfl⟩, ⟨rfl, rfl, rfl, rfl⟩,
-      ⟨rfl, rfl, rfl, rfl⟩, ⟨rfl, rfl, rfl, rfl⟩, ⟨rfl, rfl, rfl, rfl⟩, ⟨rfl, rfl, rfl, rfl⟩⟩
+      (.parser .unexpectedToken ⟨0, 3, 1, 1, ⟨0⟩⟩) ⟨``Slice0Rules.Parsed, 1⟩ :=
+  ⟨bothEntriesRefuse_of_sparse (by decide +kernel) (by decide +kernel) (by decide +kernel) rfl,
+   bothEntriesRefuse_of_sparse (by decide +kernel) (by decide +kernel) (by decide +kernel) rfl,
+   bothEntriesRefuse_of_sparse (by decide +kernel) (by decide +kernel) (by decide +kernel) rfl,
+   bothEntriesRefuse_of_sparse (by decide +kernel) (by decide +kernel) (by decide +kernel) rfl,
+   bothEntriesRefuse_of_sparse (by decide +kernel) (by decide +kernel) (by decide +kernel) rfl,
+   bothEntriesRefuse_of_sparse (by decide +kernel) (by decide +kernel) (by decide +kernel) rfl,
+   bothEntriesRefuse_of_sparse (by decide +kernel) (by decide +kernel) (by decide +kernel) rfl,
+   bothEntriesRefuse_of_sparse (by decide +kernel) (by decide +kernel) (by decide +kernel) rfl⟩
 
 -- Complete neighbors advance past lexing and parsing to surface preparation or Core checking.
 open ConcreteSpec.Core in
@@ -983,8 +1101,14 @@ example :
     ((Stages.Input.load "main.con" r"fn main() -> u8 { return 255 + 1; }".toUTF8).bind Stages.unchecked).isOk = true ∧
     ((Stages.Input.load "main.con" r"fn main() -> u8 { return (42); }".toUTF8).bind Stages.compile).isOk = true ∧
     ((Stages.Input.load "main.con" r"fn main() -> u8 { return (42); }".toUTF8).bind Stages.unchecked).isOk = true := by
-  with_unfolding_all
-    exact ⟨rfl, rfl, rfl, ⟨_, rfl, rfl, Refusal.source_diagnosticAt_iff _⟩, rfl, rfl, rfl⟩
+  refine ⟨Stages.KernelEval.load_compile_eq_error_of_sparse (by decide +kernel),
+    Stages.KernelEval.load_unchecked_eq_error_of_sparse (by decide +kernel), rfl,
+    exactRefusal_of_sparse (by decide +kernel),
+    ?_,
+    Stages.KernelEval.load_compile_isOk_of_sparse (by decide +kernel),
+    ?_⟩
+  · rw [Stages.KernelEval.load_unchecked_eq_sparse]; decide +kernel
+  · rw [Stages.KernelEval.load_unchecked_eq_sparse]; decide +kernel
 
 -- A parser token advertising either payload-bearing terminal must supply its value.
 example (t : ConcreteSpec.Surface0.TokenValue) (ident : t.kind = .ident) : ∃ name, t = .name name := by
@@ -1001,14 +1125,16 @@ example (t : ConcreteSpec.Surface0.TokenValue) (integer : t.kind = .integer) : �
 
 -- Exhausting an explicitly supplied interpreter budget is a transition failure.
 -- It retains the lookahead location even on a grammar proved predictive.
-open ConcreteSpec.Core in
+open ConcreteSpec.Core ConcreteSpec.StageGrammar ConcreteSpec.StageInterface in
 example :
     let pos : ConcreteSpec.Surface0.Span := ⟨12, 14, 2, 3, ⟨0⟩⟩
+    let eof : FileSpan := ⟨⟨0⟩, 20, 20, 2, 11⟩
+    let tok : SurfaceToken := ⟨surfaceFileSpan pos, .fixed .fn rfl⟩
     let cause := ConcreteSpec.StageInterface.RefusalCause.parser (.internal (.advance 0)) pos
-    Parse.run Parse.table0 (·.value.kind) (fun _ => ())
-        (fun _ _ _ _ => .ok ()) ⟨20, 20, 2, 11, ⟨0⟩⟩ 0 [⟨.fixed .fn, pos⟩] = .error cause ∧
+    (parseSymbol (sliceParser slice0).table #[tok] slice0 eof earlySharedGrammar.start
+        ⟨0, slice0, none, 0⟩ 0).2 = .error .exhausted ∧
       cause.rule = ⟨``Slice0Rules.ParserCanStep, 1⟩ ∧
-      cause.primary = ConcreteSpec.StageInterface.surfaceFileSpan pos ∧
+      cause.primary = surfaceFileSpan pos ∧
       ∀ candidate, ((Refusal.source cause).diagnosticAt candidate).isSome = true ↔
         candidate = ⟨``Slice0Rules.ParserCanStep, 1⟩ :=
   ⟨rfl, rfl, rfl, Refusal.source_diagnosticAt_iff _⟩
@@ -1016,37 +1142,38 @@ example :
 example : ∃ ast, mainBinderParse = .ok ast ∧
     Admission.prepareParsed .admission ast = .error (.source (.surface (.reservedBinder "main" ⟨22, 26, 1, 23, ⟨0⟩⟩))) ∧
     ∀ core, ¬ Elaborates .admission ast core := by
-  refine ⟨_, rfl, rfl, ?_⟩
-  exact refusesFirstBinder rfl (by decide)
+  have hok := (Parse.KernelEval.parseBytes_eq_sparse
+    r#"fn main() -> u8 { let main: u8 = 0; return main; }"#.toUTF8).trans
+    (Parse.KernelEval.ok_of_isOk (by decide +kernel))
+  refine ⟨_, hok, Parse.KernelEval.eq_error_of_exceptError (by decide +kernel),
+    refusesFirstBinderName (by decide +kernel) (by decide)⟩
 
 example : ∃ ast, intrinsicBinderParse = .ok ast ∧
     Admission.prepareParsed .admission ast = .error (.source (.surface (.reservedBinder "discard" ⟨22, 29, 1, 23, ⟨0⟩⟩))) ∧
     ∀ core, ¬ Elaborates .admission ast core := by
-  refine ⟨_, rfl, rfl, ?_⟩
-  exact refusesFirstBinder rfl (by decide)
+  have hok := (Parse.KernelEval.parseBytes_eq_sparse
+    r#"fn main() -> u8 { let discard: u8 = 42; return discard; }"#.toUTF8).trans
+    (Parse.KernelEval.ok_of_isOk (by decide +kernel))
+  refine ⟨_, hok, Parse.KernelEval.eq_error_of_exceptError (by decide +kernel),
+    refusesFirstBinderName (by decide +kernel) (by decide)⟩
 
 example : ∃ ast, builtinTypeBinderParse = .ok ast ∧
     Admission.prepareParsed .admission ast = .error (.source (.surface (.reservedBinder "Option" ⟨22, 28, 1, 23, ⟨0⟩⟩))) ∧
     ∀ core, ¬ Elaborates .admission ast core := by
-  refine ⟨_, rfl, rfl, ?_⟩
-  exact refusesFirstBinder rfl (by decide)
+  have hok := (Parse.KernelEval.parseBytes_eq_sparse
+    r#"fn main() -> u8 { let Option: u8 = 42; return Option; }"#.toUTF8).trans
+    (Parse.KernelEval.ok_of_isOk (by decide +kernel))
+  refine ⟨_, hok, Parse.KernelEval.eq_error_of_exceptError (by decide +kernel),
+    refusesFirstBinderName (by decide +kernel) (by decide)⟩
 
 example : ∃ ast, duplicateBinderParse = .ok ast ∧
     Admission.prepareParsed .admission ast = .error (.source (.surface (.duplicateBinder "x" ⟨37, 38, 1, 38, ⟨0⟩⟩))) ∧
     ∀ core, ¬ Elaborates .admission ast core := by
-  refine ⟨_, rfl, rfl, ?_⟩
-  intro core h
-  obtain ⟨_, _, _, _, _, _, _, _, _, checked, lowered, _⟩ := h
-  have shape : ∃ first second result,
-      checkBody (duplicateBinderParse.toOption.getD ⟨"", bindingSpan, [], bindingSpan⟩).body =
-        .ok ([first, second], result) ∧ first.name = "x" ∧ second.name = "x" :=
-    ⟨_, _, _, rfl, rfl, rfl⟩
-  obtain ⟨first, second, _, shape, firstName, secondName⟩ := shape
-  cases Except.ok.inj (shape.symm.trans checked)
-  have member : second.name ∈ [first.name] := by rw [firstName, secondName]; exact List.Mem.head _
-  cases lowered with
-  | atom _ _ rest => exact rest.headLegal.2.2 member
-  | operation _ _ _ rest => exact rest.headLegal.2.2 member
+  have hok := (Parse.KernelEval.parseBytes_eq_sparse
+    r#"fn main() -> u8 { let x: u8 = 1; let x: u8 = 20 + 22; return x; }"#.toUTF8).trans
+    (Parse.KernelEval.ok_of_isOk (by decide +kernel))
+  refine ⟨_, hok, Parse.KernelEval.eq_error_of_exceptError (by decide +kernel),
+    refusesDuplicatePair (by decide +kernel)⟩
 
 example :
     ElaboratesBindings .admission [] [⟨"x", bindingSpan, .integer 1 none bindingSpan⟩]
@@ -1068,9 +1195,8 @@ private theorem returnAtOne {A : Type} {evaluate : A → Nat → Evaluation}
 
 example : ∃ out, Stages.compile answerInput = .ok out ∧
     coreSemantics.observes (answerInput.path, out.core) exit42 := by
-  with_unfolding_all
-    refine ⟨_, rfl, ?_⟩
-    exact returnAtTwo rfl rfl rfl
+  refine ⟨answerOutput, answerCompiles, ?_⟩
+  with_unfolding_all exact returnAtTwo rfl rfl rfl
 
 example : ¬ ConformanceStatic ⟨⟨[], .lit 256, bindingSpan, bindingSpan⟩, []⟩ := by
   exact Bool.noConfusion
@@ -1079,15 +1205,15 @@ example : ¬ ConformanceStatic ⟨⟨[], .lit 256, bindingSpan, bindingSpan⟩, 
 example :
     let input := (Stages.Input.load "main.con"
       r"fn main() -> u8 { let main: u8 = 42; return main; }".toUTF8).toOption.get (by rfl)
-    Stages.unchecked input = .error (.source (.surface (.reservedBinder "main" ⟨22, 26, 1, 23, ⟨0⟩⟩))) := by
-  with_unfolding_all rfl
+    Stages.unchecked input = .error (.source (.surface (.reservedBinder "main" ⟨22, 26, 1, 23, ⟨0⟩⟩))) :=
+  Stages.KernelEval.unchecked_eq_error_of_sparse (by decide +kernel)
 
 example :
     let input := (Stages.Input.load "main.con"
       r"fn main() -> u8 { let x: u8 = 42; return 0; }".toUTF8).toOption.get (by rfl)
     Stages.unchecked input = .error (.source (.core .slice0
-      ⟨⟨0⟩, 34, 43, 1, 35⟩ [(⟨"binding"⟩, ⟨⟨0⟩, 22, 23, 1, 23⟩)] (.atPosition 1 (.unusedBinding ⟨0⟩)))) := by
-  with_unfolding_all rfl
+      ⟨⟨0⟩, 34, 43, 1, 35⟩ [(⟨"binding"⟩, ⟨⟨0⟩, 22, 23, 1, 23⟩)] (.atPosition 1 (.unusedBinding ⟨0⟩)))) :=
+  Stages.KernelEval.unchecked_eq_error_of_sparse (by decide +kernel)
 
 private def overflowInput (comment : String) : Stages.Input :=
   (Stages.Input.load "src/a.con"
@@ -1097,16 +1223,43 @@ private def overflowObservation (path : String) : Observation :=
   .trapped 134 .overflow ⟨⟨0⟩, ⟨path, 2, 30⟩⟩
     (s!"concrete: trap: overflow at {path}:2:30 (site 0)\n".toUTF8)
 
+private def trapInput := overflowInput "// x"
+
+private def trapStream : ConcreteSpec.StageInterface.TokenStream :=
+  (Lex.lexStream trapInput.stageSource).toOption.get (by rfl)
+
+private def trapAst : Program :=
+  ⟨"main", ⟨8, 12, 2, 4, ⟨0⟩⟩,
+    [.ret (.add (.integer 200 none ⟨30, 33, 2, 26, ⟨0⟩⟩)
+                (.integer 56 none ⟨36, 38, 2, 32, ⟨0⟩⟩)
+                ⟨34, 35, 2, 30, ⟨0⟩⟩)
+          ⟨23, 39, 2, 19, ⟨0⟩⟩],
+    ⟨40, 41, 2, 36, ⟨0⟩⟩⟩
+
+private theorem trapParse : Parse.parseStream trapStream = .ok trapAst :=
+  Parse.KernelEval.parseStream_eq_ok_of_sparse (by decide +kernel)
+
+private def trapCore : Elab.Output :=
+  (Admission.prepareParsed .eligibility trapAst).toOption.get (by rfl)
+
+private def trapBIR : BIR.Program :=
+  ⟨[⟨[], [.binOvf .add .u8 0 1 (.imm .u8 200) (.imm .u8 56)], .condbr 1 1 [] 2 [.reg 0]⟩,
+    ⟨[], [], .trap 0⟩, ⟨[(2, .int .u8)], [], .ret (.reg 2)⟩],
+    [⟨.arithmeticOverflow, ⟨0⟩, ⟨34, 35⟩, ⟨"src/a.con", 2, 30⟩⟩]⟩
+
+private theorem trapUnchecked : Stages.unchecked trapInput = .ok trapBIR := by
+  rw [Stages.KernelEval.unchecked_eq_sparse]
+  decide +kernel
+
 example : ∃ core bir,
     UncheckedHandoffs (overflowInput "// x") core ∧ ConformanceStatic core ∧
     Stages.unchecked (overflowInput "// x") = .ok bir ∧
     coreSemantics.observes ("src/a.con", core) (overflowObservation "src/a.con") ∧
     coreSemantics.observes ("src/b.con", core) (overflowObservation "src/b.con") := by
-  with_unfolding_all
-    refine ⟨_, _, ⟨_, _, rfl, rfl, rfl⟩, ?_, rfl, ?_, ?_⟩
-    · rfl
-    · exact returnAtOne rfl rfl
-    · exact returnAtOne rfl rfl
+  refine ⟨trapCore, trapBIR, ⟨trapStream, trapAst, rfl, trapParse, rfl⟩, ?_, trapUnchecked, ?_, ?_⟩
+  · with_unfolding_all rfl
+  · with_unfolding_all exact returnAtOne rfl rfl
+  · with_unfolding_all exact returnAtOne rfl rfl
 
 /-- Changing the comment changes the origin byte offsets. Both LLVM artifacts, and the
 process observations projected from the two BIR runs, still agree. -/
@@ -1116,9 +1269,10 @@ example : ∃ a b,
     a.sites ≠ b.sites ∧ LLVM.module a = LLVM.module b ∧
     birObservation a.sites (BIR.run a 2) = some (overflowObservation "src/a.con") ∧
     birObservation b.sites (BIR.run b 2) = some (overflowObservation "src/a.con") := by
-  with_unfolding_all
-    refine ⟨_, _, rfl, rfl, ?_, rfl, rfl, rfl⟩
-    decide
+  have hb := (Stages.KernelEval.unchecked_eq_sparse (overflowInput "// longer")).trans
+    (Parse.KernelEval.ok_of_isOk (by decide +kernel))
+  refine ⟨trapBIR, _, trapUnchecked, hb, by decide +kernel, by decide +kernel,
+    by decide +kernel, by decide +kernel⟩
 
 example : (Observation.returned 134 ByteArray.empty) ≠ overflowObservation "src/a.con" := by
   with_unfolding_all
@@ -1352,9 +1506,7 @@ private theorem lcbToInstant {i : LCBInput} {value : Source.Value}
 
 theorem answerFrontend : Frontend answerInput answerOutput := by
   with_unfolding_all
-    refine ⟨Stages.compile_lexes answerCompiles, ?_, ?_, ?_⟩
-    · exact .main _ _ _ _ _ _ _ _
-        (.ret _ _ (.expr (.integer 20 none _) (.more (.integer 22 none _) (.nil _))) .nil)
+    refine ⟨Stages.compile_lexes answerCompiles, Stages.compile_parses answerCompiles, ?_, ?_⟩
     · refine ⟨rfl, by decide, [], _, [], [], _, [], _, rfl, .nil [], ?_, rfl, rfl⟩
       exact .add trivial (.integer (purpose := .admission) 20 _ (suffix := none) rfl)
         (.integer (purpose := .admission) 22 _ (suffix := none) rfl)
@@ -1366,8 +1518,10 @@ theorem answerFrontend : Frontend answerInput answerOutput := by
       exact ⟨a, h, same, tokens.trans rfl, checked⟩
 
 theorem answerHandoffs : SharedHandoffs answerInput answerOutput := by
-  with_unfolding_all
-    exact ⟨rfl, rfl, rfl, ⟨_, rfl, rfl, rfl⟩, rfl, rfl⟩
+  refine ⟨⟨answerStream, rfl, rfl, answerParse⟩,
+    Parse.lexStream_surfaceTokens_eq answerInput.loaded
+      (show Lex.lexStream answerInput.stageSource = .ok answerStream from rfl),
+    rfl, ⟨answerAdmitted, rfl, rfl, rfl⟩, rfl, by decide +kernel⟩
 
 theorem answerOrigins : SiteOrigins answerInput.path answerOutput.core answerOutput.memory
     answerOutput.bir := by
@@ -1460,17 +1614,6 @@ theorem answerTerminates : SourceTerminates answerInput.path answerOutput.core a
     have terminal : admittedEvaluation (answerInput.path, answerOutput.core) 2 = .finished exit42 := rfl
     rw [terminal] at running
     cases running
-
-private def trapInput := overflowInput "// x"
-
-private def trapCore : Elab.Output :=
-  (do Admission.prepareParsed .eligibility (← Parse.parseForDriver trapInput.eof (← Lex.lex trapInput.source trapInput.fileId)) :
-    Except Refusal Elab.Output).toOption.get (by rfl)
-
-private def trapBIR : BIR.Program :=
-  ⟨[⟨[], [.binOvf .add .u8 0 1 (.imm .u8 200) (.imm .u8 56)], .condbr 1 1 [] 2 [.reg 0]⟩,
-    ⟨[], [], .trap 0⟩, ⟨[(2, .int .u8)], [], .ret (.reg 2)⟩],
-    [⟨.arithmeticOverflow, ⟨0⟩, ⟨34, 35⟩, ⟨"src/a.con", 2, 30⟩⟩]⟩
 
 private theorem trapStatic : ConformanceStatic trapCore := by
   with_unfolding_all
@@ -1579,7 +1722,7 @@ private theorem llvmUncheckedWitness : LLVMUncheckedNonvacuous testExecutionPoli
     refine ⟨testAnchor, ?_⟩
     exact ⟨trapInput, trapCore, trapBIR, testResolve, testLLVMBuild trapBIR trapImage, (), 134, .overflow,
       ⟨⟨0⟩, ⟨"src/a.con", 2, 30⟩⟩, (overflowObservation "src/a.con").stderr,
-      ⟨_, _, rfl, rfl, rfl⟩, trapStatic, rfl, by unfold BIRSlotsFit; decide,
+      ⟨trapStream, trapAst, rfl, trapParse, rfl⟩, trapStatic, trapUnchecked, by unfold BIRSlotsFit; decide,
       ⟨testLLVMHandoffs _ _, testLLVMPremises trapBIR trapImage (by rw [ite_eq_right testLLVMTrapMarker]) (returnAtTwo rfl rfl rfl)⟩,
       ⟨⟨trivial, trivial⟩, trivial, trivial⟩, trapTerminates, returnAtOne rfl rfl, instantObserves _ _⟩
 
@@ -1597,7 +1740,7 @@ private theorem lcbUncheckedWitness : LCBUncheckedNonvacuous testExecutionPolicy
         some (trapBytecodeObservation trapImage) := rfl
     exact ⟨trapInput, trapCore, trapBIR, testResolve, build, (), 134, .overflow,
       ⟨⟨0⟩, ⟨"src/a.con", 2, 30⟩⟩, (overflowObservation "src/a.con").stderr,
-      ⟨_, _, rfl, rfl, rfl⟩, trapStatic, rfl, by unfold BIRSlotsFit; decide,
+      ⟨trapStream, trapAst, rfl, trapParse, rfl⟩, trapStatic, trapUnchecked, by unfold BIRSlotsFit; decide,
       ⟨testLCBHandoffs _ _ assembly rfl rfl jobOK assembled,
         testLCBPremises trapBIR trapImage assembly (by
           rw [ite_eq_right (show build.runtimeInput.data[6]? ≠ _ from testLCBTrapMarker)])

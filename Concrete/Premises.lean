@@ -29,10 +29,22 @@ theorem Backend.LLVM.Width.ofCore_bits (t : ConcreteSpec.Core.IntTy) :
 
 open ConcreteSpec.Surface0 in
 structure FrontendPremises where
-  parse : ∀ eof toks ast, Parse.parse eof toks = .ok ast → Derives toks ast
+  parse : ∀ (stream : ConcreteSpec.StageInterface.TokenStream) (ast : Program),
+    stream.source.slice = ConcreteSpec.StageInterface.slice0 →
+    Parse.parseStream stream = .ok ast → Derives (Parse.surfaceTokens stream) ast
   elaborate : ∀ purpose ast out, Admission.prepareParsed purpose ast = .ok out →
     let p := Core.toCore out.program
     Elab.eval ast = Core.run p (p.body.length + 1)
+
+/-- The Slice 0 parser premise is discharged by the certified `sliceParser slice0`
+and frozen `Elab.surfaceProgram` cutover (`Parse.parseStream_derives`). -/
+theorem FrontendPremises.parse_discharged
+    (stream : ConcreteSpec.StageInterface.TokenStream)
+    (ast : ConcreteSpec.Surface0.Program)
+    (hslice : stream.source.slice = ConcreteSpec.StageInterface.slice0)
+    (hok : Parse.parseStream stream = .ok ast) :
+    ConcreteSpec.Surface0.Derives (Parse.surfaceTokens stream) ast :=
+  Parse.parseStream_derives hslice hok
 
 namespace Native
 open BIR Backend
@@ -133,7 +145,7 @@ structure Premise where
 /-- The open premises for slice 0, in the README's order. -/
 def all : List Premise := [
   ⟨"P_parse", .implementation, "the generic table-parser theorem",
-    "every tree the parser returns for a token list is one the grammar derives from it"⟩,
+    "every tree the parser returns for a token stream is one the grammar derives from it (discharged for slice 0 by Parse.parseStream_derives and Parse.driver_registry_parse_parity via sliceParser slice0)"⟩,
   ⟨"P_elab", .implementation, "ANF and resolution preservation",
     "successful elaboration preserves the source AST evaluator's outcome in Core"⟩,
   ⟨"P_print", .implementation, "an LLVM-IR semantics; not planned for slice 0",
@@ -155,7 +167,14 @@ def all : List Premise := [
 /-- The headline theorems, whose axioms the golden records. -/
 def theorems : List Lean.Name := [
   ``ConcreteSpec.Surface0.grammar0_ll1,
-  ``Concrete.Parse.table0_checked,
+  ``Concrete.Refusal.ofParseRefusal_diagnosticAt_iff,
+  ``Concrete.Parse.parseStreamFor_derives,
+  ``Concrete.Parse.parseStreamFor_parity,
+  ``Concrete.Parse.parserEngine_run_error_of_wf,
+  ``Concrete.Parse.driver_registry_parse_parity,
+  ``Concrete.Parse.parseStream_derives,
+  ``Concrete.Parse.parseForDriver_derives,
+  ``Concrete.FrontendPremises.parse_discharged,
   ``Concrete.Lex.lex_correct,
   ``Concrete.Lex.lexLossless_correct,
   ``Concrete.Lex.lexLossless_pieces,
@@ -164,6 +183,7 @@ def theorems : List Lean.Name := [
   ``Concrete.Lex.lexLossless_roundTrip,
   ``Concrete.Lex.LosslessStream.reconstruct_eq,
   ``Concrete.Stages.compile_lexes,
+  ``Concrete.Stages.compile_parses,
   ``Concrete.Admission.admit_checked,
   ``Concrete.Admission.check_evidence,
   ``Concrete.Admission.admit_never_traps,
