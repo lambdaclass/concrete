@@ -119,7 +119,7 @@ example (m : LoweringModels testLanguage testLowering testProfile) :
   intro sound
   have h := sound.1.1 (tokenStream .decimal)
     ⟨(tokenStream .decimal).source, .inr true⟩
-    ⟨rfl, by simp [Concrete.Interfaces.TokensOrdered, TokenStream.parserView, tokenStream]⟩ rfl
+    ⟨rfl, by simp [Concrete.Interfaces.TokensOrdered, ConcreteSpec.StageGrammar.TokensOrdered, TokenStream.parserView, tokenStream]⟩ rfl
   exact (show ¬ 5 ≤ 4 from by decide) h.2.2.2
 
 private def corruptTokenStream (location : FileSpan) : TokenStream :=
@@ -137,7 +137,7 @@ example (m : LoweringModels testLanguage testLowering testProfile) :
       ¬ edge.inputInvariant (corruptTokenStream entry.1) ∧
       edge.run (corruptTokenStream entry.1) = .error (.invalidStream entry.1 entry.2) ∧
       edge.refusal (corruptTokenStream entry.1) (.invalidStream entry.1 entry.2)) := by
-  refine ⟨⟨rfl, by simp [Concrete.Interfaces.TokensOrdered, TokenStream.parserView, tokenStream]⟩, ?_⟩
+  refine ⟨⟨rfl, by simp [Concrete.Interfaces.TokensOrdered, ConcreteSpec.StageGrammar.TokensOrdered, TokenStream.parserView, tokenStream]⟩, ?_⟩
   intro entry member
   simp only [List.mem_cons, List.not_mem_nil, or_false] at member
   rcases member with rfl | rfl | rfl <;>

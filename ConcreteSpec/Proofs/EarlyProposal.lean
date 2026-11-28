@@ -1,5 +1,6 @@
 import ConcreteSpec.Proofs.TableVerifier
 import ConcreteSpec.Proofs.TableVerifierBounds
+import ConcreteSpec.Spec.ConstructiveUInt64
 import ConcreteSpec.Spec.EarlyProposal
 import ConcreteSpec.Spec.LL1
 import ConcreteSpec.Spec.TableVerifier

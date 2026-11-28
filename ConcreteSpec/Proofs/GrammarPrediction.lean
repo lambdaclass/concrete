@@ -1,7 +1,9 @@
 import ConcreteSpec.Proofs.TableVerifierBounds
 import ConcreteSpec.Proofs.TableVerifier
+import ConcreteSpec.Spec.ConstructiveUInt64
 import ConcreteSpec.Spec.TableVerifier
 import ConcreteSpec.Spec.LL1
+import ConcreteSpec.StageGrammarCore
 
 namespace ConcreteSpec.GrammarVerification
 open Concrete.LL1
@@ -435,70 +437,6 @@ private theorem predict_correspondence {g : RawGrammar} {mem : Array UInt64}
     · exact Or.inr ⟨by simpa using null_seq_complete (g := g) hr (i := 0) (Nat.zero_le _) (by simpa using n),
         by simpa only [column_lookahead] using follow_complete f (by rwa [column_lookahead])⟩
 
-private theorem array_extract_loop_getElem_zero {α : Type} (as : Array α) :
-    ∀ (i : Nat) (bs : Array α) (hle : bs.size + i ≤ as.size),
-      (∀ k (hk : k < bs.size), bs[k] = as[k]'(Nat.lt_of_lt_of_le hk (Nat.le_trans (Nat.le_add_right _ _) hle))) →
-      ∃ hsz : (Array.extract.loop as i bs.size bs).size = bs.size + i,
-        ∀ k (hk : k < bs.size + i),
-          (Array.extract.loop as i bs.size bs)[k]'(hsz ▸ hk) = as[k]'(Nat.lt_of_lt_of_le hk hle)
-  | 0, bs, _, hbs => by
-    have hloop : Array.extract.loop as 0 bs.size bs = bs := by
-      unfold Array.extract.loop
-      split <;> rfl
-    rw [hloop]
-    exact ⟨rfl, hbs⟩
-  | i + 1, bs, hle, hbs => by
-    have hj : bs.size < as.size := by omega
-    have hstep : Array.extract.loop as (i + 1) bs.size bs =
-        Array.extract.loop as i (bs.push as[bs.size]).size (bs.push as[bs.size]) := by
-      rw [Array.size_push]
-      conv => lhs; unfold Array.extract.loop
-      simp only [hj, ↓reduceDIte]
-      rfl
-    have hle' : (bs.push as[bs.size]).size + i ≤ as.size := by rw [Array.size_push]; omega
-    have hbs' : ∀ k (hk : k < (bs.push as[bs.size]).size),
-        (bs.push as[bs.size])[k] = as[k]'(Nat.lt_of_lt_of_le hk (Nat.le_trans (Nat.le_add_right _ _) hle')) := by
-      intro k hk
-      rw [Array.size_push] at hk
-      by_cases hlt : k < bs.size
-      · rw [Array.getElem_push_lt hlt, hbs k hlt]
-      · have hkEq : k = bs.size := by omega
-        subst hkEq
-        exact Array.getElem_push_eq
-    obtain ⟨hsz, hget⟩ := array_extract_loop_getElem_zero as i (bs.push as[bs.size]) hle' hbs'
-    have hszFinal : (Array.extract.loop as (i + 1) bs.size bs).size = bs.size + (i + 1) := by
-      rw [hstep, hsz, Array.size_push]; omega
-    refine ⟨hszFinal, fun k hk => ?_⟩
-    have hk' : k < (bs.push as[bs.size]).size + i := by rw [Array.size_push]; omega
-    have h1 : (Array.extract.loop as (i + 1) bs.size bs)[k]'(hszFinal ▸ hk) =
-        (Array.extract.loop as i (bs.push as[bs.size]).size (bs.push as[bs.size]))[k]'(hsz ▸ hk') := by
-      simp only [hstep]
-    rw [h1]
-    exact hget k hk'
-
-private theorem array_getElem?_extract_zero {α : Type} (as : Array α) (stop k : Nat)
-    (hk : k < stop) (hstop : stop ≤ as.size) :
-    (as.extract 0 stop)[k]? = some (as[k]'(Nat.lt_of_lt_of_le hk hstop)) := by
-  have hmin : (min stop as.size).sub 0 = stop := by
-    change min stop as.size - 0 = stop
-    rw [Nat.sub_zero, Nat.min_eq_left hstop]
-  unfold Array.extract
-  dsimp only
-  rw [hmin]
-  let emp : Array α := Array.emptyWithCapacity stop
-  have hle : emp.size + stop ≤ as.size := by
-    change 0 + stop ≤ as.size
-    rw [Nat.zero_add]; exact hstop
-  obtain ⟨hsz, hget⟩ := array_extract_loop_getElem_zero as stop emp hle
-    (fun _ hj => absurd hj (Nat.not_lt_zero _))
-  have hsz' : (Array.extract.loop as stop 0 emp).size = stop := by
-    change (Array.extract.loop as stop emp.size emp).size = stop
-    rw [hsz]; exact Nat.zero_add stop
-  have hlt : k < (Array.extract.loop as stop 0 emp).size := by
-    rw [hsz']; exact hk
-  rw [Array.getElem?_eq_getElem hlt]
-  exact congrArg some (hget k (by change k < 0 + stop; rw [Nat.zero_add]; exact hk))
-
 /-- Each cell in the decoded prefix retains the actual initial word, including
 empty and EOF cells. All indexing after this point uses natural addresses. -/
 theorem decodeCells_at {l : Layout} {mem : Array UInt64} {cells : Array (Option Nat)}
@@ -517,7 +455,9 @@ theorem decodeCells_at {l : Layout} {mem : Array UInt64} {cells : Array (Option 
         omega
       omega
     have hfit : k < mem.size := Nat.lt_of_lt_of_le hk hstop
-    rw [Array.getElem?_map, array_getElem?_extract_zero mem (l.n * l.c) k hk hstop,
+    have hkMin : k < min (l.n * l.c) mem.size := (Nat.min_eq_left hstop).symm ▸ hk
+    rw [Array.getElem?_map,
+      ConcreteSpec.StageGrammar.array_getElem?_extract_zero mem (l.n * l.c) k hkMin,
       Option.map_some, getElem!_pos mem k hfit]
   · have hbeq : (mem.size == l.scratch + 1) = false := beq_false_of_ne h
     simp only [decodeCells, guard, hbeq, Bool.false_eq_true, ↓reduceIte,

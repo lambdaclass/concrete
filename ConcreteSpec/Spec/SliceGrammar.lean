@@ -147,11 +147,23 @@ def earlyAction : (id : ProductionId) →
   | .literal => mkNode .construct [.leaf a0, .leaf a1]
   | .endName => mkNode .construct []
 
+/-- Diagnostic slice gate for a catalog production.
+The scaffolding row `.ifStmt` (`body -> conditional body`, `witness = none` in
+`ConcreteSpec/Spec/GrammarData.lean`) has no separate diagnostic; its slice
+requirement is enforced immediately upon entering its sole child `.conditional`
+(`witness = some .if_`), so assigning `.ifStmt` slice 0 preserves the exact
+derivable language at every slice while ensuring out-of-slice conditionals cite
+`.production .conditional` rather than scaffolding `.production .ifStmt`. -/
+def earlyProductionFirstSlice (id : ProductionId) : Slice :=
+  match id with
+  | .ifStmt => slice0
+  | _ => ⟨⟨id.row.firstSlice, productionFirstSlice_lt_22 id⟩⟩
+
 /-- Build one typed `Production` from its catalog `ProductionId`. -/
 def earlyProduction (id : ProductionId) : Production earlyValue where
   lhs := earlyNt id.row.lhs
   rhs := earlyRhs id
-  firstSlice := ⟨⟨id.row.firstSlice, productionFirstSlice_lt_22 id⟩⟩
+  firstSlice := earlyProductionFirstSlice id
   action := earlyAction id
   id := id
 

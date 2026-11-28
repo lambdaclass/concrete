@@ -1125,7 +1125,7 @@ example (t : ConcreteSpec.Surface0.TokenValue) (integer : t.kind = .integer) : �
 
 -- The certified `sliceParser slice0` never exhausts fuel (`sliceParser_nonExhausted`)
 -- and every accepted Slice 0 CST decodes (`earlyParser_slice0_decodes`), so the driver's
--- `.error none` fallback branch (`Parse.lean:58-59`) is unreachable on every Slice 0 stream.
+-- `.error none` fallback branch in `Parse.parseStreamFor` is unreachable on every Slice 0 stream.
 open ConcreteSpec.StageGrammar ConcreteSpec.StageInterface in
 example (stream : TokenStream) (hslice : stream.source.slice = slice0) :
     Parse.parseStreamWithRefusal stream ≠ .error none ∧

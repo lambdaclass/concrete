@@ -18,6 +18,12 @@ open Concrete.LL1
 
 abbrev SurfaceToken := Located TokenValue
 
+/-- Source-order token monotonicity needed for multi-token statement spans
+(`Surface0.statementSpan kw semi = { kw with stop := semi.stop }`) to stay
+same-file and non-reversed. Real lexed streams satisfy this via `reconstruct`. -/
+def TokensOrdered (tokens : List SurfaceToken) : Prop :=
+  tokens.Pairwise (fun a b => a.span.file = b.span.file ∧ a.span.startOffset ≤ b.span.endOffset)
+
 /-- Grammar actions are first-order constructor expressions. A fetched child or
 token is shared, and the only way to traverse action syntax is the interpreter. -/
 inductive Action : Type → Type → Type 1 where
@@ -648,7 +654,9 @@ private theorem array_extract_loop_getElem_zero {α : Type} (as : Array α) :
     rw [h1]
     exact hget k hk'
 
-private theorem array_getElem?_extract_zero {α : Type} (as : Array α) (stop k : Nat)
+/-- Constructive element lookup in a zero-based `Array.extract` prefix without
+pulling classical array lemmas into the slice-0 parser/verifier closure. -/
+theorem array_getElem?_extract_zero {α : Type} (as : Array α) (stop k : Nat)
     (hk : k < min stop as.size) :
     (as.extract 0 stop)[k]? = some (as[k]'(Nat.lt_of_lt_of_le hk (Nat.min_le_right _ _))) := by
   let n := min stop as.size
