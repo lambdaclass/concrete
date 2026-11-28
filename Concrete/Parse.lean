@@ -1,6 +1,7 @@
 import ConcreteSpec.StageGrammar
 import ConcreteSpec.Proofs.SliceGrammar
 import Concrete.Interfaces.SurfaceElaboration
+import Concrete.Frontend.Validate
 import Concrete.Lex
 import Concrete.Lex.StreamProofs
 import Concrete.Refusal
@@ -763,14 +764,14 @@ private theorem parseSymbol_parseArgs_eq_sparse
               dsimp only
               rw [ihArgs]
 
-def runEarlySparse (input : ParserView) :
+def runEarlySparseWith (stepsPerToken : Nat) (input : ParserView) :
     Nat × Option (Except ParseRefusal (Parsed (earlySharedGrammar.value earlySharedGrammar.start))) :=
   match input.invalidLocation with
   | some (span, reason) => (1, some (.error (.invalidStream span reason)))
   | none =>
     let eof := eofFileSpan input.source
     let (c, value) := parseSymbolSparse input.tokens input.source.slice eof earlySharedGrammar.start
-      ⟨0, slice0, none, 0⟩ (earlyStepsPerToken * (input.tokens.size + 1))
+      ⟨0, slice0, none, 0⟩ (stepsPerToken * (input.tokens.size + 1))
     let span := (input.tokens[c.offset]?.map Located.span).getD eof
     match value with
     | .error .exhausted => (c.steps + 1, none)
@@ -790,28 +791,32 @@ def runEarlySparse (input : ParserView) :
         | none =>
           (c.steps + 1, some (.ok ⟨input.source, ast⟩))
 
-private theorem parserEngine_run_eq_sparse
-    (parser : ParserEngine earlySharedGrammar)
+def runEarlySparse (input : ParserView) :
+    Nat × Option (Except ParseRefusal (Parsed (earlySharedGrammar.value earlySharedGrammar.start))) :=
+  runEarlySparseWith earlyStepsPerToken input
+
+theorem parserEngine_run_eq_sparse_with
+    (parser : ParserEngine earlySharedGrammar) (stepsPerToken : Nat)
     (hlook : ∀ n look, parser.table.lookup n look = earlyTreeLookup n look)
-    (hsteps : parser.stepsPerToken = earlyStepsPerToken)
+    (hsteps : parser.stepsPerToken = stepsPerToken)
     (hmal : parser.malformedRule = earlyMalformedRule)
     (hprod : parser.unsupportedProductionRule = earlyUnsupportedProductionRule)
     (hlit : parser.unsupportedLiteralRule = earlyUnsupportedLiteralRule)
     (input : ParserView) :
-    parser.run input = runEarlySparse input := by
-  unfold ParserEngine.run runEarlySparse
+    parser.run input = runEarlySparseWith stepsPerToken input := by
+  unfold ParserEngine.run runEarlySparseWith
   cases input.invalidLocation with
   | some _ => rfl
   | none =>
     dsimp only
     rw [hsteps, hmal, hprod, hlit]
     have hps := (parseSymbol_parseArgs_eq_sparse parser.table hlook input.tokens input.source.slice
-      (eofFileSpan input.source) (earlyStepsPerToken * (input.tokens.size + 1))).1
+      (eofFileSpan input.source) (stepsPerToken * (input.tokens.size + 1))).1
       earlySharedGrammar.start ⟨0, slice0, none, 0⟩
     rw [hps]
     cases parseSymbolSparse input.tokens input.source.slice (eofFileSpan input.source)
         earlySharedGrammar.start ⟨0, slice0, none, 0⟩
-        (earlyStepsPerToken * (input.tokens.size + 1)) with
+        (stepsPerToken * (input.tokens.size + 1)) with
     | mk c res =>
       cases res with
       | error stop => cases stop <;> rfl
@@ -827,9 +832,39 @@ private theorem parserEngine_run_eq_sparse
             cases hit with
             | mk hitSpan cause => cases cause <;> rfl
 
+private theorem parserEngine_run_eq_sparse
+    (parser : ParserEngine earlySharedGrammar)
+    (hlook : ∀ n look, parser.table.lookup n look = earlyTreeLookup n look)
+    (hsteps : parser.stepsPerToken = earlyStepsPerToken)
+    (hmal : parser.malformedRule = earlyMalformedRule)
+    (hprod : parser.unsupportedProductionRule = earlyUnsupportedProductionRule)
+    (hlit : parser.unsupportedLiteralRule = earlyUnsupportedLiteralRule)
+    (input : ParserView) :
+    parser.run input = runEarlySparse input :=
+  parserEngine_run_eq_sparse_with parser earlyStepsPerToken hlook hsteps hmal hprod hlit input
+
+theorem sliceParser_run_eq_sparse_for (slice : Slice) (input : ParserView) :
+    ParserEngine.run (g := sliceGrammar slice) (sliceParser slice) input = runEarlySparse input :=
+  parserEngine_run_eq_sparse (sliceParser slice) sliceParser_table_lookup_eq rfl rfl rfl rfl input
+
 theorem sliceParser_run_eq_sparse (input : ParserView) :
     ParserEngine.run (g := earlySharedGrammar) (sliceParser slice0) input = runEarlySparse input :=
-  parserEngine_run_eq_sparse (sliceParser slice0) sliceParser_table_lookup_eq rfl rfl rfl rfl input
+  sliceParser_run_eq_sparse_for slice0 input
+
+theorem parserEntry_run_of_sparse {slice : Slice} {stream : TokenStream}
+    {res : Except ParseRefusal (Parsed ((sliceGrammar slice).value (sliceGrammar slice).start))}
+    (h : (runEarlySparse stream.parserView).2 = some res) :
+    (Concrete.Interfaces.parserEntry (sliceParser slice) (sliceParser_nonExhausted slice)).run stream =
+      res := by
+  have hrun : ((sliceParser slice).run stream.parserView).2 = some res :=
+    (congrArg Prod.snd (sliceParser_run_eq_sparse_for slice stream.parserView)).trans h
+  cases res with
+  | ok ast =>
+    exact (Concrete.Interfaces.parserEntry_run_eq_ok_iff
+      (sliceParser slice) (sliceParser_nonExhausted slice) stream ast).mpr hrun
+  | error err =>
+    exact (Concrete.Interfaces.parserEntry_run_eq_error_iff
+      (sliceParser slice) (sliceParser_nonExhausted slice) stream err).mpr hrun
 
 def parseStreamSparse (stream : TokenStream) : Except Refusal Program :=
   match (runEarlySparse stream.parserView).2 with
