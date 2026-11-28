@@ -2510,19 +2510,367 @@ structure SliceEvent where
   span : FileSpan
   slice : Slice
   cause : UnsupportedCause
+  deriving DecidableEq
 
-/-- Each event is either entering a grammar production at `offset` or consuming
-the token at `offset`. -/
-def SliceEvent.Valid {count : Nat} (g : SharedGrammar count) (tokens : Array SurfaceToken)
-    (eof : FileSpan) (ev : SliceEvent) : Prop :=
-  (∃ p ∈ g.productions.toList,
-    ev.slice = p.firstSlice ∧
-    ev.cause = .production p.id ∧
-    ev.span = (tokens[ev.offset]?.map Located.span).getD eof) ∨
-  (∃ hk : ev.offset < tokens.size, ∃ prodId,
-    ev.slice = g.required (tokens[ev.offset]'(hk)).value ∧
-    ev.cause = tokenUnsupportedCause prodId (tokens[ev.offset]'(hk)).value ∧
-    ev.span = (tokens[ev.offset]'(hk)).span)
+/-- First event in a pre-order slice trace whose required slice exceeds `target`. -/
+def firstOutOfSlice (target : Slice) (events : List SliceEvent) : Option SliceEvent :=
+  events.find? fun ev => decide (target.val < ev.slice.val)
+
+theorem firstOutOfSlice_eq_some_iff (target : Slice) (events : List SliceEvent) (hit : SliceEvent) :
+    firstOutOfSlice target events = some hit ↔
+      ∃ pre post, events = pre ++ hit :: post ∧
+        (∀ ev ∈ pre, ev.slice.val ≤ target.val) ∧
+        target.val < hit.slice.val := by
+  constructor
+  · intro h
+    induction events with
+    | nil => simp [firstOutOfSlice] at h
+    | cons ev rest ih =>
+      simp only [firstOutOfSlice, List.find?_cons] at h
+      by_cases hlt : target.val < ev.slice.val
+      · simp only [hlt, decide_true, Option.some.injEq] at h
+        subst hit
+        exact ⟨[], rest, rfl, (fun _ hm => nomatch hm), hlt⟩
+      · simp only [hlt, decide_false] at h
+        obtain ⟨pre, post, rfl, hpre, hhit⟩ := ih h
+        refine ⟨ev :: pre, post, rfl, ?_, hhit⟩
+        intro e he
+        rcases List.mem_cons.mp he with rfl | hmem
+        · exact Nat.le_of_not_lt hlt
+        · exact hpre e hmem
+  · rintro ⟨pre, post, rfl, hpre, hhit⟩
+    induction pre with
+    | nil =>
+      simp [firstOutOfSlice, hhit]
+    | cons ev pre ih =>
+      have hle : ev.slice.val ≤ target.val := hpre ev List.mem_cons_self
+      have hnot : ¬ (target.val < ev.slice.val) := Nat.not_lt.mpr hle
+      simp only [firstOutOfSlice, List.cons_append, List.find?_cons, hnot, decide_false]
+      exact ih (fun e he => hpre e (List.mem_cons_of_mem _ he))
+
+mutual
+  /-- Exact pre-order slice-requirement trace of a `Derives` derivation for nonterminal `n`
+  consuming `tokens` starting at token offset `pos`, with unconsumed suffix `rest` and
+  end-of-file span `eof`. Every production entry records `(pos, lookSpan, p.firstSlice, .production p.id)`
+  and every terminal consumption records `(tokPos, tok.span, g.required tok.value, tokenUnsupportedCause prodId tok.value)`. -/
+  inductive DerivesTrace {count : Nat} (g : SharedGrammar count) (slice : Slice)
+      (eof : FileSpan) :
+      (n : Fin count) → (pos : Nat) → (tokens rest : List SurfaceToken) →
+      g.value n → Nat → List SliceEvent → Prop where
+    | apply (p : Production g.value) (pos : Nat) (tokens rest : List SurfaceToken)
+        (args : ActionArgs g.value p.rhs) {steps : Nat} {events : List SliceEvent} :
+        p ∈ g.productions.toList →
+        p.firstSlice.val ≤ slice.val →
+        DerivesArgsTrace g slice eof p.id p.rhs pos tokens rest args steps events →
+        DerivesTrace g slice eof p.lhs pos tokens rest
+          (p.action.eval args).2 (steps + 1 + (p.action.eval args).1)
+          (⟨pos, ((tokens ++ rest).head?.map Located.span).getD eof,
+            p.firstSlice, .production p.id⟩ :: events)
+
+  inductive DerivesArgsTrace {count : Nat} (g : SharedGrammar count) (slice : Slice)
+      (eof : FileSpan) :
+      (prodId : ProductionId) → (rhs : List (Sym Terminal (Fin count))) → (pos : Nat) →
+      (tokens rest : List SurfaceToken) → ActionArgs g.value rhs → Nat → List SliceEvent → Prop where
+    | nil (prodId : ProductionId) (pos : Nat) (rest : List SurfaceToken) :
+        DerivesArgsTrace g slice eof prodId [] pos [] rest () 0 []
+    | token {prodId : ProductionId} {kind : Terminal} {token : SurfaceToken}
+        {rhs : List (Sym Terminal (Fin count))}
+        {pos : Nat} {tokens rest : List SurfaceToken} {args : ActionArgs g.value rhs}
+        {steps : Nat} {events : List SliceEvent} :
+        token.value.kind = kind →
+        (g.required token.value).val ≤ slice.val →
+        DerivesArgsTrace g slice eof prodId rhs (pos + 1) tokens rest args steps events →
+        DerivesArgsTrace g slice eof prodId (.t kind :: rhs) pos (token :: tokens) rest
+          (token, args) (steps + 1)
+          (⟨pos, token.span, g.required token.value, tokenUnsupportedCause prodId token.value⟩ :: events)
+    | child {prodId : ProductionId} {n : Fin count} {rhs : List (Sym Terminal (Fin count))}
+        {pos : Nat} {head tail rest : List SurfaceToken}
+        {value : g.value n} {args : ActionArgs g.value rhs}
+        {left right : Nat} {evsL evsR : List SliceEvent} :
+        DerivesTrace g slice eof n pos head (tail ++ rest) value left evsL →
+        DerivesArgsTrace g slice eof prodId rhs (pos + head.length) tail rest args right evsR →
+        DerivesArgsTrace g slice eof prodId (.n n :: rhs) pos (head ++ tail) rest
+          (value, args) (left + right) (evsL ++ evsR)
+end
+
+theorem derivesTrace_to_derives {count : Nat} {g : SharedGrammar count} {slice : Slice}
+    {eof : FileSpan} {n : Fin count} {pos : Nat} {tokens rest : List SurfaceToken}
+    {val : g.value n} {steps : Nat} {events : List SliceEvent}
+    (h : DerivesTrace g slice eof n pos tokens rest val steps events) :
+    Derives g slice n tokens val steps :=
+  DerivesTrace.rec
+    (motive_1 := fun n _ toks _ val steps _ _ => Derives g slice n toks val steps)
+    (motive_2 := fun _ rhs _ toks _ args steps _ _ => DerivesArgs g slice rhs toks args steps)
+    (fun p _ _ _ _ _ _ hmem hfs _ ih => .apply p _ _ hmem hfs ih)
+    (fun _ _ _ => .nil)
+    (fun hkind hreq _ ih => .token hkind hreq ih)
+    (fun _ _ ihL ihR => .child ihL ihR)
+    h
+
+private theorem derivesArgsTrace_to_derivesArgs {count : Nat} {g : SharedGrammar count}
+    {slice : Slice} {eof : FileSpan} {prodId : ProductionId}
+    {rhs : List (Sym Terminal (Fin count))} {pos : Nat} {tokens rest : List SurfaceToken}
+    {args : ActionArgs g.value rhs} {steps : Nat} {events : List SliceEvent}
+    (h : DerivesArgsTrace g slice eof prodId rhs pos tokens rest args steps events) :
+    DerivesArgs g slice rhs tokens args steps :=
+  DerivesArgsTrace.rec
+    (motive_1 := fun n _ toks _ val steps _ _ => Derives g slice n toks val steps)
+    (motive_2 := fun _ rhs _ toks _ args steps _ _ => DerivesArgs g slice rhs toks args steps)
+    (fun p _ _ _ _ _ _ hmem hfs _ ih => .apply p _ _ hmem hfs ih)
+    (fun _ _ _ => .nil)
+    (fun hkind hreq _ ih => .token hkind hreq ih)
+    (fun _ _ ihL ihR => .child ihL ihR)
+    h
+
+theorem derivesTrace_mono {count : Nat} {g : SharedGrammar count} {s₁ s₂ : Slice}
+    (hle : s₁.val ≤ s₂.val) {eof : FileSpan} {n : Fin count} {pos : Nat}
+    {tokens rest : List SurfaceToken} {val : g.value n} {steps : Nat} {events : List SliceEvent}
+    (h : DerivesTrace g s₁ eof n pos tokens rest val steps events) :
+    DerivesTrace g s₂ eof n pos tokens rest val steps events :=
+  DerivesTrace.rec
+    (motive_1 := fun n pos toks rest val steps evs _ =>
+      DerivesTrace g s₂ eof n pos toks rest val steps evs)
+    (motive_2 := fun prodId rhs pos toks rest args steps evs _ =>
+      DerivesArgsTrace g s₂ eof prodId rhs pos toks rest args steps evs)
+    (fun p pos toks rest args _ _ hmem hfs _ ih =>
+      .apply p pos toks rest args hmem (Nat.le_trans hfs hle) ih)
+    (fun prodId pos rest => .nil prodId pos rest)
+    (fun hkind hreq _ ih => .token hkind (Nat.le_trans hreq hle) ih)
+    (fun _ _ ihL ihR => .child ihL ihR)
+    h
+
+theorem derives_exists_trace {count : Nat} {g : SharedGrammar count} {slice : Slice}
+    (eof : FileSpan) {n : Fin count} {tokens : List SurfaceToken}
+    {val : g.value n} {steps : Nat}
+    (h : Derives g slice n tokens val steps) :
+    ∀ pos rest, ∃ events, DerivesTrace g slice eof n pos tokens rest val steps events :=
+  Derives.rec
+    (motive_1 := fun n toks val steps _ =>
+      ∀ pos rest, ∃ events, DerivesTrace g slice eof n pos toks rest val steps events)
+    (motive_2 := fun rhs toks args steps _ =>
+      ∀ prodId pos rest, ∃ events, DerivesArgsTrace g slice eof prodId rhs pos toks rest args steps events)
+    (fun p toks args _ hmem hfs _ ih pos rest => by
+      obtain ⟨evs, hevs⟩ := ih p.id pos rest
+      exact ⟨_, .apply p pos toks rest args hmem hfs hevs⟩)
+    (fun prodId pos rest => ⟨[], .nil prodId pos rest⟩)
+    (fun hkind hreq _ ih prodId pos rest => by
+      obtain ⟨evs, hevs⟩ := ih prodId (pos + 1) rest
+      exact ⟨_, .token hkind hreq hevs⟩)
+    (fun {m _ head _ _ _ _ _} _ _ ihL ihR prodId pos rest => by
+      obtain ⟨evsL, hevsL⟩ := ihL pos (_ ++ rest)
+      obtain ⟨evsR, hevsR⟩ := ihR prodId (pos + head.length) rest
+      exact ⟨evsL ++ evsR, .child hevsL hevsR⟩)
+    h
+
+private theorem pairwise_append {α : Type} {R : α → α → Prop} {xs ys : List α}
+    (hx : xs.Pairwise R) (hy : ys.Pairwise R) (hxy : ∀ a ∈ xs, ∀ b ∈ ys, R a b) :
+    (xs ++ ys).Pairwise R := by
+  induction xs with
+  | nil => exact hy
+  | cons a xs ih =>
+    rcases List.pairwise_cons.mp hx with ⟨ha, hxs⟩
+    refine List.pairwise_cons.mpr ⟨fun b hb => ?_, ih hxs (fun x hx' y hy' => hxy x (List.mem_cons_of_mem _ hx') y hy')⟩
+    rcases List.mem_append.mp hb with hb1 | hb2
+    · exact ha b hb1
+    · exact hxy a List.mem_cons_self b hb2
+
+theorem derivesTrace_props {count : Nat} {g : SharedGrammar count} {slice : Slice}
+    {eof : FileSpan} {n : Fin count} {pos : Nat} {tokens rest : List SurfaceToken}
+    {val : g.value n} {steps : Nat} {events : List SliceEvent}
+    (h : DerivesTrace g slice eof n pos tokens rest val steps events) :
+    events.Pairwise (fun a b => a.offset ≤ b.offset) ∧
+    (∀ ev ∈ events, pos ≤ ev.offset ∧ ev.offset ≤ pos + tokens.length ∧ ev.slice.val ≤ slice.val) ∧
+    (∀ i (hi : i < tokens.length),
+      ∃ ev ∈ events, ev.offset = pos + i ∧ ev.slice = g.required (tokens[i]'(hi)).value) :=
+  DerivesTrace.rec
+    (motive_1 := fun _ pos toks _ _ _ evs _ =>
+      evs.Pairwise (fun a b => a.offset ≤ b.offset) ∧
+      (∀ ev ∈ evs, pos ≤ ev.offset ∧ ev.offset ≤ pos + toks.length ∧ ev.slice.val ≤ slice.val) ∧
+      (∀ i (hi : i < toks.length),
+        ∃ ev ∈ evs, ev.offset = pos + i ∧ ev.slice = g.required (toks[i]'(hi)).value))
+    (motive_2 := fun _ _ pos toks _ _ _ evs _ =>
+      evs.Pairwise (fun a b => a.offset ≤ b.offset) ∧
+      (∀ ev ∈ evs, pos ≤ ev.offset ∧ ev.offset ≤ pos + toks.length ∧ ev.slice.val ≤ slice.val) ∧
+      (∀ i (hi : i < toks.length),
+        ∃ ev ∈ evs, ev.offset = pos + i ∧ ev.slice = g.required (toks[i]'(hi)).value))
+    (fun p pos toks rest args _ evs _ hfs _ ih => by
+      obtain ⟨hpw, hall, hcov⟩ := ih
+      refine ⟨List.pairwise_cons.mpr ⟨fun ev hev => (hall ev hev).1, hpw⟩, ?_, ?_⟩
+      · intro ev hev
+        rcases List.mem_cons.mp hev with rfl | hmem
+        · exact ⟨Nat.le_refl _, Nat.le_add_right _ _, hfs⟩
+        · exact hall ev hmem
+      · intro i hi
+        obtain ⟨ev, hev, ho, hs⟩ := hcov i hi
+        exact ⟨ev, List.mem_cons_of_mem _ hev, ho, hs⟩)
+    (fun _ _ _ => ⟨.nil, (fun _ hm => nomatch hm), (fun _ hi => nomatch hi)⟩)
+    (fun {_ _ tok _ pos toks _ _ _ _} _ hreq _ ih => by
+      obtain ⟨hpw, hall, hcov⟩ := ih
+      refine ⟨List.pairwise_cons.mpr ⟨fun ev hev => Nat.le_trans (Nat.le_succ _) (hall ev hev).1, hpw⟩, ?_, ?_⟩
+      · intro ev hev
+        rcases List.mem_cons.mp hev with rfl | hmem
+        · exact ⟨Nat.le_refl _, by simp only [List.length_cons]; omega, hreq⟩
+        · have h := hall ev hmem
+          exact ⟨Nat.le_trans (Nat.le_succ _) h.1, by simp only [List.length_cons]; omega, h.2.2⟩
+      · intro i hi
+        cases i with
+        | zero =>
+          exact ⟨_, List.mem_cons_self, by simp, rfl⟩
+        | succ j =>
+          have hj : j < toks.length := Nat.lt_of_succ_lt_succ hi
+          obtain ⟨ev, hev, ho, hs⟩ := hcov j hj
+          exact ⟨ev, List.mem_cons_of_mem _ hev, by omega, hs⟩)
+    (fun {_ _ _ pos head tail _ _ _ _ _ evsL evsR} _ _ ihL ihR => by
+      obtain ⟨hpwL, hallL, hcovL⟩ := ihL
+      obtain ⟨hpwR, hallR, hcovR⟩ := ihR
+      refine ⟨pairwise_append hpwL hpwR (fun a ha b hb => Nat.le_trans (hallL a ha).2.1 (hallR b hb).1), ?_, ?_⟩
+      · intro ev hev
+        rcases List.mem_append.mp hev with h1 | h2
+        · have h := hallL ev h1
+          exact ⟨h.1, by simp only [List.length_append]; omega, h.2.2⟩
+        · have h := hallR ev h2
+          exact ⟨by omega, by simp only [List.length_append]; omega, h.2.2⟩
+      · intro i hi
+        by_cases hlt : i < head.length
+        · obtain ⟨ev, hev, ho, hs⟩ := hcovL i hlt
+          refine ⟨ev, List.mem_append_left _ hev, ho, ?_⟩
+          simpa [List.getElem_append_left hlt] using hs
+        · have hge : head.length ≤ i := Nat.le_of_not_lt hlt
+          have hj : i - head.length < tail.length := by
+            simp only [List.length_append] at hi
+            omega
+          obtain ⟨ev, hev, ho, hs⟩ := hcovR (i - head.length) hj
+          refine ⟨ev, List.mem_append_right _ hev, by omega, ?_⟩
+          simpa [List.getElem_append_right hge] using hs)
+    h
+
+private theorem derivesTrace_inv {count : Nat} {g : SharedGrammar count} {slice : Slice}
+    {eof : FileSpan} {n : Fin count} {pos : Nat} {tokens rest : List SurfaceToken}
+    {val : g.value n} {steps : Nat} {events : List SliceEvent}
+    (h : DerivesTrace g slice eof n pos tokens rest val steps events) :
+    ∃ (p : Production g.value) (args : ActionArgs g.value p.rhs) (dSteps : Nat)
+      (evs : List SliceEvent) (hlhs : p.lhs = n),
+      p ∈ g.productions.toList ∧
+      p.firstSlice.val ≤ slice.val ∧
+      DerivesArgsTrace g slice eof p.id p.rhs pos tokens rest args dSteps evs ∧
+      val = hlhs ▸ (p.action.eval args).2 ∧
+      steps = dSteps + 1 + (p.action.eval args).1 ∧
+      events = ⟨pos, ((tokens ++ rest).head?.map Located.span).getD eof,
+        p.firstSlice, .production p.id⟩ :: evs := by
+  cases h with
+  | apply p _ _ _ args hmem hfs hargs =>
+    exact ⟨p, args, _, _, rfl, hmem, hfs, hargs, rfl, rfl, rfl⟩
+
+private theorem lookup_of_derivesArgs {count : Nat} {g : SharedGrammar count}
+    (table : CheckedTable g) {slice : Slice} {p : Production g.value}
+    {toks rest : List SurfaceToken} {args : ActionArgs g.value p.rhs} {steps : Nat}
+    (hmem : p ∈ g.productions.toList)
+    (hargs : DerivesArgs g slice p.rhs toks args steps)
+    (hfol : Follow g.grammar p.lhs (rest.head?.map fun t => t.value.kind)) :
+    ∃ idx, g.productions[idx]? = some p ∧
+      table.lookup p.lhs ((toks ++ rest).head?.map fun t => t.value.kind) = some idx := by
+  obtain ⟨idx, hget⟩ := List.mem_iff_getElem?.mp hmem
+  have hgetArr : g.productions[idx]? = some p := by
+    simpa [Array.getElem?_toList] using hget
+  have hprodAt : g.grammar.prods[idx]? = some (p.lhs, p.rhs) := by
+    simp only [SharedGrammar.grammar, List.getElem?_map, hget, Option.map_some]
+  have hpred : Predicts g.grammar idx ((toks ++ rest).head?.map fun t => t.value.kind) := by
+    refine ⟨p.lhs, p.rhs, hprodAt, ?_⟩
+    cases toks with
+    | nil => exact Or.inr ⟨derives_nullable_of_nil.2 hargs, hfol⟩
+    | cons tok toks' => exact Or.inl ⟨tok.value.kind, rfl, derives_first_of_cons.2 hargs⟩
+  exact ⟨idx, hgetArr, (table.predicts p.lhs _ idx).mpr ⟨hpred, p.rhs, hprodAt⟩⟩
+
+private theorem derivesTrace_unique_aux {count : Nat} {g : SharedGrammar count}
+    (table : CheckedTable g) {eof : FileSpan} {s₁ s₂ : Slice}
+    {n : Fin count} {pos : Nat} {head₁ rest₁ : List SurfaceToken}
+    {val₁ : g.value n} {steps₁ : Nat} {evs₁ : List SliceEvent}
+    (h₁ : DerivesTrace g s₁ eof n pos head₁ rest₁ val₁ steps₁ evs₁) :
+    Follow g.grammar n (rest₁.head?.map fun t => t.value.kind) →
+    ∀ {head₂ rest₂ val₂ steps₂ evs₂},
+      DerivesTrace g s₂ eof n pos head₂ rest₂ val₂ steps₂ evs₂ →
+      Follow g.grammar n (rest₂.head?.map fun t => t.value.kind) →
+      head₁ ++ rest₁ = head₂ ++ rest₂ →
+      head₁ = head₂ ∧ rest₁ = rest₂ ∧ val₁ = val₂ ∧ steps₁ = steps₂ ∧ evs₁ = evs₂ :=
+  DerivesTrace.rec
+    (motive_1 := fun n pos head₁ rest₁ val₁ steps₁ evs₁ _ =>
+      Follow g.grammar n (rest₁.head?.map fun t => t.value.kind) →
+      ∀ {head₂ rest₂ val₂ steps₂ evs₂},
+        DerivesTrace g s₂ eof n pos head₂ rest₂ val₂ steps₂ evs₂ →
+        Follow g.grammar n (rest₂.head?.map fun t => t.value.kind) →
+        head₁ ++ rest₁ = head₂ ++ rest₂ →
+        head₁ = head₂ ∧ rest₁ = rest₂ ∧ val₁ = val₂ ∧ steps₁ = steps₂ ∧ evs₁ = evs₂)
+    (motive_2 := fun prodId rhs pos head₁ rest₁ args₁ steps₁ evs₁ _ =>
+      ∀ (lhs : Fin count) (pre : List (Sym Terminal (Fin count))),
+        (lhs, pre ++ rhs) ∈ g.grammar.prods →
+        Follow g.grammar lhs (rest₁.head?.map fun t => t.value.kind) →
+        ∀ {head₂ rest₂ args₂ steps₂ evs₂},
+          DerivesArgsTrace g s₂ eof prodId rhs pos head₂ rest₂ args₂ steps₂ evs₂ →
+          Follow g.grammar lhs (rest₂.head?.map fun t => t.value.kind) →
+          head₁ ++ rest₁ = head₂ ++ rest₂ →
+          head₁ = head₂ ∧ rest₁ = rest₂ ∧ args₁ = args₂ ∧ steps₁ = steps₂ ∧ evs₁ = evs₂)
+    (fun p₁ pos toks₁ rest₁ args₁ _ evs₁' hmem₁ _ hargs₁ ihArgs hfol₁ head₂ rest₂ val₂ steps₂ evs₂ h₂ hfol₂ hstr => by
+      obtain ⟨idx₁, hget₁, hlook₁⟩ :=
+        lookup_of_derivesArgs table hmem₁ (derivesArgsTrace_to_derivesArgs hargs₁) hfol₁
+      obtain ⟨p₂, args₂, dSteps₂, evs₂', hlhs₂, hmem₂, _, hargs₂, rfl, rfl, rfl⟩ :=
+        derivesTrace_inv h₂
+      have hfol₂' : Follow g.grammar p₂.lhs (rest₂.head?.map fun t => t.value.kind) := by
+        simpa [hlhs₂] using hfol₂
+      obtain ⟨idx₂, hget₂, hlook₂⟩ :=
+        lookup_of_derivesArgs table hmem₂ (derivesArgsTrace_to_derivesArgs hargs₂) hfol₂'
+      rw [hstr] at hlook₁
+      have hlook₂' : table.lookup p₁.lhs ((head₂ ++ rest₂).head?.map fun t => t.value.kind) = some idx₂ := by
+        simpa [hlhs₂] using hlook₂
+      have hidx : idx₁ = idx₂ := Option.some.inj (hlook₁.symm.trans hlook₂')
+      subst hidx
+      have hp : p₁ = p₂ := Option.some.inj (hget₁.symm.trans hget₂)
+      subst hp
+      have hprodMem : (p₁.lhs, [] ++ p₁.rhs) ∈ g.grammar.prods :=
+        List.mem_map.mpr ⟨p₁, hmem₁, rfl⟩
+      obtain ⟨rfl, rfl, rfl, rfl, rfl⟩ := ihArgs p₁.lhs [] hprodMem hfol₁ hargs₂ hfol₂ hstr
+      exact ⟨rfl, rfl, rfl, rfl, rfl⟩)
+    (fun _ _ rest₁ _ _ _ _ head₂ rest₂ args₂ steps₂ evs₂ h₂ _ hstr => by
+      cases h₂ with
+      | nil _ _ _ => exact ⟨rfl, hstr, rfl, rfl, rfl⟩)
+    (fun {_ kind _ rhs _ _ _ _ _ _} _ _ _ ihArgs lhs pre hmem hfol₁ head₂ rest₂ args₂ steps₂ evs₂ h₂ hfol₂ hstr => by
+      cases h₂ with
+      | token _ _ hargs₂ =>
+        obtain ⟨rfl, htail⟩ := List.cons.inj hstr
+        have hmem' : (lhs, (pre ++ [.t kind]) ++ rhs) ∈ g.grammar.prods := by
+          simpa [List.append_assoc] using hmem
+        obtain ⟨rfl, rfl, rfl, rfl, rfl⟩ := ihArgs lhs (pre ++ [.t kind]) hmem' hfol₁ hargs₂ hfol₂ htail
+        exact ⟨rfl, rfl, rfl, rfl, rfl⟩)
+    (fun {_ child rhs _ _ tail₁ rest₁ _ _ _ _ _ _} _ hR₁ ihL ihR lhs pre hmem hfol₁ head₂ rest₂ args₂ steps₂ evs₂ h₂ hfol₂ hstr => by
+      cases h₂ with
+      | @child _ _ _ _ _ tail₂ _ _ _ _ _ _ _ hL₂ hR₂ =>
+        have hchildFol₁ : Follow g.grammar child ((tail₁ ++ rest₁).head?.map fun t => t.value.kind) := by
+          have hR₁' := derivesArgsTrace_to_derivesArgs hR₁
+          cases tail₁ with
+          | nil => exact .tail hmem (derives_nullable_of_nil.2 hR₁') hfol₁
+          | cons tok tail₁' => exact .first hmem (derives_first_of_cons.2 hR₁')
+        have hchildFol₂ : Follow g.grammar child ((tail₂ ++ rest₂).head?.map fun t => t.value.kind) := by
+          have hR₂' := derivesArgsTrace_to_derivesArgs hR₂
+          cases tail₂ with
+          | nil => exact .tail hmem (derives_nullable_of_nil.2 hR₂') hfol₂
+          | cons tok tail₂' => exact .first hmem (derives_first_of_cons.2 hR₂')
+        rw [List.append_assoc, List.append_assoc] at hstr
+        obtain ⟨rfl, hmid, rfl, rfl, rfl⟩ := ihL hchildFol₁ hL₂ hchildFol₂ hstr
+        have hmem' : (lhs, (pre ++ [.n child]) ++ rhs) ∈ g.grammar.prods := by
+          simpa [List.append_assoc] using hmem
+        obtain ⟨rfl, rfl, rfl, rfl, rfl⟩ := ihR lhs (pre ++ [.n child]) hmem' hfol₁ hR₂ hfol₂ hmid
+        exact ⟨rfl, rfl, rfl, rfl, rfl⟩)
+    h₁
+
+/-- For any LL(1) checked table, the derivation tree, step count, and exact pre-order
+slice-requirement event trace of a token stream are uniquely determined across all slices. -/
+theorem derivesTrace_unique {count : Nat} {g : SharedGrammar count}
+    (table : CheckedTable g) {eof : FileSpan} {s₁ s₂ : Slice} {tokens : List SurfaceToken}
+    {tree₁ tree₂ : g.value g.start} {steps₁ steps₂ : Nat} {evs₁ evs₂ : List SliceEvent}
+    (h₁ : DerivesTrace g s₁ eof g.start 0 tokens [] tree₁ steps₁ evs₁)
+    (h₂ : DerivesTrace g s₂ eof g.start 0 tokens [] tree₂ steps₂ evs₂) :
+    tree₁ = tree₂ ∧ steps₁ = steps₂ ∧ evs₁ = evs₂ := by
+  obtain ⟨_, _, htree, hsteps, hevs⟩ := derivesTrace_unique_aux table h₁ Follow.start h₂ Follow.start rfl
+  exact ⟨htree, hsteps, hevs⟩
 
 private def replayEvents (target : Slice) (c : ParseCursor) (events : List SliceEvent) : ParseCursor :=
   events.foldl (fun acc ev => acc.require target ev.slice ev.cause ev.span) c
@@ -2544,179 +2892,217 @@ private theorem replayEvents_only_req_hit (target : Slice) (c₁ c₂ : ParseCur
     · simp only [ParseCursor.require, hreq]
     · simp only [ParseCursor.require, hhit]
 
-private theorem pairwise_append {α : Type} {R : α → α → Prop} {xs ys : List α}
-    (hx : xs.Pairwise R) (hy : ys.Pairwise R) (hxy : ∀ a ∈ xs, ∀ b ∈ ys, R a b) :
-    (xs ++ ys).Pairwise R := by
-  induction xs with
-  | nil => exact hy
-  | cons a xs ih =>
-    rcases List.pairwise_cons.mp hx with ⟨ha, hxs⟩
-    refine List.pairwise_cons.mpr ⟨fun b hb => ?_, ih hxs (fun x hx' y hy' => hxy x (List.mem_cons_of_mem _ hx') y hy')⟩
-    rcases List.mem_append.mp hb with hb1 | hb2
-    · exact ha b hb1
-    · exact hxy a List.mem_cons_self b hb2
+private theorem tokenSlice_length (tokens : Array SurfaceToken) {lo hi : Nat}
+    (h1 : lo ≤ hi) (h2 : hi ≤ tokens.size) :
+    (tokenSlice tokens lo hi).length = hi - lo := by
+  unfold tokenSlice
+  rw [List.length_take, List.length_drop, Array.length_toList]
+  omega
 
-private theorem parseSymbol_parseArgs_events {count : Nat} {g : SharedGrammar count}
+private theorem parseSymbol_parseArgs_ok_trace {count : Nat} {g : SharedGrammar count}
     (table : CheckedTable g) (tokens : Array SurfaceToken) (targetSlice : Slice)
     (eof : FileSpan) (fuel : Nat) :
-    (∀ (n : Fin count) (c : ParseCursor),
+    (∀ (n : Fin count) (c c' : ParseCursor) (val : g.value n),
       c.offset ≤ tokens.size →
-      let c' := (parseSymbol table tokens targetSlice eof n c fuel).1
-      ∃ events : List SliceEvent,
-        events.Pairwise (fun a b => a.offset ≤ b.offset) ∧
-        (∀ ev ∈ events, c.offset ≤ ev.offset ∧ ev.offset ≤ c'.offset ∧ ev.Valid g tokens eof) ∧
-        (∀ i, c.offset ≤ i → i < c'.offset → ∀ hi : i < tokens.size,
-          ∃ ev ∈ events, ev.offset = i ∧ ev.slice = g.required (tokens[i]'(hi)).value) ∧
+      parseSymbol table tokens targetSlice eof n c fuel = (c', .ok val) →
+      ∃ dSteps events,
+        DerivesTrace g c'.required eof n c.offset
+          (tokenSlice tokens c.offset c'.offset) (tokens.toList.drop c'.offset)
+          val dSteps events ∧
         (replayEvents targetSlice c events).required = c'.required ∧
         (replayEvents targetSlice c events).firstUnsupportedHit = c'.firstUnsupportedHit) ∧
-    (∀ (prodId : ProductionId) (rhs : List (Sym Terminal (Fin count))) (c : ParseCursor),
+    (∀ (prodId : ProductionId) (rhs : List (Sym Terminal (Fin count)))
+      (c c' : ParseCursor) (args : ActionArgs g.value rhs),
       c.offset ≤ tokens.size →
-      let c' := (parseArgs table tokens targetSlice eof prodId fuel rhs c).1
-      ∃ events : List SliceEvent,
-        events.Pairwise (fun a b => a.offset ≤ b.offset) ∧
-        (∀ ev ∈ events, c.offset ≤ ev.offset ∧ ev.offset ≤ c'.offset ∧ ev.Valid g tokens eof) ∧
-        (∀ i, c.offset ≤ i → i < c'.offset → ∀ hi : i < tokens.size,
-          ∃ ev ∈ events, ev.offset = i ∧ ev.slice = g.required (tokens[i]'(hi)).value) ∧
+      parseArgs table tokens targetSlice eof prodId fuel rhs c = (c', .ok args) →
+      ∃ dSteps events,
+        DerivesArgsTrace g c'.required eof prodId rhs c.offset
+          (tokenSlice tokens c.offset c'.offset) (tokens.toList.drop c'.offset)
+          args dSteps events ∧
         (replayEvents targetSlice c events).required = c'.required ∧
         (replayEvents targetSlice c events).firstUnsupportedHit = c'.firstUnsupportedHit) := by
   induction fuel with
   | zero =>
-    exact ⟨fun _ _ _ => ⟨[], .nil, (fun _ h => nomatch h), (fun _ h1 h2 _ => by dsimp only [parseSymbol] at h2; omega), rfl, rfl⟩,
-      fun _ _ _ _ => ⟨[], .nil, (fun _ h => nomatch h), (fun _ h1 h2 _ => by dsimp only [parseArgs] at h2; omega), rfl, rfl⟩⟩
+    exact ⟨fun _ _ _ _ _ h => (by cases h), fun _ _ _ _ _ _ h => (by cases h)⟩
   | succ fuel ih =>
     obtain ⟨ihSym, ihArgs⟩ := ih
     constructor
-    · intro n c hoff
-      unfold parseSymbol
-      dsimp only
-      cases table.lookup n (tokens[c.offset]?.map fun t => t.value.kind) with
-      | none => exact ⟨[], .nil, (fun _ h => nomatch h), (fun _ h1 h2 _ => by dsimp only at h2; omega), rfl, rfl⟩
+    · intro n c c' val hoff hrun
+      unfold parseSymbol at hrun
+      dsimp only at hrun
+      cases hlook : table.lookup n (tokens[c.offset]?.map fun t => t.value.kind) with
+      | none => simp [hlook] at hrun
       | some index =>
-        dsimp only
+        simp only [hlook] at hrun
         cases hp : g.productions[index]? with
-        | none => exact ⟨[], .nil, (fun _ h => nomatch h), (fun _ h1 h2 _ => by dsimp only at h2; omega), rfl, rfl⟩
+        | none => simp [hp] at hrun
         | some p =>
-          dsimp only
+          simp only [hp] at hrun
           by_cases hlhs : p.lhs = n
-          · simp only [hlhs, ↓reduceDIte]
-            let ev₀ : SliceEvent :=
-              ⟨c.offset, (tokens[c.offset]?.map Located.span).getD eof, p.firstSlice, .production p.id⟩
+          · simp only [hlhs, ↓reduceDIte] at hrun
+            subst n
             let c₁ := ({c with steps := c.steps + 1}).require targetSlice p.firstSlice
               (.production p.id) ((tokens[c.offset]?.map Located.span).getD eof)
-            have hmono := (parseSymbol_parseArgs_mono table tokens targetSlice eof fuel).2
-              p.id p.rhs c₁ hoff
-            obtain ⟨evs, hpw, hall, hcov, hreq, hhit⟩ := ihArgs p.id p.rhs c₁ hoff
-            have hpMem : p ∈ g.productions.toList :=
-              Array.mem_toList_iff.mpr (Array.mem_of_getElem? hp)
-            have hev₀Valid : ev₀.Valid g tokens eof := Or.inl ⟨p, hpMem, rfl, rfl, rfl⟩
-            have hpw' : (ev₀ :: evs).Pairwise (fun a b => a.offset ≤ b.offset) :=
-              List.pairwise_cons.mpr ⟨fun ev hev => (hall ev hev).1, hpw⟩
-            have hrep := replayEvents_only_req_hit targetSlice
-              (c.require targetSlice p.firstSlice (.production p.id) ev₀.span) c₁ rfl rfl evs
             cases hpa : parseArgs table tokens targetSlice eof p.id fuel p.rhs c₁ with
             | mk c₂ res =>
-              rw [hpa] at hmono hall hcov hreq hhit
-              have hall' : ∀ ev ∈ ev₀ :: evs, c.offset ≤ ev.offset ∧ ev.offset ≤ c₂.offset ∧ ev.Valid g tokens eof := by
-                intro ev hev
-                rcases List.mem_cons.mp hev with rfl | hmem
-                · exact ⟨Nat.le_refl _, hmono.1, hev₀Valid⟩
-                · exact hall ev hmem
-              have hcov' : ∀ i, c.offset ≤ i → i < c₂.offset → ∀ hi : i < tokens.size,
-                  ∃ ev ∈ ev₀ :: evs, ev.offset = i ∧ ev.slice = g.required (tokens[i]'(hi)).value := by
-                intro i h1 h2 hi
-                obtain ⟨ev, hev, ho, hs⟩ := hcov i h1 h2 hi
-                exact ⟨ev, List.mem_cons_of_mem _ hev, ho, hs⟩
+              dsimp only [c₁] at hpa
+              rw [hpa] at hrun
               cases res with
-              | error _ =>
-                exact ⟨ev₀ :: evs, hpw', hall', hcov', hrep.1.trans hreq, hrep.2.trans hhit⟩
-              | ok _ =>
-                exact ⟨ev₀ :: evs, hpw', hall', hcov', hrep.1.trans hreq, hrep.2.trans hhit⟩
-          · simp only [hlhs, ↓reduceDIte]
-            exact ⟨[], .nil, (fun _ h => nomatch h), (fun _ h1 h2 _ => by omega), rfl, rfl⟩
-    · intro prodId rhs c hoff
+              | error stop => cases hrun
+              | ok args =>
+                have hpair := Prod.mk.inj hrun
+                have hc' : c' = {c₂ with steps := c₂.steps + (p.action.eval args).1} := hpair.1.symm
+                have hval : val = (p.action.eval args).2 := (Except.ok.inj hpair.2).symm
+                subst hc'
+                subst hval
+                have hmono := (parseSymbol_parseArgs_mono table tokens targetSlice eof fuel).2
+                  p.id p.rhs c₁ hoff
+                dsimp only [c₁] at hmono
+                rw [hpa] at hmono
+                dsimp only at hmono
+                obtain ⟨dSteps, evs, htr, hreq, hhit⟩ :=
+                  ihArgs p.id p.rhs c₁ c₂ args hoff hpa
+                have hpMem : p ∈ g.productions.toList :=
+                  Array.mem_toList_iff.mpr (Array.mem_of_getElem? hp)
+                have hreq₁ : p.firstSlice.val ≤ c₁.required.val := require_required_ge_right
+                have hfs : p.firstSlice.val ≤ c₂.required.val := Nat.le_trans hreq₁ hmono.2.2.2.1
+                have hc₁Off : c₁.offset = c.offset := rfl
+                have hhead :
+                    ((tokenSlice tokens c.offset c₂.offset ++ tokens.toList.drop c₂.offset).head?.map
+                      Located.span).getD eof =
+                    (tokens[c.offset]?.map Located.span).getD eof := by
+                  rw [tokenSlice_append_drop tokens (hc₁Off ▸ hmono.1), ← getElem?_eq_drop_head?]
+                let ev₀ : SliceEvent :=
+                  ⟨c.offset, ((tokenSlice tokens c.offset c₂.offset ++ tokens.toList.drop c₂.offset).head?.map
+                    Located.span).getD eof, p.firstSlice, .production p.id⟩
+                have hrep := replayEvents_only_req_hit targetSlice
+                  (c.require targetSlice p.firstSlice (.production p.id) ev₀.span) c₁
+                  rfl (by dsimp only [ev₀, c₁]; rw [hhead]; rfl) evs
+                refine ⟨dSteps + 1 + (p.action.eval args).1, ev₀ :: evs,
+                  .apply p c.offset _ _ args hpMem hfs htr,
+                  hrep.1.trans hreq, hrep.2.trans hhit⟩
+          · simp only [hlhs, ↓reduceDIte] at hrun
+            cases hrun
+    · intro prodId rhs c c' args hoff hrun
       cases rhs with
       | nil =>
-        unfold parseArgs
-        exact ⟨[], .nil, (fun _ h => nomatch h), (fun _ h1 h2 _ => by dsimp only at h2; omega), rfl, rfl⟩
+        unfold parseArgs at hrun
+        obtain ⟨hc', hargs⟩ := Prod.mk.inj hrun
+        subst hc'
+        cases args
+        exact ⟨0, [], by simpa [tokenSlice_self] using DerivesArgsTrace.nil prodId c.offset (tokens.toList.drop c.offset),
+          rfl, rfl⟩
       | cons sym rest =>
         cases sym with
         | t kind =>
-          unfold parseArgs
-          dsimp only
+          unfold parseArgs at hrun
+          dsimp only at hrun
           cases htok : tokens[c.offset]? with
-          | none => exact ⟨[], .nil, (fun _ h => nomatch h), (fun _ h1 h2 _ => by dsimp only at h2; omega), rfl, rfl⟩
+          | none => simp [htok] at hrun
           | some token =>
-            dsimp only
-            split
-            · exact ⟨[], .nil, (fun _ h => nomatch h), (fun _ h1 h2 _ => by dsimp only at h2; omega), rfl, rfl⟩
-            · have hlt : c.offset < tokens.size := (Array.getElem?_eq_some_iff.mp htok).1
-              have htokAt : tokens[c.offset]'(hlt) = token := (Array.getElem?_eq_some_iff.mp htok).2
-              let ev₀ : SliceEvent :=
-                ⟨c.offset, token.span, g.required token.value, tokenUnsupportedCause prodId token.value⟩
+            simp only [htok] at hrun
+            split at hrun
+            · cases hrun
+            · rename_i hnotNe
+              have hkindEq : token.value.kind = kind := by
+                cases hdec : decide (token.value.kind = kind) with
+                | true => exact of_decide_eq_true hdec
+                | false => exact False.elim (hnotNe (of_decide_eq_false hdec))
+              have hlt : c.offset < tokens.size := (Array.getElem?_eq_some_iff.mp htok).1
               let c₁ := ({c with steps := c.steps + 1}).require targetSlice (g.required token.value)
                 (tokenUnsupportedCause prodId token.value) token.span
               let c₂ := {c₁ with offset := c₁.offset + 1}
-              have hmono := (parseSymbol_parseArgs_mono table tokens targetSlice eof fuel).2
-                prodId rest c₂ hlt
-              obtain ⟨evs, hpw, hall, hcov, hreq, hhit⟩ := ihArgs prodId rest c₂ hlt
-              have hev₀Valid : ev₀.Valid g tokens eof :=
-                Or.inr ⟨hlt, prodId, by rw [htokAt], by rw [htokAt], by rw [htokAt]⟩
-              have hpw' : (ev₀ :: evs).Pairwise (fun a b => a.offset ≤ b.offset) :=
-                List.pairwise_cons.mpr ⟨fun ev hev => Nat.le_trans (Nat.le_succ _) (hall ev hev).1, hpw⟩
-              have hrep := replayEvents_only_req_hit targetSlice
-                (c.require targetSlice (g.required token.value) (tokenUnsupportedCause prodId token.value) token.span)
-                c₂ rfl rfl evs
-              refine ⟨ev₀ :: evs, hpw', ?_, ?_, hrep.1.trans hreq, hrep.2.trans hhit⟩
-              · intro ev hev
-                rcases List.mem_cons.mp hev with rfl | hmem
-                · exact ⟨Nat.le_refl _, Nat.le_trans (Nat.le_succ _) hmono.1, hev₀Valid⟩
-                · have h := hall ev hmem
-                  exact ⟨Nat.le_trans (Nat.le_succ _) h.1, h.2.1, h.2.2⟩
-              · intro i h1 h2 hi
-                by_cases heq : i = c.offset
-                · subst heq
-                  exact ⟨ev₀, List.mem_cons_self, rfl, by rw [htokAt]⟩
-                · obtain ⟨ev, hev, ho, hs⟩ := hcov i (by change c.offset + 1 ≤ i; omega) h2 hi
-                  exact ⟨ev, List.mem_cons_of_mem _ hev, ho, hs⟩
+              cases hpa : parseArgs table tokens targetSlice eof prodId fuel rest c₂ with
+              | mk c₃ res =>
+                dsimp only [c₂, c₁] at hpa
+                rw [hpa] at hrun
+                cases res with
+                | error stop => cases hrun
+                | ok restArgs =>
+                  obtain ⟨hc', hargs⟩ := Prod.mk.inj hrun
+                  subst hc'
+                  have hargsEq : (token, restArgs) = args := Except.ok.inj hargs
+                  subst hargsEq
+                  have hmono := (parseSymbol_parseArgs_mono table tokens targetSlice eof fuel).2
+                    prodId rest c₂ hlt
+                  dsimp only [c₂, c₁] at hmono
+                  rw [hpa] at hmono
+                  dsimp only at hmono
+                  obtain ⟨dSteps, evs, htr, hreq, hhit⟩ :=
+                    ihArgs prodId rest c₂ c₃ restArgs hlt hpa
+                  have hreq₁ : (g.required token.value).val ≤ c₁.required.val := require_required_ge_right
+                  have htokReq : (g.required token.value).val ≤ c₃.required.val :=
+                    Nat.le_trans hreq₁ hmono.2.2.2.1
+                  have hc₂Off : c₂.offset = c.offset + 1 := rfl
+                  have hts : tokenSlice tokens c.offset c₃.offset =
+                      token :: tokenSlice tokens (c.offset + 1) c₃.offset :=
+                    tokenSlice_cons tokens htok (hc₂Off ▸ hmono.1)
+                  rw [hts]
+                  let ev₀ : SliceEvent :=
+                    ⟨c.offset, token.span, g.required token.value, tokenUnsupportedCause prodId token.value⟩
+                  have hrep := replayEvents_only_req_hit targetSlice
+                    (c.require targetSlice (g.required token.value)
+                      (tokenUnsupportedCause prodId token.value) token.span) c₂ rfl rfl evs
+                  exact ⟨dSteps + 1, ev₀ :: evs, .token hkindEq htokReq htr,
+                    hrep.1.trans hreq, hrep.2.trans hhit⟩
         | n child =>
-          unfold parseArgs
-          dsimp only
-          have hmono₁ := (parseSymbol_parseArgs_mono table tokens targetSlice eof fuel).1
-            child {c with steps := c.steps + 1} hoff
-          obtain ⟨evs₁, hpw₁, hall₁, hcov₁, hreq₁, hhit₁⟩ := ihSym child {c with steps := c.steps + 1} hoff
-          have hrep₁ := replayEvents_only_req_hit targetSlice c {c with steps := c.steps + 1} rfl rfl evs₁
+          unfold parseArgs at hrun
+          dsimp only at hrun
           cases hps : parseSymbol table tokens targetSlice eof child {c with steps := c.steps + 1} fuel with
           | mk c₁ res₁ =>
-            rw [hps] at hmono₁ hall₁ hcov₁ hreq₁ hhit₁
+            rw [hps] at hrun
             cases res₁ with
-            | error _ =>
-              exact ⟨evs₁, hpw₁, hall₁, hcov₁, hrep₁.1.trans hreq₁, hrep₁.2.trans hhit₁⟩
-            | ok _ =>
-              have hmono₂ := (parseSymbol_parseArgs_mono table tokens targetSlice eof fuel).2
-                prodId rest c₁ hmono₁.2.1
-              obtain ⟨evs₂, hpw₂, hall₂, hcov₂, hreq₂, hhit₂⟩ := ihArgs prodId rest c₁ hmono₁.2.1
-              have hpw := pairwise_append hpw₁ hpw₂
-                (fun a ha b hb => Nat.le_trans (hall₁ a ha).2.1 (hall₂ b hb).1)
-              have hrep₂ := replayEvents_only_req_hit targetSlice
-                (replayEvents targetSlice c evs₁) c₁
-                (hrep₁.1.trans hreq₁) (hrep₁.2.trans hhit₁) evs₂
-              refine ⟨evs₁ ++ evs₂, hpw, ?_, ?_, ?_, ?_⟩
-              · intro ev hev
-                rcases List.mem_append.mp hev with h1 | h2
-                · have h := hall₁ ev h1
-                  exact ⟨h.1, Nat.le_trans h.2.1 hmono₂.1, h.2.2⟩
-                · have h := hall₂ ev h2
-                  exact ⟨Nat.le_trans hmono₁.1 h.1, h.2.1, h.2.2⟩
-              · intro i h1 h2 hi
-                by_cases hlt : i < c₁.offset
-                · obtain ⟨ev, hev, ho, hs⟩ := hcov₁ i h1 hlt hi
-                  exact ⟨ev, List.mem_append_left _ hev, ho, hs⟩
-                · obtain ⟨ev, hev, ho, hs⟩ := hcov₂ i (Nat.le_of_not_lt hlt) h2 hi
-                  exact ⟨ev, List.mem_append_right _ hev, ho, hs⟩
-              · rw [replayEvents_append]
-                exact hrep₂.1.trans hreq₂
-              · rw [replayEvents_append]
-                exact hrep₂.2.trans hhit₂
+            | error stop => cases hrun
+            | ok childVal =>
+              dsimp only at hrun
+              have hmono₁ := (parseSymbol_parseArgs_mono table tokens targetSlice eof fuel).1
+                child {c with steps := c.steps + 1} hoff
+              rw [hps] at hmono₁
+              cases hpa : parseArgs table tokens targetSlice eof prodId fuel rest c₁ with
+              | mk c₂ res₂ =>
+                rw [hpa] at hrun
+                cases res₂ with
+                | error stop => cases hrun
+                | ok restArgs =>
+                  obtain ⟨hc', hargs⟩ := Prod.mk.inj hrun
+                  subst hc'
+                  have hargsEq : (childVal, restArgs) = args := Except.ok.inj hargs
+                  subst hargsEq
+                  have hmono₂ := (parseSymbol_parseArgs_mono table tokens targetSlice eof fuel).2
+                    prodId rest c₁ hmono₁.2.1
+                  rw [hpa] at hmono₂
+                  obtain ⟨dL, evsL, htrL, hreqL, hhitL⟩ :=
+                    ihSym child {c with steps := c.steps + 1} c₁ childVal hoff hps
+                  obtain ⟨dR, evsR, htrR, hreqR, hhitR⟩ :=
+                    ihArgs prodId rest c₁ c₂ restArgs hmono₁.2.1 hpa
+                  have htrL' := derivesTrace_mono hmono₂.2.2.2.1 htrL
+                  have hts : tokenSlice tokens c.offset c₂.offset =
+                      tokenSlice tokens c.offset c₁.offset ++ tokenSlice tokens c₁.offset c₂.offset :=
+                    (tokenSlice_append tokens hmono₁.1 hmono₂.1).symm
+                  have hdrop : tokens.toList.drop c₁.offset =
+                      tokenSlice tokens c₁.offset c₂.offset ++ tokens.toList.drop c₂.offset :=
+                    (tokenSlice_append_drop tokens hmono₂.1).symm
+                  have hposR : c.offset + (tokenSlice tokens c.offset c₁.offset).length = c₁.offset := by
+                    have h1 : c.offset ≤ c₁.offset := hmono₁.1
+                    have h2 : c₁.offset ≤ tokens.size := hmono₁.2.1
+                    rw [tokenSlice_length tokens h1 h2]
+                    omega
+                  have htrR' : DerivesArgsTrace g c₂.required eof prodId rest
+                      (c.offset + (tokenSlice tokens c.offset c₁.offset).length)
+                      (tokenSlice tokens c₁.offset c₂.offset) (tokens.toList.drop c₂.offset)
+                      restArgs dR evsR := by
+                    simpa [hposR] using htrR
+                  rw [hts]
+                  rw [hdrop] at htrL'
+                  have hrep₁ := replayEvents_only_req_hit targetSlice c {c with steps := c.steps + 1} rfl rfl evsL
+                  have hrep₂ := replayEvents_only_req_hit targetSlice
+                    (replayEvents targetSlice c evsL) c₁
+                    (hrep₁.1.trans hreqL) (hrep₁.2.trans hhitL) evsR
+                  refine ⟨dL + dR, evsL ++ evsR, .child htrL' htrR', ?_, ?_⟩
+                  · rw [replayEvents_append]
+                    exact hrep₂.1.trans hreqR
+                  · rw [replayEvents_append]
+                    exact hrep₂.2.trans hhitR
 
 private theorem replayEvents_required_spec (target : Slice) (c : ParseCursor) (events : List SliceEvent) :
     c.required.val ≤ (replayEvents target c events).required.val ∧
@@ -2786,27 +3172,40 @@ private theorem replayEvents_firstHit_spec (target : Slice) (c : ParseCursor)
       · exact Nat.le_of_not_lt hlt
       · exact hall e hmem
 
+/-- Registered refusal rule selected by `ParserEngine.run` for an unsupported cause. -/
+def ParserEngine.unsupportedRule {count : Nat} {g : SharedGrammar count}
+    (parser : ParserEngine g) : UnsupportedCause → RegisteredRule
+  | .production _ => parser.unsupportedProductionRule
+  | .nonDecimal _ => parser.unsupportedLiteralRule
+
+/-- First out-of-slice violation in source order: every unsupported refusal comes from
+the unique pre-order `DerivesTrace` of the stream; every event in that trace before the
+reported hit is in-slice, the hit is `firstOutOfSlice input.source.slice events`, its
+rule, cause, and span are reported verbatim, and `required` is the exact maximum slice
+across the trace. -/
 theorem parserEngine_unsupported_first_witness {count : Nat} {g : SharedGrammar count}
     (parser : ParserEngine g) (input : ParserView)
     (rule : RegisteredRule) (cause : UnsupportedCause) (span : FileSpan) (required : Slice)
     (hrun : (parser.run input).2 = some (.error (.unsupported rule cause span required))) :
     input.WF ∧
-    rule = (match cause with
-      | .production _ => parser.unsupportedProductionRule
-      | .nonDecimal _ => parser.unsupportedLiteralRule) ∧
+    rule = parser.unsupportedRule cause ∧
     input.source.slice.val < required.val ∧
-    ∃ (pre : List SliceEvent) (hit : SliceEvent) (post : List SliceEvent),
-      let events := pre ++ hit :: post
+    (∃ tree steps events,
+      DerivesTrace g required (eofFileSpan input.source) g.start 0 input.tokens.toList [] tree steps events) ∧
+    ∀ s tree steps events,
+      DerivesTrace g s (eofFileSpan input.source) g.start 0 input.tokens.toList [] tree steps events →
       events.Pairwise (fun a b => a.offset ≤ b.offset) ∧
-      (∀ ev ∈ events, ev.Valid g input.tokens (eofFileSpan input.source)) ∧
-      (∀ ev ∈ pre, ev.slice.val ≤ input.source.slice.val) ∧
-      input.source.slice.val < hit.slice.val ∧
-      hit.span = span ∧
-      hit.cause = cause ∧
       (∀ ev ∈ events, ev.slice.val ≤ required.val) ∧
       (∃ ev ∈ events, ev.slice = required) ∧
-      (∀ i, i < hit.offset → ∀ hi : i < input.tokens.size,
-        (g.required (input.tokens[i]'(hi)).value).val ≤ input.source.slice.val) := by
+      ∃ pre hit post,
+        events = pre ++ hit :: post ∧
+        (∀ ev ∈ pre, ev.slice.val ≤ input.source.slice.val) ∧
+        input.source.slice.val < hit.slice.val ∧
+        hit.span = span ∧
+        hit.cause = cause ∧
+        firstOutOfSlice input.source.slice events = some hit ∧
+        (∀ i, i < hit.offset → ∀ hi : i < input.tokens.size,
+          (g.required (input.tokens[i]'(hi)).value).val ≤ input.source.slice.val) := by
   unfold ParserEngine.run at hrun
   cases hinv : input.invalidLocation with
   | some bad => simp [hinv] at hrun
@@ -2815,14 +3214,10 @@ theorem parserEngine_unsupported_first_witness {count : Nat} {g : SharedGrammar 
     have hhitInv := parseSymbol_firstUnsupportedHit_isSome parser.table input.tokens
       input.source.slice (eofFileSpan input.source) g.start ⟨0, slice0, none, 0⟩
       (parser.stepsPerToken * (input.tokens.size + 1)) (by simp [slice0, Slice.val])
-    obtain ⟨events, hpw, hall, hcov, hreq, hhit⟩ :=
-      (parseSymbol_parseArgs_events parser.table input.tokens input.source.slice
-        (eofFileSpan input.source) (parser.stepsPerToken * (input.tokens.size + 1))).1
-        g.start ⟨0, slice0, none, 0⟩ (Nat.zero_le _)
     cases hps : parseSymbol parser.table input.tokens input.source.slice (eofFileSpan input.source) g.start
         ⟨0, slice0, none, 0⟩ (parser.stepsPerToken * (input.tokens.size + 1)) with
     | mk c val =>
-      simp only [hps] at hrun hhitInv hall hcov hreq hhit
+      simp only [hps] at hrun hhitInv
       cases val with
       | error stop => cases stop <;> simp at hrun
       | ok ast =>
@@ -2836,23 +3231,41 @@ theorem parserEngine_unsupported_first_witness {count : Nat} {g : SharedGrammar 
             simp only [hfh, Option.some.injEq, Except.error.injEq,
               ParseRefusal.unsupported.injEq] at hrun
             obtain ⟨rfl, rfl, rfl, rfl⟩ := hrun
-            rw [hfh] at hhitInv hhit
+            rw [hfh] at hhitInv
             have hltReq : input.source.slice.val < c.required.val :=
               of_decide_eq_true hhitInv.symm
-            obtain ⟨pre, hit, post, rfl, hpreLe, hhitLt, hsp, hcs⟩ :=
-              replayEvents_firstHit_spec input.source.slice ⟨0, slice0, none, 0⟩ rfl events hhit
+            obtain ⟨dSteps, events₀, htr₀, hreq, hhit⟩ :=
+              (parseSymbol_parseArgs_ok_trace parser.table input.tokens input.source.slice
+                (eofFileSpan input.source) (parser.stepsPerToken * (input.tokens.size + 1))).1
+                g.start ⟨0, slice0, none, 0⟩ c ast (Nat.zero_le _) hps
+            rw [hoff, tokenSlice_full] at htr₀
+            rw [List.drop_eq_nil_of_le (by simp)] at htr₀
+            rw [hfh] at hhit
+            refine ⟨hinv, by cases hitCause <;> rfl, hltReq, ⟨ast, dSteps, events₀, htr₀⟩, ?_⟩
+            intro s tree steps events htr
+            have hevsEq : events₀ = events := (derivesTrace_unique parser.table htr₀ htr).2.2
+            subst hevsEq
+            obtain ⟨hpw, _, hcov⟩ := derivesTrace_props htr₀
+            obtain ⟨pre, hit, post, hevEq, hpreLe, hhitLt, hsp, hcs⟩ :=
+              replayEvents_firstHit_spec input.source.slice ⟨0, slice0, none, 0⟩ rfl events₀ hhit
             obtain ⟨_, hallReq, horReq⟩ :=
-              replayEvents_required_spec input.source.slice ⟨0, slice0, none, 0⟩ (pre ++ hit :: post)
+              replayEvents_required_spec input.source.slice ⟨0, slice0, none, 0⟩ events₀
             rw [hreq] at hallReq horReq
-            have hexMax : ∃ ev ∈ pre ++ hit :: post, ev.slice = c.required := by
+            have hexMax : ∃ ev ∈ events₀, ev.slice = c.required := by
               rcases horReq with heq | hex
               · have h0 : c.required.val = 0 := congrArg Slice.val heq
                 omega
               · exact hex
+            have hfirst : firstOutOfSlice input.source.slice events₀ = some hit :=
+              (firstOutOfSlice_eq_some_iff input.source.slice events₀ hit).mpr
+                ⟨pre, post, hevEq, hpreLe, hhitLt⟩
             have htokBefore : ∀ i, i < hit.offset → ∀ hi : i < input.tokens.size,
                 (g.required (input.tokens[i]'(hi)).value).val ≤ input.source.slice.val := by
               intro i hilt hi
-              obtain ⟨ev, hev, hoffEv, hsliceEv⟩ := hcov i (Nat.zero_le i) (hoff ▸ hi) hi
+              have hiList : i < input.tokens.toList.length := by simpa [Array.length_toList] using hi
+              obtain ⟨ev, hev, hoffEv, hsliceEv⟩ := hcov i hiList
+              rw [Nat.zero_add] at hoffEv
+              rw [hevEq] at hev hpw
               have hnotPost : ∀ e ∈ hit :: post, hit.offset ≤ e.offset := by
                 have hpwPost := (List.pairwise_append.mp hpw).2.1
                 rcases List.pairwise_cons.mp hpwPost with ⟨hhead, _⟩
@@ -2861,13 +3274,14 @@ theorem parserEngine_unsupported_first_witness {count : Nat} {g : SharedGrammar 
                 · exact Nat.le_refl _
                 · exact hhead e hmem
               rcases List.mem_append.mp hev with hpreMem | hpostMem
-              · rw [← hsliceEv]
+              · have hvalEq : (input.tokens.toList[i]'(hiList)) = input.tokens[i]'(hi) := by
+                  simp [Array.getElem_toList]
+                rw [hvalEq] at hsliceEv
+                rw [← hsliceEv]
                 exact hpreLe ev hpreMem
               · have hge := hnotPost ev hpostMem
                 omega
-            cases hitCause <;>
-              exact ⟨hinv, rfl, hltReq, pre, hit, post, hpw,
-                fun ev hev => (hall ev hev).2.2, hpreLe, hhitLt, hsp, hcs, hallReq, hexMax, htokBefore⟩
+            exact ⟨hpw, hallReq, hexMax, pre, hit, post, hevEq, hpreLe, hhitLt, hsp, hcs, hfirst, htokBefore⟩
         · have hbne : (c.offset != input.tokens.size) = true := bne_iff_ne.mpr hoff
           simp [hbne] at hrun
 
