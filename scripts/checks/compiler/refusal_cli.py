@@ -62,7 +62,8 @@ with TemporaryDirectory() as work:
     # Valid CRLF whitespace must compile on both backends and exit 42.
     (Path(work) / "crlf.con").write_bytes(b"fn main() -> u8 {\r\n  return 42;\r\n}\r\n")
     crlf_build = run([driver, "build", "crlf.con", "-o", "crlf-out"], cwd=work, capture_output=True, text=True)
-    if crlf_build.returncode != 0 or crlf_build.stderr:
+    # Build stderr may carry host-toolchain warnings (the macOS nix cc-wrapper); the judgment is "no refusal".
+    if crlf_build.returncode != 0 or "[rule " in crlf_build.stderr:
         failures.append(f"crlf.con: expected build success, got rc={crlf_build.returncode} stderr={crlf_build.stderr.strip()}")
     else:
         for exe in ("llvm.exe", "lcb.exe"):
