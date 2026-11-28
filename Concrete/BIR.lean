@@ -1,5 +1,6 @@
 import ConcreteSpec.Spec.Slice1Semantics
 import ConcreteSpec.Spec.Scalar
+import Concrete.BIR.Build
 
 /-!
 # BIR: the backend IR, the contract both backends read
