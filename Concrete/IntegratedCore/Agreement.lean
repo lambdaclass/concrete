@@ -776,9 +776,11 @@ private theorem located_agreement (v : AdmissionView) (project : Project)
     obtain ⟨org, found⟩ := wf.1.2.2.2.2.1 q [] k site reached trapped
     obtain ⟨_, span, file, fileAt, _⟩ := wf.1.2.2.2.2.2 site org (AList.lookup_mem found)
     change AList.lookup core.machineProgram.origins site = some org at found
-    change core.project.files[org.lexical.file.index]? = some file at fileAt
+    have fileAt : core.project.fileAt org.lexical.file = some file := by
+      rw [Project.fileAt, ← Array.getElem?_toList]
+      exact fileAt
     exact ⟨.trapped 134 k ⟨⟨site.id⟩, ⟨file.path.render.text, org.lexical.line, org.lexical.col⟩⟩
-      (coreTrapDiagnostic core k site), by simp [CoreInput.observeHosted, found, fileAt]⟩
+      (coreTrapDiagnostic core k site), by simp [CoreInput.observeHosted, runtimeSite, found, fileAt]⟩
   have finish {f : Core.Exec.Final EarlyValue} {o : Outcome} (m : Matches (firstTrapSite v.program.decls [] 0 v.program.body) o f) (fin : q.final? = some f) :
       ProgramSafe CoreInput.Execution core ∧ ∃ obs, Observable core v.program o obs ∧
         ∀ result, CoreInput.Execution.observes core result ↔ result = obs := by
