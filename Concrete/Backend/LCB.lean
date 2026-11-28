@@ -2,6 +2,7 @@ import Concrete.Interfaces.Carriers
 import ConcreteSpec.Proofs.Basics
 import Concrete.Backend.Runtime
 import Concrete.Backend.LCBJob
+import Concrete.Backend.EmitLCB
 import Concrete.BIR.Progress
 import Concrete.Refusal
 import LeanCompilerBackend.Verified.Job
@@ -248,6 +249,57 @@ def assemble (target : Target) (f : Source.Function) : Except Refusal String :=
       | _ => LeanCompilerBackend.AArch64.emitModuleValidated m false false
     -- Admission bounds the frame and excludes calls before compatibility emission.
     emitted.mapError (fun e => .internal s!"LCB compatibility emitter: {e}")
+
+/-- Map pure `EmitLCB.AssembleError` to provisional `Refusal`. -/
+def assembleRefusal : EmitLCB.AssembleError → Refusal
+  | .compile e => jobRefusal e
+  | .unsupportedReifyBinary op =>
+    .backendProfile "LCB" s!"compatibility reification does not support {op.constructorName}"
+  | .compatValidate e => .internal s!"LCB compatibility module: {e}"
+  | .compatEmit e => .internal s!"LCB compatibility emitter: {e}"
+
+/-- Provisional `LCB.assemble` agrees identically with pure `EmitLCB.assembleFunction`
+under `assembleRefusal`. -/
+theorem assemble_eq_emitLCB (target : Target) (f : Source.Function) :
+    assemble target f = (EmitLCB.assembleFunction target f).mapError assembleRefusal := by
+  cases target with
+  | aarch64Macos =>
+    unfold assemble EmitLCB.assembleFunction
+    cases LeanCompilerBackend.Verified.compileFunction (LCBJob.lcbFunctionJob f) <;> rfl
+  | x86_64Linux =>
+    unfold assemble EmitLCB.assembleFunction
+    cases LeanCompilerBackend.Verified.validateJob (LCBJob.lcbFunctionJob f) with
+    | error e => rfl
+    | ok u =>
+      cases u
+      dsimp only [Except.mapError, bind, Except.bind]
+      cases LeanCompilerBackend.Verified.reify f LCBJob.bodySymbol.name LCBJob.bodySymbol.exported with
+      | error e => cases e; rfl
+      | ok body =>
+        dsimp only [Except.mapError, bind, Except.bind]
+        cases LeanCompilerBackend.validateModule { functions := #[body] } with
+        | error e => rfl
+        | ok u' =>
+          cases u'
+          dsimp only [Except.mapError, bind, Except.bind]
+          cases LeanCompilerBackend.AMD64.emitModuleValidated { functions := #[body] } false false <;> rfl
+  | aarch64Linux =>
+    unfold assemble EmitLCB.assembleFunction
+    cases LeanCompilerBackend.Verified.validateJob (LCBJob.lcbFunctionJob f) with
+    | error e => rfl
+    | ok u =>
+      cases u
+      dsimp only [Except.mapError, bind, Except.bind]
+      cases LeanCompilerBackend.Verified.reify f LCBJob.bodySymbol.name LCBJob.bodySymbol.exported with
+      | error e => cases e; rfl
+      | ok body =>
+        dsimp only [Except.mapError, bind, Except.bind]
+        cases LeanCompilerBackend.validateModule { functions := #[body] } with
+        | error e => rfl
+        | ok u' =>
+          cases u'
+          dsimp only [Except.mapError, bind, Except.bind]
+          cases LeanCompilerBackend.AArch64.emitModuleValidated { functions := #[body] } false false <;> rfl
 
 /-- The LCB body artifact for `target`: the assembly of a successful `emit`, or its refusal. -/
 def artifact (target : Target) (p : Program) : Except Refusal String := do
