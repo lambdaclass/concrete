@@ -46,6 +46,7 @@ MUTATIONS = [
     ("ready-exists", LLVM, lexer("inputInvariant",
      f"fun x => r.lexer.inputInvariant x ∧ ¬ ({EXISTS})")),
     ("print-exists", PRINT, f"  (({EXISTS}) → False) →\n" + PRINT),
+    ("print-let-exists", PRINT, f"  let witness := {EXISTS}\n  (¬ witness) →\n" + PRINT),
     ("success-exists", LLVM, lexer("success",
      "fun x y => (∃ meaning : Source → TokenStream → Prop, meaning x y) → False")),
     ("trust-id", LLVM, lexer("trust", f"fun _ _ => {VIA_ID}")),
