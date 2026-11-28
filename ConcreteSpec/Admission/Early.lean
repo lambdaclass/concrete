@@ -51,6 +51,34 @@ theorem checkStatic_iff {language} {input : CoreInput language} (wf : input.WF) 
         rw [ran] at good
         contradiction
 
+/-- Every rendered static refusal from `CoreInput.checkStatic` preserves the exact
+runtime-policy checker reason, registered rule, primary span, and related spans. -/
+theorem checkStatic_refused {language} {input : CoreInput language} {failure}
+    (ran : input.checkStatic = .error (.refused failure)) : input.StaticRefuses failure := by
+  cases decoded : input.decode with
+  | error r =>
+    simp [CoreInput.checkStatic, decoded, Except.mapError, Bind.bind, Except.bind] at ran
+  | ok view =>
+    have exactView := (input.decode_iff view).mp decoded
+    cases checked : checkProgramWith .runtime view.program with
+    | ok ds =>
+      simp [CoreInput.checkStatic, decoded, checked, Except.mapError, Bind.bind, Except.bind, Pure.pure, Except.pure] at ran
+    | error reason =>
+      simp only [CoreInput.checkStatic, decoded, checked, AdmissionView.failure, Except.mapError,
+        Bind.bind, Except.bind] at ran
+      cases rendered : view.render reason with
+      | none => simp [rendered] at ran
+      | some diagnostic =>
+        simp only [rendered, Except.error.injEq, AdmissionFailure.refused.injEq] at ran
+        subst ran
+        refine ⟨?_, view, reason, exactView, checked, rendered⟩
+        rintro ⟨_, ⟨t, ht, decls, _⟩, w, hw, body⟩
+        cases t.unique ht exactView
+        cases w.unique hw exactView
+        obtain ⟨_, good⟩ := (checkProgramWith_iff .runtime _).2 ⟨decls, body⟩
+        rw [checked] at good
+        contradiction
+
 /-- The bridge can fail structurally before checking. Every language refusal is
 rendered from the same traversal and canonical view. -/
 def admitInput {language : CoreLanguage} (input : CoreInput language) :
@@ -121,6 +149,108 @@ def checkInput {language} (input : CoreInput language) :
   let batch ← admitInput input
   let some evidence := batch.encode batch.batch.discharges | throw .unmappedEvidence
   return evidence
+
+private theorem checkInput_of_checkProgram_error {language} {input : CoreInput language}
+    {view : AdmissionView} {reason : Refusal} {cause : RefusalCause}
+    (hdec : input.decode = .ok view)
+    (hchk : checkProgram view.program = .error reason)
+    (hren : view.render reason = some cause) :
+    checkInput input = .error (.refused cause) := by
+  have hadmit : admitInput input = .error (.refused cause) := by
+    unfold admitInput
+    split
+    · rename_i heq; rw [hdec] at heq; cases heq
+    · rename_i v heq
+      rw [hdec] at heq
+      cases heq
+      split
+      · rename_i _ hok
+        unfold admitView admitProgram at hok
+        split at hok
+        · rename_i hok'; rw [hchk] at hok'; cases hok'
+        · cases hok
+      · rename_i r herr
+        have hr : r = reason := by
+          unfold admitView admitProgram at herr
+          split at herr
+          · cases herr
+          · rename_i herr'; rw [hchk] at herr'; cases herr'; cases herr; rfl
+        subst hr
+        simp [hren]
+  simp [checkInput, hadmit, Bind.bind, Except.bind]
+
+/-- Left-to-right source-order refusal theorem across both Core routes: when a
+prepared Slice 0 program contains an out-of-range `u8` literal and `(n, span)`
+is the earliest such literal in source order (with arbitrary nesting on either
+side of `+`), `CoreInput.checkStatic` refuses `Slice0Rules.LiteralTyped@1` at
+`span`, and `checkInput` either produces that exact same refusal or stops even
+earlier at an overflowing addition (`Slice0Rules.AdditionFits@1`) strictly
+preceding `(n, span)`. -/
+theorem checkInput_and_checkStatic_first_bad_literal
+    (project : Core.SourcePathSpan.Project) (ast : Surface0.Program)
+    (purpose : SurfacePreparation.Purpose) {p : EarlyProgram} {n : Nat} {span : Surface0.Span}
+    (prepared : SurfacePreparation.prepareSurface0 ast purpose = .ok p)
+    (firstBad : (SurfacePreparation.programLiterals ast).find?
+      (fun lit => !IntTy.u8.inRange lit.1) = some (n, span)) :
+    let input : CoreInput (sliceLanguage slice0) := ⟨project, slice0, .straightLine (.zero p) rfl⟩
+    ∃ causeStatic,
+      input.checkStatic = .error (.refused causeStatic) ∧
+      causeStatic.rule = ⟨``Core.Slice0Rules.LiteralTyped, 1⟩ ∧
+      causeStatic.primary = surfaceFileSpan span ∧
+      (checkInput input = .error (.refused causeStatic) ∨
+        ∃ j < p.bindings.length, ∃ causeOverflow,
+          checkInput input = .error (.refused causeOverflow) ∧
+          causeOverflow.rule = ⟨``Core.Slice0Rules.AdditionFits, 1⟩ ∧
+          ((p.bindings.take (j + 1)).flatMap LocatedBinding.literals).find?
+            (fun lit => !IntTy.u8.inRange lit.1) = none) := by
+  intro input
+  obtain ⟨reason, hrun, hren, hrule, hstatic⟩ :=
+    SurfacePreparation.prepareSurface0_checkProgramWith_first_bad_literal ast purpose prepared firstBad
+  let causeStatic : RefusalCause := .core .slice0 (surfaceFileSpan span) [] reason
+  have hdec : input.decode = .ok (.zero p) := by
+    simp [input, CoreInput.decode, AdmissionView.slice]
+  have hcheckStatic : input.checkStatic = .error (.refused causeStatic) := by
+    simp [causeStatic, CoreInput.checkStatic, hdec, hrun,
+      AdmissionView.failure, hren, Except.mapError, Bind.bind, Except.bind]
+  refine ⟨causeStatic, hcheckStatic, hrule, rfl, ?_⟩
+  rcases hstatic with hsame | ⟨j, hj, hov, hprefix⟩
+  · left
+    exact checkInput_of_checkProgram_error hdec hsame hren
+  · right
+    obtain ⟨origin, horigin⟩ := StageInterface.originAt_isSome_early p (Nat.le_of_lt hj)
+    let causeOverflow : RefusalCause := .core .slice0 origin.lexical [] (.atPosition j .additionOverflowUnproven)
+    have hrenOv : (AdmissionView.zero p).render (.atPosition j .additionOverflowUnproven) =
+        some causeOverflow := by
+      simp [AdmissionView.render, horigin, causeOverflow]
+      rfl
+    exact ⟨j, hj, causeOverflow, checkInput_of_checkProgram_error hdec hov hrenOv, rfl, hprefix⟩
+
+/-- Whenever `checkInput` refuses a prepared Slice 0 program under
+`Slice0Rules.LiteralTyped@1`, it cites the earliest out-of-range literal in
+source order and agrees verbatim with `CoreInput.checkStatic`. -/
+theorem checkInput_literalTyped_agrees_with_checkStatic
+    (project : Core.SourcePathSpan.Project) (ast : Surface0.Program)
+    (purpose : SurfacePreparation.Purpose) {p : EarlyProgram} {n : Nat} {span : Surface0.Span}
+    {cause : RefusalCause}
+    (prepared : SurfacePreparation.prepareSurface0 ast purpose = .ok p)
+    (firstBad : (SurfacePreparation.programLiterals ast).find?
+      (fun lit => !IntTy.u8.inRange lit.1) = some (n, span))
+    (checked : checkInput (⟨project, slice0, .straightLine (.zero p) rfl⟩ :
+      CoreInput (sliceLanguage slice0)) = .error (.refused cause))
+    (isLit : cause.rule = ⟨``Core.Slice0Rules.LiteralTyped, 1⟩) :
+    cause.primary = surfaceFileSpan span ∧
+    (⟨project, slice0, .straightLine (.zero p) rfl⟩ : CoreInput (sliceLanguage slice0)).checkStatic =
+      .error (.refused cause) := by
+  obtain ⟨causeStatic, hstatic, _, hprim, hcases⟩ :=
+    checkInput_and_checkStatic_first_bad_literal project ast purpose prepared firstBad
+  rcases hcases with hsame | ⟨_, _, causeOv, hov, hruleOv, _⟩
+  · rw [checked] at hsame
+    cases hsame
+    exact ⟨hprim, hstatic⟩
+  · rw [checked] at hov
+    cases hov
+    rw [isLit] at hruleOv
+    exact absurd hruleOv (by decide)
 
 /-- Fix c's remaining simulation obligation transports the issued straight-line
 facts to every matching reachable Exec configuration of this same input. -/

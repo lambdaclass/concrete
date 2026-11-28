@@ -607,6 +607,7 @@ structure Program where
   name : String
   nameSpan : Span
   body : List Statement
+  closeBrace : Span
   deriving Repr
 
 inductive BodyError where
@@ -753,7 +754,7 @@ inductive Derives : List Token → Program → Prop
       BodyDerives body statements →
       Derives ([fixed .fn keyword, named name binder, fixed .lparen lp, fixed .rparen rp,
                 fixed .arrow arrow, fixed .u8 ty, fixed .lbrace lb] ++ body ++ [fixed .rbrace rb])
-        ⟨name, binder, statements⟩
+        ⟨name, binder, statements, rb⟩
 
 /-- Decided builtin type and trait names (OD43 and the token ballot). Primitive types
 and the Copy marker already have fixed word tokens. The remaining names lex as identifiers. -/

@@ -346,20 +346,23 @@ structure ParserEngine {count : Nat} (g : SharedGrammar count) where
 
 def ParserEngine.run {count : Nat} {g : SharedGrammar count} (parser : ParserEngine g) (input : ParserView) :
     Nat × Option (Except ParseRefusal (Parsed (g.value g.start))) := Id.run do
-  if let some span := input.invalidSpan then
-    return (1, some (.error (.invalidStream span)))
+  if let some (span, reason) := input.invalidLocation then
+    return (1, some (.error (.invalidStream span reason)))
   let (c, value) := parseSymbol parser.table input.tokens g.start
     ⟨0, ⟨0, by decide⟩, none, 0⟩ (parser.stepsPerToken * (input.tokens.size + 1))
-  let span := (input.tokens[c.offset]? <|> input.tokens.back?).map Located.span |>.getD
-    ⟨input.source.entryFile, 0, 0, 1, 1⟩
+  let span := (input.tokens[c.offset]?.map Located.span).getD (eofFileSpan input.source)
+  let malformedRule : ConcreteSpec.Core.RegisteredRule := ⟨⟨``ConcreteSpec.Core.Slice0Rules.Parsed, 1⟩, by decide⟩
+  let unsupportedRule : ConcreteSpec.Core.RegisteredRule := ⟨⟨``ConcreteSpec.Core.Slice0Rules.AdmittedProduction, 3⟩, by decide⟩
   match value with
   | .error .exhausted => return (c.steps + 1, none)
-  | .error .malformed => return (c.steps + 1, some (.error (.malformed parser.malformedRule span)))
+  | .error .malformed =>
+    let cause := if c.offset < input.tokens.size then MalformedCause.unexpectedToken else .unexpectedEnd
+    return (c.steps + 1, some (.error (.malformed malformedRule cause span)))
   | .ok ast =>
     if c.offset != input.tokens.size then
-      return (c.steps + 1, some (.error (.malformed parser.malformedRule span)))
+      return (c.steps + 1, some (.error (.malformed malformedRule .trailingTokens span)))
     if input.source.slice.val < c.required.val then
-      return (c.steps + 1, some (.error (.unsupported parser.unsupportedRule (c.restrictingSpan.getD span) c.required)))
+      return (c.steps + 1, some (.error (.unsupported unsupportedRule (.production .program) (c.restrictingSpan.getD span) c.required)))
     return (c.steps + 1, some (.ok ⟨input.source, ast⟩))
 
 def ParsesWith {count : Nat} {g : SharedGrammar count} (parser : ParserEngine g) (input : ParserView)
@@ -379,13 +382,13 @@ def Parses {count : Nat} {g : SharedGrammar count} (parser : Parser g) :=
   ParsesWith parser.engine
 
 def Refuses {count : Nat} (g : SharedGrammar count) (input : ParserView) : ParseRefusal → Prop
-  | .invalidStream span => input.invalidSpan = some span
-  | .unsupported _ _ required =>
+  | .invalidStream span reason => input.invalidLocation = some (span, reason)
+  | .unsupported _ _ _ required =>
     input.source.slice.val < required.val ∧
     (∃ tree steps, Derives g required g.start input.tokens.toList tree steps) ∧
     ∀ earlier, earlier.val < required.val →
       ¬ ∃ tree steps, Derives g earlier g.start input.tokens.toList tree steps
-  | .malformed _ _ =>
+  | .malformed _ _ _ =>
     ¬ ∃ tree required steps, Derives g required g.start input.tokens.toList tree steps
 
 private def early := slice0

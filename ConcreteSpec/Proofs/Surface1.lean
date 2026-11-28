@@ -333,16 +333,22 @@ private theorem validPieces (f : Fixture) : Valid (pieces f) := by
 private def location (f : Fixture) (i : Nat) : Span :=
   ((tokens {} (pieces f))[i]?.map Token.span).getD ⟨0, 0, 1, 1, ⟨0⟩⟩
 
-private def bindingAst : Statement := .bind "t" (.typed sTy) (.construct "S")
-private def consumeAst (name : String) : Statement := .bind "S" .destructure (.move name)
+private def bindingAst (span : Span) : Statement := .bind "t" (.typed sTy) (.construct "S") span
+private def consumeAst (name : String) (span : Span) : Statement := .bind "S" .destructure (.move name) span
 
 private def ast : Fixture → SourceProgram
   | .component => ⟨["S"], "main",
-      [bindingAst, .bind "u" (.typed sTy) (.move "t"), consumeAst "u",
+      [bindingAst (location .component 12),
+       .bind "u" (.typed sTy) (.move "t") (location .component 21),
+       consumeAst "u" (location .component 29),
        .ret (.add (.integer 20 none) (.integer 22 none) (location .component 38))]⟩
   | .consumedAbort => ⟨["S"], "main",
-      [bindingAst, consumeAst "t", .call "abort" (location .consumedAbort 28)]⟩
-  | .unusedAbort => ⟨["S"], "main", [bindingAst, .call "abort" (location .unusedAbort 20)]⟩
+      [bindingAst (location .consumedAbort 12),
+       consumeAst "t" (location .consumedAbort 21),
+       .call "abort" (location .consumedAbort 28)]⟩
+  | .unusedAbort => ⟨["S"], "main",
+      [bindingAst (location .unusedAbort 12),
+       .call "abort" (location .unusedAbort 20)]⟩
   | .ordinary134 => ⟨[], "main", [.ret (.integer 134 none)]⟩
 
 private theorem parsed (f : Fixture) : Derives (tokens {} (pieces f)) (ast f) := by
@@ -441,48 +447,48 @@ theorem nonempty_payload_outside_slice (a b c d e f g : Span) (names : List Stri
   cases h
 
 private def span : Span := ⟨0, 5, 1, 1, ⟨0⟩⟩
-private def takeS : Statement := consumeAst "t"
+private def takeS : Statement := consumeAst "t" span
 private def ret : Statement := .ret (.integer 0 none)
 private def callAbort : Statement := .call "abort" span
 
-theorem consumeThenAbort : SourcePermitted ⟨["S"], "main", [bindingAst, takeS, callAbort]⟩ := by decide
+theorem consumeThenAbort : SourcePermitted ⟨["S"], "main", [bindingAst span, takeS, callAbort]⟩ := by decide
 
 theorem freshDestructuring : SourcePermitted
-    ⟨["S"], "main", [.bind "S" .destructure (.construct "S"), ret]⟩ := by decide
+    ⟨["S"], "main", [.bind "S" .destructure (.construct "S") span, ret]⟩ := by decide
 
 theorem wildcardCopy : SourcePermitted
-    ⟨[], "main", [.bind "_" (.typed u8) (.integer 1 none), ret]⟩ := by decide
+    ⟨[], "main", [.bind "_" (.typed u8) (.integer 1 none) span, ret]⟩ := by decide
 
 theorem overflow : ¬ SourcePermitted
     ⟨[], "main", [.ret (.add (.integer 200 none) (.integer 56 none) span)]⟩ := by decide
 
-theorem liveLinearAtReturn : ¬ SourcePermitted ⟨["S"], "main", [bindingAst, ret]⟩ := by decide
+theorem liveLinearAtReturn : ¬ SourcePermitted ⟨["S"], "main", [bindingAst span, ret]⟩ := by decide
 
 theorem codeAfterAbort : ¬ SourcePermitted ⟨[], "main", [callAbort, ret]⟩ := by decide
 
-theorem useAfterMove : ¬ SourcePermitted ⟨["S"], "main", [bindingAst, takeS, takeS, ret]⟩ := by decide
+theorem useAfterMove : ¬ SourcePermitted ⟨["S"], "main", [bindingAst span, takeS, takeS, ret]⟩ := by decide
 
 theorem otherCall : ¬ SourcePermitted ⟨[], "main", [.call "other" span]⟩ := by decide
 
 theorem reservedAbort : ¬ SourcePermitted
-    ⟨[], "main", [.bind "abort" (.typed u8) (.integer 1 none), .ret (.local "abort")]⟩ := by decide
+    ⟨[], "main", [.bind "abort" (.typed u8) (.integer 1 none) span, .ret (.local "abort")]⟩ := by decide
 
 theorem localCannotShadowStruct : ¬ SourcePermitted
-    ⟨["S"], "main", [.bind "S" (.typed u8) (.integer 1 none), .ret (.local "S")]⟩ := by decide
+    ⟨["S"], "main", [.bind "S" (.typed u8) (.integer 1 none) span, .ret (.local "S")]⟩ := by decide
 
 theorem nominalMismatch : ¬ SourcePermitted
-    ⟨["S", "T"], "main", [.bind "T" .destructure (.construct "S"), ret]⟩ := by decide
+    ⟨["S", "T"], "main", [.bind "T" .destructure (.construct "S") span, ret]⟩ := by decide
 
 theorem wildcardLinear : ¬ SourcePermitted
-    ⟨["S"], "main", [.bind "_" (.typed sTy) (.construct "S"), ret]⟩ := by decide
+    ⟨["S"], "main", [.bind "_" (.typed sTy) (.construct "S") span, ret]⟩ := by decide
 
 theorem bareLinearRead : ¬ SourcePermitted
-    ⟨["S"], "main", [bindingAst, .bind "S" .destructure (.local "t"), ret]⟩ := by decide
+    ⟨["S"], "main", [bindingAst span, .bind "S" .destructure (.local "t") span, ret]⟩ := by decide
 
 theorem moveCopy : ¬ SourcePermitted
-    ⟨[], "main", [.bind "t" (.typed u8) (.integer 1 none), .ret (.move "t")]⟩ := by decide
+    ⟨[], "main", [.bind "t" (.typed u8) (.integer 1 none) span, .ret (.move "t")]⟩ := by decide
 
 theorem nonSliceType : ¬ SourcePermitted
-    ⟨[], "main", [.bind "_" (.typed (.scalar (.int .u16))) (.integer 1 none), ret]⟩ := by decide
+    ⟨[], "main", [.bind "_" (.typed (.scalar (.int .u16))) (.integer 1 none) span, ret]⟩ := by decide
 
 end ConcreteSpec.Surface1.Witness

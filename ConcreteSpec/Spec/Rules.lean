@@ -7,6 +7,7 @@ import ConcreteSpec.Spec.Ident
 import ConcreteSpec.Spec.Own
 import ConcreteSpec.Spec.Slice0Rules
 import ConcreteSpec.Spec.Slice1Checker
+import ConcreteSpec.Surface1
 
 /-!
 # Diagnostic rule registry
@@ -80,6 +81,7 @@ def registeredRules : List RuleId :=
    ⟨``AbortReady, 1⟩, ⟨``ProgramPermitted, 1⟩,
    ⟨``OwnershipRule.FreshBinder, 1⟩, ⟨``OwnershipRule.FreshPattern, 1⟩,
    ⟨``OwnershipRule.ReadAllowed, 1⟩, ⟨``OwnershipRule.ReturnDischarged, 1⟩, ⟨``WildcardPermitted, 1⟩,
+   Surface1.structDeclaredRule,
    ⟨``Leak.FiniteActionPermitted, 1⟩, ⟨``Leak.FiniteSequencePermitted, 1⟩] ++ SourcePath.Reason.inOrder.map SourcePath.Reason.ruleId ++
   [SourcePath.Project.Reason.caseCollision, .fileDirectoryConflict, .duplicate].map
     SourcePath.Project.Reason.ruleId ++
@@ -92,7 +94,8 @@ def registeredRules : List RuleId :=
 
 /-- Historical diagnostic IDs retained when a dependency changed the judgment.
 DepthAccepted@2 checks path depth in source order, including before later malformed text.
-AdmittedProduction@3 admits the shared grammar's empty declarations production. -/
+AdmittedProduction@3 delegates to `GrammarData.AdmittedAt 0`, admitting the shared
+grammar's slice-0 productions including empty declarations (`.endDecls`). -/
 def retiredRuleIds : List RuleId :=
   [⟨`ConcreteSpec.Project.Manifest.DepthAccepted, 1⟩, ⟨`ConcreteSpec.Core.Slice0Rules.AdmittedProduction, 2⟩]
 
