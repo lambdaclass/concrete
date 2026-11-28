@@ -3,7 +3,7 @@ import ConcreteSpec.Proofs.TableVerifierBounds
 import ConcreteSpec.Spec.EarlyProposal
 import ConcreteSpec.Spec.LL1
 import ConcreteSpec.Spec.TableVerifier
-import ConcreteSpec.StageGrammar
+import ConcreteSpec.Spec.VerifyMachine
 
 /-! Structural completeness proof for `earlyProposal`. Every obligation in
 `ValidCertificate` is reduced to sparse checks over the 1,106 nonzero entries

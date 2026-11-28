@@ -1,7 +1,7 @@
 import ConcreteSpec.Proofs.TableVerifierBounds
 import ConcreteSpec.Spec.LL1
 import ConcreteSpec.Spec.TableVerifier
-import ConcreteSpec.StageGrammar
+import ConcreteSpec.Spec.VerifyMachine
 
 namespace ConcreteSpec.GrammarVerification
 open ConcreteSpec.StageGrammar
