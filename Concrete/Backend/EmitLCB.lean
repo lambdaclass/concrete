@@ -34,7 +34,8 @@ in process across `aarch64-macos`, `x86_64-linux`, and `aarch64-linux`.
   - builds validated, uniquely named `additionalJobs` for all non-entry functions in `bir.functions`
     (guaranteed unreachable from `bir.entry` when `bir.requiresLCBLinking = false`).
 
-All theorems are proved constructively without `Classical.choice` or `sorry`.
+No theorem uses `sorry`; any `Classical.choice` dependency comes only from the pinned LCB
+`validateJob`/`compileFunction` definitions.
 -/
 
 namespace Concrete.Backend.EmitLCB
@@ -2433,7 +2434,8 @@ theorem emitUnvalidated_ok_of_wf {language : CoreLanguage}
   exact ⟨_, hEmitOk⟩
 
 /-- Universal refusal classification for `EmitLCB.emit` on any well-formed LCB `BIR`,
-matching all four branches of `Concrete.Interfaces.PassFunctions.emitEntry.refusal`. -/
+matching the first three branches of `Concrete.Interfaces.PassFunctions.emitEntry.refusal`
+and the fourth branch up to the `LCBEncoding` conjunct (which P6b owns). -/
 theorem emit_error_of_wf {language : CoreLanguage}
     {lang : LoweringLanguage language.operands.Ty} {profile : Profile}
     {bir : BIR lang profile} {failure : StageFailure}

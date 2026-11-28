@@ -18,8 +18,10 @@ into a two-module `Concrete.Interfaces.LLVMInput`:
     entry-loop trampoline (`Label.entry`) when the entry block has reachable predecessors,
     same-target parameterized branch edge splitting, `phi` nodes, and hosted `ret`/`trap`
     return-word encoding (`zext` to `i32` for `u8` returns, `256 + slot` for traps).
-* **Launcher module (`LLVMInput.launcher`)**: exact fixed runtime entry produced by
-  `Concrete.Backend.Runtime.llvmDiagnostics` from the ordered diagnostic lines of
+* **Launcher module (`LLVMInput.launcher`)**: exact standalone runtime entry produced by
+  `Concrete.Interfaces.launcherItems` (`declare i32 @concrete_body()`, matching the
+  component's unique external `llvmBodyDefinition`, followed by
+  `Concrete.Backend.Runtime.llvmDiagnostics`) from the ordered diagnostic lines of
   `bir.sites` resolved in `bir.project` via `TrapEntry.diagnosticLine`, establishing
   `LauncherMatches` and `LLVMMetadataMatches` directly. Target datalayout and triple
   headers are rendered exclusively from `profile` inside `LLVMInput.bytesAt`.
@@ -58,9 +60,10 @@ def siteDiagnostics {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
     (bir : BIR lang profile) : Option (List String) :=
   bir.sites.toList.mapM fun entry => entry.diagnosticLine bir.project
 
-/-- Build the fixed LLVM launcher module directly from the ordered trap diagnostic lines. -/
+/-- Build the fixed standalone LLVM launcher module directly from the ordered trap
+diagnostic lines using the contract's single `Concrete.Interfaces.launcherItems` source. -/
 def launcherModule (diagnostics : List String) : LLVMModule :=
-  ⟨Backend.Runtime.llvmDiagnostics diagnostics⟩
+  ⟨launcherItems diagnostics⟩
 
 /-! ## Types, literals, and scalar operations -/
 
@@ -340,12 +343,13 @@ def emitComponentGraph (language : CoreLanguage) {lang : LoweringLanguage langua
   let decls := intrinsicDeclarations blocks
   let entryTrampoline :=
     if entryHasPreds then [Item.label .entry, .terminator (.branch (.block 0))] else []
-  return ⟨decls ++ [.blank, .define false (.integer .u32) .body []] ++
+  return ⟨decls ++ [.blank, llvmBodyDefinition] ++
     entryTrampoline ++ blockItems.flatten ++ splitItems ++ [.endFunction]⟩
 
 /-- Production two-module LLVM emitter over frozen `BIR`.
 Enforces `profile.backend = .llvm` and `firstUnsupported` before emitting the
-component (`@concrete_body`) and launcher (`Backend.Runtime.llvmDiagnostics`) modules. -/
+component (`llvmBodyDefinition`, i.e. `@concrete_body`) and standalone launcher
+(`Concrete.Interfaces.launcherItems`) modules. -/
 def emit {language : CoreLanguage} {lang : LoweringLanguage language.operands.Ty}
     {profile : Profile} (bir : BIR lang profile) :
     Except StageFailure (LLVMInput profile) := do
@@ -516,6 +520,283 @@ theorem emit_firstUnsupported_none {language : CoreLanguage}
   · simp only [hBack, ↓reduceIte, throw, throwThe, MonadExceptOf.throw] at h
     cases h
 
+private theorem filter_eq_nil_of_all_false {α : Type} {p : α → Bool} {xs : List α}
+    (h : ∀ x ∈ xs, p x = false) : xs.filter p = [] := by
+  induction xs with
+  | nil => rfl
+  | cons a rest ih =>
+    rw [List.filter_cons, h a List.mem_cons_self]
+    exact ih fun x hx => h x (List.mem_cons_of_mem _ hx)
+
+private theorem list_mapM_except_ok_mem {α β ε : Type} {f : α → Except ε β}
+    {xs : List α} {ys : List β} (h : xs.mapM f = .ok ys) :
+    ∀ y ∈ ys, ∃ x ∈ xs, f x = .ok y := by
+  induction xs generalizing ys with
+  | nil =>
+    simp only [List.mapM_nil, pure, Except.pure, Except.ok.injEq] at h
+    subst h
+    intro _ hy; cases hy
+  | cons a rest ih =>
+    simp only [List.mapM_cons, bind, Except.bind] at h
+    cases hfa : f a with
+    | error e => rw [hfa] at h; cases h
+    | ok b =>
+      rw [hfa] at h
+      cases hrest : rest.mapM f with
+      | error e => rw [hrest] at h; cases h
+      | ok bs =>
+        rw [hrest] at h
+        simp only [pure, Except.pure, Except.ok.injEq] at h
+        subst h
+        intro y hy
+        cases hy with
+        | head => exact ⟨a, List.mem_cons_self, hfa⟩
+        | tail _ htl =>
+          obtain ⟨x, hx, hfx⟩ := ih hrest y htl
+          exact ⟨x, List.mem_cons_of_mem _ hx, hfx⟩
+
+private theorem intrinsicDeclarations_not_bodyHeader {Ty : Type} {lang : LoweringLanguage Ty}
+    (blocks : List (BIRBlock lang)) :
+    ∀ item ∈ intrinsicDeclarations blocks, isLLVMBodyHeader item = false := by
+  intro item hMem
+  unfold intrinsicDeclarations at hMem
+  obtain ⟨_, _, rfl⟩ := List.mem_map.mp hMem
+  rfl
+
+private theorem emitEntryParamDefaults_not_bodyHeader (language : CoreLanguage)
+    (params : List (Sigma (SSAValue language.operands.Ty))) :
+    ∀ item ∈ emitEntryParamDefaults language params, isLLVMBodyHeader item = false := by
+  intro item hMem
+  unfold emitEntryParamDefaults at hMem
+  obtain ⟨⟨pty, reg⟩, _, rfl⟩ := List.mem_map.mp hMem
+  dsimp only
+  cases llvmType language pty <;> rfl
+
+private theorem emitPhis_not_bodyHeader {language : CoreLanguage}
+    {lang : LoweringLanguage language.operands.Ty}
+    {edges : List (BlockId × Label × List (Sigma (SSARead language.operands.Ty lang.literal)))}
+    {isEntry entryHasPreds : Bool} {blk : BIRBlock lang} {phis : List Item}
+    (h : emitPhis language edges isEntry entryHasPreds blk = .ok phis) :
+    ∀ item ∈ phis, isLLVMBodyHeader item = false := by
+  unfold emitPhis at h
+  split at h
+  · simp only [pure, Except.pure, Except.ok.injEq] at h
+    subst h
+    intro _ hm; cases hm
+  · split at h
+    · simp only [pure, Except.pure, Except.ok.injEq] at h
+      subst h
+      exact emitEntryParamDefaults_not_bodyHeader language blk.params
+    · intro item hMem
+      obtain ⟨⟨k, ⟨pty, reg⟩⟩, _, hMap⟩ := list_mapM_except_ok_mem h item hMem
+      simp only [bind, Except.bind, pure, Except.pure] at hMap
+      split at hMap
+      · cases hMap
+      · cases Except.ok.inj hMap
+        rfl
+
+private theorem emitInst_not_bodyHeader {language : CoreLanguage}
+    {lang : LoweringLanguage language.operands.Ty} {inst : SSAInst lang} {items : List Item}
+    (h : emitInst language inst = .ok items) :
+    ∀ item ∈ items, isLLVMBodyHeader item = false := by
+  unfold emitInst at h
+  cases inst with
+  | op dst fop args addresses =>
+    rename_i opcode types ty
+    dsimp only at h
+    split at h
+    · cases h
+    · cases opcode with
+      | read =>
+        cases args with
+        | nil => cases h
+        | cons arg rest =>
+          cases rest with
+          | cons _ _ => cases h
+          | nil =>
+            dsimp only at h
+            cases hr : emitRead language arg with
+            | error e => simp only [hr, bind, Except.bind] at h; cases h
+            | ok arg' =>
+              simp only [hr, bind, Except.bind, pure, Except.pure] at h
+              cases hTy : llvmType language ty <;>
+                (rw [hTy] at h; cases Except.ok.inj h;
+                 intro item hm; cases List.mem_singleton.mp hm; rfl)
+      | arithmetic mOp =>
+        cases ha : arithmeticOfMachineOp mOp with
+        | none => simp only [ha] at h; cases h
+        | some arith =>
+          simp only [ha] at h
+          cases hsc : language.scalarType ty with
+          | none => simp only [hsc] at h; cases h
+          | some ct =>
+            simp only [hsc] at h
+            cases ct with
+            | bool | char | unit => cases h
+            | int t =>
+              cases args with
+              | nil => cases h
+              | cons lhs r1 =>
+                cases r1 with
+                | nil => cases h
+                | cons rhs r2 =>
+                  cases r2 with
+                  | cons _ _ => cases h
+                  | nil =>
+                    dsimp only at h
+                    cases hl : emitRead language lhs with
+                    | error e => simp only [hl, bind, Except.bind] at h; cases h
+                    | ok lhs' =>
+                      simp only [hl, bind, Except.bind] at h
+                      cases hr : emitRead language rhs with
+                      | error e => simp only [hr] at h; cases h
+                      | ok rhs' =>
+                        simp only [hr, pure, Except.pure, Except.ok.injEq] at h
+                        subst h
+                        intro item hm
+                        cases List.mem_singleton.mp hm
+                        rfl
+      | named _ => cases h
+  | addWithOverflow t dst flag lhs rhs =>
+    dsimp only at h
+    cases hl : emitRead language lhs with
+    | error e => simp only [hl, bind, Except.bind] at h; cases h
+    | ok lhs' =>
+      simp only [hl, bind, Except.bind] at h
+      cases hr : emitRead language rhs with
+      | error e => simp only [hr] at h; cases h
+      | ok rhs' =>
+        simp only [hr, pure, Except.pure, Except.ok.injEq] at h
+        subst h
+        intro item hm
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hm
+        rcases hm with rfl | rfl | rfl <;> rfl
+  | load _ _ | store _ _ | beginLifetime _ | endLifetime _ | destructure _ _ | call _ _ _ =>
+    cases h
+
+private theorem emitTerm_not_bodyHeader {language : CoreLanguage}
+    {lang : LoweringLanguage language.operands.Ty}
+    {indices : AList BlockId Nat} {splits : List (SplitEdge lang)} {j : Nat}
+    {ending : BIRTerm (Sigma (SSARead language.operands.Ty lang.literal))
+      (SSARead language.operands.Ty lang.literal lang.bool)}
+    {items : List Item}
+    (h : emitTerm language indices splits j ending = .ok items) :
+    ∀ item ∈ items, isLLVMBodyHeader item = false := by
+  unfold emitTerm at h
+  cases ending with
+  | ret ov =>
+    cases ov with
+    | none =>
+      cases Except.ok.inj h
+      intro item hm; cases List.mem_singleton.mp hm; rfl
+    | some pair =>
+      rcases pair with ⟨ty, arg⟩
+      dsimp only at h
+      cases ha : emitRead language arg with
+      | error e => simp only [ha, bind, Except.bind] at h; cases h
+      | ok arg' =>
+        simp only [ha, bind, Except.bind, pure, Except.pure] at h
+        cases hTy : llvmType language ty with
+        | integer w =>
+          rw [hTy] at h
+          cases w <;>
+            (cases Except.ok.inj h;
+             intro item hm; simp only [List.mem_cons, List.not_mem_nil, or_false] at hm;
+             first | (cases hm; rfl) | (rcases hm with rfl | rfl <;> rfl))
+        | flag =>
+          rw [hTy] at h; cases Except.ok.inj h
+          intro item hm; simp only [List.mem_cons, List.not_mem_nil, or_false] at hm
+          rcases hm with rfl | rfl <;> rfl
+        | ptr | void | overflowPair _ =>
+          rw [hTy] at h; cases Except.ok.inj h
+          intro item hm; cases List.mem_singleton.mp hm; rfl
+  | trap slot =>
+    cases Except.ok.inj h
+    intro item hm; cases List.mem_singleton.mp hm; rfl
+  | jump edge =>
+    cases hl : AList.lookup indices edge.target with
+    | none => simp only [hl] at h; cases h
+    | some tgtIdx =>
+      simp only [hl, Except.ok.injEq] at h; subst h
+      intro item hm; cases List.mem_singleton.mp hm; rfl
+  | branch test yes no =>
+    cases hy : AList.lookup indices yes.target with
+    | none => simp only [hy] at h; cases h
+    | some yesIdx =>
+      cases hn : AList.lookup indices no.target with
+      | none => simp only [hy, hn] at h; cases h
+      | some rawNoIdx =>
+        simp only [hy, hn] at h
+        cases test with
+        | value v =>
+          simp only [pure, Except.pure, Except.ok.injEq] at h; subst h
+          intro item hm; cases List.mem_singleton.mp hm; rfl
+        | literal lit =>
+          cases hl : decodeLiteralArg language lit with
+          | none => simp only [hl, throw, throwThe, MonadExceptOf.throw] at h; cases h
+          | some arg' =>
+            simp only [hl, pure, Except.pure, Except.ok.injEq] at h; subst h
+            intro item hm; simp only [List.mem_cons, List.not_mem_nil, or_false] at hm
+            rcases hm with rfl | rfl <;> rfl
+
+/-- Every component module produced by `emitComponentGraph` has `llvmBodyDefinition`
+as its unique `@concrete_body` header. -/
+theorem emitComponentGraph_bodyHeader {language : CoreLanguage}
+    {lang : LoweringLanguage language.operands.Ty} {graph : BIRGraph lang} {component : LLVMModule}
+    (h : emitComponentGraph language graph = .ok component) :
+    component.items.filter isLLVMBodyHeader = [llvmBodyDefinition] := by
+  unfold emitComponentGraph at h
+  cases hOrd : orderedReachableBlocks graph with
+  | none =>
+    simp only [hOrd, throw, throwThe, MonadExceptOf.throw] at h
+    cases h
+  | some blocks =>
+    simp only [hOrd, bind, Except.bind, pure, Except.pure] at h
+    split at h
+    · cases h
+    · rename_i blockItems hBlks
+      cases Except.ok.inj h
+      have hDecls : (intrinsicDeclarations blocks).filter isLLVMBodyHeader = [] :=
+        filter_eq_nil_of_all_false (intrinsicDeclarations_not_bodyHeader blocks)
+      have hTramp : (if hasIncomingEdge blocks graph.entry then
+          [Item.label .entry, .terminator (.branch (.block 0))] else []).filter isLLVMBodyHeader = [] := by
+        cases hasIncomingEdge blocks graph.entry <;> rfl
+      have hBlocksNil : blockItems.flatten.filter isLLVMBodyHeader = [] := by
+        apply filter_eq_nil_of_all_false
+        intro item hItem
+        obtain ⟨blkList, hBlkList, hInBlk⟩ := List.mem_flatten.mp hItem
+        obtain ⟨⟨j, blk⟩, _, hOne⟩ := list_mapM_except_ok_mem hBlks blkList hBlkList
+        dsimp only at hOne
+        split at hOne
+        · cases hOne
+        · rename_i phis hPhis
+          split at hOne
+          · cases hOne
+          · rename_i insts hInsts
+            split at hOne
+            · cases hOne
+            · rename_i term hTerm
+              cases Except.ok.inj hOne
+              rcases List.mem_append.mp hInBlk with hPre | hInTerm
+              · rcases List.mem_append.mp hPre with hPre2 | hInInsts
+                · rcases List.mem_append.mp hPre2 with hLab | hInPhis
+                  · cases List.mem_singleton.mp hLab; rfl
+                  · exact emitPhis_not_bodyHeader hPhis item hInPhis
+                · obtain ⟨instItems, hInstItems, hInInst⟩ := List.mem_flatten.mp hInInsts
+                  obtain ⟨op, _, hOp⟩ := list_mapM_except_ok_mem hInsts instItems hInstItems
+                  exact emitInst_not_bodyHeader hOp item hInInst
+              · exact emitTerm_not_bodyHeader hTerm item hInTerm
+      have hSplitsNil : ((collectSplitEdges blocks (blockIndexTable blocks)).flatMap fun sp =>
+          [Item.label (.block sp.splitIndex), .terminator (.branch (.block sp.targetIndex))]).filter
+            isLLVMBodyHeader = [] := by
+        apply filter_eq_nil_of_all_false
+        intro item hItem
+        obtain ⟨sp, _, hInSp⟩ := List.mem_flatMap.mp hItem
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hInSp
+        rcases hInSp with rfl | rfl <;> rfl
+      simp only [List.filter_append, hDecls, hTramp, hBlocksNil, hSplitsNil]
+      rfl
+
 /-- Every successful `EmitLLVM.emit` satisfies `LauncherMatches`. -/
 theorem emit_launcherMatches {language : CoreLanguage}
     {lang : LoweringLanguage language.operands.Ty} {profile : Profile}
@@ -551,7 +832,7 @@ theorem emit_launcherMatches {language : CoreLanguage}
           | ok component =>
             simp only [hComp, bind, Except.bind, pure, Except.pure, Except.ok.injEq] at h
             subst h
-            exact ⟨diagnostics, hDiag, rfl⟩
+            exact ⟨diagnostics, hDiag, emitComponentGraph_bodyHeader hComp, rfl⟩
   · simp only [hBack, ↓reduceIte, throw, throwThe, MonadExceptOf.throw] at h
     cases h
 
@@ -1304,7 +1585,8 @@ private def addOvfBIR (p : Profile) (lhs rhs : UInt8) : BIR cLow p :=
     declarations := [] }
 
 -- Positive control: two-result `addWithOverflow` emits `@llvm.uadd.with.overflow.i8` +
--- `extractvalue` 0/1 + `phi` + `LauncherMatches` + exact profile-derived headers.
+-- `extractvalue` 0/1 + `phi` + `LauncherMatches` (with leading body declaration tied to
+-- component's `llvmBodyDefinition`) + exact profile-derived headers.
 example :
     ∃ out,
       emit (language := cLang) (addOvfBIR ctrlProfile 20 22) = .ok out ∧
@@ -1318,10 +1600,38 @@ example :
         (Item.instruction (.extract (.register 0) (.overflowPair .u8) (.overflow 0) 0)) = true ∧
       out.component.items.contains
         (Item.instruction (.extract (.register 1) (.overflowPair .u8) (.overflow 0) 1)) = true ∧
-      out.launcher.items = Backend.Runtime.llvmDiagnostics
+      out.component.items.filter isLLVMBodyHeader = [llvmBodyDefinition] ∧
+      out.launcher.items = launcherItems
         ["concrete: trap: overflow at src/main.con:1:30 (site 0)\n"] := by
-  refine ⟨_, rfl, ?_, rfl, rfl, rfl, rfl, rfl⟩
+  refine ⟨_, rfl, ?_, rfl, rfl, rfl, rfl, rfl, rfl⟩
   exact emit_metadataMatches (language := cLang) (bir := addOvfBIR ctrlProfile 20 22) rfl
+
+-- Negative control: omitting the leading `declare i32 @concrete_body()` (passing bare
+-- `Backend.Runtime.llvmDiagnostics`) violates `LauncherMatches`.
+example :
+    let bir := addOvfBIR ctrlProfile 20 22
+    let diag := ["concrete: trap: overflow at src/main.con:1:30 (site 0)\n"]
+    ¬ LauncherMatches bir
+      ⟨⟨[llvmBodyDefinition, .endFunction]⟩, ⟨Backend.Runtime.llvmDiagnostics diag⟩, bir.sites⟩ := by
+  intro bir diag hMatch
+  have hEq := hMatch.launcher_items_eq (diagnostics := diag) (by dsimp only [bir, diag]; rfl)
+  cases hEq
+
+-- Negative controls: even with exact `launcherItems`, a component that omits
+-- `@concrete_body`, marks it `internal`, or uses a mismatched return type/parameter list
+-- violates `LauncherMatches`.
+example :
+    let bir := addOvfBIR ctrlProfile 20 22
+    let diag := ["concrete: trap: overflow at src/main.con:1:30 (site 0)\n"]
+    ¬ LauncherMatches bir ⟨⟨[]⟩, ⟨launcherItems diag⟩, bir.sites⟩ ∧
+    ¬ LauncherMatches bir
+      ⟨⟨[.define true (.integer .u32) .body [], .endFunction]⟩, ⟨launcherItems diag⟩, bir.sites⟩ ∧
+    ¬ LauncherMatches bir
+      ⟨⟨[.define false (.integer .u8) .body [], .endFunction]⟩, ⟨launcherItems diag⟩, bir.sites⟩ ∧
+    ¬ LauncherMatches bir
+      ⟨⟨[.define false (.integer .u32) .body [(.integer .u32, .p)], .endFunction]⟩,
+        ⟨launcherItems diag⟩, bir.sites⟩ := by
+  refine ⟨?_, ?_, ?_, ?_⟩ <;> (intro hMatch; have hComp := hMatch.component_body_header_eq; cases hComp)
 
 -- Positive control: LLVM supports 32-bit `addWithOverflow` (`@llvm.uadd.with.overflow.i32`)
 -- and emits distinct target headers across `x86_64Linux` vs `aarch64Macos`.

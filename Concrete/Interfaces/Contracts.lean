@@ -2820,21 +2820,61 @@ theorem memoryView_addWithOverflow_aliased_not_tablesWF {bir : BIR lang profile}
 
 end BIR
 
-/-- The LLVM launcher module is the exact fixed runtime entry rendered by
-`Backend.Runtime.llvmDiagnostics` from the ordered diagnostic lines of `bir.sites`
-resolved in `bir.project` via `runtimeSite` / `TrapEntry.diagnosticLine`. -/
+/-- Canonical LLVM return type of the hosted entry body (`i32`), matching the call
+`call i32 @concrete_body()` inside `Backend.Runtime.llvmDiagnostics`. -/
+def llvmBodyReturnType : Backend.LLVM.TypeCode := .integer .u32
+
+/-- Canonical LLVM global symbol of the hosted entry body (`@concrete_body`), matching
+the call inside `Backend.Runtime.llvmDiagnostics`. -/
+def llvmBodyGlobal : Backend.LLVM.Global := .body
+
+/-- Canonical LLVM parameter list of the hosted entry body (`()`), matching the
+0-argument call inside `Backend.Runtime.llvmDiagnostics`. -/
+def llvmBodyParams : List (Backend.LLVM.TypeCode × Backend.LLVM.Local) := []
+
+/-- External LLVM definition header of `@concrete_body` required in the component module. -/
+def llvmBodyDefinition : Backend.LLVM.Item :=
+  .define false llvmBodyReturnType llvmBodyGlobal llvmBodyParams
+
+/-- Matching LLVM `declare` item for `@concrete_body` prepended to the standalone
+launcher module, using the exact same return type, global symbol, and parameter types as
+`llvmBodyDefinition`. -/
+def llvmBodyDeclaration : Backend.LLVM.Item :=
+  .declare llvmBodyReturnType llvmBodyGlobal (llvmBodyParams.map Prod.fst)
+
+/-- Whether an LLVM item declares or defines the hosted entry body symbol `@concrete_body`. -/
+def isLLVMBodyHeader : Backend.LLVM.Item → Bool
+  | .define _ _ .body _ => true
+  | .declare _ .body _ => true
+  | _ => false
+
+/-- Exact LLVM assembly items of a standalone two-module launcher: the matching external
+body declaration (`llvmBodyDeclaration`) followed by
+`Backend.Runtime.llvmDiagnostics diagnostics`. Used by both `LauncherMatches` and
+`EmitLLVM.launcherModule` as a single source of truth. -/
+def launcherItems (diagnostics : List String) : List Backend.LLVM.Item :=
+  llvmBodyDeclaration :: Backend.Runtime.llvmDiagnostics diagnostics
+
+/-- The two-module LLVM launcher contract:
+1. `bir.sites` resolves in `bir.project` via `TrapEntry.diagnosticLine` to `diagnostics`;
+2. `output.component.items` has `llvmBodyDefinition` (`define i32 @concrete_body()`) as its
+   unique `@concrete_body` header (non-internal, matching symbol, return type, and parameters);
+3. `output.launcher.items` equals `launcherItems diagnostics` — the matching declaration
+   `llvmBodyDeclaration` (`declare i32 @concrete_body()`) followed by
+   `Backend.Runtime.llvmDiagnostics diagnostics`. -/
 def LauncherMatches {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
     (bir : BIR lang profile) (output : LLVMInput profile) : Prop :=
   ∃ diagnostics,
     bir.sites.toList.mapM (fun entry => entry.diagnosticLine bir.project) = some diagnostics ∧
-    output.launcher.items = Backend.Runtime.llvmDiagnostics diagnostics
+    output.component.items.filter isLLVMBodyHeader = [llvmBodyDefinition] ∧
+    output.launcher.items = launcherItems diagnostics
 
 theorem LauncherMatches.launcher_unique {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
     {bir : BIR lang profile} {left right : LLVMInput profile}
     (hLeft : LauncherMatches bir left) (hRight : LauncherMatches bir right) :
     left.launcher = right.launcher := by
-  obtain ⟨d₁, hMap₁, hItems₁⟩ := hLeft
-  obtain ⟨d₂, hMap₂, hItems₂⟩ := hRight
+  obtain ⟨d₁, hMap₁, _, hItems₁⟩ := hLeft
+  obtain ⟨d₂, hMap₂, _, hItems₂⟩ := hRight
   have hDiag : d₁ = d₂ := Option.some.inj (hMap₁.symm.trans hMap₂)
   subst hDiag
   cases left; cases right
@@ -2845,11 +2885,42 @@ theorem LauncherMatches.launcher_items_eq {Ty : Type} {lang : LoweringLanguage T
     {bir : BIR lang profile} {output : LLVMInput profile} {diagnostics : List String}
     (hMatch : LauncherMatches bir output)
     (hDiag : bir.sites.toList.mapM (fun entry => entry.diagnosticLine bir.project) = some diagnostics) :
-    output.launcher.items = Backend.Runtime.llvmDiagnostics diagnostics := by
-  obtain ⟨d, hMap, hItems⟩ := hMatch
+    output.launcher.items = launcherItems diagnostics := by
+  obtain ⟨d, hMap, _, hItems⟩ := hMatch
   have hEq : d = diagnostics := Option.some.inj (hMap.symm.trans hDiag)
   subst hEq
   exact hItems
+
+/-- Every `LauncherMatches` handoff has `llvmBodyDefinition` as the unique `@concrete_body`
+header in `output.component.items`. -/
+theorem LauncherMatches.component_body_header_eq {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {bir : BIR lang profile} {output : LLVMInput profile}
+    (hMatch : LauncherMatches bir output) :
+    output.component.items.filter isLLVMBodyHeader = [llvmBodyDefinition] :=
+  let ⟨_, _, hComp, _⟩ := hMatch
+  hComp
+
+/-- Every `LauncherMatches` handoff externally defines `@concrete_body` in `output.component`. -/
+theorem LauncherMatches.component_defines_body {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {bir : BIR lang profile} {output : LLVMInput profile}
+    (hMatch : LauncherMatches bir output) :
+    llvmBodyDefinition ∈ output.component.items := by
+  obtain ⟨_, _, hComp, _⟩ := hMatch
+  have hMem : llvmBodyDefinition ∈ output.component.items.filter isLLVMBodyHeader := by
+    rw [hComp]; exact List.mem_cons_self
+  exact (List.mem_filter.mp hMem).1
+
+/-- The declaration at the head of `output.launcher.items` matches `output.component`'s
+unique external body definition in return type, global symbol, and parameter types. -/
+theorem LauncherMatches.body_decl_matches_define {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {bir : BIR lang profile} {output : LLVMInput profile}
+    (hMatch : LauncherMatches bir output) :
+    ∃ result fn params rest,
+      output.component.items.filter isLLVMBodyHeader = [.define false result fn params] ∧
+      output.launcher.items = .declare result fn (params.map Prod.fst) :: rest := by
+  obtain ⟨diagnostics, _, hComp, hLaunch⟩ := hMatch
+  exact ⟨llvmBodyReturnType, llvmBodyGlobal, llvmBodyParams,
+    Backend.Runtime.llvmDiagnostics diagnostics, hComp, hLaunch⟩
 
 /-- Structural obligations of the two-module LLVM handoff. The target datalayout and
 triple headers are rendered unconditionally from `profile` inside `LLVMInput.bytesAt`,
