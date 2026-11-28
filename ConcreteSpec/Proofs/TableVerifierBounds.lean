@@ -35,10 +35,31 @@ private theorem fold_group_mem {α : Type} (key : α → Nat) (items : List α)
     simp only [List.foldl_cons]
     rw [ih _ (by simpa)]
     by_cases h : key y = i
-    · simp [h, hi, Array.getElem_modify]
-      grind
-    · simp [h, hi, Array.getElem_modify]
-      grind
+    · have hmod : (bins.modify (key y) (y :: ·))[i]! = y :: bins[i]! := by
+        rw [getElem!_pos _ i (by simpa using hi), getElem!_pos bins i hi, Array.getElem_modify]
+        simp only [h, ↓reduceIte]
+      rw [hmod, List.mem_cons, List.mem_cons]
+      constructor
+      · rintro ((rfl | hbin) | ⟨hmem, hkey⟩)
+        · exact Or.inr ⟨Or.inl rfl, h⟩
+        · exact Or.inl hbin
+        · exact Or.inr ⟨Or.inr hmem, hkey⟩
+      · rintro (hbin | ⟨rfl | hmem, hkey⟩)
+        · exact Or.inl (Or.inr hbin)
+        · exact Or.inl (Or.inl rfl)
+        · exact Or.inr ⟨hmem, hkey⟩
+    · have hmod : (bins.modify (key y) (y :: ·))[i]! = bins[i]! := by
+        rw [getElem!_pos _ i (by simpa using hi), getElem!_pos bins i hi, Array.getElem_modify]
+        simp only [h, ↓reduceIte]
+      rw [hmod, List.mem_cons]
+      constructor
+      · rintro (hbin | ⟨hmem, hkey⟩)
+        · exact Or.inl hbin
+        · exact Or.inr ⟨Or.inr hmem, hkey⟩
+      · rintro (hbin | ⟨rfl | hmem, hkey⟩)
+        · exact Or.inl hbin
+        · exact absurd hkey h
+        · exact Or.inr ⟨hmem, hkey⟩
 
 theorem group_mem {α : Type} (key : α → Nat) (size : Nat) (items : List α)
     (i : Nat) (hi : i < size) (x : α) :
@@ -112,9 +133,9 @@ private theorem rules_fit {g : RawGrammar} (h : g.valid) :
   · intro t ht
     simp [RuleFits, Fact.valid, lhs, base, show t+1 < g.layout.c by omega]
   · rintro ⟨sym,i⟩ member
-    obtain ⟨lt,eqn⟩ := List.mem_zipIdx' member
+    obtain ⟨lt,_⟩ := List.mem_zipIdx' member
     apply symbolRules_fit lhs (by omega)
-    exact syms sym (by grind)
+    exact syms sym (List.mem_of_getElem? (List.mem_zipIdx_iff_getElem?.mp member))
 
 theorem grammarRules_valid {g : RawGrammar} (h : g.valid) :
     ∀ r ∈ grammarRules g, r.head.valid g.layout = true ∧ ∀ p ∈ r.premises, p.valid g.layout = true :=
@@ -235,12 +256,13 @@ theorem checks_inBounds {g : RawGrammar} (h : g.valid) :
     · intro r hr t ht
       obtain ⟨lhs,stop,syms⟩ := rowBounds h hr
       obtain ⟨⟨sym,i⟩,member,eqn⟩ := List.mem_filterMap.mp ht
-      obtain ⟨lt,atI⟩ := List.mem_zipIdx' member
+      obtain ⟨lt,_⟩ := List.mem_zipIdx' member
       cases sym with
       | t _ => contradiction
       | n child =>
         cases eqn
-        have childLt : child < g.layout.n := syms (.n child) (by grind)
+        have childLt : child < g.layout.n :=
+          syms (.n child) (List.mem_of_getElem? (List.mem_zipIdx_iff_getElem?.mp member))
         have pref := valid_fact_address (f := .prefixNull (r.base+i))
           (by simp only [Fact.valid,decide_eq_true_eq]; omega : (Fact.prefixNull (r.base+i)).valid g.layout)
         exact Bool.and_eq_true_iff.mpr ⟨decide_eq_true (isFact_lt pref),
@@ -367,7 +389,7 @@ private theorem combined_width (ts : List Test) :
   | cons x xs =>
     simp only [Test.all, Test.any, fold Test.both (fun _ _ => rfl),
       fold Test.either (fun _ _ => rfl), totalWidth,List.map_cons,List.sum_cons]
-    omega
+    constructor <;> omega
 
 private theorem mapped_width {α : Type} (xs : List α) (f : α → Test) :
     totalWidth (xs.map f) = cost xs (fun x => (f x).width) := by
@@ -381,7 +403,21 @@ private theorem clause_width (r : Clause) (h : r.premises.length ≤ 2) :
   have wp := cost_fixed r.premises (fun a => (Test.positive a).width) 2 (fun _ _ => Nat.le_refl _)
   have wl := cost_fixed r.premises (fun a => (Test.less a r.head).width) 1 (fun _ _ => Nat.le_refl _)
   simp only [Clause.closedTest,Clause.justification,Test.implies,Test.width,Test.positive]
-  omega
+  constructor <;> omega
+
+private theorem nodup_range'_constructive (s n : Nat) : (List.range' s n).Nodup := by
+  induction n generalizing s with
+  | zero => exact List.nodup_nil
+  | succ n ih =>
+    rw [List.range'_succ, List.nodup_cons]
+    refine ⟨fun h => ?_, ih (s + 1)⟩
+    rw [List.mem_range'] at h
+    obtain ⟨k, _, hk⟩ := h
+    omega
+
+private theorem nodup_range_constructive (n : Nat) : (List.range n).Nodup := by
+  rw [List.range_eq_range']
+  exact nodup_range'_constructive 0 n
 
 private theorem facts_width (g : RawGrammar) (h : g.valid) :
     totalWidth (factChecks g.layout (grammarClauses g)).toList ≤
@@ -399,7 +435,7 @@ private theorem facts_width (g : RawGrammar) (h : g.valid) :
     omega
   have unique : l.factAddresses.Nodup := by
     rw [Layout.factAddresses, ← List.range'_eq_map_range]
-    exact List.nodup_range'
+    exact nodup_range'_constructive _ _
   have count := group_count Rule.head l.scratch rs l.factAddresses unique inside
   change cost l.factAddresses (fun a => groups[a]!.length) ≤ rs.length at count
   have localWidth (a : Nat) (ha : a ∈ l.factAddresses) :
@@ -440,7 +476,7 @@ private theorem predictions_width (g : RawGrammar) :
     have ones : (cost rows (fun _ => 1)) = rows.length := by
       simpa using cost_linear rows (fun _ => 0) 1 0
     omega
-  have count := group_count Row.lhs l.n rows (List.range l.n) List.nodup_range
+  have count := group_count Row.lhs l.n rows (List.range l.n) (nodup_range_constructive l.n)
     (by simp)
   change cost (List.range l.n) (fun n => groups[n]!.length) ≤ rows.length at count
   have cells (n col : Nat) :

@@ -154,6 +154,16 @@ private def decodeFact (l : Layout) (a : Nat) : Option Fact :=
     some (.suffixFirst (off / l.c) (off % l.c))
   else none
 
+private theorem nat_beq_self (n : Nat) : (n == n) = true := decide_eq_true rfl
+
+private theorem nat_div_lt_of_lt_mul {a b c : Nat} (h : a < b * c) : a / c < b := by
+  match Nat.lt_or_ge (a / c) b with
+  | .inl hlt => exact hlt
+  | .inr hge =>
+    have hmul : b * c ≤ a / c * c := Nat.mul_le_mul_right c hge
+    have hdm : a / c * c + a % c = a := by rw [Nat.mul_comm]; exact Nat.div_add_mod a c
+    omega
+
 private theorem decodeFact_sound {l : Layout} (hc : 0 < l.c) {a : Nat}
     (hfact : l.isFact a = true) :
     ∃ f, decodeFact l a = some f ∧ f.valid l = true ∧ f.address l = a := by
@@ -178,7 +188,7 @@ private theorem decodeFact_sound {l : Layout} (hc : 0 < l.c) {a : Nat}
     have hoff : a - l.firstNt 0 0 < l.n * l.c := by
       simp only [Layout.follow, Layout.firstNt] at h2 h3 ⊢; omega
     have hdiv : (a - l.firstNt 0 0) / l.c < l.n :=
-      Nat.div_lt_of_lt_mul (by rw [Nat.mul_comm]; exact hoff)
+      nat_div_lt_of_lt_mul hoff
     have hmod : (a - l.firstNt 0 0) % l.c < l.c := Nat.mod_lt _ hc
     refine ⟨_, rfl, by simp [Fact.valid, hdiv, hmod], ?_⟩
     have hdm : (a - l.firstNt 0 0) / l.c * l.c + (a - l.firstNt 0 0) % l.c = a - l.firstNt 0 0 := by
@@ -194,7 +204,7 @@ private theorem decodeFact_sound {l : Layout} (hc : 0 < l.c) {a : Nat}
     have hoff : a - l.follow 0 0 < l.n * l.c := by
       simp only [Layout.prefixNull, Layout.follow, Layout.firstNt] at h3 h4 ⊢; omega
     have hdiv : (a - l.follow 0 0) / l.c < l.n :=
-      Nat.div_lt_of_lt_mul (by rw [Nat.mul_comm]; exact hoff)
+      nat_div_lt_of_lt_mul hoff
     have hmod : (a - l.follow 0 0) % l.c < l.c := Nat.mod_lt _ hc
     refine ⟨_, rfl, by simp [Fact.valid, hdiv, hmod], ?_⟩
     have hdm : (a - l.follow 0 0) / l.c * l.c + (a - l.follow 0 0) % l.c = a - l.follow 0 0 := by
@@ -227,7 +237,7 @@ private theorem decodeFact_sound {l : Layout} (hc : 0 < l.c) {a : Nat}
     have hoff : a - l.suffixFirst 0 0 < l.positions * l.c := by
       simp only [Layout.scratch, Layout.suffixFirst] at h7 hhi ⊢; omega
     have hdiv : (a - l.suffixFirst 0 0) / l.c < l.positions :=
-      Nat.div_lt_of_lt_mul (by rw [Nat.mul_comm]; exact hoff)
+      nat_div_lt_of_lt_mul hoff
     have hmod : (a - l.suffixFirst 0 0) % l.c < l.c := Nat.mod_lt _ hc
     refine ⟨_, rfl, by simp [Fact.valid, hdiv, hmod], ?_⟩
     have hdm : (a - l.suffixFirst 0 0) / l.c * l.c + (a - l.suffixFirst 0 0) % l.c =
@@ -480,7 +490,7 @@ private theorem cells_of_check {g : RawGrammar} {t : SparseTree}
       simp only [checkPredNode, Bool.and_eq_true, decide_eq_true_eq, hnotfol, ↓reduceIte,
         hlo, hhi, and_self, hoff, hdm.1, hdm.2] at hnode
       have hrow := List.all_eq_true.mp hnode r hr
-      simp only [beq_self_eq_true, ↓reduceIte, beq_iff_eq] at hrow
+      simp only [nat_beq_self, ↓reduceIte, beq_iff_eq] at hrow
       exact hlhs ▸ hrow
     · have hnode := SparseTree.lookup_pos_of_allNodes hb hpred hfol
       have hlo : g.layout.follow 0 0 ≤ g.layout.follow r.lhs col := by
@@ -497,7 +507,7 @@ private theorem cells_of_check {g : RawGrammar} {t : SparseTree}
         ↓reduceIte, hoff, hdm.1, hdm.2] at hnode
       have hrow := List.all_eq_true.mp hnode r hr
       have hsnB : (t.lookup (g.layout.suffixNull r.base) != 0) = true := (u64_bne_zero_iff _).2 hsn
-      simp only [beq_self_eq_true, hsnB, and_self, ↓reduceIte, beq_iff_eq] at hrow
+      simp only [nat_beq_self, hsnB, and_self, ↓reduceIte, beq_iff_eq] at hrow
       exact hlhs ▸ hrow
 
 private theorem closed_of_check {g : RawGrammar} (hg : g.valid = true) {t : SparseTree}
@@ -576,7 +586,7 @@ private theorem closed_of_check {g : RawGrammar} (hg : g.valid = true) {t : Spar
       simp only [checkClosedColNode, Bool.and_eq_true, decide_eq_true_eq, hnotFi, hnotFo,
         hsfLo, hsfHi, and_self, ↓reduceIte, hoff, hdm.1, hdm.2, hcolNe, Bool.false_eq_true] at hnode
       have hrowC := List.all_eq_true.mp hnode r hr
-      simp only [Bool.and_eq_true, beq_self_eq_true, ↓reduceIte] at hrowC
+      simp only [Bool.and_eq_true, nat_beq_self, ↓reduceIte] at hrowC
       exact (u64_bne_zero_iff _).1 hrowC.1
     · have hsymB := List.all_eq_true.mp hsyms (sym, i) hzi
       have hget : r.rhs[i]? = some sym := List.mem_zipIdx_iff_getElem?.mp hzi
@@ -637,7 +647,7 @@ private theorem closed_of_check {g : RawGrammar} (hg : g.valid = true) {t : Spar
           simp only [checkClosedColNode, Bool.and_eq_true, decide_eq_true_eq, hnotFi,
             hfoLo, hfoHi, and_self, ↓reduceIte, hoff, hdm.1, hdm.2] at hnode
           have hrowC := List.all_eq_true.mp hnode r hr
-          simp only [beq_self_eq_true, ↓reduceIte] at hrowC
+          simp only [nat_beq_self, ↓reduceIte] at hrowC
           have hsymC := List.all_eq_true.mp hrowC (.n child, i) hzi
           have hsnB := (u64_bne_zero_iff _).2 hsnPos
           simp only [hsnB, ↓reduceIte] at hsymC
@@ -666,7 +676,7 @@ private theorem closed_of_check {g : RawGrammar} (hg : g.valid = true) {t : Spar
                 Bool.false_eq_true] at hnode
               have hrowC := List.all_eq_true.mp hnode r hr
               have hsymC := List.all_eq_true.mp hrowC (.n child, i) hzi
-              simp only [beq_self_eq_true, ↓reduceIte] at hsymC
+              simp only [nat_beq_self, ↓reduceIte] at hsymC
               exact (u64_bne_zero_iff _).1 hsymC
             · -- Schema 9f: suffixFirst (r.base + i) col ← [nullable child, suffixFirst (r.base + i + 1) col]
               have hnuPos : 0 < (t.lookup (g.layout.nullNt child)).toNat :=
@@ -696,8 +706,8 @@ private theorem closed_of_check {g : RawGrammar} (hg : g.valid = true) {t : Spar
                 hnotFi, hnotFo, hsfLo, hsfHi, and_self, ↓reduceIte, hoff, hdm.1, hdm.2,
                 hcolEqFalse, Bool.false_eq_true] at hnode
               have hrowC := List.all_eq_true.mp hnode r hr
-              have hrange : r.base < r.base + i + 1 ∧ r.base + i + 1 ≤ r.base + r.rhs.length := by
-                omega
+              have hrange : r.base < r.base + i + 1 ∧ r.base + i + 1 ≤ r.base + r.rhs.length :=
+                ⟨by omega, by omega⟩
               have hidx : r.base + i + 1 - r.base - 1 = i := by omega
               simp only [Bool.and_eq_true] at hrowC
               have h2 := hrowC.2
@@ -732,8 +742,8 @@ private theorem closed_of_check {g : RawGrammar} (hg : g.valid = true) {t : Spar
                 hnotFi, hnotFo, hsfLo, hsfHi, and_self, ↓reduceIte, hoff, hdm.1, hdm.2,
                 hcolEqFalse, Bool.false_eq_true] at hnode
               have hrowC := List.all_eq_true.mp hnode r hr
-              have hrange : r.base < r.base + i + 1 ∧ r.base + i + 1 ≤ r.base + r.rhs.length := by
-                omega
+              have hrange : r.base < r.base + i + 1 ∧ r.base + i + 1 ≤ r.base + r.rhs.length :=
+                ⟨by omega, by omega⟩
               have hidx : r.base + i + 1 - r.base - 1 = i := by omega
               simp only [Bool.and_eq_true] at hrowC
               have h2 := hrowC.2

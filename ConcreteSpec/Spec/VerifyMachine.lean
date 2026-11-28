@@ -4,6 +4,25 @@ instructions; program and proposal are data. -/
 
 namespace ConcreteSpec.StageGrammar
 
+/-- Constructive `BEq` on `UInt64` backed directly by `UInt64.decEq`.
+Definitionally equal (`rfl`) to Lean's `Std.LinearOrderPackage.toBEq` projection,
+avoiding the bundled order package's `Classical.choice` proofs in executable
+definitions and theorem statements. -/
+instance (priority := high) instBEqUInt64Constructive : BEq UInt64 :=
+  instBEqOfDecidableEq
+
+instance (priority := high) instLawfulBEqUInt64Constructive : LawfulBEq UInt64 where
+  eq_of_beq h := of_decide_eq_true h
+  rfl := decide_eq_true rfl
+
+instance (priority := high) instReflBEqUInt64Constructive : ReflBEq UInt64 where
+  rfl := decide_eq_true rfl
+
+instance (priority := high) instEquivBEqUInt64Constructive : EquivBEq UInt64 where
+  rfl := decide_eq_true rfl
+  symm h := decide_eq_true (of_decide_eq_true h).symm
+  trans h1 h2 := decide_eq_true ((of_decide_eq_true h1).trans (of_decide_eq_true h2))
+
 /-- The verifier is a closed word machine. Indexed word reads/writes, comparisons,
 branches and arithmetic are instructions. Program and proposal are data. -/
 inductive VerifyInstruction where

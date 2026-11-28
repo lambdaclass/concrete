@@ -470,7 +470,8 @@ private theorem acceptedCells_decodeCells {count : Nat} (g : SharedGrammar count
     (hacc : (compileTableVerifier g.rawGrammar).accepts memory g.rawGrammar.budget = true) :
     decodeCells g.rawGrammar.layout memory = some (acceptedCells memory g) := by
   have hsize := ((compileTableVerifier_correct g.rawGrammar memory).mp hacc).2.1
-  simp only [decodeCells, guard, hsize, beq_self_eq_true, ↓reduceIte, pure, Bind.bind, Option.bind_some]
+  have hbeq : (memory.size == g.rawGrammar.layout.scratch + 1) = true := beq_iff_eq.mpr hsize
+  simp only [decodeCells, guard, hbeq, ↓reduceIte, pure, Bind.bind, Option.bind_some]
   rfl
 
 private theorem acceptedCells_dimensions {count : Nat} (g : SharedGrammar count)

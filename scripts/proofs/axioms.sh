@@ -96,12 +96,109 @@ audit_library() {
   fi
 }
 
+# check_no_classical_choice LOG_FILE EXPECTED_NAMES...
+# Parses `#print axioms` output and rejects any missing/extra target or any axiom outside
+# `{propext, Quot.sound}` (specifically banning `Classical.choice`, `sorryAx`, and native axioms).
+check_no_classical_choice() {
+  local log_file=$1
+  shift
+  python3 -I - "$log_file" "$@" <<'PY'
+import re, sys
+text = open(sys.argv[1], encoding="utf-8").read()
+expected = sys.argv[2:]
+allowed = {"propext", "Quot.sound"}
+seen = []
+bad = []
+for line in text.splitlines():
+    s = line.strip()
+    m1 = re.match(r"^'([^']+)' does not depend on any axioms$", s)
+    if m1:
+        seen.append(m1.group(1))
+        continue
+    m2 = re.match(r"^'([^']+)' depends on axioms: \[([^\]]*)\]$", s)
+    if m2:
+        name = m2.group(1)
+        seen.append(name)
+        axs = [a.strip() for a in m2.group(2).split(",") if a.strip()]
+        extra = [a for a in axs if a not in allowed]
+        if extra:
+            bad.append(f"{name}: {extra}")
+if seen != expected:
+    print(f"expected #print axioms for {expected}, saw {seen}")
+    sys.exit(1)
+if bad:
+    print("forbidden axioms: " + "; ".join(bad))
+    sys.exit(1)
+PY
+}
+
+slice_parser_constructive_check() {
+  local probe="$TMP/slice-parser-axioms.lean"
+  local probe_out="$TMP/slice-parser-axioms.out"
+  local probe_err="$TMP/slice-parser-axioms.err"
+  local neg="$TMP/slice-parser-axioms-neg.lean"
+  local neg_out="$TMP/slice-parser-axioms-neg.out"
+  local neg_err="$TMP/slice-parser-axioms-neg.err"
+  local msg
+  local targets=(
+    ConcreteSpec.StageGrammar.sliceParser
+    ConcreteSpec.StageGrammar.sliceVerifierInputs
+    ConcreteSpec.StageGrammar.earlySharedGrammar_productive
+    ConcreteSpec.StageGrammar.sliceParser_rank_le
+    ConcreteSpec.StageGrammar.sliceParser_stepsPerToken_ge
+    ConcreteSpec.StageGrammar.sliceParser_nonExhausted
+    ConcreteSpec.StageGrammar.sliceParser_steps_le
+    ConcreteSpec.StageGrammar.sliceParser_ok_derives_iff
+    ConcreteSpec.StageGrammar.sliceParser_ok_iff
+    ConcreteSpec.StageGrammar.sliceParser_unsupported_iff
+    ConcreteSpec.StageGrammar.sliceParser_malformed_iff
+    ConcreteSpec.StageGrammar.sliceParser_unsupported_ne_program
+  )
+  echo "=== ConcreteSpec: constructive sliceParser boundary (no Classical.choice) ==="
+  {
+    echo "import ConcreteSpec.StageGrammar"
+    echo "import ConcreteSpec.Proofs.SliceGrammar"
+    local name
+    for name in "${targets[@]}"; do
+      echo "#print axioms $name"
+    done
+  } > "$probe"
+  if run_enumerator "$probe" > "$probe_out" 2> "$probe_err"; then
+    if msg=$(check_no_classical_choice "$probe_out" "${targets[@]}"); then
+      ok "sliceParser, sliceVerifierInputs, earlySharedGrammar_productive, and all 9 sliceParser_* lemmas use no Classical.choice"
+    else
+      no "constructive sliceParser axiom check failed: $msg"
+    fi
+  else
+    no "constructive sliceParser axiom probe failed to elaborate: $(head -5 "$probe_out" "$probe_err" | tr '\n' ' ')"
+  fi
+
+  cat > "$neg" <<'EOF'
+theorem sliceParserClassicalControl (P : Prop) : P ∨ ¬ P := Classical.em P
+#print axioms sliceParserClassicalControl
+EOF
+  if run_enumerator "$neg" > "$neg_out" 2> "$neg_err"; then
+    if msg=$(check_no_classical_choice "$neg_out" sliceParserClassicalControl); then
+      no "control: constructive sliceParser axiom checker unexpectedly accepted Classical.choice"
+    elif printf '%s\n' "$msg" | grep -Fq "Classical.choice"; then
+      ok "control: constructive sliceParser axiom checker rejects Classical.choice ($msg)"
+    else
+      no "control: constructive sliceParser axiom checker failed with unexpected message: $msg"
+    fi
+  else
+    no "control: classical negative control for sliceParser failed to elaborate: $(head -5 "$neg_out" "$neg_err" | tr '\n' ' ')"
+  fi
+}
+
 GOLDEN=scripts/proofs/axioms.golden
 EVIDENCE_GOLDEN=scripts/proofs/evidence_axioms.golden
 COMPILER_GOLDEN=scripts/proofs/compiler_axioms.golden
 audit_library ConcreteSpec "$GOLDEN" "${1:-}"
 audit_library ConcreteSpecEvidence "$EVIDENCE_GOLDEN" "${1:-}"
 audit_library Concrete "$COMPILER_GOLDEN" "${1:-}"
+if [ "${1:-}" != --update ]; then
+  slice_parser_constructive_check
+fi
 if [ "${1:-}" = --update ] || [ "$FAIL" != 0 ]; then finish; fi
 
 echo "=== negative controls ==="
