@@ -37,11 +37,10 @@ def Source.WF (source : Source) : Prop :=
 /-- Source-order monotonicity on a `ParserView` token stream, required for multi-token
 surface statement spans (`Surface0.statementSpan`) to remain same-file and non-reversed.
 Owned by the lexer→parser boundary and discharged for every lexed stream by
-`Lexes.tokensOrdered`. Definitionally equal to `ConcreteSpec.StageGrammar.TokensOrdered`
-applied to `input.tokens.toList`. -/
-def TokensOrdered (input : ParserView) : Prop :=
-  input.tokens.toList.Pairwise
-    (fun a b => a.span.file = b.span.file ∧ a.span.startOffset ≤ b.span.endOffset)
+`Lexes.tokensOrdered`. Delegates directly to `ConcreteSpec.StageGrammar.TokensOrdered`
+so the definition lives in one place. -/
+abbrev TokensOrdered (input : ParserView) : Prop :=
+  ConcreteSpec.StageGrammar.TokensOrdered input.tokens.toList
 
 section ReconstructTokensOrdered
 
@@ -254,7 +253,7 @@ theorem reconstruct_tokensOrdered {source : Source} {stream : TokenStream} {byte
             dsimp only at hfile hstart hend hs''eq
             exact ⟨tok, rfl, hfile, by omega, by omega, hs''eq.symm⟩
     have hpw := (foldlM_range_tokens step hstep _ _ _ hs').2.2
-    unfold TokensOrdered TokenStream.parserView
+    unfold TokensOrdered ConcreteSpec.StageGrammar.TokensOrdered TokenStream.parserView
     dsimp only
     apply list_pairwise_of_range
     rw [List.length_map, Array.length_toList]

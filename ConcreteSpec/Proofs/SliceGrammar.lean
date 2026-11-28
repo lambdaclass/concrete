@@ -4,6 +4,7 @@ import ConcreteSpec.Proofs.GrammarPrediction
 import ConcreteSpec.Proofs.StageParser
 import ConcreteSpec.Proofs.TableVerifier
 import ConcreteSpec.Spec.Basics
+import ConcreteSpec.Spec.ConstructiveUInt64
 import ConcreteSpec.Spec.EarlyProposal
 import ConcreteSpec.Spec.GrammarData
 import ConcreteSpec.Spec.GrammarVocab
@@ -702,6 +703,10 @@ private theorem earlyProduction_mem (id : ProductionId) :
     earlyProduction id ∈ earlySharedGrammar.productions.toList :=
   mem_earlyProductions_iff.mpr ⟨id, rfl⟩
 
+private theorem earlyProductionFirstSlice_le (id : ProductionId) :
+    (earlyProductionFirstSlice id).val ≤ id.row.firstSlice := by
+  cases id <;> simp [earlyProductionFirstSlice, slice0, Slice.val]
+
 private theorem earlyDerives_apply (id : ProductionId) {slice : Slice}
     {tokens : List SurfaceToken} {args : ActionArgs earlyValue (earlyRhs id)} {steps : Nat}
     (hslice : id.row.firstSlice ≤ slice.val)
@@ -709,7 +714,7 @@ private theorem earlyDerives_apply (id : ProductionId) {slice : Slice}
     Derives earlySharedGrammar slice (earlyNt id.row.lhs) tokens
       ((earlyAction id).eval args).2 (steps + 1 + ((earlyAction id).eval args).1) :=
   Derives.apply (g := earlySharedGrammar) (slice := slice) (earlyProduction id) tokens args
-    (earlyProduction_mem id) hslice hargs
+    (earlyProduction_mem id) (Nat.le_trans (earlyProductionFirstSlice_le id) hslice) hargs
 
 private theorem earlyIntegerSlices_radix_val (r : Surface0.Radix) (suf : Option IntTy) :
     (earlyIntegerSlices[integerForm r suf]'(earlySharedGrammar.integerSliceCoverage r suf)).val =
@@ -904,14 +909,17 @@ private theorem singleton_map_eq {α β : Type} {f : α → β} {xs : List α} {
     | nil => exact ⟨x, rfl, (List.cons.inj h).1⟩
     | cons _ _ => cases h
 
-private theorem earlyProd_slice0_cases {id : ProductionId} (h : id.row.firstSlice ≤ 0) :
+private theorem earlyProd_slice0_cases {id : ProductionId}
+    (h : (earlyProduction id).firstSlice.val ≤ 0) :
     id = .program ∨ id = .endDecls ∨ id = .retU8 ∨ id = .localU8 ∨
     id = .binding ∨ id = .retStmt ∨ id = .endBody ∨
     id = .named ∨ id = .annotated ∨
     id = .expr ∨ id = .plus ∨ id = .endSum ∨
     id = .product ∨ id = .endProduct ∨
-    id = .integer ∨ id = .name ∨ id = .group ∨ id = .endName := by
-  cases id <;> simp [ProductionId.row, GrammarData.ProductionRow.firstSlice,
+    id = .integer ∨ id = .name ∨ id = .group ∨ id = .endName ∨
+    id = .ifStmt := by
+  cases id <;> simp [earlyProduction, earlyProductionFirstSlice, slice0, Slice.val,
+    ProductionId.row, GrammarData.ProductionRow.firstSlice,
     GrammarData.Authority.firstSlice, GrammarData.primitiveReturn,
     Surface0.terminalFirstSlice] at h ⊢
 
@@ -954,9 +962,9 @@ private theorem earlyDerives_slice0_inv {steps : Nat} :
     intro n tokens val hder
     obtain ⟨p, args, innerSteps, rfl, hmem, hslice, hargs, rfl, hsteps⟩ := derives_inv hder
     obtain ⟨id, rfl⟩ := mem_earlyProductions_iff.mp hmem
-    have hid := earlyProd_slice0_cases (show id.row.firstSlice ≤ 0 from hslice)
+    have hid := earlyProd_slice0_cases hslice
     rcases hid with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl |
-      rfl | rfl | rfl | rfl | rfl | rfl
+      rfl | rfl | rfl | rfl | rfl | rfl | rfl
     · -- .program
       obtain ⟨tStructs, r0, vStructs, a0, sStructs, s0, rfl, rfl, rfl, hStructs, hargs⟩ :=
         derivesArgs_child_inv hargs
@@ -1233,6 +1241,9 @@ private theorem earlyDerives_slice0_inv {steps : Nat} :
     · -- .endName
       obtain ⟨rfl, rfl, rfl⟩ := derivesArgs_nil_inv hargs
       exact ⟨rfl, rfl⟩
+    · -- .ifStmt (impossible: child `.conditional` requires Slice 3)
+      obtain ⟨_, _, _, _, sCond, _, rfl, rfl, rfl, hCond, _⟩ := derivesArgs_child_inv hargs
+      exact False.elim (ih sCond (by omega) hCond)
 
 /-- Every Slice 0 derivation of the 78-production shared grammar yields a `SyntaxTree`
 that decodes via `decodeSurface0` to a `Surface0.Program` derived by `Surface0.Derives`. -/
@@ -1558,8 +1569,10 @@ private theorem earlyProd_slice1_cases (id : ProductionId)
     id = .callStmt ∨ id = .endBody ∨ id = .named ∨ id = .wildcard ∨
     id = .annotated ∨ id = .destructure ∨ id = .expr ∨ id = .plus ∨
     id = .endSum ∨ id = .product ∨ id = .endProduct ∨ id = .integer ∨
-    id = .name ∨ id = .group ∨ id = .move ∨ id = .literal ∨ id = .endName := by
-  cases id <;> simp_all [earlyProduction, GrammarData.ProductionId.row,
+    id = .name ∨ id = .group ∨ id = .move ∨ id = .literal ∨ id = .endName ∨
+    id = .ifStmt := by
+  cases id <;> simp_all [earlyProduction, earlyProductionFirstSlice, slice0,
+    GrammarData.ProductionId.row,
     GrammarData.ProductionRow.firstSlice, GrammarData.Authority.firstSlice,
     GrammarData.primitiveReturn, Slice.val, sliceOne, Surface0.terminalFirstSlice] <;>
     exact absurd h (by decide)
@@ -1642,7 +1655,7 @@ private theorem earlyDerives_slice1_inv :
   rcases hCases with
     rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl |
     rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl |
-    rfl | rfl | rfl | rfl | rfl
+    rfl | rfl | rfl | rfl | rfl | rfl
   · -- .program
     obtain ⟨tDecls, r0, vDecls, a0, sDecls, s0, rfl, rfl, rfl, hDecls, hargs⟩ :=
       derivesArgs_child_inv hargs
@@ -2049,6 +2062,9 @@ private theorem earlyDerives_slice1_inv :
     obtain ⟨rfl, rfl, rfl⟩ := derivesArgs_nil_inv hargs
     left
     exact ⟨rfl, rfl⟩
+  · -- .ifStmt (impossible: child `.conditional` requires Slice 3)
+    obtain ⟨_, _, _, _, sCond, _, rfl, rfl, rfl, hCond, _⟩ := derivesArgs_child_inv hargs
+    exact False.elim (ih sCond (by omega) hCond)
 
 /-- Every Slice 1 derivation of the 78-production shared grammar yields a `SyntaxTree`
 that decodes via `decodeSurface1` to a `Surface1.SourceProgram` derived by `Surface1.Derives`. -/
@@ -2720,12 +2736,6 @@ def ProgramSpansBind (project : Core.SourcePathSpan.Project) (prog : Surface0.Pr
   (∀ st ∈ prog.body, StmtSpansBind project st) ∧
   SurfaceSpanBinds project prog.closeBrace
 
-/-- Source-order token monotonicity needed for multi-token statement spans
-(`Surface0.statementSpan kw semi = { kw with stop := semi.stop }`) to stay
-same-file and non-reversed. Real lexed streams satisfy this via `reconstruct`. -/
-def TokensOrdered (tokens : List SurfaceToken) : Prop :=
-  tokens.Pairwise (fun a b => a.span.file = b.span.file ∧ a.span.startOffset ≤ b.span.endOffset)
-
 private theorem toSurfaceSpan_surfaceFileSpan (span : FileSpan) :
     surfaceFileSpan (toSurfaceSpan span) = span := rfl
 
@@ -3200,12 +3210,12 @@ theorem twoUnsupportedControlInput_wf : twoUnsupportedControlInput.WF := by
 private theorem earlyDerivesTrace_apply (id : ProductionId) {slice : Slice} {eof : FileSpan}
     {pos : Nat} {tokens rest : List SurfaceToken} {args : ActionArgs earlyValue (earlyRhs id)}
     {steps : Nat} {events : List SliceEvent}
-    (hslice : id.row.firstSlice ≤ slice.val)
+    (hslice : (earlyProductionFirstSlice id).val ≤ slice.val)
     (hargs : DerivesArgsTrace earlySharedGrammar slice eof id (earlyRhs id) pos tokens rest args steps events) :
     DerivesTrace earlySharedGrammar slice eof (earlyNt id.row.lhs) pos tokens rest
       ((earlyAction id).eval args).2 (steps + 1 + ((earlyAction id).eval args).1)
       (⟨pos, ((tokens ++ rest).head?.map Located.span).getD eof,
-        ⟨⟨id.row.firstSlice, by cases id <;> decide⟩⟩, .production id⟩ :: events) :=
+        earlyProductionFirstSlice id, .production id⟩ :: events) :=
   DerivesTrace.apply (g := earlySharedGrammar) (slice := slice) (eof := eof)
     (earlyProduction id) pos tokens rest args (earlyProduction_mem id) hslice hargs
 
