@@ -9,7 +9,7 @@ namespace StageInterfaceControls
 
 abbrev returnLowering := sliceLoweringLanguage slice0
 
-def returnType : earlyFixtureLanguage.operands.Ty := .inl (.scalar (.int .u8))
+def returnType : earlyFixtureLanguage.operands.Ty := .scalar (.int .u8)
 
 def singleBlockGraph {P I T : Type} (ending : T) (origins : List Origin) : CFG P I T :=
   ⟨⟨0⟩, #[⟨⟨0⟩, [], [], ending, origins⟩]⟩
@@ -17,7 +17,7 @@ def singleBlockGraph {P I T : Type} (ending : T) (origins : List Origin) : CFG P
 private def lowerLiteralReturn (core : CoreInput earlyFixtureLanguage) :
     Except StageFailure (MIR returnLowering testProfile) :=
   match core.machineProgram.operations with
-  | [(site, .expression (.inl (.read (.literal (.int .u8 value)))))] =>
+  | [(site, .expression (.read (.literal (.int .u8 value))))] =>
     match AList.lookup core.machineProgram.origins site with
     | some origin =>
       let graph : MIRGraph returnLowering :=
@@ -56,7 +56,7 @@ def literalReturnPasses : Passes slice0 testProfile :=
       let graph : BIRGraph returnLowering :=
         singleBlockGraph (.ret (some ⟨returnType, .literal ⟨bytes⟩⟩)) origins
       return ⟨ssa.project, ssa.entry, ssa.signatures, [(ssa.entry, [], graph)], ssa.layouts, #[], [], ssa.declarations⟩
-    emitLCB := fun bir => do
+    emit := fun bir => do
       let (bytes, _) ← memoryLiteral (bir.memoryView (language := earlyFixtureLanguage))
       match bytes with
       | [status] => return lcbReturnJob (BitVec.ofNat 32 status.toNat)

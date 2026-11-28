@@ -164,6 +164,7 @@ private def argLanguage : CoreLanguage where
   fieldType := fun _ _ => none
   activeFields := fun _ _ _ => none
   operation := fun _ _ _ _ _ _ _ _ _ _ _ => False
+  preservesResidentHandles := by intro _ _ _ _ _ _ _ _ _ _ _ h; cases h
   checkTrap := fun _ _ _ => false
   field := fun _ _ => none
   replaceField := fun _ _ _ => none
@@ -175,7 +176,7 @@ private def argLanguage : CoreLanguage where
   permit := fun _ _ _ own => some own
 
 private def argLowering : LoweringLanguage argLanguage.operands.Ty :=
-  ⟨fun _ _ _ => Unit, ()⟩
+  ⟨fun _ _ _ => Unit, (), fun _ => ()⟩
 
 private def argCore (project : Project) (body : Exec.Stmt (argLanguage.instrumented [])) : CoreInput argLanguage :=
   ⟨project, early, .integrated ⟨[], [], ⟨[(Exec.Demo.mainF, ⟨[], (), ⟨0⟩, body⟩)]⟩,

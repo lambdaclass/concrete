@@ -8,7 +8,7 @@ open ConcreteSpec Core Core.SourcePathSpan StageInterface StageGrammar
 namespace StageInterfaceControls
 
 private abbrev ownerFixtureLowering := sliceLoweringLanguage slice0
-private def ownerFixtureType : earlyFixtureLanguage.operands.Ty := .inl (.scalar (.int .u8))
+private def ownerFixtureType : earlyFixtureLanguage.operands.Ty := .scalar (.int .u8)
 
 private def ownerFixtureMIR (consuming mutable : Bool) : MIR ownerFixtureLowering testProfile :=
   let place : Place _ ownerFixtureType := ⟨storeRoot, []⟩

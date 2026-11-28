@@ -354,7 +354,20 @@ set_option maxHeartbeats 2000000 in
 example (project : Project) :
     LowersMemory (language := erasureLanguage) (erasureSource project) (materializedBinding project) := by
   have static := materializationStatic project
-  refine ⟨rfl, rfl, static.1, static.2.1, ⟨rfl, rfl⟩, static.2.2,
+  have hretains : RetainsTypedRoots (erasureSource project) (materializedBinding project) := by
+    refine ⟨by simp [erasureSource, shadowMIR], by simp [materializedBinding], ?_, ?_, ?_, ?_⟩
+    · intro _ _ _ h; cases List.mem_singleton.mp h; simp
+    · intro _ _ _ h; cases List.mem_singleton.mp h; simp
+    · intro _ _ _ h; cases List.mem_singleton.mp h
+      exact ⟨_, _, List.mem_singleton_self _, fun _ _ => Iff.rfl⟩
+    · intro _ _ _ h; cases List.mem_singleton.mp h
+      exact ⟨_, _, List.mem_singleton_self _, fun _ _ => Iff.rfl⟩
+  have hlayouts : (materializedBinding project).LayoutsWF := by
+    intro tbl htbl slot hslot
+    cases List.mem_singleton.mp htbl
+    cases List.mem_singleton.mp hslot
+    decide
+  refine ⟨rfl, rfl, static.1, static.2.1, ⟨rfl, rfl⟩, static.2.2, hretains, hlayouts,
     (materializedTables project).1, (materializedTables project).2, ?_, ?_⟩
   · apply matchingRefinement (language := erasureLanguage)
     refine finiteProgressRefines bindingMIR bindingMemory _ _ bindingResult erasureBound
@@ -431,7 +444,7 @@ example (project : Project) :
     cases phase
     · exact stuck.2.1 _ (bindingMIRTick project)
     · exact stuck.2.2 _ terminal
-  obtain ⟨sim, represents⟩ := lowers.2.2.2.2.2.2.2.2.2 safe
+  obtain ⟨sim, represents⟩ := lowers.2.2.2.2.2.2.2.2.2.2.2 safe
   have targetInitial : bindingMemory.initial (immediateReturn project) storeInitial := by with_unfolding_all rfl
   have targetReach : bindingMemory.finite (immediateReturn project) storeInitial :=
     ⟨_, targetInitial, .nil _⟩

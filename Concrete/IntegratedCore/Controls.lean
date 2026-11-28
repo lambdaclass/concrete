@@ -889,7 +889,16 @@ example :
       some (⟨1⟩, surfaceFileSpan innerPlus, [(⟨1⟩, innerPlus), (⟨2⟩, outerPlus)]) ∧
     ((parseSource r"fn main() -> u8 { }").bind (Admission.prepareParsed .admission)) =
       .error (.source (.surface (.fallthrough ⟨18, 19, 1, 19, ⟨0⟩⟩))) := by
-  with_unfolding_all exact ⟨by decide, rfl, rfl⟩
+  refine ⟨?_, ?_, ?_⟩
+  · simp only [sourceKeys_eq_sparse]
+    decide +kernel
+  · unfold parseSource
+    rw [Parse.KernelEval.parseBytes_eq_sparse]
+    decide +kernel
+  · apply Parse.KernelEval.eq_error_of_exceptError
+    unfold parseSource
+    rw [Parse.KernelEval.parseBytes_eq_sparse]
+    decide +kernel
 
 -- Stage-order surface preparation on the driver/registry boundary: surface rules run
 -- before Core checking, while valid surface right-nested additions check `256` first.
@@ -901,6 +910,7 @@ example :
       some (.surface (.unknownLocal "missing" ⟨32, 39, 1, 33, ⟨0⟩⟩)) ∧
     sourceDiagnostic r"fn main() -> u8 { return 256 + (255 + 1); }" =
       some (.core .slice0 ⟨⟨0⟩, 25, 28, 1, 26⟩ [] litReason) := by
-  with_unfolding_all exact ⟨rfl, rfl, rfl⟩
+  simp only [sourceDiagnostic, pendingSource_eq_sparse]
+  decide +kernel
 
 end Concrete.IntegratedCore

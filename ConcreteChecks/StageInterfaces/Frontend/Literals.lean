@@ -21,17 +21,32 @@ private def entryNameSpan : Surface0.Span := ⟨3, 7, 1, 4, ⟨0⟩⟩
 def resultSpan : Surface0.Span := ⟨25, 27, 1, 26, ⟨0⟩⟩
 
 private def literalProgram (n : Nat) : Surface0.Program :=
-  ⟨"main", entryNameSpan, [.ret (.integer n none resultSpan) ⟨18, 28, 1, 19, ⟨0⟩⟩]⟩
+  let stop := 25 + (toString n).length
+  ⟨"main", entryNameSpan,
+    [.ret (.integer n none ⟨25, stop, 1, 26, ⟨0⟩⟩) ⟨18, stop + 1, 1, 19, ⟨0⟩⟩],
+    ⟨stop + 2, stop + 3, 1, stop + 3, ⟨0⟩⟩⟩
 
 abbrev returnProgram := literalProgram 42
 
 def returnSyntax (n : Nat) : SyntaxTree :=
-  .node .program [.leaf ⟨⟨⟨0⟩, 3, 7, 1, 4⟩, .name "main"⟩, .node .body [
-    .node .return_ [.leaf ⟨⟨⟨0⟩, 18, 24, 1, 19⟩, .fixed .return_ rfl⟩,
-      .leaf ⟨⟨⟨0⟩, 25, 27, 1, 26⟩, .integer n .decimal none⟩,
-      .leaf ⟨⟨⟨0⟩, 27, 28, 1, 28⟩, .fixed .semi rfl⟩]]]
+  let stop := 25 + (toString n).length
+  .node .program [
+    .node .declList [],
+    .leaf ⟨⟨⟨0⟩, 3, 7, 1, 4⟩, .name "main"⟩,
+    .leaf ⟨⟨⟨0⟩, 13, 15, 1, 14⟩, .fixed .u8 rfl⟩,
+    .node .body [
+      .node .return_ [
+        .leaf ⟨⟨⟨0⟩, 18, 24, 1, 19⟩, .fixed .return_ rfl⟩,
+        .node .expr [
+          .node .product [
+            .leaf ⟨⟨⟨0⟩, 25, stop, 1, 26⟩, .integer n .decimal none⟩,
+            .node .productTail []],
+          .node .sumTail []],
+        .leaf ⟨⟨⟨0⟩, stop, stop + 1, 1, stop + 1⟩, .fixed .semi rfl⟩],
+      .node .body []],
+    .leaf ⟨⟨⟨0⟩, stop + 2, stop + 3, 1, stop + 3⟩, .fixed .rbrace rfl⟩]
 
-def parsedReturn : Parsed (SyntaxTree ⊕ Bool) :=
+def parsedReturn : Parsed (SyntaxTree ⊕ Empty) :=
   ⟨elaborationSource, .inl (returnSyntax 42)⟩
 
 abbrev earlyFixtureLanguage := sliceLanguage slice0
@@ -62,7 +77,7 @@ theorem returnedCoreWF (n : Nat) : (elaboratedReturn n).WF := by
   refine ⟨⟨by change [SiteId.mk 0].Nodup; simp, by change [SiteId.mk 0].Nodup; simp,
     by change [origin.2.evidenceKey].Nodup; simp, ?_, ?_, ?_⟩, ?_, ?_⟩
   · intro site op member
-    change (site, op) ∈ [(⟨0⟩, .expression (.inl (.read (.literal (.int .u8 n)))))] at member
+    change (site, op) ∈ [(⟨0⟩, .expression (.read (.literal (.int .u8 n))))] at member
     cases List.mem_singleton.mp member
     exact ⟨origin.2, rfl⟩
   · intro state events kind site reached trapped
@@ -117,7 +132,7 @@ theorem returnedCoreWF (n : Nat) : (elaboratedReturn n).WF := by
     let specSpan : ConcreteSpec.Core.Span := ⟨⟨0⟩, 18, 28, by decide, 1, 19, by decide, by decide⟩
     exact ⟨rfl, specSpan, _, rfl, rfl, by decide, rfl, rfl, rfl, rfl⟩
   · intro site op member
-    change (site, op) ∈ [(⟨0⟩, .expression (.inl (.read (.literal (.int .u8 n)))))] at member
+    change (site, op) ∈ [(⟨0⟩, .expression (.read (.literal (.int .u8 n))))] at member
     cases List.mem_singleton.mp member
     trivial
   · intro location member
@@ -126,9 +141,9 @@ theorem returnedCoreWF (n : Nat) : (elaboratedReturn n).WF := by
     exact ⟨⟨⟨0⟩, 25, 27, by decide, 1, 26, by decide, by decide⟩, _, rfl, rfl, by decide, rfl, rfl, rfl, rfl⟩
 
 example :
-    (Concrete.Lex.lex elaborationSourceText.toUTF8).bind
-      (Concrete.Parse.parseForDriver (Concrete.Parse.eofSpan elaborationSourceText.toUTF8)) = .ok returnProgram :=
-  rfl
+    Concrete.Parse.parseForDriver elaborationSource = .ok returnProgram := by
+  apply Concrete.Parse.KernelEval.parseBytes_eq_ok_of_sparse
+  decide +kernel
 
 def returnView (n : Nat := 42) : ParserView :=
   let stop := 25 + (toString n).length
