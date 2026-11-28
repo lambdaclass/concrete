@@ -9,6 +9,7 @@ import Concrete.Backend.LLVM
 import Concrete.Backend.LCBJob
 import Concrete.Backend.LCB
 import Concrete.Backend.LCBWordLemmas
+import Concrete.Backend.ValidateEmit
 import Concrete.Premises
 import Concrete.Lex
 import Concrete.Refusal
