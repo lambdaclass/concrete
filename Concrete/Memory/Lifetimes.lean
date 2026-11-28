@@ -480,4 +480,297 @@ theorem lowerGraph_handoff {mir : MIR lowering profile} {memory : Interfaces.Mem
         obtain ⟨rfl, rfl, certificate⟩ := shape rel
         exact ⟨placed, hm, certificate⟩
 
+section UnambiguousPlacement
+
+variable {Ty : Type} {lang : LoweringLanguage Ty}
+
+private theorem mem_of_mem_erase_constructive {α : Type} [BEq α] [LawfulBEq α] :
+    ∀ {xs : List α} {x y : α}, x ∈ xs.erase y → x ∈ xs
+  | [], _, _, h => nomatch h
+  | a :: rest, x, y, h => by
+    simp only [List.erase_cons] at h
+    cases hay : (a == y)
+    · rw [hay] at h
+      rcases List.mem_cons.mp h with rfl | h'
+      · exact .head _
+      · exact .tail _ (mem_of_mem_erase_constructive h')
+    · rw [hay] at h
+      exact .tail _ h
+
+private theorem reachableEntries_sound (graph : MemoryGraph lang) (root : PlaceId)
+    (remaining pending : List Entry)
+    (hrem : ∀ x ∈ remaining, x ∈ entryDomain graph)
+    (hpend : ∀ x ∈ pending, x ∈ entryDomain graph → EntryPath graph root x) :
+    ∀ x ∈ reachableEntries graph root remaining pending, EntryPath graph root x := by
+  fun_induction reachableEntries with
+  | case1 => intro _ h; cases h
+  | case2 remaining key rest member ih =>
+    intro x hx
+    have hkey : EntryPath graph root key := hpend key (.head _) (hrem key member)
+    rcases List.mem_cons.mp hx with rfl | hx
+    · exact hkey
+    · refine ih (fun y hy => hrem y (mem_of_mem_erase_constructive hy)) ?_ x hx
+      intro y hy hdom
+      rcases List.mem_append.mp hy with hnext | hrest
+      · exact .edge hkey hnext hdom
+      · exact hpend y (.tail _ hrest) hdom
+  | case3 remaining key rest _ ih =>
+    exact ih hrem (fun y hy hdom => hpend y (.tail _ hy) hdom)
+
+/-- Exact condition under which `entryLifetime graph block root` succeeds (`some _`). -/
+def RootUnambiguousAt (graph : MemoryGraph lang) (block : MemoryBlock lang) (root : PlaceId) : Prop :=
+  block.params.any (·.2.logical.root == root) = true ∨
+  graph.blocks.any (fun b => b.ending.successors.any (·.target == block.id)) = false ∨
+  ¬ (EntryPath graph root (block.id, true) ∧ EntryPath graph root (block.id, false))
+
+/-- Decidable check for whether `root` has an ambiguous lifetime join at any block of `graph`. -/
+def hasAmbiguousJoin (graph : MemoryGraph lang) (root : PlaceId) : Bool :=
+  graph.blocks.any fun block => (entryLifetime graph block root).isNone
+
+theorem rootUnambiguousAt_of_hasAmbiguousJoin_false {graph : MemoryGraph lang} {root : PlaceId}
+    (h : hasAmbiguousJoin graph root = false) {block : MemoryBlock lang}
+    (hmem : block ∈ graph.blocks.toList) :
+    RootUnambiguousAt graph block root := by
+  have hnotNone : (entryLifetime graph block root).isNone = false := by
+    cases hval : (entryLifetime graph block root).isNone
+    · rfl
+    · have hany : hasAmbiguousJoin graph root = true :=
+        Array.any_eq_true'.mpr ⟨block, Array.mem_toList_iff.mp hmem, hval⟩
+      rw [h] at hany
+      cases hany
+  cases hparam : block.params.any (·.2.logical.root == root) with
+  | true => exact .inl hparam
+  | false =>
+    cases hedge : graph.blocks.any (fun b => b.ending.successors.any (·.target == block.id)) with
+    | false => exact .inr (.inl hedge)
+    | true =>
+      refine .inr (.inr ?_)
+      rintro ⟨htrue, hfalse⟩
+      have covers := reachableEntries_closed graph root (entryDomain graph) [(graph.entry, false)]
+      have all : ∀ {key}, EntryPath graph root key →
+          key ∈ reachableEntries graph root (entryDomain graph) [(graph.entry, false)] := by
+        intro key p
+        induction p with
+        | initial mem => exact covers.1 _ (.head _) mem
+        | edge _ step mem ih => exact covers.2 _ ih _ step mem
+      have ht := List.contains_iff_mem.mpr (all htrue)
+      have hf := List.contains_iff_mem.mpr (all hfalse)
+      have hnone : entryLifetime graph block root = none := by
+        simp only [entryLifetime, hparam, hedge, ht, hf, Bool.false_eq_true, ite_false,
+          Bool.not_true, Bool.and_self, ite_true, Id.run_pure]
+      rw [hnone] at hnotNone
+      cases hnotNone
+
+private theorem entryLifetime_isSome_of_rootUnambiguousAt {graph : MemoryGraph lang}
+    {block : MemoryBlock lang} {root : PlaceId}
+    (h : RootUnambiguousAt graph block root) :
+    (entryLifetime graph block root).isSome = true := by
+  cases hparam : block.params.any (·.2.logical.root == root) with
+  | true => simp only [entryLifetime, hparam, ite_true, Id.run_pure, Option.isSome_some]
+  | false =>
+    cases hedge : graph.blocks.any (fun b => b.ending.successors.any (·.target == block.id)) with
+    | false =>
+      simp only [entryLifetime, hparam, hedge, Bool.false_eq_true, ite_false,
+        Bool.not_false, ite_true, Id.run_pure, Option.isSome_some]
+    | true =>
+      have hnotBoth : ¬ (EntryPath graph root (block.id, true) ∧ EntryPath graph root (block.id, false)) := by
+        rcases h with hp | he | hnb
+        · rw [hparam] at hp; cases hp
+        · rw [hedge] at he; cases he
+        · exact hnb
+      have hsound := reachableEntries_sound graph root (entryDomain graph) [(graph.entry, false)]
+        (fun _ hx => hx) (fun x hx hdom => by
+          cases List.mem_singleton.mp hx
+          exact .initial hdom)
+      cases ht : (reachableEntries graph root (entryDomain graph) [(graph.entry, false)]).contains (block.id, true) with
+      | false =>
+        simp only [entryLifetime, hparam, hedge, ht, Bool.false_eq_true, ite_false,
+          Bool.not_true, Bool.false_and, Id.run_pure, Option.isSome_some]
+      | true =>
+        cases hf : (reachableEntries graph root (entryDomain graph) [(graph.entry, false)]).contains (block.id, false) with
+        | false =>
+          simp only [entryLifetime, hparam, hedge, ht, hf, Bool.false_eq_true, ite_false,
+            Bool.not_true, Bool.and_false, Id.run_pure, Option.isSome_some]
+        | true =>
+          exact (hnotBoth ⟨hsound _ (List.contains_iff_mem.mp ht),
+            hsound _ (List.contains_iff_mem.mp hf)⟩).elim
+
+/-- Public structural induction principle for `EntryPath`, independent of private worklist helpers. -/
+theorem EntryPath.ind_step {graph : MemoryGraph lang} {root : PlaceId}
+    (P : BlockId → Bool → Prop)
+    (hInit : P graph.entry false)
+    (hEdge : ∀ (src : MemoryBlock lang) (prev : Bool) (edge : CFGEdge (Sigma (MemoryRead Ty lang.literal))),
+      graph.blocks.find? (·.id == src.id) = some src →
+      EntryPath graph root (src.id, prev) → P src.id prev →
+      edge ∈ src.ending.successors →
+      P edge.target (src.body.foldl (fun fact op =>
+        (match op.instruction with
+          | .bind dst _ | .op dst .. => if dst.logical.root = root then some true else none
+          | .beginLifetime id => if id = root then some true else none
+          | .endLifetime id => if id = root then some false else none
+          | .call _ dst .. => if dst.any (fun p : Sigma (MemoryPlace Ty) => p.2.logical.root == root) then some true else none
+          | .destructure _ bindings => if bindings.any (fun b : FieldId × Sigma (MemoryPlace Ty) => b.2.2.logical.root == root) then some true else none
+          | .addWithOverflow _ dst flag _ _ =>
+            if dst.logical.root = root || flag.logical.root = root then some true else none
+          | .assign .. => none).getD fact)
+        (prev || src.params.any (fun p : Sigma (MemoryPlace Ty) => p.2.logical.root == root))))
+    {bid : BlockId} {inc : Bool} (h : EntryPath graph root (bid, inc)) :
+    P bid inc := by
+  have aux : ∀ {key}, EntryPath graph root key → P key.1 key.2 := by
+    intro key hp
+    induction hp with
+    | initial _ => exact hInit
+    | @edge x y hp' hnext _ ih =>
+      rcases x with ⟨srcId, prev⟩
+      rcases y with ⟨tgtId, outLive⟩
+      unfold nextEntries at hnext
+      split at hnext
+      · cases hnext
+      · rename_i src hfind
+        have hbeq : (src.id == srcId) = true :=
+          Array.find?_some (p := fun b : MemoryBlock lang => b.id == srcId) hfind
+        have hid : src.id = srcId := eq_of_beq hbeq
+        subst hid
+        obtain ⟨edge, hedge, hpair⟩ := List.mem_map.mp hnext
+        obtain ⟨htgt, hout⟩ := Prod.mk.inj hpair
+        subst htgt hout
+        exact hEdge src prev edge hfind hp' ih hedge
+  exact aux h
+
+theorem EntryPath.mk_initial {graph : MemoryGraph lang} {root : PlaceId}
+    {block : MemoryBlock lang} (hmem : block ∈ graph.blocks.toList) (hid : block.id = graph.entry) :
+    EntryPath graph root (graph.entry, false) :=
+  .initial (List.mem_flatMap.mpr ⟨block, hmem, by rw [hid]; exact .head _⟩)
+
+theorem EntryPath.mk_edge {graph : MemoryGraph lang} {root : PlaceId}
+    {src dst : MemoryBlock lang} {prev : Bool} {edge}
+    (hp : EntryPath graph root (src.id, prev))
+    (hfind : graph.blocks.find? (·.id == src.id) = some src)
+    (hedge : edge ∈ src.ending.successors)
+    (hdst : dst ∈ graph.blocks.toList) (hid : dst.id = edge.target) :
+    EntryPath graph root (dst.id, src.body.foldl (fun fact op =>
+      (match op.instruction with
+        | .bind dst _ | .op dst .. => if dst.logical.root = root then some true else none
+        | .beginLifetime id => if id = root then some true else none
+        | .endLifetime id => if id = root then some false else none
+        | .call _ dst .. => if dst.any (fun p : Sigma (MemoryPlace Ty) => p.2.logical.root == root) then some true else none
+        | .destructure _ bindings => if bindings.any (fun b : FieldId × Sigma (MemoryPlace Ty) => b.2.2.logical.root == root) then some true else none
+        | .addWithOverflow _ dst flag _ _ =>
+          if dst.logical.root = root || flag.logical.root = root then some true else none
+        | .assign .. => none).getD fact)
+      (prev || src.params.any (fun p : Sigma (MemoryPlace Ty) => p.2.logical.root == root))) := by
+  refine .edge hp ?_ ?_
+  · unfold nextEntries
+    rw [hfind]
+    exact List.mem_map.mpr ⟨edge, hedge, Prod.ext hid.symm rfl⟩
+  · refine List.mem_flatMap.mpr ⟨dst, hdst, ?_⟩
+    cases src.body.foldl _ _
+    · exact .head _
+    · exact .tail _ (.head _)
+
+private theorem placeBody_ok_of_isSome (locals : LocalTypes Ty) (fn : FnId) (block : BlockId)
+    (live : PlaceId → Option Bool) (body : List (LocatedOp (MemoryInst lang)))
+    (h : ∀ op ∈ body, ∀ root, definitionRoot locals op.instruction = some root → (live root).isSome = true) :
+    ∃ placed, placeBody locals fn block live body = .ok placed := by
+  induction body generalizing live with
+  | nil => exact ⟨[], rfl⟩
+  | cons op rest ih =>
+    have hNext : ∀ op' ∈ rest, ∀ root, definitionRoot locals op'.instruction = some root →
+        ((lifetimeChange op.instruction root).orElse (fun _ => live root)).isSome = true := by
+      intro op' hop' root hdef
+      have hl := h op' (.tail _ hop') root hdef
+      cases hc : lifetimeChange op.instruction root with
+      | some _ => rfl
+      | none => simpa [Option.orElse] using hl
+    obtain ⟨tail, htail⟩ := ih _ hNext
+    cases hd : definitionRoot locals op.instruction with
+    | none =>
+      refine ⟨op :: tail, ?_⟩
+      unfold placeBody
+      rw [hd]
+      dsimp only
+      simp only [bind, Except.bind, pure, Except.pure, List.nil_append]
+      rw [htail]
+    | some root =>
+      have hl := h op (.head _) root hd
+      cases hlv : live root with
+      | none => rw [hlv] at hl; cases hl
+      | some b =>
+        cases b
+        · refine ⟨⟨op.origin, .beginLifetime root⟩ :: op :: tail, ?_⟩
+          unfold placeBody
+          rw [hd]
+          dsimp only
+          rw [hlv]
+          dsimp only
+          simp only [bind, Except.bind, pure, Except.pure, List.cons_append, List.nil_append]
+          rw [htail]
+        · refine ⟨op :: tail, ?_⟩
+          unfold placeBody
+          rw [hd]
+          dsimp only
+          rw [hlv]
+          dsimp only
+          simp only [bind, Except.bind, pure, Except.pure, List.nil_append]
+          rw [htail]
+
+private theorem list_mapM_ok_of_forall {α β ε : Type} (f : α → Except ε β) (xs : List α)
+    (h : ∀ x ∈ xs, ∃ y, f x = .ok y) : ∃ ys, xs.mapM f = .ok ys := by
+  induction xs with
+  | nil => exact ⟨[], rfl⟩
+  | cons x rest ih =>
+    obtain ⟨y, hy⟩ := h x (.head _)
+    obtain ⟨ys, hys⟩ := ih (fun a ha => h a (.tail _ ha))
+    refine ⟨y :: ys, ?_⟩
+    rw [List.mapM_cons, hy, hys]
+    rfl
+
+/-- When every `bind`/`op` definition root in every block of every prepared function is
+unambiguous (`RootUnambiguousAt`), `lowerGraph` is guaranteed to succeed. -/
+theorem lowerGraph_ok_of_unambiguous {language : CoreLanguage}
+    {lowering : LoweringLanguage language.operands.Ty} {profile : Profile}
+    {mir : MIR lowering profile} {prepared : PreparedGraphs lowering profile}
+    (hprep : prepareGraph (language := language) mir = .ok prepared)
+    (hunambig : ∀ fn locals graph, (fn, locals, graph) ∈ prepared.functions →
+      ∀ block ∈ graph.blocks.toList, ∀ op ∈ block.body, ∀ root,
+        definitionRoot locals op.instruction = some root →
+        RootUnambiguousAt graph block root) :
+    ∃ memory, lowerGraph (language := language) mir = .ok memory := by
+  have hFns : ∃ fns, prepared.functions.mapM placeFunction = .ok fns := by
+    apply list_mapM_ok_of_forall
+    rintro ⟨fn, locals, graph⟩ hmem
+    have hBlks : ∃ blks, graph.blocks.toList.mapM (fun block => do
+        let body ← placeBody locals fn block.id (entryLifetime graph block) block.body
+        return {block with body}) = .ok blks := by
+      apply list_mapM_ok_of_forall
+      intro block hb
+      obtain ⟨placed, hp⟩ := placeBody_ok_of_isSome locals fn block.id (entryLifetime graph block) block.body
+        (fun op hop root hdef =>
+          entryLifetime_isSome_of_rootUnambiguousAt (hunambig fn locals graph hmem block hb op hop root hdef))
+      refine ⟨{block with body := placed}, ?_⟩
+      change (placeBody locals fn block.id (entryLifetime graph block) block.body).bind _ = _
+      rw [hp]
+      rfl
+    obtain ⟨blks, hblks⟩ := hBlks
+    refine ⟨(fn, locals, {graph with blocks := blks.toArray}), ?_⟩
+    unfold placeFunction placeGraph
+    rw [hblks]
+    rfl
+  obtain ⟨fns, hfns⟩ := hFns
+  refine ⟨{
+    project := mir.project
+    entry := mir.entry
+    signatures := mir.signatures
+    functions := fns
+    storage := prepared.storage
+    layouts := prepared.layouts
+    mutableLocals := mir.mutableLocals
+    declarations := mir.declarations }, ?_⟩
+  unfold lowerGraph
+  rw [hprep]
+  simp only [Except.mapError, bind, Except.bind, pure, Except.pure]
+  rw [hfns]
+
+end UnambiguousPlacement
+
 end Concrete.Memory
