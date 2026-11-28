@@ -176,14 +176,14 @@ def module_order(env_mods):
     return first + sorted(set(env_mods) - set(first))
 
 
-def blocks(lines):
+def blocks(lines, allow_quotations=False):
     """Split a Lean source into ('doc', text, line) and ('code', [(line, text)]) blocks. A doc
     block is a top-level `/--` or `/-!` comment (scripts/proofs/lean_lex.py finds the comments, so
     one inside another comment or in a string is not a doc block) that is the first text on its
     line; text after its closing `-/` on the same line stays code."""
     src = '\n'.join(lines)
     try:
-        spans = lean_lex.comment_spans(src)
+        spans = lean_lex.comment_spans(src, allow_quotations=allow_quotations)
     except lean_lex.LexError as e:
         sys.exit(f'error: {e}')
     starts = [0]
@@ -324,8 +324,9 @@ def main():
         refs = ilean_refs(mod)
         body = []
         nthm = ndef = 0
-        nex = lean_lex.count_examples('\n'.join(src))
-        for blk in blocks(src):
+        allow_q = mod.startswith('ConcreteSpec.Tactics.')
+        nex = lean_lex.count_examples('\n'.join(src), allow_quotations=allow_q)
+        for blk in blocks(src, allow_quotations=allow_q):
             if blk[0] == 'doc':
                 body.append('<div class="prose">' + prose(blk[1]) + '</div>')
                 continue

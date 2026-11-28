@@ -4394,6 +4394,10 @@ _private.Concrete.Memory.Lowering.0.Concrete.Memory.rootLayouts.match_1.eq_2
 _private.Concrete.Memory.Lowering.0.Concrete.Memory.rootLayouts.match_3.eq_1	
 _private.Concrete.Memory.Lowering.0.Concrete.Memory.rootLayouts.match_3.eq_2	
 _private.Concrete.Memory.Lowering.0.Concrete.Memory.rootLayouts_match	Quot.sound propext
+_private.Concrete.Memory.Lowering.0.Concrete.Memory.rootLayouts_match._simp_1_10	propext
+_private.Concrete.Memory.Lowering.0.Concrete.Memory.rootLayouts_match._simp_1_11	propext
+_private.Concrete.Memory.Lowering.0.Concrete.Memory.rootLayouts_match._simp_1_12	propext
+_private.Concrete.Memory.Lowering.0.Concrete.Memory.rootLayouts_match._simp_1_13	propext
 _private.Concrete.Memory.Lowering.0.Concrete.Memory.rootLayouts_match._simp_1_6	Quot.sound propext
 _private.Concrete.Memory.Lowering.0.Concrete.Memory.slice1._proof_1	
 _private.Concrete.Memory.Lowering.0.Except.map.match_1.eq_1	
@@ -4445,7 +4449,6 @@ _private.Concrete.Memory.Placement.0.Concrete.Interfaces.Memory.Rel.roots	Quot.s
 _private.Concrete.Memory.Placement.0.Concrete.Interfaces.Memory.Rel.splice	Quot.sound propext
 _private.Concrete.Memory.Placement.0.Concrete.Interfaces.Memory.Rel.storesValue	Quot.sound propext
 _private.Concrete.Memory.Placement.0.Concrete.Interfaces.Memory.Rel.writeValue	Quot.sound propext
-_private.Concrete.Memory.Placement.0.Concrete.Interfaces.Memory.Rel.writeValue._simp_1_2	Quot.sound propext
 _private.Concrete.Memory.Placement.0.Concrete.Interfaces.Memory.Rel.writes	Quot.sound propext
 _private.Concrete.Memory.Placement.0.Concrete.Interfaces.Memory.TransferCheckpoint.backings	Quot.sound propext
 _private.Concrete.Memory.Placement.0.Concrete.Interfaces.Memory.WriteFrame.effects	
@@ -4484,6 +4487,8 @@ _private.Concrete.Memory.Placement.0.Concrete.Interfaces.Memory.splice.eq_1
 _private.Concrete.Memory.Placement.0.ConcreteSpec.Core.Mem.Memory.load.match_1.eq_1	
 _private.Concrete.Memory.Placement.0.ConcreteSpec.Core.Mem.Memory.load.match_1.eq_2	
 _private.Concrete.Memory.Placement.0.ConcreteSpec.Core.Mem.Memory.load.match_1.eq_3	
+_private.Concrete.Memory.Placement.0.Option.bind.match_1.eq_1	
+_private.Concrete.Memory.Placement.0.Option.bind.match_1.eq_2	
 _private.Concrete.Memory.Refinement.0.Concrete.Memory.Checkpoint.finite	Quot.sound propext
 _private.Concrete.Memory.Refinement.0.Concrete.Memory.Checkpoint.mk.inj	Quot.sound propext
 _private.Concrete.Memory.Refinement.0.Concrete.Memory.Checkpoint.mk.injEq	Quot.sound propext
