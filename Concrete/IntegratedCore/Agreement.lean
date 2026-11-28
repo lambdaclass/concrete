@@ -1,5 +1,6 @@
 import Concrete.Interfaces.Contracts
 import ConcreteSpec.Admission.Early
+import Concrete.IntegratedCore.DischargeTransfer
 
 /-! Execution correspondence for the two located, straight-line Core fragments. -/
 namespace Concrete.IntegratedCore.Agreement
@@ -833,5 +834,47 @@ theorem lowered_observations {language : CoreLanguage} {lang : LoweringLanguage 
   rintro o ⟨q, reached, result⟩
   obtain ⟨p, path, same, _⟩ := finite q o reached result
   exact ⟨p, path, same⟩
+
+private theorem checked_terminates_no_overflow (v : AdmissionView) (checked : Checked v.program) :
+    ∃ q f, Exec.Steps v.execution.body v.execution.initial [] q ∧
+      q.final? = some f ∧ ∀ s, f ≠ .trapped .overflow s := by
+  obtain ⟨q, f, path, final, matched⟩ := view_agrees v checked.1 checked.2.runtime
+  have toExec {a b} (steps : Concrete.Contracts.Steps (Next v.execution.body) a b) :
+      Core.Exec.Steps v.execution.body a [] b := by
+    induction steps with
+    | nil => exact .refl _
+    | cons tick _ ih => exact .step (.silent tick) ih
+  refine ⟨q, f, toExec path, final, ?_⟩
+  intro s heq
+  subst heq
+  generalize ho : ConcreteSpec.run v.program (v.program.body.length + 1) = o at matched
+  cases matched with
+  | overflow _ =>
+    exact checked_no_implicit_traps checked (v.program.body.length + 1) .arithmeticOverflow ho
+
+/-- Every encoded discharge subset of an admitted early-fragment Core input
+satisfies `ValidDischarges`, for any `CoreLanguage` index. -/
+theorem validDischarges_encoded {language : CoreLanguage} (input : CoreInput language)
+    (batch : ConcreteSpec.Admission.InputBatch input)
+    (selected : List ConcreteSpec.Admission.Discharge)
+    (out : StageInterface.Discharges language)
+    (_wf : input.WF) (encoded : batch.encode selected = some out) :
+    ValidDischarges input out :=
+  DischargeTransfer.validDischarges_of_terminates checked_terminates_no_overflow
+    input batch selected out encoded
+
+/-- Fix (c)/(e) discharge transfer: every encoded discharge subset issued by
+straight-line admission holds at every matching reachable integrated machine state. -/
+theorem dischargeTransfer : ConcreteSpec.Admission.DischargeTransfer :=
+  fun input batch selected out wf encoded =>
+    validDischarges_encoded input batch selected out wf encoded
+
+/-- `ConcreteSpec.Admission.checkInput` is sound on every well-located
+early-fragment Core input: acceptance matches success, issued discharges
+transfer to `ValidDischarges`, and every refusal is a rendered `CheckerRefuses`. -/
+theorem admissionSound {language : CoreLanguage} :
+    AdmissionSound (language := language) ConcreteSpec.Admission.checkInput :=
+  DischargeTransfer.admissionSound_of_transfer (fun input batch selected out wf encoded =>
+    validDischarges_encoded input batch selected out wf encoded)
 
 end Concrete.IntegratedCore.Agreement
