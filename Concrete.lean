@@ -7,6 +7,7 @@ import Concrete.BIR.Progress
 import Concrete.Backend.Runtime
 import Concrete.Backend.LLVM
 import Concrete.Backend.LCB
+import Concrete.Backend.LCBWordLemmas
 import Concrete.Premises
 import Concrete.Lex
 import Concrete.Refusal
