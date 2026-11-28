@@ -68,11 +68,12 @@ for dep in sorted(modules):
         raise SystemExit('spec_imports: capability-base control accepted: ' + dep)
 # Positive and negative layering controls for ConcreteSpec/Tactics/.
 if 'ConcreteSpec.Tactics' in modules:
+    tactics_suffix = '\nnamespace ConcreteSpec.Tactics\nend ConcreteSpec.Tactics\n'
     check('import ConcreteSpec.Tactics' + suffix)
     for bad_tactics in (
-        'import ConcreteSpec.Spec.Basics' + suffix,
-        'import ConcreteSpec.Proofs.Basics' + suffix,
-        'import ConcreteSpec.Tactics' + suffix,
+        'import ConcreteSpec.Spec.Basics' + tactics_suffix,
+        'import ConcreteSpec.Proofs.Basics' + tactics_suffix,
+        'import ConcreteSpec.Tactics' + tactics_suffix,
     ):
         try:
             check(bad_tactics, tactics=True)
@@ -81,6 +82,13 @@ if 'ConcreteSpec.Tactics' in modules:
                 raise
         else:
             raise SystemExit('spec_imports: tactics-layer control accepted: ' + bad_tactics)
+    for bad_meta_import in ('import Lean.Elab' + tactics_suffix, 'import Lean.Meta' + tactics_suffix):
+        try:
+            check(bad_meta_import, tactics=True)
+        except (ValueError, LexError):
+            pass
+        else:
+            raise SystemExit('spec_imports: tactics meta-import control accepted: ' + bad_meta_import)
     for bad_spec in ('import ConcreteSpec.Tactics' + suffix, 'import ConcreteSpec.Tactics.Option' + suffix):
         if bad_spec.split()[1] in modules:
             try:

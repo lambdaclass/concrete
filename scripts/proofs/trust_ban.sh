@@ -63,16 +63,21 @@ BANNED_WORD_RE="$TRUST_WORD_RE"'|\bdecide\s*(?:\(\s*config\b|[+-])'
 DECIDE_CONFIG_ITEM_RE='[+-]|\(\s*(?:«[^»]*»|[^\s():]+)\s*:='
 COMPILER_WORD_RE="$TRUST_WORD_RE|\bdecide\s*(?:(?!\+kernel\b)(?:$DECIDE_CONFIG_ITEM_RE)|\+kernel\b\s*(?:$DECIDE_CONFIG_ITEM_RE))"
 # The source scan is lexical, so it holds only for the syntax it lexes: Lean core's. Under the
-# 2026-11-28 owner decision ("yes to tactics", R-0724 item 2), tactic-definition commands
-# (`macro`, `macro_rules`, `syntax`, `elab`, `elab_rules`) are permitted ONLY in
-# `ConcreteSpec/Tactics/` and remain refused everywhere else (`ConcreteSpec/Spec/`,
-# `ConcreteSpec/Proofs/`, `ConcreteSpecEvidence/`, `Concrete/`). Every other ban (trust words,
-# `axiom`, `implemented_by`, `extern`, `unsafe`, meta execution, options, outside imports)
-# continues to apply everywhere, including inside `ConcreteSpec/Tactics/`.
-TACTIC_EXT_RE='\b(macro|macro_rules|syntax|elab|elab_rules)\b'
-META_EXT_RE='#eval\b|\b(run_cmd|run_tac|run_elab|run_meta|set_option|notation|infix|infixl|infixr|prefix|postfix|declare_syntax_cat|initialize|builtin_initialize)\b'
+# 2026-11-28 owner decision ("yes to tactics", R-0724 item 2), pure tactic-template commands
+# (`syntax ... : tactic`, `macro ... : tactic => `(tactic| ...)`, and
+# `macro_rules | `(tactic| ...) => `(tactic| ...)`) are permitted ONLY in `ConcreteSpec/Tactics/`
+# under the strict structural whitelist enforced by `lean_lex.py scan-tactics`, and remain refused
+# everywhere else (`ConcreteSpec/Spec/`, `ConcreteSpec/Proofs/`, `ConcreteSpecEvidence/`, `Concrete/`).
+# `elab`/`elab_rules`, `do`, hand-built syntax/name constructors, non-`tactic` categories,
+# non-sibling imports (`Lean.Elab`, `Lean.Meta`, etc.), and every other trust ban (`sorry`,
+# `sorryAx`, `admit`, `native_decide`, `axiom`, `implemented_by`, `extern`, `unsafe`, meta
+# execution, options, outside imports) are refused in `ConcreteSpec/Tactics/` as well (including
+# inside quotations).
+TACTIC_EXT_RE='\b(macro|macro_rules|syntax)\b'
+META_EXT_RE='#eval\b|\b(elab|elab_rules|run_cmd|run_tac|run_elab|run_meta|set_option|notation|infix|infixl|infixr|prefix|postfix|declare_syntax_cat|initialize|builtin_initialize)\b'
+TACTICS_META_RE='\b(do|mkIdent|mkAtom|mkNode|mkNullNode|mkIdentFrom|mkCIdent|mkNumLit|mkStrLit|dbg_trace|bv_decide|stop|sleep|eval_tactic|evalTactic)\b|\bSyntax\.(node|atom|ident|missing|mkNumLit|mkStrLit|mkCharLit|mkNameLit|mkApp)\b|\bName\.(mkStr|mkSimple|mkNum)\b|\bLean\.(Elab|Meta|Syntax|Name|Macro|MacroM|TSyntax|TSyntaxArray)\b'
 EXTENSION_RE="$META_EXT_RE|$TACTIC_EXT_RE"
-TACTICS_WORD_RE="$BANNED_WORD_RE|$META_EXT_RE"
+TACTICS_WORD_RE="$BANNED_WORD_RE|$META_EXT_RE|$TACTICS_META_RE"
 
 # banned FILE → `<constant> (<axiom>)` for every constant of a PROOF_MODE=constants listing with a banned axiom
 banned() {
@@ -606,13 +611,18 @@ W=$(scan "$TMP/tactics-ctl/ConcreteSpec/Spec/SyntaxControl.lean"); RC=$?
   && ok "control: syntax/macro keywords in ConcreteSpec/Spec/ are still refused" \
   || no "control: syntax keyword in ConcreteSpec/Spec/ was not refused (rc=$RC): $W"
 
-printf '%s\n' 'namespace ConcreteSpec.Tactics' 'syntax "tac_ok_syn" : tactic' \
+printf '%s\n' \
+  'namespace ConcreteSpec.Tactics' \
+  'syntax "tac_ok_syn" : tactic' \
+  'syntax (name := tac_ok_named) "tac_ok_named" ("at " ident)? : tactic' \
   'macro_rules | `(tactic| tac_ok_syn) => `(tactic| rfl)' \
-  'macro "tac_ok" : tactic => `(tactic| tac_ok_syn)' 'end ConcreteSpec.Tactics' \
+  'macro "tac_ok" : tactic => `(tactic| tac_ok_syn)' \
+  'macro "tac_ok_arg " h:ident : tactic => `(tactic| exact $h)' \
+  'end ConcreteSpec.Tactics' \
   > "$TMP/tactics-ctl/ConcreteSpec/Tactics/MacroPass.lean"
 W=$(scan_tactics "$TMP/tactics-ctl/ConcreteSpec/Tactics/MacroPass.lean"); RC=$?
 [ "$RC" = 0 ] && [ -z "$W" ] \
-  && ok "control: macro/syntax/macro_rules in ConcreteSpec/Tactics/ passes" \
+  && ok "control: pure tactic-template syntax/macro/macro_rules in ConcreteSpec/Tactics/ passes" \
   || no "control: valid tactic macro in ConcreteSpec/Tactics/ was rejected (rc=$RC): $W"
 
 for bad_tac in \
@@ -622,6 +632,34 @@ for bad_tac in \
   '@[extern "c_bad"] opaque badExt : Nat' \
   'macro "badSorry" : tactic => `(tactic| sorry)' \
   'macro "badNative" : tactic => `(tactic| native_decide)' \
+  'macro "badOpt" : tactic => `(tactic| set_option maxRecDepth 10 in rfl)' \
+  'macro "badEval" : tactic => `(tactic| #eval 1)' \
+  'macro "badRunTac" : tactic => `(tactic| run_tac pure ())' \
+  'macro "badRunCmd" : tactic => `(tactic| run_cmd pure ())' \
+  'macro "badCmd" : command => `(command| #check 0)' \
+  'macro "badCmdTac" : command => `(tactic| rfl)' \
+  'macro "badTerm" : term => `(term| 0)' \
+  'macro "badAttr" : attr => `(attr| simp)' \
+  'syntax "badSynCmd" : command' \
+  'syntax (name := Lean.Parser.Command.eval) "badQualName" : tactic' \
+  'elab "badElab" : tactic => pure ()' \
+  'elab_rules | `(tactic| rfl) => pure ()' \
+  'macro "badDo" : tactic => do `(tactic| rfl)' \
+  'macro "badNode" : tactic => pure ⟨Lean.Syntax.node .none .anonymous #[]⟩' \
+  'macro "badAtom" : tactic => pure ⟨Lean.Syntax.atom .none "rfl"⟩' \
+  'macro "badIdent" : tactic => pure ⟨Lean.Syntax.ident .none "".toSubstring .anonymous []⟩' \
+  'macro "badMkIdent" : tactic => pure ⟨Lean.mkIdent (Lean.Name.mkSimple "x")⟩' \
+  'macro "badMkStr" : tactic => pure ⟨Lean.mkIdent (Lean.Name.mkStr .anonymous "x")⟩' \
+  'macro "badMkAtom" : tactic => pure ⟨Lean.mkAtom "rfl"⟩' \
+  'macro "badMkNode" : tactic => pure ⟨Lean.mkNode .anonymous #[]⟩' \
+  'macro "badAntiquot" : tactic => `(tactic| $(⟨.node .none (.str .anonymous ("set_" ++ "option")) #[]⟩))' \
+  'macro "badTokAnti" : tactic => `(tactic| rfl%$(x))' \
+  'macro "badNestedQuot" : tactic => `(tactic| exact `(command| #check 0))' \
+  'macro "badUnbound" : tactic => `(tactic| exact $unboundVar)' \
+  'macro "badMultiRhs" : tactic => `(tactic| rfl) <|> `(tactic| trivial)' \
+  'macro_rules | `(command| bad) => `(tactic| rfl)' \
+  'macro_rules | `(tactic| bad) => `(command| #check 0)' \
+  'macro_rules | `(tactic| bad) => do `(tactic| rfl)' \
   'set_option warningAsError false' \
   'run_cmd pure ()' \
   '#eval 1 + 1' \
@@ -635,13 +673,109 @@ for bad_tac in \
     || no "control: ConcreteSpec/Tactics/ scan missed $bad_tac (rc=$RC): $W"
 done
 
-for bad_hdr in 'import Lean' 'import ConcreteSpec.Spec.Basics'; do
+for bad_hdr in 'import Lean' 'import Lean.Elab' 'import Lean.Meta' 'import ConcreteSpec.Spec.Basics' 'import ConcreteSpec.Tactics'; do
   printf '%s\n' "$bad_hdr" 'namespace ConcreteSpec.Tactics' 'end ConcreteSpec.Tactics' \
     > "$TMP/tactics-ctl/ConcreteSpec/Tactics/BadHdr.lean"
   W=$(scan_tactics "$TMP/tactics-ctl/ConcreteSpec/Tactics/BadHdr.lean"); RC=$?
   [ "$RC" = 0 ] && [ -n "$W" ] \
     && ok "control: ConcreteSpec/Tactics/ scan rejects header $bad_hdr" \
     || no "control: ConcreteSpec/Tactics/ scan missed header $bad_hdr (rc=$RC): $W"
+done
+
+# Reviewer reproduction controls (round 2): verbatim copies of the macro-construction and
+# meta-smuggling reproducers placed under ConcreteSpec/Tactics/ in a throwaway copy.
+REV_DIR="$TMP/tactics-reviewer-copy/ConcreteSpec/Tactics"
+mkdir -p "$REV_DIR"
+
+cat > "$REV_DIR/Both.lean" <<'EOF'
+namespace ConcreteSpec.Tactics
+
+/-- A command macro built without spelling any banned word: expands to a `set_option`. -/
+macro "cheat_opt" : command => do
+  let kw := "set_" ++ "option"
+  let kind := Lean.Name.mkStr (Lean.Name.mkStr (Lean.Name.mkStr (Lean.Name.mkStr .anonymous "Lean") "Parser") "Command") kw
+  let opt := Lean.mkIdent (Lean.Name.mkStr .anonymous "maxRecDepth")
+  pure ⟨Lean.Syntax.node .none kind #[Lean.Syntax.atom .none kw, opt.raw, Lean.Syntax.node .none (Lean.Name.mkStr .anonymous "null") #[], (Lean.Syntax.mkNumLit "3").raw]⟩
+
+/-- A command macro that expands to an evaluation command (runs IO at build time). -/
+macro "cheat_eval" : command => do
+  let kw := "#" ++ "eval"
+  let kind := Lean.Name.mkStr (Lean.Name.mkStr (Lean.Name.mkStr (Lean.Name.mkStr .anonymous "Lean") "Parser") "Command") "eval"
+  let body ← `(IO.println "meta code ran at build time")
+  pure ⟨Lean.Syntax.node .none kind #[Lean.Syntax.atom .none kw, body.raw]⟩
+
+end ConcreteSpec.Tactics
+namespace UseControl
+def before : Nat := [1,2,3,4,5,6,7,8,9,10].foldl (· + ·) 0
+cheat_opt
+cheat_eval
+def after : Nat := [1,2,3,4,5,6,7,8,9,10].foldl (· + ·) 0
+end UseControl
+EOF
+
+cat > "$REV_DIR/Evil.lean" <<'EOF'
+namespace ConcreteSpec.Tactics
+
+/-- A command macro built without spelling any banned word: expands to a `set_option`. -/
+macro "cheat_opt" : command => do
+  let kw := "set_" ++ "option"
+  let kind := Lean.Name.mkStr (Lean.Name.mkStr (Lean.Name.mkStr (Lean.Name.mkStr .anonymous "Lean") "Parser") "Command") kw
+  let opt := Lean.mkIdent (Lean.Name.mkStr .anonymous "maxRecDepth")
+  pure ⟨Lean.Syntax.node .none kind #[Lean.Syntax.atom .none kw, opt.raw, Lean.Syntax.node .none (Lean.Name.mkStr .anonymous "null") #[], (Lean.Syntax.mkNumLit "3").raw]⟩
+
+/-- A command macro that expands to an evaluation command (runs IO at build time). -/
+macro "cheat_eval" : command => do
+  let kw := "#" ++ "eval"
+  let kind := Lean.Name.mkStr (Lean.Name.mkStr (Lean.Name.mkStr (Lean.Name.mkStr .anonymous "Lean") "Parser") "Command") "eval"
+  let body ← `(IO.println "meta code ran at build time")
+  pure ⟨Lean.Syntax.node .none kind #[Lean.Syntax.atom .none kw, body.raw]⟩
+
+end ConcreteSpec.Tactics
+EOF
+
+cat > "$REV_DIR/Probe2.lean" <<'EOF'
+import Lean
+open Lean Elab Command in
+#eval show CommandElabM Unit from do
+  let s ← `(tactic| set_option maxRecDepth 10 in rfl)
+  logInfo m!"{s.raw.getKind} {s.raw.getNumArgs}"
+EOF
+
+cat > "$REV_DIR/Probe.lean" <<'EOF'
+import Lean
+open Lean Elab Command in
+#eval show CommandElabM Unit from do
+  let s ← `(command| set_option maxRecDepth 10)
+  logInfo m!"{repr s.raw}"
+EOF
+
+cat > "$REV_DIR/TacEvil.lean" <<'EOF'
+namespace ConcreteSpec.Tactics
+macro "cheat_tac " t:tactic : tactic => do
+  let kw := "set_" ++ "option"
+  let kind := Lean.Name.mkStr (Lean.Name.mkStr (Lean.Name.mkStr (Lean.Name.mkStr .anonymous "Lean") "Parser") "Tactic") kw
+  let opt := Lean.mkIdent (Lean.Name.mkStr .anonymous "bogusOpt")
+  pure ⟨Lean.Syntax.node .none kind #[Lean.Syntax.atom .none kw, opt.raw,
+    Lean.Syntax.node .none (Lean.Name.mkStr .anonymous "null") #[], (Lean.Syntax.mkNumLit "1").raw,
+    Lean.Syntax.atom .none "in", t.raw]⟩
+end ConcreteSpec.Tactics
+example : ([1,2,3,4,5,6,7,8,9,10].foldl (· + ·) 0) = 55 := by simp
+example : ([1,2,3,4,5,6,7,8,9,10].foldl (· + ·) 0) = 55 := by cheat_tac simp
+EOF
+
+cat > "$REV_DIR/Use.lean" <<'EOF'
+namespace ConcreteSpec.Proofs.UseControl
+cheat_opt
+cheat_eval
+theorem probe : maxRecDepthProbe = 0 := rfl
+end ConcreteSpec.Proofs.UseControl
+EOF
+
+for rev_file in Both.lean Evil.lean Probe2.lean Probe.lean TacEvil.lean Use.lean; do
+  W=$(scan_tactics "$REV_DIR/$rev_file"); RC=$?
+  [ "$RC" = 0 ] && [ -n "$W" ] && has_match -F "tactics whitelist:" <<<"$W" \
+    && ok "control: ConcreteSpec/Tactics/ whitelist refuses reviewer reproducer $rev_file" \
+    || no "control: ConcreteSpec/Tactics/ scan missed reviewer reproducer $rev_file (rc=$RC): $W"
 done
 
 # Constructive tactic axiom control: run `#print axioms` on a theorem proved with every tactic

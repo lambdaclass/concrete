@@ -191,27 +191,103 @@ end Witness{index}
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp) / "T.lean"
             p.write_text(
-                'namespace ConcreteSpec.Tactics\n'
-                'macro "bad1" : tactic => `(tactic| sorry)\n'
+                'namespace ConcreteSpec.Spec\n'
+                'def bad1 : Nat := sorry\n'
                 'unsafe def bad2 : Nat := 0\n'
                 'def okQuoted : String := "extern"\n'
                 'def «unsafe» : Nat := 1\n'
-                'end ConcreteSpec.Tactics\n'
+                'end ConcreteSpec.Spec\n'
             )
             out = io.StringIO()
             with contextlib.redirect_stdout(out):
                 rc = lexer.scan(
                     r'\bsorry\b', [p],
-                    header=lexer.TACTICS_HEADER,
+                    header=lexer.HEADER,
                     code_pattern=r'\b(axiom|implemented_by|extern|unsafe)\b',
-                    allow_quotations=True,
-                    first_command=lexer.FIRST_COMMAND_TACTICS,
                 )
             self.assertEqual(rc, 0)
             self.assertEqual(out.getvalue().splitlines(), [
-                f'{p}:2: macro "bad1" : tactic => `(tactic| sorry)',
+                f'{p}:2: def bad1 : Nat := sorry',
                 f'{p}:3: unsafe def bad2 : Nat := 0',
             ])
+
+    def test_scan_tactics_whitelist_accepts_pure_templates(self):
+        good = (
+            'import ConcreteSpec.Tactics.Option\n'
+            '/-! doc comment with do and Lean.Syntax.node ignored -/\n'
+            'namespace ConcreteSpec.Tactics\n'
+            'syntax (name := my_named) "my_named" ("[" ident,* "]")? ("at " (ident <|> "*"))? : tactic\n'
+            'syntax "my_plain" ident : tactic\n'
+            'macro "my_rfl" : tactic => `(tactic| rfl)\n'
+            'macro "my_exact " h:ident : tactic => `(tactic| exact $h:term)\n'
+            'macro_rules\n'
+            '  | `(tactic| my_named) => `(tactic| rfl)\n'
+            '  | `(tactic| my_named [$fs:ident,*] at $h:ident) =>\n'
+            '    `(tactic| (try unfold $fs:ident* at $h:term; try simp only [$[$fs:term],*] at $h:term))\n'
+            'end ConcreteSpec.Tactics\n'
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "Good.lean"
+            p.write_text(good)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                rc = lexer.scan_tactics(r'\b(sorry|set_option|do)\b', [p],
+                                        code_pattern=r'\b(axiom|implemented_by|extern|unsafe)\b')
+            self.assertEqual(rc, 0)
+            self.assertEqual(out.getvalue(), "")
+
+    def test_scan_tactics_whitelist_refuses_meta_and_non_tactic_forms(self):
+        cases = [
+            ("command_macro", 'macro "c" : command => `(command| #check 0)'),
+            ("command_macro_tac_rhs", 'macro "c" : command => `(tactic| rfl)'),
+            ("term_macro", 'macro "t" : term => `(term| 0)'),
+            ("attr_macro", 'macro "a" : attr => `(attr| simp)'),
+            ("syntax_command", 'syntax "c" : command'),
+            ("syntax_qualified_name", 'syntax (name := Lean.Parser.Command.eval) "c" : tactic'),
+            ("elab", 'elab "e" : tactic => pure ()'),
+            ("elab_rules", 'elab_rules | `(tactic| rfl) => pure ()'),
+            ("do_rhs", 'macro "d" : tactic => do `(tactic| rfl)'),
+            ("hand_syntax_node", 'macro "n" : tactic => pure ⟨Lean.Syntax.node .none .anonymous #[]⟩'),
+            ("dot_antiquot_escape", 'macro "a" : tactic => `(tactic| $(⟨.node .none (.str .anonymous ("set_" ++ "option")) #[]⟩))'),
+            ("token_antiquot", 'macro "ta" : tactic => `(tactic| rfl%$(x))'),
+            ("double_backtick", 'macro "db" : tactic => ``(tactic| rfl)'),
+            ("nested_quotation", 'macro "nq" : tactic => `(tactic| exact `(command| #check 0))'),
+            ("unbound_rhs_var", 'macro "ub" : tactic => `(tactic| exact $x)'),
+            ("trailing_rhs_combinator", 'macro "tr" : tactic => `(tactic| rfl) <|> `(tactic| trivial)'),
+            ("macro_rules_cmd_lhs", 'macro_rules | `(command| c) => `(tactic| rfl)'),
+            ("macro_rules_cmd_rhs", 'macro_rules | `(tactic| c) => `(command| #check 0)'),
+            ("macro_rules_do_rhs", 'macro_rules | `(tactic| c) => do `(tactic| rfl)'),
+            ("quot_set_option", 'macro "qo" : tactic => `(tactic| set_option maxRecDepth 10 in rfl)'),
+            ("quot_eval", 'macro "qe" : tactic => `(tactic| #eval 1)'),
+            ("quot_run_tac", 'macro "qt" : tactic => `(tactic| run_tac pure ())'),
+            ("quot_run_cmd", 'macro "qc" : tactic => `(tactic| run_cmd pure ())'),
+            ("quot_native_decide", 'macro "qn" : tactic => `(tactic| native_decide)'),
+            ("quot_interp_string", 'macro "qi" : tactic => `(tactic| exact s!"{(")")}")'),
+            ("unicode_prime_trailing_rhs", 'macro "up" : tactic => `(tactic| intro α\') <|> `(tactic| rfl)'),
+            ("def_in_tactics", 'def helper : Nat := 0'),
+            ("example_in_tactics", 'example : 1 = 1 := rfl'),
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            for name, body in cases:
+                with self.subTest(case=name):
+                    p = Path(tmp) / f"{name}.lean"
+                    p.write_text(f'namespace ConcreteSpec.Tactics\n{body}\nend ConcreteSpec.Tactics\n')
+                    out = io.StringIO()
+                    with contextlib.redirect_stdout(out):
+                        rc = lexer.scan_tactics(r'\b(sorry|native_decide|set_option|run_tac|run_cmd|do)\b|#eval\b', [p])
+                    self.assertEqual(rc, 0)
+                    self.assertIn("tactics whitelist:", out.getvalue(), f"{name} was not rejected by whitelist")
+
+        for bad_imp in ('import Lean\n', 'import Lean.Elab\n', 'import Lean.Meta\n',
+                        'import ConcreteSpec.Tactics\n', 'import ConcreteSpec.Spec.Basics\n'):
+            with self.subTest(bad_imp=bad_imp.strip()), tempfile.TemporaryDirectory() as tmp:
+                p = Path(tmp) / "BadImp.lean"
+                p.write_text(bad_imp + 'namespace ConcreteSpec.Tactics\nend ConcreteSpec.Tactics\n')
+                out = io.StringIO()
+                with contextlib.redirect_stdout(out):
+                    rc = lexer.scan_tactics(r'\bsorry\b', [p])
+                self.assertEqual(rc, 0)
+                self.assertTrue(out.getvalue().strip(), f"{bad_imp.strip()} was not rejected")
 
 
 if __name__ == "__main__":
