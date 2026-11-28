@@ -50,6 +50,9 @@ structure StepLanguage (language : CoreLanguage) (profile : Profile)
     language.layout env profile.memoryTarget ty = some layout → 0 < layout.size →
     ∃ intTy, language.scalarType ty = some (.int intTy) ∧ layout.size = intTy.byteSize ∧
       ∀ v, ValidVal ty v → ∃ n, language.valueShape ▸ v = .scalar (.int intTy n) ∧ intTy.InRange n
+  opDecidable : ∀ env op tys ty vals tgt before,
+    (∃ res, language.operation env op tys ty vals tgt [] before res [] before) ∨
+    (∀ res, ¬ language.operation env op tys ty vals tgt [] before res [] before)
 
 def SliceValidVal : EarlyTy ⊕ Bool → EarlyValue → Prop
   | .inl (.scalar (.int intTy)), .scalar (.int actual n) => actual = intTy ∧ intTy.InRange n
@@ -100,11 +103,32 @@ private theorem earlyOpMirror_valid (env : Declarations)
     | ok n =>
       simp only [hpl, Res.map, Res.bind, Function.comp_apply] at hop
       cases hop
-      have hv1 := hvals.2 0 _ _ rfl rfl
       have hchk := (plain_ok_iff rt .add l r n).mp hpl
-      exact ⟨rfl, checked_inRange rt .add l r n hv1.2 hchk⟩
+      exact ⟨rfl, inRangeOr_inRange hchk⟩
   · cases hop
   · cases hop
+
+private theorem ofBits_inRange_constructive (t : IntTy) (m : Nat) (h : m < 2 ^ t.bits) :
+    t.InRange (ofBits t m) := by
+  have hS : ∀ (t : IntTy), t.signed = true → m < 2 ^ t.bits → t.InRange (ofBits t m) := by
+    intro t hs hm
+    unfold ofBits IntTy.InRange IntTy.min IntTy.max
+    rw [ite_eq_left hs, ite_eq_left hs]
+    if hge : m ≥ 2 ^ (t.bits - 1) then
+      rw [ite_eq_left (And.intro hs hge)]
+      cases t <;> cases hs <;> (dsimp only [IntTy.bits] at hm hge ⊢; constructor <;> omega)
+    else
+      rw [ite_eq_right (fun x => hge x.2)]
+      cases t <;> cases hs <;> (dsimp only [IntTy.bits] at hm hge ⊢; constructor <;> omega)
+  have hU : ∀ (t : IntTy), t.signed = false → m < 2 ^ t.bits → t.InRange (ofBits t m) := by
+    intro t hs hm
+    unfold ofBits IntTy.InRange IntTy.min IntTy.max
+    have hnf : ¬ t.signed = true := fun h1 => Bool.noConfusion (hs.symm.trans h1)
+    rw [ite_eq_right hnf, ite_eq_right hnf, ite_eq_right (fun x => hnf x.1)]
+    cases t <;> cases hs <;> (dsimp only [IntTy.bits] at hm ⊢; constructor <;> omega)
+  cases hs : t.signed with
+  | true => exact hS t hs h
+  | false => exact hU t hs h
 
 theorem sliceLanguage_stepLanguage (slice : Slice) (profile : Profile) :
     StepLanguage (sliceLanguage slice) profile SliceValidVal where
@@ -140,7 +164,7 @@ theorem sliceLanguage_stepLanguage (slice : Slice) (profile : Profile) :
           split at h
           · rename_i hlen
             cases h
-            refine ⟨rfl, ofBits_inRange intTy _ ?_⟩
+            refine ⟨rfl, ofBits_inRange_constructive intTy _ ?_⟩
             have hlt := Mem.leValue_lt (bs.map UInt8.toFin)
             rw [List.length_map, hlen] at hlt
             rw [← Mem.intByte_power]
@@ -191,6 +215,17 @@ theorem sliceLanguage_stepLanguage (slice : Slice) (profile : Profile) :
               | int actual n =>
                 obtain ⟨rfl, hr⟩ := hv
                 exact ⟨n, rfl, hr⟩
+  opDecidable env op tys ty vals _ _ := by
+    cases hop : earlyOpMirror env op tys ty vals with
+    | ok res => exact .inl ⟨res, rfl, by with_unfolding_all exact hop, rfl, rfl⟩
+    | trap _ =>
+      refine .inr fun res h => ?_
+      have heq : earlyOpMirror env op tys ty vals = .ok res := by with_unfolding_all exact h.2.1
+      rw [hop] at heq; cases heq
+    | stuck =>
+      refine .inr fun res h => ?_
+      have heq : earlyOpMirror env op tys ty vals = .ok res := by with_unfolding_all exact h.2.1
+      rw [hop] at heq; cases heq
 
 section StaticPlacement
 
@@ -348,13 +383,13 @@ private theorem bodyPlacement_at_pc {locals : LocalTypes Ty} {live : PlaceId →
     have htail : ∀ x ∈ src', instIsBegin x.instruction = false := fun x hx => noBegin x (.tail _ hx)
     cases j with
     | zero =>
-      refine ⟨Nat.zero_le _, fun h => by simp at h, ?_⟩
+      refine ⟨Nat.zero_le _, fun h => by simp only [List.length_cons] at h; exact Nat.noConfusion h, ?_⟩
       intro physOp hget
       cases hget
       refine .inr ⟨hnb, rfl, fun root hdef => hkeep root hdef, ?_⟩
       simp [List.take, hpred, hnb]
     | succ k =>
-      have hk : k ≤ dst'.length := by simp at hj; omega
+      have hk : k ≤ dst'.length := by simp only [List.length_cons] at hj; omega
       obtain ⟨hi_le, hi_end, hi_at⟩ := ih htail hk
       have htake : ((op :: dst').take (k + 1)).filter (fun o => pred o.instruction) =
           op :: (dst'.take k).filter (fun o => pred o.instruction) := by
@@ -368,7 +403,7 @@ private theorem bodyPlacement_at_pc {locals : LocalTypes Ty} {live : PlaceId →
       · rw [htake]; simp only [List.length_cons]; omega
       · intro hend
         rw [htake]; simp only [List.length_cons]
-        have hkEnd : k = dst'.length := by simp at hend; omega
+        have hkEnd : k = dst'.length := by simp only [List.length_cons] at hend; omega
         exact congrArg (· + 1) (hi_end hkEnd)
       · intro physOp hget
         rw [htake, htake1]
@@ -386,7 +421,7 @@ private theorem bodyPlacement_at_pc {locals : LocalTypes Ty} {live : PlaceId →
     have htail : ∀ x ∈ src', instIsBegin x.instruction = false := fun x hx => noBegin x (.tail _ hx)
     cases j with
     | zero =>
-      refine ⟨Nat.zero_le _, fun h => by simp at h, ?_⟩
+      refine ⟨Nat.zero_le _, fun h => by simp only [List.length_cons] at h; exact Nat.noConfusion h, ?_⟩
       intro physOp hget
       cases hget
       refine .inl ⟨root0, op, rfl, rfl, hdef0, hdead0, ?_⟩
@@ -403,7 +438,7 @@ private theorem bodyPlacement_at_pc {locals : LocalTypes Ty} {live : PlaceId →
             (fun o => pred o.instruction) = [op] := by
           simp only [List.take, List.filter_cons, List.filter_nil, hpred, hbegTrue, hnb,
             Bool.not_true, Bool.not_false, Bool.false_eq_true, ↓reduceIte]
-        refine ⟨by rw [htake0]; exact Nat.zero_le _, fun h => by simp at h, ?_⟩
+        refine ⟨by rw [htake0]; exact Nat.zero_le _, fun h => by simp only [List.length_cons] at h; omega, ?_⟩
         intro physOp hget
         cases hget
         refine .inr ⟨hnb, ?_, ?_, ?_⟩
@@ -414,7 +449,7 @@ private theorem bodyPlacement_at_pc {locals : LocalTypes Ty} {live : PlaceId →
           simp [List.take, staticFold, staticStep, instChange]
         · rw [htake0, htake1]; rfl
       | succ m =>
-        have hm : m ≤ dst'.length := by simp at hj; omega
+        have hm : m ≤ dst'.length := by simp only [List.length_cons] at hj; omega
         obtain ⟨hi_le, hi_end, hi_at⟩ := ih htail hm
         have hbegTrue : instIsBegin (.beginLifetime root0 : MemoryInst lang) = true := rfl
         have htake : ((⟨op.origin, (.beginLifetime root0 : MemoryInst lang)⟩ :: op :: dst').take (m + 2)).filter
@@ -436,7 +471,7 @@ private theorem bodyPlacement_at_pc {locals : LocalTypes Ty} {live : PlaceId →
         · rw [htake]; simp only [List.length_cons]; omega
         · intro hend
           rw [htake]; simp only [List.length_cons]
-          have hmEnd : m = dst'.length := by simp at hend; omega
+          have hmEnd : m = dst'.length := by simp only [List.length_cons] at hend; omega
           exact congrArg (· + 1) (hi_end hmEnd)
         · intro physOp hget
           rw [htake, htake1]
@@ -726,21 +761,24 @@ private theorem alist_lookup_map {α β γ : Type} [DecidableEq α] (xs : AList 
 private theorem list_mem_erase_iff_of_nodup {α : Type} [BEq α] [LawfulBEq α] {xs : List α}
     (hnd : xs.Nodup) (x y : α) : y ∈ xs.erase x ↔ y ∈ xs ∧ y ≠ x := by
   induction xs with
-  | nil => simp
+  | nil => simp only [List.erase_nil, List.not_mem_nil, false_and]
   | cons a rest ih =>
     obtain ⟨hnotin, hrest⟩ := List.nodup_cons.mp hnd
     simp only [List.erase_cons]
-    by_cases hax : a = x
-    · subst hax
-      simp only [beq_self_eq_true, ↓reduceIte, List.mem_cons]
+    cases hbeq : (a == x) with
+    | true =>
+      have hax : a = x := eq_of_beq hbeq
+      subst hax
+      simp only [↓reduceIte, List.mem_cons]
       constructor
       · intro hy
         exact ⟨.inr hy, fun h => hnotin (h ▸ hy)⟩
       · rintro ⟨rfl | hy, hne⟩
         · exact (hne rfl).elim
         · exact hy
-    · have hbeq : (a == x) = false := beq_false_of_ne hax
-      simp only [hbeq, Bool.false_eq_true, ↓reduceIte, List.mem_cons, ih hrest]
+    | false =>
+      have hax : a ≠ x := ne_of_beq_false hbeq
+      simp only [Bool.false_eq_true, ↓reduceIte, List.mem_cons, ih hrest]
       constructor
       · rintro (rfl | ⟨hy, hne⟩)
         · exact ⟨.inl rfl, hax⟩
@@ -1271,8 +1309,9 @@ private theorem entry_no_params {mir : MIR lang profile} {memory : Interfaces.Me
           unfold Interfaces.Memory.terminalObservation
           rw [show (p0 : MemoryRegisters language profile).resourceExhausted = false by rw [hp0eq]]
           simp only [Bool.false_eq_true, ↓reduceIte, hblkAt, bind, Option.bind, hnone]
-          rw [hp0eq]
-          simp
+          have hpcNe : ((p0 : MemoryRegisters language profile).instruction != srcEntry.body.length) = true := by
+            rw [hp0eq]; exact bne_iff_ne.mpr (Nat.succ_ne_self srcEntry.body.length)
+          rw [hpcNe]; rfl
         have hres' := (src_result_iff mir p0 o).mp hres
         simp [observeHosted, hterm] at hres'
   have hphysEmpty : physEntry.params = [] := by
@@ -1462,6 +1501,31 @@ private theorem mem_store_wellFormed_at {tgt : Target} {c : Nat} {m m' : Mem.Mem
         omega
       · intro y hy; exact hy
 
+private theorem list_splice_read {α : Type} (xs ys : List α) (off : Nat)
+    (h : off + ys.length ≤ xs.length) :
+    ((xs.take off ++ ys ++ xs.drop (off + ys.length)).drop off).take ys.length = ys := by
+  induction xs generalizing off with
+  | nil =>
+    cases off with
+    | zero =>
+      have h0 : ys.length ≤ 0 := by rw [Nat.zero_add] at h; exact h
+      have hy0 : ys = [] := List.eq_nil_of_length_eq_zero (Nat.le_zero.mp h0)
+      subst hy0; rfl
+    | succ _ => exact absurd h (by simp only [List.length_nil]; omega)
+  | cons x rest ih =>
+    cases off with
+    | zero =>
+      simp only [List.take_zero, List.nil_append, List.drop_zero]
+      have htakeApp : ∀ (a b : List α), (a ++ b).take a.length = a := by
+        intro a b; induction a with | nil => rfl | cons c cs ihc => exact congrArg (c :: ·) ihc
+      exact htakeApp ys _
+    | succ k =>
+      simp only [List.take_succ_cons, List.cons_append, List.drop_succ_cons]
+      rw [Nat.add_right_comm k 1 ys.length, List.drop_succ_cons]
+      have hk : k + ys.length ≤ rest.length := by
+        simp only [List.length_cons] at h; omega
+      exact ih k hk
+
 private theorem mem_store_load_at {tgt : Target} {c : Nat} {m m' : Mem.Memory}
     (hw : m.WellFormed tgt c) {p : Mem.Ptr} {bs : List Mem.MByte} {a : Nat}
     (h : m.store tgt p bs a c = some m') : m'.load tgt p bs.length a c = some bs := by
@@ -1491,7 +1555,7 @@ private theorem mem_store_load_at {tgt : Target} {c : Nat} {m m' : Mem.Memory}
         simp [Mem.Memory.access, hn, hp, hx, hv, hs, hlo, hhi, hal, hoff]
       simp only [Mem.Memory.load, ha', Mem.block_modify, ↓reduceIte, hx, Option.map_some]
       congr 1
-      exact Mem.splice_read _ _ _ (by omega)
+      exact list_splice_read _ _ _ (by omega)
 
 private theorem mem_store_meta_at {tgt : Target} {c : Nat} {m m' : Mem.Memory}
     {p : Mem.Ptr} {bs : List Mem.MByte} {a : Nat}
@@ -2578,7 +2642,7 @@ private theorem targetStateWF_writes (hl : StepLanguage language profile ValidVa
           hpath, List.isEmpty_nil, ↓reduceIte, bind, Option.bind, pure, Option.some.injEq] at hput
         subst stored
         exact ⟨⟨⟨hwf.active.liveNodup, hinitNd, hinitSub, hwf.active.matNodup, hwf.active.matSubLive,
-          hwf.active.matResident, by simpa [hpath] using hmoved, hwf.active.noAddr⟩,
+          hwf.active.matResident, by change (q.movedFields.filter _) = []; rw [hwf.active.noMoved]; rfl, hwf.active.noAddr⟩,
           hwf.callers, hwf.bytesWF, hwf.provsNodup, hwf.noEffects,
           by with_unfolding_all exact hcomm, hwf.noNextAddr⟩,
           rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
@@ -2589,7 +2653,7 @@ private theorem targetStateWF_writes (hl : StepLanguage language profile ValidVa
             hpath, List.isEmpty_nil, ↓reduceIte, bind, Option.bind, pure, Option.some.injEq] at hput
           subst stored
           exact ⟨⟨⟨hwf.active.liveNodup, hinitNd, hinitSub, hwf.active.matNodup, hwf.active.matSubLive,
-            hwf.active.matResident, by simpa [hpath] using hmoved, hwf.active.noAddr⟩,
+            hwf.active.matResident, by change (q.movedFields.filter _) = []; rw [hwf.active.noMoved]; rfl, hwf.active.noAddr⟩,
             hwf.callers, hwf.bytesWF, hwf.provsNodup, hwf.noEffects,
             by with_unfolding_all exact hcomm, hwf.noNextAddr⟩,
             rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
@@ -4708,7 +4772,7 @@ private theorem mem_store_load_align_at {tgt : Target} {c : Nat} {m m' : Mem.Mem
         simp [Mem.Memory.access, hn, hp, hx, hv, hs, hlo, hhi, halign, hoff]
       simp only [Mem.Memory.load, ha', Mem.block_modify, ↓reduceIte, hx, Option.map_some]
       congr 1
-      exact Mem.splice_read _ _ _ (by omega)
+      exact list_splice_read _ _ _ (by omega)
 
 private theorem valueShape_inv {A B : Type} (h : A = B) {x : A} {y : B}
     (hxy : h ▸ x = y) : h.symm ▸ y = x := by
@@ -4962,7 +5026,7 @@ private theorem writes_source_to_target_at_ceiling (hl : StepLanguage language p
   have hmayQ : memory.mayInitialize q physPl c = true := by
     simp only [Interfaces.Memory.mayInitialize, physPl, reclassPlace, hpath, List.isEmpty_nil,
       Interfaces.Memory.initializedAt, hb.noMoved, List.any_nil, Bool.not_false, Bool.and_true]
-    cases q.initialized.contains srcPl.logical.root <;> simp
+    cases q.initialized.contains srcPl.logical.root <;> rfl
   have hauthEq : memory.authorizeWrite q physPl c = mir.logicalView.authorizeWrite p srcPl := by
     have hwo : memory.writeOwnerView q physPl c = mir.logicalView.writeOwnerView p srcPl := by
       unfold Interfaces.Memory.writeOwnerView
@@ -4972,23 +5036,24 @@ private theorem writes_source_to_target_at_ceiling (hl : StepLanguage language p
       Bool.false_eq_true, ↓reduceIte]
   have hauthSome : ∃ owners, mir.logicalView.authorizeWrite p srcPl = some owners := by
     unfold Interfaces.Memory.writeValue at hputP
-    by_cases hguard : (!p.live.contains srcPl.logical.root || !mir.logicalView.mayInitialize p srcPl) = true
-    · rw [ite_eq_left hguard] at hputP; cases hputP
-    · rw [ite_eq_right hguard] at hputP
-      simp only [bind, Option.bind] at hputP
+    cases hguard : (!p.live.contains srcPl.logical.root || !mir.logicalView.mayInitialize p srcPl) with
+    | true => simp only [hguard, ↓reduceIte] at hputP; cases hputP
+    | false =>
+      simp only [hguard, Bool.false_eq_true, ↓reduceIte, bind, Option.bind] at hputP
       cases ha : mir.logicalView.authorizeWrite p srcPl with
-      | none => simp [ha] at hputP
+      | none => simp only [ha] at hputP; cases hputP
       | some owners => exact ⟨owners, rfl⟩
   obtain ⟨owners, hauthP⟩ := hauthSome
   have hauthQ : memory.authorizeWrite q physPl c = some owners := hauthEq.trans hauthP
   have hp'Init : p'.initialized = (if p.initialized.contains srcPl.logical.root then p.initialized
       else srcPl.logical.root :: p.initialized) := by
     unfold Interfaces.Memory.writeValue at hputP
-    by_cases hguard : (!p.live.contains srcPl.logical.root || !mir.logicalView.mayInitialize p srcPl) = true
-    · rw [ite_eq_left hguard] at hputP; cases hputP
-    · rw [ite_eq_right hguard] at hputP
-      simp only [bind, Option.bind, hauthP, hvir, Interfaces.Memory.replaceLocal,
-        Interfaces.Memory.markWritten, hpath, List.isEmpty_nil, ↓reduceIte, pure, Option.some.injEq] at hputP
+    cases hguard : (!p.live.contains srcPl.logical.root || !mir.logicalView.mayInitialize p srcPl) with
+    | true => simp only [hguard, ↓reduceIte] at hputP; cases hputP
+    | false =>
+      simp only [hguard, Bool.false_eq_true, ↓reduceIte, bind, Option.bind, hauthP, hvir,
+        Interfaces.Memory.replaceLocal, Interfaces.Memory.markWritten, hpath, List.isEmpty_nil,
+        ↓reduceIte, pure, Option.some.injEq] at hputP
       subst p'; rfl
   have hcommQ : (match AList.lookup q.addressIds srcPl.logical.root with
       | none => q.ownership
@@ -5035,24 +5100,25 @@ private theorem writes_source_to_target_at_ceiling (hl : StepLanguage language p
         physPl, reclassPlace, hst, Interfaces.Memory.replaceLocal, hpath, List.isEmpty_nil, pure]
       rfl
     have hstoresQ : memory.StoresValue q' physPl v c := by
-      refine ⟨?_, fun h => by simp [physPl, reclassPlace, hst] at h⟩
+      refine ⟨?_, fun h => by simp only [physPl, reclassPlace, hst] at h; cases h⟩
       have hia : Interfaces.Memory.initializedAt q' physPl.logical.root physPl.logical.path = true := by
         simp only [q', Interfaces.Memory.markWritten, Interfaces.Memory.initializedAt, physPl,
           reclassPlace, hpath, hb.noMoved, List.filter_nil, List.any_nil, Bool.not_false, Bool.and_true]
         split
         · assumption
-        · simp
+        · exact List.contains_iff_mem.mpr (.head _)
       unfold Interfaces.Memory.loadValue
       rw [ite_eq_left hia]
       unfold Interfaces.Memory.loadBacking
       have hvpQ' : memory.validPlace q' physPl = true := hvpQ
       have hlvQ' : q'.live.contains physPl.logical.root = true := List.contains_iff_mem.mpr hqLive
       rw [hvpQ', hlvQ']
-      simp [physPl, reclassPlace, hst, q', AList.lookup, hpath]
+      simp only [Bool.not_true, Bool.false_eq_true, ↓reduceIte, physPl, reclassPlace, hst, q',
+        AList.lookup, hpath, List.isEmpty_nil, bind, Option.bind]
     refine ⟨q', ⟨⟨hvpQ, fun hi => hcopyP (by rw [← hinitAtEq]; exact hi)⟩,
-        (fun h => by simp [reclassPlace, hst] at h), hputQ, hstoresQ⟩,
+        (fun h => by simp only [reclassPlace, hst] at h; cases h), hputQ, hstoresQ⟩,
       ⟨hb.bytesWF, hb.liveNodup, hinitNd, hinitSub, hb.matNodup, hb.matSubLive, hb.matResident,
-        hb.liveMat, by simpa [q', Interfaces.Memory.markWritten, physPl, reclassPlace, hpath] using hmoved',
+        hb.liveMat, by change (q.movedFields.filter _) = []; rw [hb.noMoved]; rfl,
         hb.noAddr, by simp only [q', Interfaces.Memory.markWritten, physPl, reclassPlace, hpath, List.isEmpty_nil, ↓reduceIte]; with_unfolding_all exact hcommQ,
         hb.noNextAddr⟩,
       hinitAgree', rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
@@ -5063,15 +5129,17 @@ private theorem writes_source_to_target_at_ceiling (hl : StepLanguage language p
       obtain ⟨_, hstor, hvir' | ⟨_, slots, lay', hlayFn, hlayLu, hspec⟩⟩ :=
         handoff.layouts.1 q.frame locals physGraph hfc.dstMem srcPl.logical.root ty (AList.lookup_mem hrtLu)
       · have : memory.classAt q.frame srcPl.logical.root = some .virtual := by
-          simp [Interfaces.Memory.classAt, hstor, hvir']
+          simp only [Interfaces.Memory.classAt, hstor, hvir', bind, Option.bind]
         rw [hclsQ] at this; cases this
       · have hlay' : memory.layoutAt q.frame srcPl.logical.root = some lay' := by
-          simp [Interfaces.Memory.layoutAt, hlayFn, hlayLu]
+          simp only [Interfaces.Memory.layoutAt, hlayFn, hlayLu, bind, Option.bind]
         cases Option.some.inj (hlay.symm.trans hlay')
         exact hspec
-    by_cases hz : lay.size = 0
-    · have hzr : memory.zeroRoot q.frame srcPl.logical.root = true := by
-        simp [Interfaces.Memory.zeroRoot, hlay, hz]
+    cases hsz : lay.size with
+    | zero =>
+      have hzr : memory.zeroRoot q.frame srcPl.logical.root = true := by
+        simp only [Interfaces.Memory.zeroRoot, hlay, Option.any_some, hsz]
+        rfl
       let q' : MemoryRegisters language profile :=
         {Interfaces.Memory.markWritten q physPl owners with
           zeroValues := (srcPl.logical.root, v) :: AList.erase q.zeroValues srcPl.logical.root}
@@ -5092,7 +5160,7 @@ private theorem writes_source_to_target_at_ceiling (hl : StepLanguage language p
             reclassPlace, hpath, hb.noMoved, List.filter_nil, List.any_nil, Bool.not_false, Bool.and_true]
           split
           · assumption
-          · simp
+          · exact List.contains_iff_mem.mpr (.head _)
         unfold Interfaces.Memory.loadValue
         rw [ite_eq_left hia]
         unfold Interfaces.Memory.loadBacking
@@ -5101,20 +5169,23 @@ private theorem writes_source_to_target_at_ceiling (hl : StepLanguage language p
         rw [hvpQ', hlvQ']
         simp only [Bool.not_true, Bool.false_eq_true, ↓reduceIte, physPl, reclassPlace, hst]
         rw [show q'.frame = q.frame from rfl, hzr]
-        simp [q', AList.lookup, hpath]
+        simp only [↓reduceIte, q', AList.lookup, hpath, List.isEmpty_nil, bind, Option.bind]
       refine ⟨q', ⟨⟨hvpQ, fun hi => hcopyP (by rw [← hinitAtEq]; exact hi)⟩,
           fun _ => ⟨lay, hlay, hisNone⟩, hputQ, hstoresQ⟩,
         ⟨hb.bytesWF, hb.liveNodup, hinitNd, hinitSub, hb.matNodup, hb.matSubLive, hb.matResident,
-          hb.liveMat, by simpa [q', Interfaces.Memory.markWritten, physPl, reclassPlace, hpath] using hmoved',
+          hb.liveMat, by change (q.movedFields.filter _) = []; rw [hb.noMoved]; rfl,
           hb.noAddr, by simp only [q', Interfaces.Memory.markWritten, physPl, reclassPlace, hpath, List.isEmpty_nil, ↓reduceIte]; with_unfolding_all exact hcommQ,
           hb.noNextAddr⟩,
         hinitAgree', rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-    · have hpos : 0 < lay.size := Nat.pos_of_ne_zero hz
+    | succ szPred =>
+      have hz : lay.size ≠ 0 := by rw [hsz]; exact Nat.succ_ne_zero szPred
+      have hpos : 0 < lay.size := by rw [hsz]; exact Nat.zero_lt_succ szPred
       have hnzr : memory.zeroRoot q.frame srcPl.logical.root = false := by
-        simp [Interfaces.Memory.zeroRoot, hlay, hz]
+        simp only [Interfaces.Memory.zeroRoot, hlay, Option.any_some, hsz]
+        rfl
       obtain ⟨rg, hrgLu⟩ : ∃ rg, AList.lookup q.materialized srcPl.logical.root = some rg := by
         cases hlu : AList.lookup q.materialized srcPl.logical.root with
-        | none => exact (hz (hisNone.mpr (by simp [hlu]))).elim
+        | none => exact (hz (hisNone.mpr (by rw [hlu]; rfl))).elim
         | some rg => exact ⟨rg, rfl⟩
       obtain ⟨lay', id, blk, hlay', hprov, hblk, ⟨hliveB, hspB, hbaseB, hszB, halB⟩,
         hext, hral, hald, hnull, hsp, hfreshId, _⟩ := hb.matResident _ _ (AList.lookup_mem hrgLu)
@@ -5134,10 +5205,13 @@ private theorem writes_source_to_target_at_ceiling (hl : StepLanguage language p
         dsimp only
         rw [hblk]
         dsimp only
-        simp [hliveB, hspB, hbaseB, hszB, hbsLen, Nat.mod_one]
+        have hcond : blk.live = true ∧ blk.space = rg.ptr.space ∧ blk.base ≤ rg.ptr.addr ∧
+            rg.ptr.addr + bs.length ≤ blk.base + blk.size ∧ rg.ptr.addr % 1 = 0 :=
+          ⟨hliveB, hspB, Nat.le_of_eq hbaseB, by rw [hbaseB, hszB, hbsLen]; exact Nat.le_refl _, Nat.mod_one _⟩
+        rw [ite_eq_left hcond, hbaseB, Nat.sub_self]
       have hstore1 : q.bytes.store profile.memoryTarget rg.ptr bs 1 c =
           some (q.bytes.modify id fun y => {y with bytes := y.bytes.take 0 ++ bs ++ y.bytes.drop (0 + bs.length)}) := by
-        simp [Mem.Memory.store, hacc1]
+        simp only [Mem.Memory.store, hacc1]
       let bytes' := q.bytes.modify id fun y => {y with bytes := y.bytes.take 0 ++ bs ++ y.bytes.drop (0 + bs.length)}
       have hsr : Interfaces.Memory.storeRuns profile.memoryTarget c rg [(0, bs)] q.bytes = some bytes' := by
         simp only [Interfaces.Memory.storeRuns, List.foldlM_cons, List.foldlM_nil,
@@ -5173,7 +5247,7 @@ private theorem writes_source_to_target_at_ceiling (hl : StepLanguage language p
               reclassPlace, hpath, hb.noMoved, List.filter_nil, List.any_nil, Bool.not_false, Bool.and_true]
             split
             · assumption
-            · simp
+            · exact List.contains_iff_mem.mpr (.head _)
           unfold Interfaces.Memory.loadValue
           rw [ite_eq_left hia]
           unfold Interfaces.Memory.loadBacking
@@ -5186,14 +5260,17 @@ private theorem writes_source_to_target_at_ceiling (hl : StepLanguage language p
             Hybrid.decode, bs, Mem.decodeInt_encodeInt profile.memoryTarget intTy n hinRange,
             Option.map_some, bind, Option.bind, pure, Option.some.injEq]
           exact valueShape_inv language.valueShape hvShape
-        · simp [q', Interfaces.Memory.markWritten, physPl, reclassPlace, Interfaces.Memory.rangeAt, hpath, hrgLu]
+        · simp only [q', Interfaces.Memory.markWritten, physPl, reclassPlace, Interfaces.Memory.rangeAt,
+            hpath, List.isEmpty_nil, ↓reduceIte, hrgLu]
+          rfl
         · intro _
-          exact ⟨0, bs, .head _, fun h => by rw [h] at hbsLen; simp [hext] at hbsLen; exact hz hbsLen.symm⟩
+          exact ⟨0, bs, .head _, fun h => by rw [h, hext] at hbsLen; exact hz hbsLen.symm⟩
         · intro off bs' hbm
           cases List.mem_singleton.mp hbm
-          refine ⟨by omega, ?_, ?_⟩
+          refine ⟨by rw [Nat.zero_add, hbsLen]; exact Nat.le_refl _, ?_, ?_⟩
           · intro b hb'; obtain ⟨_, _, rfl⟩ := List.mem_map.mp hb'; intro hc; cases hc
-          · simpa [Interfaces.Memory.atOffset] using hload1
+          · simp only [Interfaces.Memory.atOffset, Nat.add_zero]
+            exact hload1
       obtain ⟨hbwf', hnextEq, _, hmeta⟩ := mem_storeRuns_preserves [(0, bs)] hb.bytesWF hsr
       have hres' : ∀ r rg', (r, rg') ∈ q.materialized →
           ∃ l' id' blk', memory.layoutAt q.frame r = some l' ∧
@@ -5211,7 +5288,7 @@ private theorem writes_source_to_target_at_ceiling (hl : StepLanguage language p
       refine ⟨q', ⟨⟨hvpQ, fun hi => hcopyP (by rw [← hinitAtEq]; exact hi)⟩,
           fun _ => ⟨lay, hlay, hisNone⟩, hputQ, hstoresQ⟩,
         ⟨hbwf', hb.liveNodup, hinitNd, hinitSub, hb.matNodup, hb.matSubLive, hres', hb.liveMat,
-          by simpa [q', Interfaces.Memory.markWritten, physPl, reclassPlace, hpath] using hmoved',
+          by change (q.movedFields.filter _) = []; rw [hb.noMoved]; rfl,
           hb.noAddr, by simp only [q', Interfaces.Memory.markWritten, physPl, reclassPlace, hpath, List.isEmpty_nil, ↓reduceIte]; with_unfolding_all exact hcommQ,
           hb.noNextAddr⟩,
         hinitAgree', rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, storeRuns_same_geom [(0, bs)] hsr⟩
@@ -6067,7 +6144,15 @@ private theorem observeHosted_eq (hl : StepLanguage language profile ValidVal)
           simp only [reclassTerm, Option.map_some, reclassArg]
           have hcallEmpty : q.callers.isEmpty = p.callers.isEmpty := by
             have hlenC := hr.representation.2.1
-            cases hpC : p.callers <;> cases hqC : q.callers <;> simp_all
+            cases hpC : p.callers with
+            | nil =>
+              cases hqC : q.callers with
+              | nil => rfl
+              | cons _ _ => rw [hpC, hqC] at hlenC; cases hlenC
+            | cons _ _ =>
+              cases hqC : q.callers with
+              | nil => rw [hpC, hqC] at hlenC; cases hlenC
+              | cons _ _ => rfl
           have hfrEq : (q.frame != memory.entry) = (p.frame != mir.logicalView.entry) := by
             rw [← hpf, hent]
           rw [hcallEmpty, hfrEq]
@@ -6232,10 +6317,12 @@ private theorem transfer_source_to_target (hl : StepLanguage language profile Va
     hbaseS hbaseT hrA.representation hpw hwpP
   rw [show (srcDst.params.map (reclassParam (fnCls mir afterQ.frame locals))) = physDst.params by
     rw [hfqA, hparamsEq]] at hvalid
-  by_cases hfits : memory.ParamSpaceFits physDst.params {afterQ with block := edge.target, instruction := 0}
-  · obtain ⟨q', hwpQ, _, hreQ'⟩ := hvalid.physical handoff.handoff.2.2.2 hfits
+  match decidableParamSpaceFits memory physDst.params {afterQ with block := edge.target, instruction := 0} with
+  | isTrue hfits =>
+    obtain ⟨q', hwpQ, _, hreQ'⟩ := hvalid.physical handoff.handoff.2.2.2 hfits
     exact .inl ⟨q', ⟨vals, afterQ, physDst, hreadsQ, hdstBlkQ, htyQ, hwpQ⟩, hreQ'.trans hreAfterQ⟩
-  · exact .inr ⟨_, vals, afterQ, physDst, hreadsQ, hdstBlkQ, htyQ, hvalid.exhausted_of_no_space hfits⟩
+  | isFalse hfits =>
+    exact .inr ⟨_, vals, afterQ, physDst, hreadsQ, hdstBlkQ, htyQ, hvalid.exhausted_of_no_space hfits⟩
 
 /-! ### `LocalCorrespondence` clauses (`initial`, `finish`, `advance`, `progress`) -/
 
@@ -6277,8 +6364,8 @@ private theorem correspondence_finish (hl : StepLanguage language profile ValidV
       op.instruction ≠ .beginLifetime root := by
     intro blk op root hblk hget hbeg
     have hterm : memory.terminalObservation q = none := by
-      simp [Interfaces.Memory.terminalObservation, hqNotExh, hblk, hget, hbeg,
-        Interfaces.Memory.instructionTrap]
+      simp only [Interfaces.Memory.terminalObservation, hqNotExh, Bool.false_eq_true, ↓reduceIte,
+        hblk, hget, hbeg, Interfaces.Memory.instructionTrap, bind, Option.bind]
     simp [observeHosted, hterm] at hobsQ
   exact (src_result_iff mir p o).mpr
     ((observeHosted_eq hl ok sourceWF hs ht hr hqNotExh hnoBeg).symm.trans hobsQ)
@@ -6913,6 +7000,659 @@ private theorem correspondence_advance (hl : StepLanguage language profile Valid
           ⟨hrep', hfa', by with_unfolding_all exact hsusp', by rw [hs'.noEffects, ht'.noEffects]⟩⟩
     | trap _ _ | invalid => rw [hendS] at hctrl; exact hctrl.elim
 
+/-! ### Constructive source step decidability (`src_step_decidable`) -/
+
+private theorem src_begins_unique {mir : MIR lang profile}
+    {p started : MemoryRegisters language profile} {root : PlaceId}
+    (h : mir.logicalView.Begins p root started) :
+    started = {p with live := root :: p.live} := by
+  rcases h.2 with ⟨_, rfl⟩ | ⟨hmat, _⟩
+  · rfl
+  · cases logicalView_classAt_virtual mir p.frame root hmat
+
+private theorem src_begins_decidable {mir : MIR lang profile}
+    {p : MemoryRegisters language profile} (root : PlaceId) :
+    mir.logicalView.Begins p root {p with live := root :: p.live} ∨
+    (∀ started, ¬ mir.logicalView.Begins p root started) := by
+  if hlive : root ∈ p.live then
+    exact .inr fun _ hb => hb.1 hlive
+  else
+    cases hcls : mir.logicalView.classAt p.frame root with
+    | none =>
+      refine .inr fun _ hb => ?_
+      rcases hb.2 with ⟨hv, _⟩ | ⟨hm, _⟩
+      · rw [hcls] at hv; cases hv
+      · rw [hcls] at hm; cases hm
+    | some cls =>
+      cases cls with
+      | virtual => exact .inl ⟨hlive, .inl ⟨hcls, rfl⟩⟩
+      | materialized => cases logicalView_classAt_virtual mir p.frame root hcls
+
+private theorem src_writes_unique {mir : MIR lang profile}
+    {p stored₁ stored₂ : MemoryRegisters language profile}
+    {ty : language.operands.Ty} {dst : MemoryPlace _ ty} {v : language.operands.Val}
+    (h1 : mir.logicalView.Writes p dst v stored₁)
+    (h2 : mir.logicalView.Writes p dst v stored₂) :
+    stored₁ = stored₂ :=
+  Option.some.inj (h1.2.2.1.symm.trans h2.2.2.1)
+
+private theorem src_writes_noMoved {mir : MIR lang profile}
+    {p stored : MemoryRegisters language profile} (hnoMoved : p.movedFields = [])
+    {ty : language.operands.Ty} {dst : MemoryPlace _ ty} (hvir : dst.storage = .virtual)
+    {v : language.operands.Val} (hw : mir.logicalView.Writes p dst v stored) :
+    stored.movedFields = [] := by
+  have hput := hw.2.2.1
+  unfold Interfaces.Memory.writeValue at hput
+  dsimp only at hput
+  split at hput
+  · cases hput
+  · simp only [bind, Option.bind] at hput
+    cases hauth : mir.logicalView.authorizeWrite p dst with
+    | none => simp only [hauth] at hput; cases hput
+    | some owners =>
+      simp only [hauth, hvir] at hput
+      cases hrep : Interfaces.Memory.replaceLocal (language := language)
+          (Interfaces.Memory.markWritten p dst owners).virtualValues dst.logical v with
+      | none => simp only [hrep] at hput; cases hput
+      | some tbl =>
+        simp only [hrep, pure, Option.some.injEq] at hput
+        subst stored
+        change (p.movedFields.filter _) = []
+        rw [hnoMoved]; rfl
+
+private theorem src_writes_decidable (hl : StepLanguage language profile ValidVal)
+    {mir : MIR lang profile} {p : MemoryRegisters language profile}
+    (hnoMoved : p.movedFields = [])
+    {ty : language.operands.Ty} (dst : MemoryPlace _ ty) (hvir : dst.storage = .virtual)
+    (v : language.operands.Val) :
+    (∃ stored, mir.logicalView.Writes p dst v stored) ∨
+    (∀ v' stored, ¬ mir.logicalView.Writes p dst v' stored) := by
+  cases hvp : mir.logicalView.validPlace p dst with
+  | false => exact .inr fun _ _ hw => Bool.noConfusion (hvp.symm.trans hw.1.1)
+  | true =>
+    obtain ⟨hpath, _, _⟩ := validPlace_path_nil hl hvp
+    have hcopyDec :
+        (Interfaces.Memory.initializedAt p dst.logical.root dst.logical.path = true →
+          language.operands.isCopy ty = true) ∨
+        (Interfaces.Memory.initializedAt p dst.logical.root dst.logical.path = true ∧
+          language.operands.isCopy ty = false) := by
+      cases hinit : Interfaces.Memory.initializedAt p dst.logical.root dst.logical.path with
+      | false => exact .inl fun h => Bool.noConfusion h
+      | true =>
+        cases hcopy : language.operands.isCopy ty with
+        | true => exact .inl fun _ => rfl
+        | false => exact .inr ⟨rfl, rfl⟩
+    rcases hcopyDec with hcopyOk | ⟨hinit, hcopyF⟩
+    · cases hlive : p.live.contains dst.logical.root with
+      | false =>
+        refine .inr fun v' stored hw => ?_
+        have hput := hw.2.2.1
+        unfold Interfaces.Memory.writeValue at hput
+        simp only [hlive, Bool.not_false, Bool.true_or, ↓reduceIte] at hput
+        cases hput
+      | true =>
+        cases hmay : mir.logicalView.mayInitialize p dst with
+        | false =>
+          refine .inr fun v' stored hw => ?_
+          have hput := hw.2.2.1
+          unfold Interfaces.Memory.writeValue at hput
+          simp only [hlive, hmay, Bool.not_true, Bool.not_false, Bool.false_or, ↓reduceIte] at hput
+          cases hput
+        | true =>
+          cases hauth : mir.logicalView.authorizeWrite p dst with
+          | none =>
+            refine .inr fun v' stored hw => ?_
+            have hput := hw.2.2.1
+            unfold Interfaces.Memory.writeValue at hput
+            simp only [hlive, hmay, Bool.not_true, Bool.or_self, Bool.false_eq_true, ↓reduceIte,
+              bind, Option.bind, hauth] at hput
+            cases hput
+          | some owners =>
+            let stored : MemoryRegisters language profile :=
+              { Interfaces.Memory.markWritten p dst owners with
+                virtualValues := (dst.logical.root, v) :: AList.erase p.virtualValues dst.logical.root }
+            have hput : mir.logicalView.writeValue p dst v = some stored := by
+              unfold Interfaces.Memory.writeValue
+              simp only [hlive, hmay, Bool.not_true, Bool.or_self, Bool.false_eq_true, ↓reduceIte,
+                bind, Option.bind, hauth, hvir, Interfaces.Memory.replaceLocal, hpath,
+                List.isEmpty_nil, pure]
+              rfl
+            have hstores : mir.logicalView.StoresValue stored dst v := by
+              refine ⟨?_, fun hm => by rw [hvir] at hm; cases hm⟩
+              have hia : Interfaces.Memory.initializedAt stored dst.logical.root dst.logical.path = true := by
+                simp only [stored, Interfaces.Memory.markWritten, Interfaces.Memory.initializedAt,
+                  hnoMoved, List.filter_nil, List.any_nil, Bool.not_false, Bool.and_true]
+                cases hc : p.initialized.contains dst.logical.root with
+                | true => simp only [↓reduceIte, hc]
+                | false =>
+                  simp only [Bool.false_eq_true, ↓reduceIte]
+                  exact List.contains_iff_mem.mpr (.head _)
+              unfold Interfaces.Memory.loadValue
+              rw [ite_eq_left hia]
+              unfold Interfaces.Memory.loadBacking
+              have hvp' : mir.logicalView.validPlace stored dst = true := hvp
+              have hlive' : stored.live.contains dst.logical.root = true := hlive
+              rw [hvp', hlive']
+              simp only [Bool.not_true, Bool.false_eq_true, ↓reduceIte, hvir, stored, bind, Option.bind,
+                AList.lookup, ↓reduceIte, hpath, List.isEmpty_nil]
+            exact .inl ⟨stored, ⟨⟨hvp, hcopyOk⟩, (fun hm => by rw [hvir] at hm; cases hm), hput, hstores⟩⟩
+    · exact .inr fun _ _ hw => Bool.noConfusion ((hw.1.2 hinit).symm.trans hcopyF)
+
+private theorem src_writeSingleParam_decidable (hl : StepLanguage language profile ValidVal)
+    {mir : MIR lang profile} {p : MemoryRegisters language profile}
+    (hnoMoved : p.movedFields = [])
+    {ty : language.operands.Ty} (dst : MemoryPlace _ ty) (hvir : dst.storage = .virtual)
+    (v : language.operands.Val) :
+    (∃ stored, mir.logicalView.ParamOutcome [⟨ty, dst⟩] [v] p stored false) ∨
+    (∀ v' stored, ¬ mir.logicalView.ParamOutcome [⟨ty, dst⟩] [v'] p stored false) := by
+  cases hlive : p.live.contains dst.logical.root with
+  | true =>
+    rcases src_writes_decidable hl hnoMoved dst hvir v with ⟨stored, hw⟩ | hno
+    · exact .inl ⟨stored, .cons (by rw [ite_eq_left hlive]) hw (.nil _)⟩
+    · refine .inr fun v' stored hwp => ?_
+      cases hwp with
+      | cons hb hw hnil =>
+        cases hnil
+        rw [ite_eq_left hlive] at hb
+        subst hb
+        exact hno v' stored hw
+  | false =>
+    have hnf : ¬ p.live.contains dst.logical.root = true := fun h => Bool.noConfusion (hlive.symm.trans h)
+    rcases src_begins_decidable (mir := mir) (p := p) dst.logical.root with hbeg | hnoBeg
+    · rcases src_writes_decidable hl (p := {p with live := dst.logical.root :: p.live}) hnoMoved dst hvir v with
+        ⟨stored, hw⟩ | hno
+      · exact .inl ⟨stored, .cons (by rw [ite_eq_right hnf]; exact hbeg) hw (.nil _)⟩
+      · refine .inr fun v' stored hwp => ?_
+        cases hwp with
+        | cons hb hw hnil =>
+          cases hnil
+          rw [ite_eq_right hnf] at hb
+          cases src_begins_unique hb
+          exact hno v' stored hw
+    · refine .inr fun v' stored hwp => ?_
+      cases hwp with
+      | cons hb _ _ =>
+        rw [ite_eq_right hnf] at hb
+        exact hnoBeg _ hb
+
+private theorem src_writeParams_decidable (hl : StepLanguage language profile ValidVal)
+    {mir : MIR lang profile}
+    (params : List (Sigma (MemoryPlace language.operands.Ty)))
+    (hvir : ∀ a ∈ params, a.2.storage = .virtual)
+    (values : List language.operands.Val)
+    {p : MemoryRegisters language profile} (hnoMoved : p.movedFields = []) :
+    (∃ next, mir.logicalView.ParamOutcome params values p next false) ∨
+    (∀ next, ¬ mir.logicalView.ParamOutcome params values p next false) := by
+  induction params generalizing values p with
+  | nil =>
+    cases values with
+    | nil => exact .inl ⟨p, .nil _⟩
+    | cons _ _ => exact .inr fun _ h => by cases h
+  | cons param rest ih =>
+    cases values with
+    | nil => exact .inr fun _ h => by cases h
+    | cons v vs =>
+      obtain ⟨ty, pl⟩ := param
+      have hplVir : pl.storage = .virtual := hvir ⟨ty, pl⟩ (.head _)
+      have hrestVir : ∀ a ∈ rest, a.2.storage = .virtual := fun a ha => hvir a (.tail _ ha)
+      cases hlive : p.live.contains pl.logical.root with
+      | true =>
+        rcases src_writes_decidable hl hnoMoved pl hplVir v with ⟨stored, hw⟩ | hno
+        · have hnoM' := src_writes_noMoved hnoMoved hplVir hw
+          rcases ih hrestVir vs hnoM' with ⟨next, htail⟩ | hnoTail
+          · exact .inl ⟨next, .cons (by rw [ite_eq_left hlive]) hw htail⟩
+          · refine .inr fun next hwp => ?_
+            cases hwp with
+            | cons hb hw' htail' =>
+              rw [ite_eq_left hlive] at hb
+              subst hb
+              cases src_writes_unique hw hw'
+              exact hnoTail next htail'
+        · refine .inr fun next hwp => ?_
+          cases hwp with
+          | cons hb hw' _ =>
+            rw [ite_eq_left hlive] at hb
+            subst hb
+            exact hno v _ hw'
+      | false =>
+        have hnf : ¬ p.live.contains pl.logical.root = true := fun h => Bool.noConfusion (hlive.symm.trans h)
+        rcases src_begins_decidable (mir := mir) (p := p) pl.logical.root with hbeg | hnoBeg
+        · rcases src_writes_decidable hl (p := {p with live := pl.logical.root :: p.live}) hnoMoved pl hplVir v with
+            ⟨stored, hw⟩ | hno
+          · have hnoM' := src_writes_noMoved (p := {p with live := pl.logical.root :: p.live}) hnoMoved hplVir hw
+            rcases ih hrestVir vs hnoM' with ⟨next, htail⟩ | hnoTail
+            · exact .inl ⟨next, .cons (by rw [ite_eq_right hnf]; exact hbeg) hw htail⟩
+            · refine .inr fun next hwp => ?_
+              cases hwp with
+              | cons hb hw' htail' =>
+                rw [ite_eq_right hnf] at hb
+                cases src_begins_unique hb
+                cases src_writes_unique hw hw'
+                exact hnoTail next htail'
+          · refine .inr fun next hwp => ?_
+            cases hwp with
+            | cons hb hw' _ =>
+              rw [ite_eq_right hnf] at hb
+              cases src_begins_unique hb
+              exact hno v _ hw'
+        · refine .inr fun next hwp => ?_
+          cases hwp with
+          | cons hb _ _ =>
+            rw [ite_eq_right hnf] at hb
+            exact hnoBeg _ hb
+
+private theorem src_ends_unique {mir : MIR lang profile}
+    {p ended₁ ended₂ : MemoryRegisters language profile} {root : PlaceId}
+    (h1 : mir.logicalView.Ends p root ended₁) (h2 : mir.logicalView.Ends p root ended₂) :
+    ended₁ = ended₂ := by
+  rcases h1.2 with ⟨_, rfl⟩ | ⟨hm, _⟩
+  · rcases h2.2 with ⟨_, rfl⟩ | ⟨hm', _⟩
+    · rfl
+    · cases logicalView_classAt_virtual mir p.frame root hm'
+  · cases logicalView_classAt_virtual mir p.frame root hm
+
+private theorem src_ends_decidable {mir : MIR lang profile}
+    (p : MemoryRegisters language profile) (root : PlaceId) :
+    (∃ ended, mir.logicalView.Ends p root ended) ∨
+    (∀ ended, ¬ mir.logicalView.Ends p root ended) := by
+  if hlive : root ∈ p.live then
+    cases hcan : mir.logicalView.canEnd p root with
+    | false => exact .inr fun _ he => Bool.noConfusion (hcan.symm.trans he.1.2)
+    | true =>
+      cases hcls : mir.logicalView.classAt p.frame root with
+      | none =>
+        refine .inr fun _ he => ?_
+        rcases he.2 with ⟨hv, _⟩ | ⟨hm, _⟩
+        · rw [hcls] at hv; cases hv
+        · rw [hcls] at hm; cases hm
+      | some cls =>
+        cases cls with
+        | virtual => exact .inl ⟨_, ⟨hlive, hcan⟩, .inl ⟨hcls, rfl⟩⟩
+        | materialized => cases logicalView_classAt_virtual mir p.frame root hcls
+  else
+    exact .inr fun _ he => hlive he.1.1
+
+private theorem src_endLocals_decidable {mir : MIR lang profile}
+    (xs : List PlaceId) (p : MemoryRegisters language profile) :
+    (∃ ended, mir.logicalView.EndLocals xs p ended) ∨
+    (∀ ended, ¬ mir.logicalView.EndLocals xs p ended) := by
+  induction xs generalizing p with
+  | nil => exact .inl ⟨p, .nil _⟩
+  | cons root rest ih =>
+    rcases src_ends_decidable (mir := mir) p root with ⟨mid, hend⟩ | hno
+    · rcases ih mid with ⟨ended, htail⟩ | hnoTail
+      · exact .inl ⟨ended, .cons hend htail⟩
+      · refine .inr fun ended hel => ?_
+        cases hel with
+        | cons hend' htail' =>
+          cases src_ends_unique hend hend'
+          exact hnoTail ended htail'
+    · refine .inr fun ended hel => ?_
+      cases hel with
+      | cons hend' _ => exact hno _ hend'
+
+private theorem src_transfer_decidable (hl : StepLanguage language profile ValidVal)
+    {mir : MIR lang profile} {p : MemoryRegisters language profile}
+    (hs : SourceInv mir ValidVal p)
+    (edge : CFGEdge (Sigma (MemoryRead _ lang.literal))) :
+    (∃ p', mir.logicalView.Transfer edge p p' false) ∨
+    (∀ p', ¬ mir.logicalView.Transfer edge p p' false) := by
+  cases hreads : mir.logicalView.readOperands edge.arguments p with
+  | none =>
+    exact .inr fun _ ⟨_, _, _, hr, _⟩ => by rw [hreads] at hr; cases hr
+  | some pair =>
+    obtain ⟨vals, afterP⟩ := pair
+    cases hblk : mir.logicalView.blockAt {p with block := edge.target} with
+    | none =>
+      exact .inr fun _ ⟨_, _, _, _, hb, _⟩ => by rw [hblk] at hb; cases hb
+    | some dstBlock =>
+      letI := language.typeDecidableEq
+      if hty : edge.arguments.map Sigma.fst = dstBlock.params.map Sigma.fst then
+        have hparamsVir : ∀ a ∈ dstBlock.params, a.2.storage = .virtual := by
+          unfold Interfaces.Memory.blockAt Interfaces.Memory.graphAt at hblk
+          dsimp only at hblk
+          cases hfn : AList.lookup mir.logicalView.functions p.frame with
+          | none => simp only [hfn, Option.map_none, bind, Option.bind] at hblk; cases hblk
+          | some fg =>
+            simp only [hfn, Option.map_some, bind, Option.bind] at hblk
+            exact (logicalView_graphVirtual mir (AList.lookup_mem hfn) dstBlock
+              (Array.mem_toList_iff.mpr (Array.mem_of_find?_eq_some hblk))).1
+        have hsA := (sourceInv_readOperands hl _ hs hreads).1
+        rcases src_writeParams_decidable hl dstBlock.params hparamsVir vals
+            (p := {afterP with block := edge.target, instruction := 0}) hsA.active.noMoved with
+          ⟨p', hwp⟩ | hno
+        · exact .inl ⟨p', vals, afterP, dstBlock, hreads, hblk, hty, hwp⟩
+        · refine .inr fun p' ⟨vs', ar', b', hr', hb', _, hwp'⟩ => ?_
+          cases Option.some.inj (hreads.symm.trans hr')
+          cases Option.some.inj (hblk.symm.trans hb')
+          exact hno p' hwp'
+      else
+        refine .inr fun _ ⟨_, _, b', _, hb', hty', _⟩ => ?_
+        cases Option.some.inj (hblk.symm.trans hb')
+        exact hty hty'
+
+private theorem src_step_decidable (hl : StepLanguage language profile ValidVal)
+    {mir : MIR lang profile} {p : MemoryRegisters language profile}
+    (hs : SourceInv mir ValidVal p)
+    (hobsP : observeHosted mir.logicalView p = none) :
+    (∃ p', Src.step mir p p') ∨ (∀ p', ¬ Src.step mir p p') := by
+  obtain ⟨locals, srcGraph, hfnP, srcBlock, hpFind, _⟩ := hs.active.fnDecl
+  have hblkVir := logicalView_graphVirtual mir (AList.lookup_mem hfnP) srcBlock
+    (Array.mem_toList_iff.mpr (Array.mem_of_find?_eq_some hpFind))
+  suffices hraw : (∃ p', MIR.Step mir p p') ∨ (∀ p', ¬ MIR.Step mir p p') by
+    rcases hraw with ⟨p', hmr⟩ | hno
+    · exact .inl ⟨p', src_step_of_raw hobsP hmr hs.noEffects⟩
+    · exact .inr fun p' hst => hno p' hst.2.1
+  cases hgetP : srcBlock.body[p.instruction]? with
+  | some srcOp =>
+    have hsrcVir := hblkVir.2.1 srcOp (List.mem_of_getElem? hgetP)
+    cases htrap : mir.logicalView.instructionTrap p srcOp.instruction with
+    | some _ =>
+      refine .inr fun p' hmr => ?_
+      rw [mir_step_at_block hfnP hpFind, hgetP] at hmr; dsimp only at hmr
+      rw [htrap] at hmr; cases hmr.1
+    | none =>
+      cases hkind : srcOp.instruction with
+      | bind dst src =>
+        rw [hkind] at hsrcVir
+        cases hread : mir.logicalView.readValue p src with
+        | none =>
+          refine .inr fun p' hmr => ?_
+          rw [mir_step_at_block hfnP hpFind, hgetP] at hmr; dsimp only at hmr; rw [hkind] at hmr
+          obtain ⟨_, _, _, _, hr, _⟩ := hmr; rw [hread] at hr; cases hr
+        | some pair =>
+          obtain ⟨v, afterP⟩ := pair
+          have hsA := (sourceInv_readValue hl hs hread).1
+          rcases src_writeSingleParam_decidable hl hsA.active.noMoved dst hsrcVir.1 v with ⟨stored, hwp⟩ | hno
+          · refine .inl ⟨stored.advance, ?_⟩
+            rw [mir_step_at_block hfnP hpFind, hgetP]; dsimp only; rw [hkind]
+            exact ⟨rfl, v, afterP, stored, hread, hwp, rfl⟩
+          · refine .inr fun p' hmr => ?_
+            rw [mir_step_at_block hfnP hpFind, hgetP] at hmr; dsimp only at hmr; rw [hkind] at hmr
+            obtain ⟨_, v', ar', st', hr', hwp', _⟩ := hmr
+            cases Option.some.inj (hread.symm.trans hr')
+            exact hno v st' hwp'
+      | assign dst src =>
+        rw [hkind] at hsrcVir
+        cases hread : mir.logicalView.readValue p src with
+        | none =>
+          refine .inr fun p' hmr => ?_
+          rw [mir_step_at_block hfnP hpFind, hgetP] at hmr; dsimp only at hmr; rw [hkind] at hmr
+          obtain ⟨_, _, _, _, hr, _⟩ := hmr; rw [hread] at hr; cases hr
+        | some pair =>
+          obtain ⟨v, afterP⟩ := pair
+          have hsA := (sourceInv_readValue hl hs hread).1
+          rcases src_writes_decidable hl hsA.active.noMoved dst hsrcVir.1 v with ⟨stored, hw⟩ | hno
+          · refine .inl ⟨stored.advance, ?_⟩
+            rw [mir_step_at_block hfnP hpFind, hgetP]; dsimp only; rw [hkind]
+            exact ⟨rfl, v, afterP, stored, hread, hw, rfl⟩
+          · refine .inr fun p' hmr => ?_
+            rw [mir_step_at_block hfnP hpFind, hgetP] at hmr; dsimp only at hmr; rw [hkind] at hmr
+            obtain ⟨_, v', ar', st', hr', hw', _⟩ := hmr
+            cases Option.some.inj (hread.symm.trans hr')
+            exact hno v st' hw'
+      | @op opcode _ _ dst _ args checks addresses =>
+        rw [hkind] at hsrcVir
+        cases hreads : mir.logicalView.readArgs args p with
+        | none =>
+          refine .inr fun p' hmr => ?_
+          rw [mir_step_at_block hfnP hpFind, hgetP] at hmr; dsimp only at hmr; rw [hkind] at hmr
+          obtain ⟨_, _, _, _, _, _, _, _, hr, _⟩ := hmr; rw [hreads] at hr; cases hr
+        | some pair =>
+          obtain ⟨vals, afterP⟩ := pair
+          cases hft : Interfaces.Memory.firstTrap (language := language) (.operator opcode) vals checks with
+          | some _ =>
+            refine .inr fun p' hmr => ?_
+            rw [mir_step_at_block hfnP hpFind, hgetP] at hmr; dsimp only at hmr; rw [hkind] at hmr
+            obtain ⟨_, _, _, _, _, _, _, _, hr, hft', _⟩ := hmr
+            cases Option.some.inj (hreads.symm.trans hr)
+            rw [hft] at hft'; cases hft'
+          | none =>
+            cases addresses with
+            | cons a rest =>
+              refine .inr fun p' hmr => ?_
+              rw [mir_step_at_block hfnP hpFind, hgetP] at hmr; dsimp only at hmr; rw [hkind] at hmr
+              obtain ⟨_, _, _, ops, _, _, _, _, _, _, hmap, hop, _⟩ := hmr
+              obtain ⟨hopsNil, _, _⟩ := hl.pureOp _ _ _ _ _ _ _ _ _ _ _ hop
+              subst hopsNil
+              simp only [List.mapM_cons, Option.bind_eq_bind, Option.bind_eq_some_iff] at hmap
+              obtain ⟨_, _, _, _, heq⟩ := hmap; cases heq
+            | nil =>
+              have hsA := (sourceInv_readArgs hl _ hs hreads).1
+              have hprepP : Interfaces.Memory.prepareAddresses afterP [] = afterP := rfl
+              have happId : Interfaces.Memory.applyOperation afterP true (Interfaces.Memory.operationStore afterP true) = afterP :=
+                applyOperation_id hsA.active.noAddr (fun c hc => (hsA.callers c hc).noAddr)
+              rcases hl.opDecidable mir.logicalView.declarations opcode _ _ vals profile.memoryTarget
+                  (Interfaces.Memory.operationStore afterP true) with ⟨res, hop⟩ | hnoOp
+              · rcases src_writeSingleParam_decidable hl hsA.active.noMoved dst hsrcVir.1 res with ⟨stored, hwp⟩ | hnoW
+                · refine .inl ⟨{stored.advance with effects := stored.effects ++ []}, ?_⟩
+                  rw [mir_step_at_block hfnP hpFind, hgetP]; dsimp only; rw [hkind]
+                  refine ⟨by rw [← hkind]; exact htrap, vals, afterP, [], res, [],
+                    Interfaces.Memory.operationStore afterP true, stored, hreads, hft, rfl, hop, rfl, ?_, rfl⟩
+                  change mir.logicalView.ParamOutcome [⟨_, dst⟩] [res]
+                    (Interfaces.Memory.applyOperation afterP true (Interfaces.Memory.operationStore afterP true)) stored false
+                  rw [happId]; exact hwp
+                · refine .inr fun p' hmr => ?_
+                  rw [mir_step_at_block hfnP hpFind, hgetP] at hmr; dsimp only at hmr; rw [hkind] at hmr
+                  obtain ⟨_, vs', ar', ops', res', effs', chg', st', hr', _, hmap', hop', _, hwp', _⟩ := hmr
+                  cases Option.some.inj (hreads.symm.trans hr')
+                  obtain ⟨hopsNil, heffsNil, hchgEq⟩ := hl.pureOp _ _ _ _ _ _ _ _ _ _ _ hop'
+                  subst hopsNil; subst heffsNil
+                  change mir.logicalView.ParamOutcome [⟨_, dst⟩] [res']
+                    (Interfaces.Memory.applyOperation afterP true chg') st' false at hwp'
+                  rw [← hchgEq, hprepP, happId] at hwp'
+                  exact hnoW res' st' hwp'
+              · refine .inr fun p' hmr => ?_
+                rw [mir_step_at_block hfnP hpFind, hgetP] at hmr; dsimp only at hmr; rw [hkind] at hmr
+                obtain ⟨_, vs', ar', ops', res', effs', chg', _, hr', _, _, hop', _⟩ := hmr
+                cases Option.some.inj (hreads.symm.trans hr')
+                obtain ⟨hopsNil, heffsNil, hchgEq⟩ := hl.pureOp _ _ _ _ _ _ _ _ _ _ _ hop'
+                subst hopsNil; subst heffsNil
+                rw [← hchgEq, hprepP] at hop'
+                exact hnoOp res' hop'
+      | beginLifetime _ => rw [hkind] at hsrcVir; exact hsrcVir.elim
+      | endLifetime root =>
+        rcases src_ends_decidable (mir := mir) p root with ⟨ended, hend⟩ | hno
+        · refine .inl ⟨ended.advance, ?_⟩
+          rw [mir_step_at_block hfnP hpFind, hgetP]; dsimp only; rw [hkind]
+          exact ⟨rfl, ended, hend, rfl⟩
+        · refine .inr fun p' hmr => ?_
+          rw [mir_step_at_block hfnP hpFind, hgetP] at hmr; dsimp only at hmr; rw [hkind] at hmr
+          obtain ⟨_, ended, hend, _⟩ := hmr
+          exact hno ended hend
+      | destructure src bindings =>
+        rename_i dty
+        cases hread : mir.logicalView.readValue p (if language.operands.isCopy dty then .copy src else .move src) with
+        | none =>
+          refine .inr fun p' hmr => ?_
+          rw [mir_step_at_block hfnP hpFind, hgetP] at hmr; dsimp only at hmr; rw [hkind] at hmr
+          obtain ⟨_, _, _, _, _, hr, _⟩ := hmr; rw [hread] at hr; cases hr
+        | some pair =>
+          obtain ⟨v, afterP⟩ := pair
+          cases bindings with
+          | cons b rest =>
+            refine .inr fun p' hmr => ?_
+            rw [mir_step_at_block hfnP hpFind, hgetP] at hmr; dsimp only at hmr; rw [hkind] at hmr
+            obtain ⟨_, _, _, _, _, _, ⟨_, actFs, hactFs, hmemB, _⟩, _⟩ := hmr
+            have hactNil := hl.noActiveFields _ _ _ _ hactFs
+            have hmem := (hmemB (b.1, b.2.1) (.head _)).1
+            rw [hactNil] at hmem; cases hmem
+          | nil =>
+            cases hact : language.activeFields mir.logicalView.declarations dty v with
+            | none =>
+              refine .inr fun p' hmr => ?_
+              rw [mir_step_at_block hfnP hpFind, hgetP] at hmr; dsimp only at hmr; rw [hkind] at hmr
+              obtain ⟨_, v', _, _, _, hr', ⟨_, _, hact', _⟩, _⟩ := hmr
+              cases Option.some.inj (hread.symm.trans hr')
+              rw [hact] at hact'; cases hact'
+            | some fs =>
+              have hfsNil := hl.noActiveFields _ _ _ _ hact
+              subst hfsNil
+              refine .inl ⟨afterP.advance, ?_⟩
+              rw [mir_step_at_block hfnP hpFind, hgetP]; dsimp only; rw [hkind]
+              exact ⟨rfl, v, afterP, [], afterP, hread, ⟨.nil, [], hact, nofun, nofun⟩, rfl, .nil _, rfl⟩
+      | call callee dst args checks =>
+        cases hreads : mir.logicalView.readOperands args p with
+        | none =>
+          refine .inr fun p' hmr => ?_
+          rw [mir_step_at_block hfnP hpFind, hgetP] at hmr; dsimp only at hmr; rw [hkind] at hmr
+          obtain ⟨_, _, _, _, _, _, hr, _⟩ := hmr; rw [hreads] at hr; cases hr
+        | some pair =>
+          obtain ⟨vals, afterP⟩ := pair
+          cases hcg : mir.logicalView.graphAt callee with
+          | none =>
+            refine .inr fun p' hmr => ?_
+            rw [mir_step_at_block hfnP hpFind, hgetP] at hmr; dsimp only at hmr; rw [hkind] at hmr
+            obtain ⟨_, _, _, _, _, _, _, hcg', _⟩ := hmr; rw [hcg] at hcg'; cases hcg'
+          | some srcCG =>
+            cases hce : srcCG.blocks.find? (·.id == srcCG.entry) with
+            | none =>
+              refine .inr fun p' hmr => ?_
+              rw [mir_step_at_block hfnP hpFind, hgetP] at hmr; dsimp only at hmr; rw [hkind] at hmr
+              obtain ⟨_, _, _, _, cg', _, _, hcg', hce', _⟩ := hmr
+              cases Option.some.inj (hcg.symm.trans hcg')
+              rw [hce] at hce'; cases hce'
+            | some srcCEntry =>
+              letI := language.typeDecidableEq
+              if hty : args.map Sigma.fst = srcCEntry.params.map Sigma.fst then
+                have hparamsVir : ∀ a ∈ srcCEntry.params, a.2.storage = .virtual := by
+                  unfold Interfaces.Memory.graphAt at hcg
+                  cases hlu : AList.lookup mir.logicalView.functions callee with
+                  | none => simp only [hlu, Option.map_none] at hcg; cases hcg
+                  | some fg =>
+                    simp only [hlu, Option.map_some, Option.some.injEq] at hcg
+                    subst hcg
+                    exact (logicalView_graphVirtual mir (AList.lookup_mem hlu) srcCEntry
+                      (Array.mem_toList_iff.mpr (Array.mem_of_find?_eq_some hce))).1
+                let pC0 : MemoryRegisters language profile :=
+                  { toMemoryFrame := ⟨callee, srcCG.entry, 0, [], [], [], [], [], [], []⟩
+                    bytes := afterP.bytes, ownership := afterP.ownership,
+                    nextAddressId := afterP.nextAddressId, effects := afterP.effects,
+                    callers := ⟨afterP.advance.toMemoryFrame, dst⟩ :: afterP.callers }
+                rcases src_writeParams_decidable hl srcCEntry.params hparamsVir vals (p := pC0) rfl with
+                  ⟨p', hwp⟩ | hno
+                · refine .inl ⟨p', ?_⟩
+                  rw [mir_step_at_block hfnP hpFind, hgetP]; dsimp only; rw [hkind]
+                  exact ⟨by rw [← hkind]; exact htrap, by rw [← hkind]; exact htrap,
+                    vals, afterP, srcCG, srcCEntry, hreads, hcg, hce, hty, hwp⟩
+                · refine .inr fun p' hmr => ?_
+                  rw [mir_step_at_block hfnP hpFind, hgetP] at hmr; dsimp only at hmr; rw [hkind] at hmr
+                  obtain ⟨_, _, vs', ar', cg', ce', hr', hcg', hce', _, hwp'⟩ := hmr
+                  cases Option.some.inj (hreads.symm.trans hr')
+                  cases Option.some.inj (hcg.symm.trans hcg')
+                  cases Option.some.inj (hce.symm.trans hce')
+                  exact hno p' hwp'
+              else
+                refine .inr fun p' hmr => ?_
+                rw [mir_step_at_block hfnP hpFind, hgetP] at hmr; dsimp only at hmr; rw [hkind] at hmr
+                obtain ⟨_, _, _, _, cg', ce', _, hcg', hce', hty', _⟩ := hmr
+                cases Option.some.inj (hcg.symm.trans hcg')
+                cases Option.some.inj (hce.symm.trans hce')
+                exact hty hty'
+  | none =>
+    if hlen : p.instruction = srcBlock.body.length then
+      cases hend : srcBlock.ending with
+      | jump edge =>
+        rcases src_transfer_decidable hl hs edge with ⟨p', htr⟩ | hno
+        · refine .inl ⟨p', ?_⟩
+          rw [mir_step_at_block hfnP hpFind, hgetP, hend]; exact ⟨hlen, htr⟩
+        · refine .inr fun p' hmr => ?_
+          rw [mir_step_at_block hfnP hpFind, hgetP, hend] at hmr
+          exact hno p' hmr.2
+      | branch test yes no =>
+        cases hread : mir.logicalView.readValue p test with
+        | none =>
+          refine .inr fun p' hmr => ?_
+          rw [mir_step_at_block hfnP hpFind, hgetP, hend] at hmr
+          obtain ⟨_, _, _, _, hr, _⟩ := hmr; rw [hread] at hr; cases hr
+        | some pair =>
+          obtain ⟨v, afterP⟩ := pair
+          cases htest : language.operands.test v with
+          | none =>
+            refine .inr fun p' hmr => ?_
+            rw [mir_step_at_block hfnP hpFind, hgetP, hend] at hmr
+            obtain ⟨_, v', _, _, hr', ht', _⟩ := hmr
+            cases Option.some.inj (hread.symm.trans hr')
+            rw [htest] at ht'; cases ht'
+          | some flag =>
+            have hsA := (sourceInv_readValue hl hs hread).1
+            rcases src_transfer_decidable hl hsA (if flag then yes else no) with ⟨p', htr⟩ | hno
+            · refine .inl ⟨p', ?_⟩
+              rw [mir_step_at_block hfnP hpFind, hgetP, hend]
+              exact ⟨hlen, v, afterP, flag, hread, htest, htr⟩
+            · refine .inr fun p' hmr => ?_
+              rw [mir_step_at_block hfnP hpFind, hgetP, hend] at hmr
+              obtain ⟨_, v', ar', fl', hr', ht', htr'⟩ := hmr
+              cases Option.some.inj (hread.symm.trans hr')
+              cases Option.some.inj (htest.symm.trans ht')
+              exact hno p' htr'
+      | ret op =>
+        cases hcall : p.callers with
+        | nil =>
+          refine .inr fun p' hmr => ?_
+          rw [mir_step_at_block hfnP hpFind, hgetP, hend] at hmr
+          obtain ⟨_, _, _, _, _, _, hc, _⟩ := hmr; rw [hcall] at hc; cases hc
+        | cons callerP restP =>
+          cases hreads : mir.logicalView.readOperands op.toList p with
+          | none =>
+            refine .inr fun p' hmr => ?_
+            rw [mir_step_at_block hfnP hpFind, hgetP, hend] at hmr
+            obtain ⟨_, _, _, _, _, _, _, hr, _⟩ := hmr; rw [hreads] at hr; cases hr
+          | some pair =>
+            obtain ⟨vals, afterP⟩ := pair
+            rcases src_endLocals_decidable (mir := mir) afterP.live afterP with ⟨endedP, hends⟩ | hnoEnd
+            · letI := language.typeDecidableEq
+              if hty : op.toList.map Sigma.fst = callerP.destination.toList.map Sigma.fst then
+                have hdestVir : ∀ a ∈ callerP.destination.toList, a.2.storage = .virtual := by
+                  cases hd : callerP.destination with
+                  | none => exact nofun
+                  | some d =>
+                    intro a ha; cases List.mem_singleton.mp ha
+                    exact hs.callersVirtual callerP (by rw [hcall]; exact .head _) d hd
+                let pRes : MemoryRegisters language profile :=
+                  { toMemoryFrame := callerP.caller, bytes := endedP.bytes, callers := restP,
+                    effects := endedP.effects, ownership := endedP.ownership, nextAddressId := endedP.nextAddressId }
+                have hnoM : pRes.movedFields = [] := (hs.callers callerP (by rw [hcall]; exact .head _)).noMoved
+                rcases src_writeParams_decidable hl callerP.destination.toList hdestVir vals (p := pRes) hnoM with
+                  ⟨p', hwp⟩ | hno
+                · refine .inl ⟨p', ?_⟩
+                  rw [mir_step_at_block hfnP hpFind, hgetP, hend]
+                  exact ⟨hlen, callerP, restP, vals, afterP, endedP, hcall, hreads, hends, hty, hwp⟩
+                · refine .inr fun p' hmr => ?_
+                  rw [mir_step_at_block hfnP hpFind, hgetP, hend] at hmr
+                  obtain ⟨_, cp', rp', vs', ar', ep', hc', hr', hends', _, hwp'⟩ := hmr
+                  rw [hcall] at hc'; cases hc'
+                  cases Option.some.inj (hreads.symm.trans hr')
+                  have hEqEnd : ∀ xs s e₁ e₂, mir.logicalView.EndLocals xs s e₁ →
+                      mir.logicalView.EndLocals xs s e₂ → e₁ = e₂ := by
+                    intro xs s e₁ e₂ h1 h2
+                    induction h1 generalizing e₂ with
+                    | nil => cases h2; rfl
+                    | cons ha _ iha =>
+                      cases h2 with
+                      | cons hb ht => cases src_ends_unique ha hb; exact iha e₂ ht
+                  cases hEqEnd _ _ _ _ hends hends'
+                  exact hno p' hwp'
+              else
+                refine .inr fun p' hmr => ?_
+                rw [mir_step_at_block hfnP hpFind, hgetP, hend] at hmr
+                obtain ⟨_, cp', rp', _, _, _, hc', _, _, hty', _⟩ := hmr
+                rw [hcall] at hc'; cases hc'
+                exact hty hty'
+            · refine .inr fun p' hmr => ?_
+              rw [mir_step_at_block hfnP hpFind, hgetP, hend] at hmr
+              obtain ⟨_, _, _, _, ar', ep', _, hr', hends', _⟩ := hmr
+              cases Option.some.inj (hreads.symm.trans hr')
+              exact hnoEnd ep' hends'
+      | trap _ _ | invalid =>
+        refine .inr fun p' hmr => ?_
+        rw [mir_step_at_block hfnP hpFind, hgetP, hend] at hmr
+        exact hmr.2
+    else
+      refine .inr fun p' hmr => ?_
+      rw [mir_step_at_block hfnP hpFind, hgetP] at hmr
+      exact hlen hmr.1
+
 private theorem correspondence_progress (hl : StepLanguage language profile ValidVal)
     {mir : MIR lang profile} {memory : Interfaces.Memory lang profile}
     (ok : lowerGraph (language := language) mir = .ok memory)
@@ -6941,11 +7681,21 @@ private theorem correspondence_progress (hl : StepLanguage language profile Vali
       rw [hpb, hblkEq, ← hbc.sameId]; exact hbc.srcFind
     have hfnP : AList.lookup mir.logicalView.functions p.frame = some (locals, srcGraph) :=
       hpf ▸ hfc.srcLookup
-    -- Check if q is at an inserted `beginLifetime`
-    by_cases hbegAt : ∃ physOp root, physBlock.body[q.instruction]? = some physOp ∧
-        physOp.instruction = .beginLifetime root
-    · obtain ⟨physOp, root, hgetQ, hbegInst⟩ := hbegAt
-      rcases hatP physOp hgetQ with ⟨root', _, hbeg', _, _, hdecl, hfresh, _⟩ | ⟨_, _, _, hnb, _, _⟩
+    -- Constructively check if q is at an inserted `beginLifetime`
+    have hbegDec : (∃ physOp root, physBlock.body[q.instruction]? = some physOp ∧
+        physOp.instruction = .beginLifetime root) ∨
+        (∀ physOp root, physBlock.body[q.instruction]? = some physOp →
+          physOp.instruction ≠ .beginLifetime root) := by
+      cases hget : physBlock.body[q.instruction]? with
+      | none => exact .inr fun _ _ h => by cases h
+      | some physOp =>
+        cases hinst : physOp.instruction with
+        | beginLifetime root => exact .inl ⟨physOp, root, rfl, hinst⟩
+        | bind _ _ | assign _ _ | op _ _ _ _ _ | endLifetime _ | destructure _ _ | call _ _ _ _ =>
+          exact .inr fun op' root h hbi => by
+            cases Option.some.inj h; rw [hinst] at hbi; cases hbi
+    rcases hbegDec with ⟨physOp, root, hgetQ, hbegInst⟩ | hnotBeg
+    · rcases hatP physOp hgetQ with ⟨root', _, hbeg', _, _, hdecl, hfresh, _⟩ | ⟨_, _, _, hnb, _, _⟩
       · cases Option.some.inj (by rw [hbegInst] at hbeg'; cases hbeg'; rfl : some root = some root')
         have hvalid := targetInv_begin_valid ok sourceWF ht hbc root hdecl hfresh
         rcases begin_progress hreQ hqBlkAt hgetQ hbegInst hvalid with ⟨opened, _, hstep⟩ | ⟨hstep, _⟩
@@ -6957,18 +7707,19 @@ private theorem correspondence_progress (hl : StepLanguage language profile Vali
           op.instruction ≠ .beginLifetime root := by
         intro blk op root hb hg hbi
         cases Option.some.inj (hqBlkAt.symm.trans hb)
-        exact hbegAt ⟨op, root, hg, hbi⟩
+        exact hnotBeg op root hg hbi
       have hobsEq := observeHosted_eq hl ok sourceWF hs ht hr hreQ hnoBeg
       cases hobsP : observeHosted mir.logicalView p with
       | some o => exact .inl ⟨o, (dst_result_iff memory q o).mpr (hobsEq.trans hobsP)⟩
       | none =>
         have hobsQ : observeHosted memory q = none := hobsEq.trans hobsP
         have hsrcStepEx : ∃ p', Src.step mir p p' := by
-          apply Classical.byContradiction
-          intro hno
-          apply safe p
-          refine ⟨hp, fun p' hs' => hno ⟨p', hs'⟩, fun o ho => ?_⟩
-          rw [(src_result_iff mir p o).mp ho] at hobsP; cases hobsP
+          rcases src_step_decidable hl hs hobsP with hstep | hno
+          · exact hstep
+          · exfalso
+            apply safe p
+            refine ⟨hp, hno, fun o ho => ?_⟩
+            rw [(src_result_iff mir p o).mp ho] at hobsP; cases hobsP
         obtain ⟨p', hpStep⟩ := hsrcStepEx
         let p'R : MemoryRegisters language profile := p'
         have hmr : MIR.Step mir p p'R := hpStep.2.1
@@ -6976,7 +7727,7 @@ private theorem correspondence_progress (hl : StepLanguage language profile Vali
         cases hgetQ : physBlock.body[q.instruction]? with
         | some physOp =>
           rcases hatP physOp hgetQ with ⟨root, _, hbeg', _⟩ | ⟨srcOp, hgetP, hphysEq, _, hdefLive, _⟩
-          · exact (hbegAt ⟨physOp, root, hgetQ, hbeg'⟩).elim
+          · exact (hnotBeg physOp root hgetQ hbeg').elim
           · rw [hgetP] at hmr
             obtain ⟨hnoTrapP, hinstP⟩ := hmr
             have hsrcVir := (hbc.fnC.virtualGraph srcBlock
@@ -7254,13 +8005,15 @@ private theorem correspondence_progress (hl : StepLanguage language profile Vali
                 have hvalid := writeParams_paramsValid hl ok sourceWF srcCEntry.params hparamsVir hfcC
                   hsC0 htC0 hrepC0 hpw hwpP
                 rw [← hparamsEq] at hvalid
-                by_cases hfits : memory.ParamSpaceFits physCEntry.params qC0
-                · obtain ⟨q', hwpQ, _, hreQ'⟩ := hvalid.physical handoff.handoff.2.2.2 hfits
+                match decidableParamSpaceFits memory physCEntry.params qC0 with
+                | isTrue hfits =>
+                  obtain ⟨q', hwpQ, _, hreQ'⟩ := hvalid.physical handoff.handoff.2.2.2 hfits
                   refine .inr ⟨q', hstepOfOutcome q' ?_ hreQ'⟩
                   rw [hphysEq, hkind]
                   exact ⟨hnoTrapQ, vals, afterQ, physCG, physCEntry, hreadsQ,
                     by simp [Interfaces.Memory.graphAt, hfcC.dstLookup], hceIdQ ▸ hbcC.dstFind, htyQ, hwpQ⟩
-                · refine .inr ⟨{q with resourceExhausted := true}, hexhStep qC0 ?_⟩
+                | isFalse hfits =>
+                  refine .inr ⟨{q with resourceExhausted := true}, hexhStep qC0 ?_⟩
                   rw [hphysEq, hkind]
                   exact ⟨hnoTrapQ, vals, afterQ, physCG, physCEntry, hreadsQ,
                     by simp [Interfaces.Memory.graphAt, hfcC.dstLookup], hceIdQ ▸ hbcC.dstFind, htyQ,
@@ -7441,16 +8194,570 @@ private theorem correspondence_progress (hl : StepLanguage language profile Vali
               have hvalid := writeParams_paramsValid hl ok sourceWF callerP.destination.toList hdestVir hfcCaller
                 hsRes htRes hrepRes hpw hwpP
               rw [← hdestMap] at hvalid
-              by_cases hfits : memory.ParamSpaceFits callerQ.destination.toList qRes
-              · obtain ⟨q', hwpQ, _, hreQ'⟩ := hvalid.physical handoff.handoff.2.2.2 hfits
+              match decidableParamSpaceFits memory callerQ.destination.toList qRes with
+              | isTrue hfits =>
+                obtain ⟨q', hwpQ, _, hreQ'⟩ := hvalid.physical handoff.handoff.2.2.2 hfits
                 refine .inr ⟨q', hstepCtrl q' ?_ hreQ'⟩
                 rw [hbc.placedB.ending.symm]; dsimp only [reclassBlock]; rw [hendS]
                 exact ⟨callerQ, restQ, vals, afterQ, endedQ, hcallQ, hmapOp ▸ hreadsQ, hendLocsQ, htyQ, hwpQ⟩
-              · refine .inr ⟨{q with resourceExhausted := true}, hexhCtrl qRes ?_⟩
+              | isFalse hfits =>
+                refine .inr ⟨{q with resourceExhausted := true}, hexhCtrl qRes ?_⟩
                 rw [hbc.placedB.ending.symm]; dsimp only [reclassBlock]; rw [hendS]
                 exact ⟨callerQ, restQ, vals, afterQ, endedQ, hcallQ, hmapOp ▸ hreadsQ, hendLocsQ, htyQ,
                   hvalid.exhausted_of_no_space hfits⟩
           | trap _ _ | invalid => rw [hendS] at hctrlP; exact hctrlP.elim
+
+/-! ### Constructive divergence reflection (eliminating `Classical.choice` from `LowersMemory`) -/
+
+private def isBeginAt (memory : Interfaces.Memory lang profile)
+    (q : MemoryRegisters language profile) : Bool :=
+  match memory.blockAt q with
+  | none => false
+  | some blk =>
+    match blk.body[q.instruction]? with
+    | none => false
+    | some op => instIsBegin op.instruction
+
+private def computeSrcBegin (p : MemoryRegisters language profile) (root : PlaceId) :
+    MemoryRegisters language profile :=
+  if p.live.contains root then p else {p with live := root :: p.live}
+
+private def computeSrcWriteParams (mir : MIR lang profile) :
+    List (Sigma (MemoryPlace language.operands.Ty)) → List language.operands.Val →
+    MemoryRegisters language profile → Option (MemoryRegisters language profile)
+  | [], [], p => some p
+  | ⟨_, pl⟩ :: rest, v :: vs, p => do
+    let started := computeSrcBegin p pl.logical.root
+    let stored ← mir.logicalView.writeValue started pl v
+    computeSrcWriteParams mir rest vs stored
+  | _, _, _ => none
+
+private def computeSrcEndLocals :
+    List PlaceId → MemoryRegisters language profile → MemoryRegisters language profile
+  | [], p => p
+  | root :: rest, p =>
+    let ownership := match AList.lookup p.addressIds root with
+      | none => p.ownership
+      | some id => Own.erasePlaces p.ownership [id]
+    let dead := {p with
+      ownership
+      live := p.live.erase root
+      initialized := p.initialized.erase root
+      zeroValues := AList.erase p.zeroValues root
+      virtualValues := AList.erase p.virtualValues root
+      materialized := AList.erase p.materialized root
+      addressIds := AList.erase p.addressIds root
+      movedFields := p.movedFields.filter (fun (owner, _) => owner != root)}
+    computeSrcEndLocals rest dead
+
+private def computeSrcTransfer (mir : MIR lang profile)
+    (edge : CFGEdge (Sigma (MemoryRead _ lang.literal)))
+    (p : MemoryRegisters language profile) : Option (MemoryRegisters language profile) := do
+  let (vals, afterP) ← mir.logicalView.readOperands edge.arguments p
+  let dstBlock ← mir.logicalView.blockAt {p with block := edge.target}
+  computeSrcWriteParams mir dstBlock.params vals {afterP with block := edge.target, instruction := 0}
+
+private def computeSourceStep (mir : MIR lang profile) (memory : Interfaces.Memory lang profile)
+    (p q q' : MemoryRegisters language profile) : Option (MemoryRegisters language profile) := do
+  let srcBlock ← mir.logicalView.blockAt p
+  match srcBlock.body[p.instruction]? with
+  | some srcOp =>
+    match srcOp.instruction with
+    | .bind dst src => do
+      let (v, afterP) ← mir.logicalView.readValue p src
+      let stored ← computeSrcWriteParams mir [⟨_, dst⟩] [v] afterP
+      some stored.advance
+    | .assign dst src => do
+      let (v, afterP) ← mir.logicalView.readValue p src
+      let stored ← mir.logicalView.writeValue afterP dst v
+      some stored.advance
+    | .op dst _ args _ _ => do
+      let (_, afterP) ← mir.logicalView.readArgs args p
+      let (locals, _) ← AList.lookup mir.logicalView.functions q.frame
+      let physDst := reclassPlace (fnCls mir q.frame locals) dst
+      let res ← memory.loadValue q' physDst
+      let stored ← computeSrcWriteParams mir [⟨_, dst⟩] [res] afterP
+      some {stored.advance with effects := stored.effects ++ []}
+    | .beginLifetime _ => none
+    | .endLifetime root => some (computeSrcEndLocals [root] p).advance
+    | .destructure (ty := dty) src _ => do
+      let (_, afterP) ← mir.logicalView.readValue p
+        (if language.operands.isCopy dty then .copy src else .move src)
+      some afterP.advance
+    | .call callee dst args _ => do
+      let (vals, afterP) ← mir.logicalView.readOperands args p
+      let srcCG ← mir.logicalView.graphAt callee
+      let srcCEntry ← srcCG.blocks.find? (·.id == srcCG.entry)
+      let pC0 : MemoryRegisters language profile :=
+        { toMemoryFrame := ⟨callee, srcCG.entry, 0, [], [], [], [], [], [], []⟩
+          bytes := afterP.bytes, ownership := afterP.ownership,
+          nextAddressId := afterP.nextAddressId, effects := afterP.effects,
+          callers := ⟨afterP.advance.toMemoryFrame, dst⟩ :: afterP.callers }
+      computeSrcWriteParams mir srcCEntry.params vals pC0
+  | none =>
+    match srcBlock.ending with
+    | .jump edge => computeSrcTransfer mir edge p
+    | .branch test yes no => do
+      let (v, afterP) ← mir.logicalView.readValue p test
+      let flag ← language.operands.test v
+      computeSrcTransfer mir (if flag then yes else no) afterP
+    | .ret op =>
+      match p.callers with
+      | [] => none
+      | callerP :: restP => do
+        let (vals, afterP) ← mir.logicalView.readOperands op.toList p
+        let endedP := computeSrcEndLocals afterP.live afterP
+        let pRes : MemoryRegisters language profile :=
+          { toMemoryFrame := callerP.caller, bytes := endedP.bytes, callers := restP,
+            effects := endedP.effects, ownership := endedP.ownership, nextAddressId := endedP.nextAddressId }
+        computeSrcWriteParams mir callerP.destination.toList vals pRes
+    | .trap _ _ | .invalid => none
+
+private theorem computeSrcWriteParams_of_writeParams {mir : MIR lang profile}
+    {params : List (Sigma (MemoryPlace language.operands.Ty))} {values : List language.operands.Val}
+    {p next : MemoryRegisters language profile}
+    (hwp : mir.logicalView.ParamOutcome params values p next false) :
+    computeSrcWriteParams mir params values p = some next := by
+  have aux : ∀ {params values p next ex c}, mir.logicalView.WriteParams params values p next ex c →
+      ex = false → c = profile.memoryTarget.addressCeiling →
+      computeSrcWriteParams mir params values p = some next := by
+    intro params values p next ex c hw hex hc
+    induction hw with
+    | nil _ => rfl
+    | @cons ty pl rest v vs s0 started stored fin _ _ hbeg hw _ ih =>
+      subst hc
+      simp only [computeSrcWriteParams, computeSrcBegin, bind, Option.bind]
+      have hstEq : (if s0.live.contains pl.logical.root then s0 else {s0 with live := pl.logical.root :: s0.live}) = started := by
+        cases hc : s0.live.contains pl.logical.root with
+        | true =>
+          rw [ite_eq_left hc] at hbeg
+          simp only [↓reduceIte]; exact hbeg.symm
+        | false =>
+          have hnf : ¬ s0.live.contains pl.logical.root = true := fun h => Bool.noConfusion (hc.symm.trans h)
+          rw [ite_eq_right hnf] at hbeg
+          simp only [Bool.false_eq_true, ↓reduceIte]
+          exact (src_begins_unique hbeg).symm
+      rw [hstEq, hw.2.2.1]
+      exact ih hex rfl
+    | exhausted _ => cases hex
+  exact aux hwp rfl rfl
+
+private theorem computeSrcEndLocals_of_endLocals {mir : MIR lang profile}
+    {xs : List PlaceId} {p ended : MemoryRegisters language profile}
+    (h : mir.logicalView.EndLocals xs p ended) :
+    computeSrcEndLocals xs p = ended := by
+  induction h with
+  | nil _ => rfl
+  | @cons root rest s0 mid fin hend _ ih =>
+    have hmid : mid = {s0 with
+      ownership := match AList.lookup s0.addressIds root with
+        | none => s0.ownership
+        | some id => Own.erasePlaces s0.ownership [id]
+      live := s0.live.erase root
+      initialized := s0.initialized.erase root
+      zeroValues := AList.erase s0.zeroValues root
+      virtualValues := AList.erase s0.virtualValues root
+      materialized := AList.erase s0.materialized root
+      addressIds := AList.erase s0.addressIds root
+      movedFields := s0.movedFields.filter (fun (owner, _) => owner != root)} := by
+      rcases hend.2 with ⟨_, rfl⟩ | ⟨hmat, _⟩
+      · rfl
+      · cases logicalView_classAt_virtual mir s0.frame root hmat
+    simp only [computeSrcEndLocals, ← hmid]
+    exact ih
+
+private theorem computeSrcTransfer_of_transfer {mir : MIR lang profile}
+    {edge : CFGEdge (Sigma (MemoryRead _ lang.literal))}
+    {p p' : MemoryRegisters language profile}
+    (htr : mir.logicalView.Transfer edge p p' false) :
+    computeSrcTransfer mir edge p = some p' := by
+  obtain ⟨vals, afterP, dstBlock, hreads, hblk, _, hwp⟩ := htr
+  simp only [computeSrcTransfer, hreads, hblk, bind, Option.bind]
+  exact computeSrcWriteParams_of_writeParams hwp
+
+private theorem computeSourceStep_of_step (hl : StepLanguage language profile ValidVal)
+    {mir : MIR lang profile} {memory : Interfaces.Memory lang profile}
+    (ok : lowerGraph (language := language) mir = .ok memory)
+    (sourceWF : mir.logicalView.HandoffWF)
+    {p p' q q' : MemoryRegisters language profile}
+    (hs : SourceInv mir ValidVal p) (hr : Related memory p q)
+    (hstepP : Src.step mir p p') (hr' : Related memory p' q') :
+    computeSourceStep mir memory p q q' = some p' := by
+  have handoff := lowerGraph_handoff ok sourceWF
+  obtain ⟨locals, srcGraph, hfnP, srcBlock, hpFind, _⟩ := hs.active.fnDecl
+  have hblkAt : mir.logicalView.blockAt p = some srcBlock := by
+    simp only [Interfaces.Memory.blockAt, Interfaces.Memory.graphAt, hfnP, Option.map_some,
+      bind, Option.bind, hpFind]
+  have hmr : MIR.Step mir p p' := hstepP.2.1
+  rw [mir_step_at_block hfnP hpFind] at hmr
+  unfold computeSourceStep
+  simp only [hblkAt, bind, Option.bind]
+  cases hgetP : srcBlock.body[p.instruction]? with
+  | some srcOp =>
+    rw [hgetP] at hmr
+    obtain ⟨_, hinstP⟩ := hmr
+    have hblkVir := logicalView_graphVirtual mir (AList.lookup_mem hfnP) srcBlock
+      (Array.mem_toList_iff.mpr (Array.mem_of_find?_eq_some hpFind))
+    have hsrcVir := hblkVir.2.1 srcOp (List.mem_of_getElem? hgetP)
+    dsimp only
+    cases hkind : srcOp.instruction with
+    | bind dst src =>
+      rw [hkind] at hinstP
+      obtain ⟨v, afterP, storedP, hread, hwp, rfl⟩ := hinstP
+      simp only [hread, computeSrcWriteParams_of_writeParams hwp]
+    | assign dst src =>
+      rw [hkind] at hinstP
+      obtain ⟨v, afterP, storedP, hread, hw, rfl⟩ := hinstP
+      simp only [hread, hw.2.2.1]
+    | @op opcode types ty dst _ args checks addresses =>
+      rw [hkind] at hsrcVir hinstP
+      obtain ⟨vals, afterP, opsP, res, effs, chgP, storedP, hreadsP, _, hmapMP, hopP, _, hwpP, rfl⟩ := hinstP
+      obtain ⟨haddrsNil, heffsNil, hchgEq⟩ := hl.pureOp _ _ _ _ _ _ _ _ _ _ _ hopP
+      have haddEmpty : addresses = [] := by
+        cases addresses with
+        | nil => rfl
+        | cons a rest =>
+          simp only [List.mapM_cons, Option.bind_eq_bind, Option.bind_eq_some_iff] at hmapMP
+          obtain ⟨_, _, _, _, heq⟩ := hmapMP; cases heq; cases haddrsNil
+      subst haddEmpty; subst haddrsNil; subst heffsNil
+      have hprepP : Interfaces.Memory.prepareAddresses afterP [] = afterP := rfl
+      have hsA := (sourceInv_readArgs hl _ hs hreadsP).1
+      have hfpA : afterP.frame = p.frame := (sourceInv_readArgs hl _ hs hreadsP).2.2.1
+      have happId : Interfaces.Memory.applyOperation afterP true (Interfaces.Memory.operationStore afterP true) = afterP :=
+        applyOperation_id hsA.active.noAddr (fun c hc => (hsA.callers c hc).noAddr)
+      change mir.logicalView.ParamOutcome [⟨_, dst⟩] [res]
+        (Interfaces.Memory.applyOperation afterP true chgP) storedP false at hwpP
+      rw [← hchgEq, hprepP, happId] at hwpP
+      have hpf : p.frame = q.frame := hr.representation.1.2.1
+      have hfnQ : AList.lookup mir.logicalView.functions q.frame = some (locals, srcGraph) := hpf ▸ hfnP
+      obtain ⟨physGraph, hfc⟩ := fnCorresp_of_src ok sourceWF hfnQ
+      cases hwpP with
+      | @cons _ _ _ _ _ _ pSt _ _ _ _ hbegP hwP hnil =>
+        cases hnil
+        obtain ⟨hpath, hrtSt, _⟩ := validPlace_path_nil hl hwP.1.1
+        have hfpSt : pSt.frame = afterP.frame := by
+          split at hbegP
+          · subst pSt; rfl
+          · exact (sourceInv_begins hsA hbegP).2.1
+        have hluLoc : AList.lookup locals dst.logical.root = some ty := by
+          simpa only [Interfaces.Memory.rootType, hfpSt, hfpA, hfnP, bind, Option.bind] using hrtSt
+        have hdstProps : dst.logical.root ∈ storedP.live ∧
+            AList.lookup storedP.virtualValues dst.logical.root = some res ∧
+            storedP.frame = q.frame := by
+          have hput := hwP.2.2.1
+          simp only [Interfaces.Memory.writeValue, hsrcVir.1] at hput
+          cases hcond : (!pSt.live.contains dst.logical.root || !mir.logicalView.mayInitialize pSt dst) with
+          | true => simp only [hcond, ↓reduceIte] at hput; cases hput
+          | false =>
+            simp only [hcond, Bool.false_eq_true, ↓reduceIte, bind, Option.bind] at hput
+            cases ha : mir.logicalView.authorizeWrite pSt dst with
+            | none => simp only [ha] at hput; cases hput
+            | some ow =>
+              simp only [ha, Interfaces.Memory.replaceLocal, Interfaces.Memory.markWritten,
+                hpath, List.isEmpty_nil, ↓reduceIte, bind, Option.bind, pure, Option.some.injEq] at hput
+              have hlvSt : pSt.live.contains dst.logical.root = true := by
+                cases hc : pSt.live.contains dst.logical.root with
+                | true => rfl
+                | false => simp only [hc, Bool.not_false, Bool.true_or] at hcond; cases hcond
+              rw [← hput]
+              refine ⟨List.contains_iff_mem.mp hlvSt, ?_, hfpSt.trans (hfpA.trans hpf)⟩
+              simp only [AList.lookup, ↓reduceIte]
+        obtain ⟨hdstLive, hdstVal, hfpStored⟩ := hdstProps
+        have hnoMovedStored : storedP.movedFields = [] := by
+          have hnoMSt : pSt.movedFields = [] := by
+            split at hbegP
+            · subst pSt; exact hsA.active.noMoved
+            · cases src_begins_unique hbegP; exact hsA.active.noMoved
+          exact src_writes_noMoved hnoMSt hsrcVir.1 hwP
+        have hloadQ' : memory.loadValue q' (reclassPlace (fnCls mir q.frame locals) dst) = some res := by
+          have hact := hr'.representation.1
+          have hfq' : q'.frame = q.frame := hact.2.1.symm.trans hfpStored
+          have hq'Live : dst.logical.root ∈ q'.live := hact.2.2.1 dst.logical.root hdstLive
+          obtain ⟨ls', g', ty', st', hfm', hlu', hcls', _, hvals'⟩ :=
+            hact.2.2.2.2.2.2.2.2.2.2.2.2 dst.logical.root hq'Live
+          have hfnLu' := AList.lookup_of_mem handoff.handoff.1.1 hfm'
+          rw [hfq'] at hfnLu' hcls'
+          obtain ⟨rfl, rfl⟩ := Prod.mk.inj (Option.some.inj (hfc.dstLookup.symm.trans hfnLu'))
+          cases Option.some.inj (hluLoc.symm.trans hlu')
+          have hstEq : st' = fnCls mir q.frame locals dst.logical.root :=
+            Option.some.inj (hcls'.symm.trans (fnCorresp_classAt_eq hfc hluLoc).1)
+          subst hstEq
+          have hinitQ' : dst.logical.root ∈ q'.initialized :=
+            (hact.2.2.2.2.2.2.2.2.1 dst.logical.root).mpr (Option.isSome_iff_exists.mpr ⟨res, hdstVal⟩)
+          have hnoMovedQ' : q'.movedFields = [] := hact.1.2.symm.trans hnoMovedStored
+          have hia : Interfaces.Memory.initializedAt
+              ({ toMemoryFrame := q'.toMemoryFrame, bytes := q'.bytes } : MemoryRegisters language profile)
+              dst.logical.root [] = true := by
+            simp only [Interfaces.Memory.initializedAt, hnoMovedQ', List.any_nil, Bool.not_false,
+              Bool.and_true]
+            exact List.contains_iff_mem.mpr hinitQ'
+          have hrepV := hvals' res hdstVal
+          rw [ite_eq_left hia] at hrepV
+          obtain ⟨phys, hre, hld, _⟩ := hrepV
+          have hphysEq : res = phys := (hl.representsEq _ _ _ _ _).mp hre
+          subst hphysEq
+          have hplEq : reclassPlace (fnCls mir q.frame locals) dst =
+              ⟨⟨dst.logical.root, []⟩, fnCls mir q.frame locals dst.logical.root⟩ := by
+            cases dst with | mk lg _ => cases lg with | mk rt pa =>
+              dsimp only at hpath; subst hpath; rfl
+          rw [hplEq]
+          exact hld
+        have hwpRes : mir.logicalView.ParamOutcome [⟨_, dst⟩] [res] afterP storedP false :=
+          .cons hbegP hwP (.nil _)
+        simp only [hreadsP, hfnQ, hloadQ', computeSrcWriteParams_of_writeParams hwpRes]
+    | beginLifetime _ => rw [hkind] at hsrcVir; exact hsrcVir.elim
+    | endLifetime root =>
+      rw [hkind] at hinstP
+      obtain ⟨endedP, hendP, rfl⟩ := hinstP
+      have hel : mir.logicalView.EndLocals [root] p endedP := .cons hendP (.nil _)
+      simp only [computeSrcEndLocals_of_endLocals hel]
+    | destructure src bindings =>
+      rw [hkind] at hinstP
+      obtain ⟨v, afterP, fields, storedP, hreadP, hdest, hmapM, hwpP, rfl⟩ := hinstP
+      obtain ⟨_, actFs, hactFs, hmemB, _⟩ := hdest
+      have hactNil := hl.noActiveFields _ _ _ _ hactFs
+      have hbNil : bindings = [] := by
+        cases bindings with
+        | nil => rfl
+        | cons b rest =>
+          have hmem := (hmemB (b.1, b.2.1) (.head _)).1
+          rw [hactNil] at hmem; cases hmem
+      subst hbNil; cases hmapM
+      obtain ⟨rfl, _⟩ := Interfaces.Memory.ParamOutcome.empty hwpP
+      simp only [hreadP]
+    | call callee dst args checks =>
+      rw [hkind] at hinstP
+      obtain ⟨_, vals, afterP, srcCG, srcCEntry, hreadsP, hcgP, hceP, _, hwpP⟩ := hinstP
+      simp only [hreadsP, hcgP, hceP, computeSrcWriteParams_of_writeParams hwpP]
+  | none =>
+    rw [hgetP] at hmr
+    obtain ⟨_, hctrlP⟩ := hmr
+    cases hendS : srcBlock.ending with
+    | jump edge =>
+      rw [hendS] at hctrlP
+      exact computeSrcTransfer_of_transfer hctrlP
+    | branch test yes no =>
+      rw [hendS] at hctrlP
+      obtain ⟨v, afterP, flag, hreadP, htest, htrP⟩ := hctrlP
+      simp only [hreadP, htest]
+      exact computeSrcTransfer_of_transfer htrP
+    | ret op =>
+      rw [hendS] at hctrlP
+      obtain ⟨callerP, restP, vals, afterP, endedP, hcallP, hreadsP, hendLocsP, _, hwpP⟩ := hctrlP
+      simp only [hcallP, hreadsP, computeSrcEndLocals_of_endLocals hendLocsP]
+      exact computeSrcWriteParams_of_writeParams hwpP
+    | trap _ _ | invalid => rw [hendS] at hctrlP; exact hctrlP.elim
+
+private theorem correspondence_advance_begin (hl : StepLanguage language profile ValidVal)
+    {mir : MIR lang profile} {memory : Interfaces.Memory lang profile}
+    (ok : lowerGraph (language := language) mir = .ok memory)
+    (sourceWF : mir.logicalView.HandoffWF) (safe : ProgramSafe Src mir)
+    {p q q' : MemoryRegisters language profile}
+    (hp : Src.finite mir p) (hq : Dst.finite memory q)
+    (hr : Related memory p q) (htick : Dst.step memory q q')
+    (hnotExh' : q'.resourceExhausted = false)
+    (hbegAt : isBeginAt memory q = true) :
+    Related memory p q' ∧ stutterRank memory q' < stutterRank memory q := by
+  have hs := sourceInv_reachable hl ok sourceWF safe hp
+  have ht := targetInv_reachable hl ok sourceWF safe hq
+  have hraw : memory.Step q q' := htick.2.1
+  unfold Interfaces.Memory.Step at hraw
+  have hqNotExh : q.resourceExhausted = false := by
+    cases hf : q.resourceExhausted
+    · rfl
+    · rw [hf] at hraw; simp at hraw
+  rw [ite_eq_right (by simp [hqNotExh]), ite_eq_right (by simp [hnotExh'])] at hraw
+  obtain ⟨locals, srcGraph, physGraph, physBlock, hfn, hdst, hfind, _, _⟩ := ht.liveAligned
+  obtain ⟨srcGraph', hfc⟩ := fnCorresp_of_dst ok sourceWF hdst
+  cases Option.some.inj (hfn.symm.trans hfc.srcLookup)
+  obtain ⟨srcBlock, hbc⟩ := blockCorresp_of_dst hfc hfind
+  have hblkEq : q.block = physBlock.id :=
+    (eq_of_beq (List.find?_some (p := fun x : MemoryBlock lang => x.id == q.block)
+      (by rwa [Array.find?_toList]))).symm
+  obtain ⟨_, _, _, _, _, hatP⟩ := frameAligned_decode hbc ht.liveAligned hr.active hblkEq
+  have hqBlkAt : memory.blockAt q = some physBlock := by
+    simp [Interfaces.Memory.blockAt, Interfaces.Memory.graphAt, hdst, hfind]
+  have hraw0 : memory.StepOutcome q q' false := hraw
+  obtain ⟨blk', hblk', hbody⟩ := hraw
+  cases Option.some.inj (hqBlkAt.symm.trans hblk')
+  unfold isBeginAt at hbegAt
+  rw [hqBlkAt] at hbegAt
+  dsimp only at hbegAt
+  cases hgetQ : physBlock.body[q.instruction]? with
+  | none => rw [hgetQ] at hbegAt; cases hbegAt
+  | some physOp =>
+    rw [hgetQ] at hbegAt hbody
+    dsimp only at hbegAt hbody
+    rcases hatP physOp hgetQ with
+      ⟨root, _, hbeg, _, _, hdecl, _, hfaNext⟩ | ⟨_, _, _, hnb, _, _⟩
+    · rw [hbeg] at hbody
+      obtain ⟨started, hbegQ, rfl⟩ := hbody
+      obtain ⟨ty, hloc⟩ := Option.isSome_iff_exists.mp hdecl
+      have hrepStarted := begins_representsCheckpoint hfc hs ht.stateWF hr.representation hloc hbegQ
+      obtain ⟨_, hfs, hbs, his, _, hcq, _⟩ := targetStateWF_begins ht.stateWF hbegQ
+      have heffS : started.effects = q.effects := by
+        rcases hbegQ.2 with ⟨_, rfl⟩ | ⟨_, _, _, ⟨_, rfl⟩ | ⟨_, _, _, _, _, _, rfl⟩⟩ <;> rfl
+      have hfaStarted : FrameAligned memory p.toMemoryFrame started.advance.toMemoryFrame := by
+        obtain ⟨hfp', hbp', g, b, hg, hb, hle, hpc⟩ := hfaNext
+        exact ⟨hfp'.trans hfs.symm, hbp'.trans hbs.symm, g, b,
+          by change memory.graphAt started.frame = _; rw [hfs]; exact hg,
+          by change g.blocks.find? (·.id == started.block) = _; rw [hbs]; exact hb,
+          by change started.instruction + 1 ≤ _; rw [his]; exact hle,
+          by dsimp only [MemoryRegisters.advance] at hpc ⊢; rw [his]; exact hpc⟩
+      refine ⟨⟨hrepStarted, hfaStarted,
+        by change ∀ pair ∈ p.callers.zip started.callers, _; rw [hcq]; exact hr.suspended,
+        hr.effects.trans heffS.symm⟩, ?_⟩
+      have hdec := begin_decreases hqBlkAt hgetQ hbeg hraw0
+      simpa only [stutterRank, hnotExh', hqNotExh, Bool.false_eq_true, ite_false,
+        Nat.add_lt_add_iff_right] using hdec
+    · rw [hnb] at hbegAt; cases hbegAt
+
+private def advanceMatchingPoint (mir : MIR lang profile) (memory : Interfaces.Memory lang profile)
+    (run : Nat → MemoryRegisters language profile)
+    (p : MemoryRegisters language profile) (t : Nat) :
+    Nat → Nat × MemoryRegisters language profile
+  | 0 => (t, p)
+  | fuel + 1 =>
+    if isBeginAt memory (run t) then
+      advanceMatchingPoint mir memory run p (t + 1) fuel
+    else
+      (t + 1, (computeSourceStep mir memory p (run t) (run (t + 1))).getD p)
+
+private theorem run_finite_local {A E : Type} {s : Semantics A E} {a : A} {run}
+    (infinite : s.diverges a run) (i : Nat) : s.finite a (run i) := by
+  induction i with
+  | zero => exact ⟨_, infinite.1, .nil _⟩
+  | succ i ih => exact finite_next ih (infinite.2 i)
+
+private theorem run_trace_mono_local {A E : Type} {s : Semantics A E} {a : A} {run}
+    (infinite : s.diverges a run) {i j : Nat} (order : i ≤ j) :
+    TracePrefix (s.trace a (run i)) (s.trace a (run j)) := by
+  induction order with
+  | refl => exact ⟨[], List.append_nil _⟩
+  | step _ ih =>
+    obtain ⟨l, hl⟩ := ih
+    obtain ⟨r, hr⟩ := s.traceGrows _ _ _ (infinite.2 _)
+    exact ⟨l ++ r, by rw [← List.append_assoc, hl, hr]⟩
+
+private theorem trace_on_run_local {mir : MIR lang profile} {memory : Interfaces.Memory lang profile}
+    {p p' q q' : MemoryRegisters language profile} (r : Related memory p q)
+    (hs : Src.step mir p p') (ht : Dst.step memory q q') :
+    Src.trace mir p = Dst.trace memory q := by
+  have noSource := hs.1
+  have noTarget := ht.1
+  change p.effects.map _ ++ (Option.map _ _).getD [] =
+    q.effects.map _ ++ (Option.map _ _).getD []
+  rw [noSource, noTarget, r.effects]
+
+private theorem trace_at_result_local {mir : MIR lang profile} {memory : Interfaces.Memory lang profile}
+    {p q : MemoryRegisters language profile} {o} (r : Related memory p q)
+    (hs : Src.result mir p o) (ht : Dst.result memory q o) :
+    Src.trace mir p = Dst.trace memory q := by
+  change (_ : Option Concrete.Contracts.Observation) = some o at hs ht
+  change p.effects.map _ ++ (Option.map _ _).getD [] =
+    q.effects.map _ ++ (Option.map _ _).getD []
+  rw [hs, ht, r.effects]
+
+private theorem correspondence_divergence (hl : StepLanguage language profile ValidVal)
+    {mir : MIR lang profile} {memory : Interfaces.Memory lang profile}
+    (ok : lowerGraph (language := language) mir = .ok memory)
+    (sourceWF : mir.logicalView.HandoffWF) (safe : ProgramSafe Src mir)
+    {run : Nat → MemoryRegisters language profile}
+    (infinite : Dst.diverges memory run) :
+    ∃ matching, Src.diverges mir matching ∧
+      Concrete.Contracts.SameInfiniteTrace
+        (fun i => Src.trace mir (matching i)) (fun i => Dst.trace memory (run i)) := by
+  obtain ⟨_, srcGraph, physGraph, srcEntry, physEntry, hbc, _, hpeId,
+    _, _, hsrcInit, hdstInit⟩ := entry_no_params ok sourceWF safe
+  let p0 : MemoryRegisters language profile :=
+    ⟨⟨mir.entry, srcGraph.entry, 0, [], [], [], [], [], [], []⟩,
+      Mem.Memory.empty, [], [], {}, 0, false⟩
+  have hr0 : Related memory p0 (run 0) := by
+    rw [hdstInit (run 0) infinite.1]
+    refine ⟨?_, ?_, nofun, rfl⟩
+    · refine ⟨⟨⟨⟨Mem.empty_wellFormed _, .nil, .nil, nofun⟩, rfl⟩, rfl, nofun,
+        .nil, .nil, .nil, .nil, nofun, fun _ => ⟨nofun, fun h => by cases h⟩, nofun, nofun, nofun, nofun⟩,
+        rfl, nofun, ⟨rfl, nofun⟩, .nil, rfl, rfl⟩
+    · refine ⟨rfl, hbc.fnC.placed.entry, physGraph, physEntry,
+        by simp [Interfaces.Memory.graphAt, hbc.fnC.dstLookup], hpeId ▸ hbc.dstFind, Nat.zero_le _, rfl⟩
+  have hnotExhRun : ∀ k, (run k).resourceExhausted = false := by
+    intro k
+    cases hf : (run k).resourceExhausted with
+    | false => rfl
+    | true =>
+      exact (Dst.terminal memory (run k) .resourceExhausted (memory.exhausted_result hf) _ (infinite.2 k)).elim
+  have hadvance : ∀ fuel t (p : MemoryRegisters language profile),
+      Src.finite mir p → Related memory p (run t) → stutterRank memory (run t) < fuel →
+      t < (advanceMatchingPoint mir memory run p t fuel).1 ∧
+      Src.step mir p (advanceMatchingPoint mir memory run p t fuel).2 ∧
+      Src.finite mir (advanceMatchingPoint mir memory run p t fuel).2 ∧
+      Related memory (advanceMatchingPoint mir memory run p t fuel).2
+        (run (advanceMatchingPoint mir memory run p t fuel).1) := by
+    intro fuel
+    induction fuel with
+    | zero => intro _ _ _ _ hlt; exact absurd hlt (Nat.not_lt_zero _)
+    | succ f ih =>
+      intro t p hp hr hlt
+      unfold advanceMatchingPoint
+      cases hb : isBeginAt memory (run t) with
+      | true =>
+        simp only [↓reduceIte]
+        obtain ⟨hr', hrank⟩ := correspondence_advance_begin hl ok sourceWF safe hp
+          (run_finite_local infinite t) hr (infinite.2 t) (hnotExhRun (t + 1)) hb
+        have hlt' : stutterRank memory (run (t + 1)) < f := Nat.lt_of_lt_of_le hrank (Nat.le_of_lt_succ hlt)
+        obtain ⟨ht', hstep', hfin', hr''⟩ := ih (t + 1) p hp hr' hlt'
+        exact ⟨Nat.lt_trans (Nat.lt_succ_self t) ht', hstep', hfin', hr''⟩
+      | false =>
+        simp only [Bool.false_eq_true, ↓reduceIte]
+        have hstep := correspondence_advance hl ok sourceWF safe p (run t) (run (t + 1))
+          hp (run_finite_local infinite t) hr (infinite.2 t) (hnotExhRun (t + 1))
+        rcases hstep with ⟨p', hstepP, hr'⟩ | ⟨_, blk, op, root, hblk, hget, hbi⟩
+        · have hs := sourceInv_reachable hl ok sourceWF safe hp
+          have hcomp := computeSourceStep_of_step hl ok sourceWF hs hr hstepP hr'
+          rw [hcomp]
+          exact ⟨Nat.lt_succ_self t, hstepP, finite_next hp hstepP, hr'⟩
+        · unfold isBeginAt at hb
+          rw [hblk] at hb; dsimp only at hb
+          rw [hget] at hb; dsimp only at hb
+          rw [hbi] at hb; cases hb
+  let points : Nat → Nat × MemoryRegisters language profile :=
+    Nat.rec (0, p0) fun _ pt => advanceMatchingPoint mir memory run pt.2 pt.1 (stutterRank memory (run pt.1) + 1)
+  have hinv : ∀ i, Src.finite mir (points i).2 ∧ Related memory (points i).2 (run (points i).1) := by
+    intro i
+    induction i with
+    | zero => exact ⟨⟨p0, hsrcInit, .nil _⟩, hr0⟩
+    | succ k ih =>
+      obtain ⟨_, _, hfin', hr'⟩ := hadvance (stutterRank memory (run (points k).1) + 1)
+        (points k).1 (points k).2 ih.1 ih.2 (Nat.lt_succ_self _)
+      exact ⟨hfin', hr'⟩
+  have hmoves : ∀ i, (points i).1 < (points (i + 1)).1 ∧ Src.step mir (points i).2 (points (i + 1)).2 := by
+    intro i
+    obtain ⟨hfin, hr⟩ := hinv i
+    obtain ⟨hlt, hstep, _, _⟩ := hadvance (stutterRank memory (run (points i).1) + 1)
+      (points i).1 (points i).2 hfin hr (Nat.lt_succ_self _)
+    exact ⟨hlt, hstep⟩
+  have hcofinal : ∀ i, i ≤ (points i).1 := by
+    intro i
+    induction i with
+    | zero => exact Nat.zero_le _
+    | succ k ih => exact Nat.lt_of_le_of_lt ih (hmoves k).1
+  have htraces : ∀ i, Src.trace mir (points i).2 = Dst.trace memory (run (points i).1) := by
+    intro i
+    exact trace_on_run_local (hinv i).2 (hmoves i).2 (infinite.2 _)
+  refine ⟨fun i => (points i).2, ⟨hsrcInit, fun i => (hmoves i).2⟩, ?_⟩
+  intro events
+  constructor
+  · rintro ⟨i, h⟩
+    refine ⟨(points i).1, ?_⟩
+    dsimp only at h ⊢
+    rw [← htraces i]
+    exact h
+  · rintro ⟨i, h⟩
+    obtain ⟨l, hl⟩ := h
+    obtain ⟨r, hr⟩ := run_trace_mono_local infinite (hcofinal i)
+    refine ⟨i, l ++ r, ?_⟩
+    dsimp only at hl ⊢
+    rw [← List.append_assoc, hl, hr, htraces i]
 
 end Simulation
 
@@ -7477,8 +8784,73 @@ theorem lowerGraph_lowersMemory {language : CoreLanguage} {lang : LoweringLangua
     {mir : MIR lang profile} {memory : Interfaces.Memory lang profile}
     (ok : lowerGraph (language := language) mir = .ok memory)
     (sourceWF : mir.logicalView.HandoffWF) :
-    LowersMemory (language := language) mir memory :=
-  lowerGraph_refines ok sourceWF (lowerGraph_correspondence hl ok sourceWF)
+    LowersMemory (language := language) mir memory := by
+  have static := lowerGraph_handoff ok sourceWF
+  let Src := Interfaces.MIR.Execution (language := language) (lang := lang) (profile := profile)
+  let Dst := Interfaces.Memory.Execution (language := language) (lang := lang) (profile := profile)
+  have matchStep (safe : ProgramSafe Src mir) {p q q'}
+      (hp : Src.finite mir p) (hq : Dst.finite memory q)
+      (r : Related memory p q) (tick : Dst.step memory q q') :
+      (∃ p', Src.step mir p p' ∧ Related memory p' q') ∨
+        (Related memory p q' ∧ stutterRank memory q' < stutterRank memory q) := by
+    have running : q.resourceExhausted = false := by
+      cases hf : q.resourceExhausted
+      · rfl
+      · exact (Dst.terminal _ _ _ (memory.exhausted_result hf) _ tick).elim
+    have raw : memory.Step q q' := tick.2.1
+    unfold Interfaces.Memory.Step at raw
+    rw [ite_eq_right (by simp [running])] at raw
+    cases hf : q'.resourceExhausted with
+    | true =>
+      rw [ite_eq_left hf] at raw
+      obtain ⟨rfl, _⟩ := raw
+      exact .inr ⟨⟨r.representation, r.active, r.suspended, r.effects⟩, by simp [stutterRank, running]⟩
+    | false =>
+      rcases correspondence_advance hl ok sourceWF safe p q q' hp hq r tick hf with
+        matched | ⟨rel, _, _, _, hb, ho, hi⟩
+      · exact .inl matched
+      · rw [ite_eq_right (by simp [hf])] at raw
+        exact .inr ⟨rel, by simpa only [stutterRank, hf, running, Bool.false_eq_true, ite_false,
+          Nat.add_lt_add_iff_right] using begin_decreases hb ho hi raw⟩
+  have reached (safe : ProgramSafe Src mir) {q} (hfin : Dst.finite memory q) :
+      ∃ p, Src.finite mir p ∧ Related memory p q := by
+    obtain ⟨start, init, path⟩ := hfin
+    obtain ⟨p, atEntry, rel⟩ := correspondence_initial ok sourceWF safe _ init
+    have follow {a b} (steps : Steps (Dst.step memory) a b) :
+        Dst.finite memory a → ∀ p, Src.finite mir p → Related memory p a →
+          ∃ next, Src.finite mir next ∧ Related memory next b := by
+      induction steps with
+      | nil => exact fun _ p h r => ⟨p, h, r⟩
+      | cons tick _ ih =>
+        intro fin p hs r
+        rcases matchStep safe hs fin r tick with ⟨p', step, r'⟩ | ⟨r', _⟩
+        · exact ih (finite_next fin tick) _ (finite_next hs step) r'
+        · exact ih (finite_next fin tick) _ hs r'
+    exact follow path ⟨start, init, .nil _⟩ p ⟨p, atEntry, .nil _⟩ rel
+  refine ⟨static.project, static.entry, static.origins, static.layouts, ⟨static.signatures, static.declarations⟩,
+    static.promotion, static.handoff.1, sourceWF.1, ?_, ?_⟩
+  · intro safe
+    refine ⟨?_, fun _ run => correspondence_divergence hl ok sourceWF safe run, ?_⟩
+    · intro q o fin obs
+      obtain ⟨p, hp, r⟩ := reached safe fin
+      have hfin := correspondence_finish hl ok sourceWF safe p q o hp fin r obs
+      exact ⟨p, hp, hfin, trace_at_result_local r hfin (Interfaces.Memory.matchingResult_result obs)⟩
+    · intro q stuck
+      obtain ⟨p, hp, r⟩ := reached safe stuck.1
+      rcases correspondence_progress hl ok sourceWF safe p q hp stuck.1 r with ⟨o, obs⟩ | ⟨q', tick⟩
+      · exact stuck.2.2 o obs
+      · exact stuck.2.1 q' tick
+  · intro safe
+    refine ⟨⟨Related memory, fun _ q => stutterRank memory q,
+      correspondence_initial ok sourceWF safe, ?_, ?_⟩,
+      fun _ _ _ _ r => ⟨r.representation, r.effects⟩⟩
+    · intro p q q' hp hq r tick
+      rcases matchStep safe hp hq r tick with ⟨p', step, rel⟩ | pause
+      · exact .inl ⟨p, p', .nil _, step, rel⟩
+      · exact .inr pause
+    · intro p q o hp hq r obs
+      have hfin := correspondence_finish hl ok sourceWF safe p q o hp hq r obs
+      exact ⟨p, .nil _, hfin, trace_at_result_local r hfin (Interfaces.Memory.matchingResult_result obs)⟩
 
 /-- `LocalCorrespondence` for `lowerGraph` on every safe Slice-language MIR program (including Slice 0). -/
 theorem slice_lowerGraph_correspondence {slice : Slice} {profile : Profile}

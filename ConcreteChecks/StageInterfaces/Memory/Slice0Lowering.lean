@@ -25,14 +25,12 @@ private def emptyDeclId : DeclId := ⟨mainFn.module, ⟨"Empty"⟩⟩
 private def emptyDecls : Declarations := [(emptyDeclId, ⟨emptyDeclId.name, false, []⟩)]
 
 private abbrev u8Ty : Language.operands.Ty := .inl (.scalar (.int .u8))
-private abbrev boolTy : Language.operands.Ty := .inl (.scalar .bool)
 private abbrev emptyTy : Language.operands.Ty := .inl (.nominal emptyDeclId)
 
 private def orig : Origin := base.functions[0].2.2.blocks[0].body[0].origin
 private def p0 : Place _ u8Ty := ⟨⟨0⟩, []⟩
 private def p1 : Place _ u8Ty := ⟨⟨1⟩, []⟩
 private def p2 : Place _ u8Ty := ⟨⟨2⟩, []⟩
-private def pb : Place _ boolTy := ⟨⟨0⟩, []⟩
 private def pe : Place _ emptyTy := ⟨⟨0⟩, []⟩
 
 private def startState : State :=
@@ -42,6 +40,11 @@ private def overflowTrapObs : Concrete.Contracts.Observation :=
   .trapped 134 .overflow
     ⟨⟨orig.operation.id⟩, ⟨mainSourcePath.render.text, orig.lexical.line, orig.lexical.col⟩⟩
     (trapDiagnostic base.project .overflow orig.operation orig.lexical)
+
+private def abortTrapObs : Concrete.Contracts.Observation :=
+  .trapped 134 .abort
+    ⟨⟨orig.operation.id⟩, ⟨mainSourcePath.render.text, orig.lexical.line, orig.lexical.col⟩⟩
+    (trapDiagnostic base.project .abort orig.operation orig.lexical)
 
 private theorem lowers_of_checks {mir : MIR Lowering profile}
     (hok : (lowerGraph (language := Language) mir).isOk = true)
@@ -168,24 +171,180 @@ theorem assign_endLifetime_rebind_lowersMemory :
     rw [h] at hlen
     exact hlen
 
-/-! ### Positive Control 5: `branch` with block parameters and explicit `trap` -/
+/-! ### Positive Control 5: Block-parameter transfer and explicit `trap` with valid Slice 0 `u8` binding -/
 
-private def branchParamsMIR : MIR Lowering profile :=
+private abbrev MTerm := Terminator (Sigma (Read Language.operands.Ty Lowering.literal))
+  (Read Language.operands.Ty Lowering.literal Lowering.bool)
+
+private def transferControlMIR (b1Ending : MTerm) : MIR Lowering profile :=
   let b0 : MBlock :=
     ⟨⟨0⟩, [],
-      [⟨orig, .bind pb (.literal ⟨[1]⟩)⟩],
-      .branch (.copy pb)
-        ⟨⟨1⟩, [⟨u8Ty, .literal ⟨[42]⟩⟩]⟩
-        ⟨⟨2⟩, [⟨u8Ty, .literal ⟨[0]⟩⟩]⟩, []⟩
-  let b1 : MBlock := ⟨⟨1⟩, [⟨u8Ty, p1⟩], [], .ret (some ⟨u8Ty, .copy p1⟩), []⟩
-  let b2 : MBlock := ⟨⟨2⟩, [⟨u8Ty, p1⟩], [], .trap .abort orig, []⟩
-  { base with functions := [(mainFn, [(⟨0⟩, boolTy), (⟨1⟩, u8Ty)], ⟨⟨0⟩, #[b0, b1, b2]⟩)] }
+      [⟨orig, .bind p0 (.literal ⟨[42]⟩)⟩],
+      .jump ⟨⟨1⟩, [⟨u8Ty, .copy p0⟩]⟩, []⟩
+  let b1 : MBlock := ⟨⟨1⟩, [⟨u8Ty, p1⟩], [], b1Ending, []⟩
+  { base with functions := [(mainFn, [(⟨0⟩, u8Ty), (⟨1⟩, u8Ty)], ⟨⟨0⟩, #[b0, b1]⟩)] }
 
+private def transferControlMemory (b1Ending : MemoryTerm Lowering) : M :=
+  let vp0 : MemoryPlace _ u8Ty := ⟨p0, .virtual⟩
+  let vp1 : MemoryPlace _ u8Ty := ⟨p1, .virtual⟩
+  let b0 : MemoryBlock Lowering :=
+    ⟨⟨0⟩, [],
+      [⟨orig, .beginLifetime ⟨0⟩⟩, ⟨orig, .bind vp0 (.literal ⟨[42]⟩)⟩],
+      .jump ⟨⟨1⟩, [⟨u8Ty, .copy vp0⟩]⟩, []⟩
+  let b1 : MemoryBlock Lowering := ⟨⟨1⟩, [⟨u8Ty, vp1⟩], [], b1Ending, []⟩
+  { project := base.project, entry := mainFn, signatures := base.signatures
+    functions := [(mainFn, [(⟨0⟩, u8Ty), (⟨1⟩, u8Ty)], ⟨⟨0⟩, #[b0, b1]⟩)]
+    storage := [(mainFn, [(⟨0⟩, .virtual), (⟨1⟩, .virtual)])]
+    layouts := [(mainFn, [])] }
+
+private def branchParamsMIR : MIR Lowering profile :=
+  transferControlMIR (.ret (some ⟨u8Ty, .copy p1⟩))
+
+private def branchTrapParamsMIR : MIR Lowering profile :=
+  transferControlMIR (.trap .abort orig)
+
+private def transferVal42 : Language.operands.Val := .scalar (.int .u8 42)
+private def transferBoundL : State :=
+  { startState with instruction := 1, live := [⟨0⟩], initialized := [⟨0⟩], virtualValues := [(⟨0⟩, transferVal42)] }
+private def transferArrived : State :=
+  { startState with
+    block := ⟨1⟩, instruction := 0, live := [⟨1⟩, ⟨0⟩],
+    initialized := [⟨1⟩, ⟨0⟩], virtualValues := [(⟨1⟩, transferVal42), (⟨0⟩, transferVal42)] }
+private def transferOpenedM : State := { startState with instruction := 1, live := [⟨0⟩] }
+private def transferBoundM : State :=
+  { startState with instruction := 2, live := [⟨0⟩], initialized := [⟨0⟩], virtualValues := [(⟨0⟩, transferVal42)] }
+
+private theorem transferControl_src_bind (b1Ending : MTerm) :
+    Src.step (transferControlMIR b1Ending) startState transferBoundL := by
+  with_unfolding_all
+    refine ⟨rfl, ⟨rfl, transferVal42, startState, { transferBoundL with instruction := 0 }, rfl,
+      .cons ⟨by decide, Or.inl ⟨rfl, rfl⟩⟩ ⟨⟨rfl, nofun⟩, nofun, rfl, ⟨rfl, nofun⟩⟩ (.nil _), rfl⟩, [], rfl⟩
+
+private theorem transferControl_src_jump (b1Ending : MTerm) :
+    Src.step (transferControlMIR b1Ending) transferBoundL transferArrived := by
+  with_unfolding_all
+    refine ⟨rfl, ⟨_, rfl, rfl, [transferVal42], transferBoundL, _, rfl, rfl, rfl,
+      .cons ⟨by decide, Or.inl ⟨rfl, rfl⟩⟩ ⟨⟨rfl, nofun⟩, nofun, rfl, ⟨rfl, nofun⟩⟩ (.nil _)⟩, _, rfl⟩
+
+private theorem transferControl_safe (b1Ending : MTerm) (obs : Concrete.Contracts.Observation)
+    (hres : Src.result (transferControlMIR b1Ending) transferArrived obs) :
+    ProgramSafe Src (transferControlMIR b1Ending) := by
+  have hcases : ∀ p, Src.finite (transferControlMIR b1Ending) p →
+      p = startState ∨ p = transferBoundL ∨ p = transferArrived := by
+    intro p hp
+    apply finite_invariant Src (transferControlMIR b1Ending) _
+      (fun _ h => .inl (by with_unfolding_all exact h)) _ hp
+    rintro _ next (rfl | rfl | rfl) tick
+    · have step : (transferControlMIR b1Ending).logicalView.InstructionStep startState next true
+          (.bind ⟨p0, .virtual⟩ (.literal ⟨[42]⟩)) := by
+        with_unfolding_all exact tick.2.1.2
+      obtain ⟨v, ar, s, hrd, hw, rfl⟩ := step
+      have e : some (transferVal42, startState) = some (v, ar) := by with_unfolding_all exact hrd
+      cases e
+      cases hw with
+      | cons hbeg hwr hnil =>
+        cases hnil
+        rcases hbeg.2 with ⟨_, rfl⟩ | ⟨hmat, _⟩
+        · have hst : some { transferBoundL with instruction := 0 } = some s := by with_unfolding_all exact hwr.2.2.1
+          cases hst; exact .inr (.inl rfl)
+        · have bad : some StorageClass.virtual = some StorageClass.materialized := by with_unfolding_all exact hmat
+          cases bad
+    · have step : (transferControlMIR b1Ending).logicalView.Transfer
+          ⟨⟨1⟩, [⟨u8Ty, .copy ⟨p0, .virtual⟩⟩]⟩ transferBoundL next false := by
+        obtain ⟨blk, hblk, _, htr⟩ := tick.2.1
+        have heq : some (((transferControlMIR b1Ending).logicalView.functions[0]'(by with_unfolding_all exact Nat.zero_lt_one)).2.2.blocks[0]'(by with_unfolding_all exact Nat.zero_lt_two)) = some blk := by
+          with_unfolding_all exact hblk
+        cases Option.some.inj heq
+        with_unfolding_all exact htr
+      obtain ⟨vs, ar, dstBlk, hrd, hblk, _, hw⟩ := step
+      have e : some ([transferVal42], transferBoundL) = some (vs, ar) := by with_unfolding_all exact hrd
+      cases e
+      have eb : some (((transferControlMIR b1Ending).logicalView.functions[0]'(by with_unfolding_all exact Nat.zero_lt_one)).2.2.blocks[1]'(by with_unfolding_all exact Nat.lt_succ_self 1)) = some dstBlk := by
+        with_unfolding_all exact hblk
+      cases Option.some.inj eb
+      have hp : (((transferControlMIR b1Ending).logicalView.functions[0]'(by with_unfolding_all exact Nat.zero_lt_one)).2.2.blocks[1]'(by with_unfolding_all exact Nat.lt_succ_self 1)).params =
+          [⟨u8Ty, ⟨p1, .virtual⟩⟩] := by with_unfolding_all rfl
+      rw [hp] at hw
+      cases hw with
+      | cons hbeg hwr hnil =>
+        cases hnil
+        rcases hbeg.2 with ⟨_, rfl⟩ | ⟨hmat, _⟩
+        · have hst : some transferArrived = some next := by with_unfolding_all exact hwr.2.2.1
+          cases hst; exact .inr (.inr rfl)
+        · have bad : some StorageClass.virtual = some StorageClass.materialized := by with_unfolding_all exact hmat
+          cases bad
+    · exact (Src.terminal (transferControlMIR b1Ending) _ obs hres next tick).elim
+  intro p stuck
+  rcases hcases p stuck.1 with rfl | rfl | rfl
+  · exact stuck.2.1 _ (transferControl_src_bind b1Ending)
+  · exact stuck.2.1 _ (transferControl_src_jump b1Ending)
+  · exact stuck.2.2 obs hres
+
+private theorem transferControl_dst_steps (b1Ending : MemoryTerm Lowering) :
+    Dst.step (transferControlMemory b1Ending) startState transferOpenedM ∧
+    Dst.step (transferControlMemory b1Ending) transferOpenedM transferBoundM ∧
+    Dst.step (transferControlMemory b1Ending) transferBoundM transferArrived := by
+  refine ⟨?_, ?_, ?_⟩
+  · with_unfolding_all
+      exact ⟨rfl, ⟨_, rfl, { transferOpenedM with instruction := 0 }, ⟨by decide, Or.inl ⟨rfl, rfl⟩⟩, rfl⟩, [], rfl⟩
+  · with_unfolding_all
+      exact ⟨rfl, ⟨_, rfl, transferVal42, transferOpenedM, { transferBoundM with instruction := 1 }, rfl,
+        ⟨⟨rfl, nofun⟩, nofun, rfl, ⟨rfl, nofun⟩⟩, rfl⟩, [], rfl⟩
+  · with_unfolding_all
+      exact ⟨rfl, ⟨_, rfl, rfl, [transferVal42], transferBoundM, _, rfl, rfl, rfl,
+        .cons ⟨by decide, Or.inl ⟨rfl, rfl⟩⟩ ⟨⟨rfl, nofun⟩, nofun, rfl, ⟨rfl, nofun⟩⟩ (.nil _)⟩, _, rfl⟩
+
+/-- Valid Slice 0 integer binding (`42 : u8`) transferred via `jump` into block parameter `p1`
+and returned (Boolean literal decoding is held under ISS-0069). Verifies non-stuckness of the
+initial state, full source safety, lowering correspondence, and matching return of 42. -/
 theorem branch_blockParams_lowersMemory :
     ∃ m, lowerGraph (language := Language) branchParamsMIR = .ok m ∧
-      LowersMemory (language := Language) branchParamsMIR m := by
+      ¬ Src.stuck branchParamsMIR startState ∧
+      ProgramSafe Src branchParamsMIR ∧
+      LowersMemory (language := Language) branchParamsMIR m ∧
+      LocalCorrespondence (language := Language) branchParamsMIR m ∧
+      Src.observes branchParamsMIR (.returned 42 ByteArray.empty) ∧
+      Dst.observes m (.returned 42 ByteArray.empty) := by
   letI := Language.typeDecidableEq
-  exact lowers_of_checks (by with_unfolding_all decide) ((checkHandoff_iff _).mp (by with_unfolding_all decide))
+  let mem := transferControlMemory (.ret (some ⟨u8Ty, .copy ⟨p1, .virtual⟩⟩))
+  have hwf : branchParamsMIR.logicalView.HandoffWF := (checkHandoff_iff _).mp (by with_unfolding_all decide)
+  have hok : lowerGraph (language := Language) branchParamsMIR = .ok mem := by with_unfolding_all rfl
+  have hresS : Src.result branchParamsMIR transferArrived (.returned 42 ByteArray.empty) := by with_unfolding_all rfl
+  have hsafe := transferControl_safe _ _ hresS
+  have hnotStuck : ¬ Src.stuck branchParamsMIR startState := hsafe startState
+  obtain ⟨hd1, hd2, hd3⟩ := transferControl_dst_steps (.ret (some ⟨u8Ty, .copy ⟨p1, .virtual⟩⟩))
+  refine ⟨mem, hok, hnotStuck, hsafe, slice_lowerGraph_lowersMemory hok hwf,
+    slice_lowerGraph_correspondence hok hwf hsafe,
+    ⟨transferArrived, ⟨startState, by with_unfolding_all rfl,
+      .cons (transferControl_src_bind _) (.cons (transferControl_src_jump _) (.nil _))⟩, hresS⟩,
+    ⟨transferArrived, ⟨startState, by with_unfolding_all rfl,
+      .cons hd1 (.cons hd2 (.cons hd3 (.nil _)))⟩, by with_unfolding_all rfl⟩⟩
+
+/-- Valid Slice 0 integer binding (`42 : u8`) transferred into block parameter `p1` and reaching
+an explicit `.trap .abort` arm. Verifies non-stuckness of the initial state, full source safety,
+lowering correspondence, and matching abort-trap observation on both machines. -/
+theorem blockParams_trap_lowersMemory :
+    ∃ m, lowerGraph (language := Language) branchTrapParamsMIR = .ok m ∧
+      ¬ Src.stuck branchTrapParamsMIR startState ∧
+      ProgramSafe Src branchTrapParamsMIR ∧
+      LowersMemory (language := Language) branchTrapParamsMIR m ∧
+      LocalCorrespondence (language := Language) branchTrapParamsMIR m ∧
+      Src.observes branchTrapParamsMIR abortTrapObs ∧
+      Dst.observes m abortTrapObs := by
+  letI := Language.typeDecidableEq
+  let mem := transferControlMemory (.trap .abort orig)
+  have hwf : branchTrapParamsMIR.logicalView.HandoffWF := (checkHandoff_iff _).mp (by with_unfolding_all decide)
+  have hok : lowerGraph (language := Language) branchTrapParamsMIR = .ok mem := by with_unfolding_all rfl
+  have hresS : Src.result branchTrapParamsMIR transferArrived abortTrapObs := by with_unfolding_all rfl
+  have hsafe := transferControl_safe _ _ hresS
+  have hnotStuck : ¬ Src.stuck branchTrapParamsMIR startState := hsafe startState
+  obtain ⟨hd1, hd2, hd3⟩ := transferControl_dst_steps (.trap .abort orig)
+  refine ⟨mem, hok, hnotStuck, hsafe, slice_lowerGraph_lowersMemory hok hwf,
+    slice_lowerGraph_correspondence hok hwf hsafe,
+    ⟨transferArrived, ⟨startState, by with_unfolding_all rfl,
+      .cons (transferControl_src_bind _) (.cons (transferControl_src_jump _) (.nil _))⟩, hresS⟩,
+    ⟨transferArrived, ⟨startState, by with_unfolding_all rfl,
+      .cons hd1 (.cons hd2 (.cons hd3 (.nil _)))⟩, by with_unfolding_all rfl⟩⟩
 
 /-! ### Positive Control 6: Interprocedural `call` and callee `ret` -/
 
