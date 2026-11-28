@@ -37,6 +37,30 @@ private def nextEntries (graph : MemoryGraph lang) (root : PlaceId) (key : Entry
       (lifetimeChange op.instruction root).getD fact) live
     block.ending.successors.map fun edge => (edge.target, outgoing)
 
+private theorem length_erase_lt_of_mem {α : Type} [BEq α] [LawfulBEq α] :
+    ∀ {xs : List α} {x : α}, x ∈ xs → (xs.erase x).length < xs.length
+  | [], _, h => nomatch h
+  | a :: rest, x, h => by
+    simp only [List.erase_cons]
+    cases hax : (a == x)
+    · rcases List.mem_cons.mp h with rfl | h'
+      · simp at hax
+      · exact Nat.succ_lt_succ (length_erase_lt_of_mem h')
+    · exact Nat.lt_succ_self _
+
+private theorem mem_erase_of_ne_constructive {α : Type} [BEq α] [LawfulBEq α] :
+    ∀ {xs : List α} {x y : α}, x ≠ y → x ∈ xs → x ∈ xs.erase y
+  | [], _, _, _, h => nomatch h
+  | a :: rest, x, y, hne, h => by
+    simp only [List.erase_cons]
+    cases hay : (a == y)
+    · rcases List.mem_cons.mp h with rfl | h'
+      · exact .head _
+      · exact .tail _ (mem_erase_of_ne_constructive hne h')
+    · rcases List.mem_cons.mp h with rfl | h'
+      · exact (hne (eq_of_beq hay)).elim
+      · exact h'
+
 /-- Follow both branch successors. For one queried root there are at most two
 distinct entry facts per block, including on back edges. Each expansion removes
 one fact from the remaining domain. -/
@@ -50,10 +74,7 @@ private def reachableEntries (graph : MemoryGraph lang) (root : PlaceId)
     else reachableEntries graph root remaining rest
 termination_by (remaining.length, pending.length)
 decreasing_by
-  · apply Prod.Lex.left
-    have := List.length_pos_of_mem _h
-    rw [List.length_erase_of_mem _h]
-    omega
+  · exact Prod.Lex.left _ _ (length_erase_lt_of_mem _h)
   · exact Prod.Lex.right _ (Nat.lt_succ_self _)
 
 /-- A definition at a join may need to start a lifetime on just some incoming
@@ -93,7 +114,7 @@ private theorem reachableEntries_closed (graph : MemoryGraph lang) (root : Place
         x ∈ key :: reachableEntries graph root (remaining.erase key) (nextEntries graph root key ++ rest) := by
       by_cases eq : x = key
       · exact List.mem_cons.mpr (.inl eq)
-      · exact .tail _ (pending' x h ((List.mem_erase_of_ne eq).mpr hx))
+      · exact .tail _ (pending' x h (mem_erase_of_ne_constructive eq hx))
     constructor
     · intro x hx hr
       rcases List.mem_cons.mp hx with rfl | hx
@@ -104,7 +125,7 @@ private theorem reachableEntries_closed (graph : MemoryGraph lang) (root : Place
       · exact cover hr (List.mem_append_left _ edge)
       · by_cases eq : y = key
         · exact List.mem_cons.mpr (.inl eq)
-        · exact .tail _ (closed x hx y edge ((List.mem_erase_of_ne eq).mpr hr))
+        · exact .tail _ (closed x hx y edge (mem_erase_of_ne_constructive eq hr))
   | case3 remaining key rest absent ih =>
     exact ⟨fun x hx hr => ih.1 x (by
       rcases List.mem_cons.mp hx with rfl | h
