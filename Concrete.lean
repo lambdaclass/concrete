@@ -33,6 +33,7 @@ import Concrete.Theorem
 import Concrete.Certificate
 
 import Concrete.Interfaces.Carriers
+import Concrete.Interfaces.Formation
 import Concrete.Interfaces.Contracts
 import Concrete.Interfaces.Pipeline
 import Concrete.Origins
