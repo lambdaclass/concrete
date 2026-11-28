@@ -1,0 +1,30 @@
+name: Restore, verify and fetch pinned Lake dependency sources
+description: >-
+  Restore clean Lake dependency sources under .lake/packages by exact
+  lake-manifest.json and lean-toolchain hash, verify every checked-out
+  revision against lake-manifest.json, delete and refetch any missing or
+  mismatched package with bounded retry, and save pure sources before any
+  build runs.
+
+runs:
+  using: composite
+  steps:
+    - name: Restore pinned Lake dependency sources
+      id: restore
+      continue-on-error: true
+      uses: actions/cache/restore@v4
+      with:
+        path: .lake/packages
+        key: ${{ runner.os }}-lake-packages-sources-${{ hashFiles('lake-manifest.json', 'lean-toolchain') }}
+
+    - name: Verify pinned Lake dependencies and fetch missing packages with retry
+      shell: bash
+      run: nix develop .#gates --command bash --noprofile --norc -eo pipefail scripts/checks/lib/fetch_lake_packages.sh
+
+    - name: Save pinned Lake dependency sources
+      if: steps.restore.outputs.cache-hit != 'true'
+      continue-on-error: true
+      uses: actions/cache/save@v4
+      with:
+        path: .lake/packages
+        key: ${{ runner.os }}-lake-packages-sources-${{ hashFiles('lake-manifest.json', 'lean-toolchain') }}

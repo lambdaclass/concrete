@@ -8,7 +8,7 @@ set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
-REQUIRED="external_toolchain archived_references lean_threads legacy_frozen root_inventory workflow_yaml doc_links sandbox_isolation retention_manifest issues oracle_fetch test_manifest spec_imports shell_assignments stage_interfaces"
+REQUIRED="external_toolchain archived_references lean_threads legacy_frozen root_inventory workflow_yaml lake_packages doc_links sandbox_isolation retention_manifest issues oracle_fetch test_manifest spec_imports shell_assignments stage_interfaces"
 missing=""
 for c in $REQUIRED; do [ -f "scripts/checks/$c.sh" ] || missing="$missing $c"; done
 [ -z "$missing" ] || { echo "run.sh: required check(s) missing:$missing" >&2; exit 1; }

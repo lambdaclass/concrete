@@ -75,6 +75,7 @@ Paths are relative to `scripts/`.
 - `checks/doc_links.sh` Checks that Markdown files link to existing files and headings.
 - `checks/external_toolchain.sh` Exercises the external checker’s toolchain isolation, cache handling and call-site scan after relative invocation.
 - `checks/issues.sh` Checks the issue ledger’s structure and IDs so defects stay traceable.
+- `checks/lake_packages.sh` Exercises pinned Lake dependency cache verification, cleanup and bounded-retry fetch controls offline.
 - `checks/lean_threads.sh` Checks the Lean worker limit so builds respect their resource budget.
 - `checks/legacy_frozen.sh` Checks the frozen tree and retention approvals to protect historical material.
 - `checks/lib/archived_references.py` Identifies retired references and recognizes historical exceptions.
@@ -82,6 +83,7 @@ Paths are relative to `scripts/`.
 - `checks/lib/bounded_exec.py` Controls process groups so timed-out commands stop with their children.
 - `checks/lib/changelog.py` Folds changelog fragments so link checks can resolve their published headings.
 - `checks/lib/doc_links.py` Resolves Markdown targets and headings to detect broken references.
+- `checks/lib/fetch_lake_packages.sh` Verifies restored pinned Lake dependency checkouts against `lake-manifest.json` and refetches missing or mismatched packages with bounded retries.
 - `checks/lib/gate_env.sh` Checks that gates have the expected environment and loads shared settings.
 - `checks/lib/git_sandbox.sh` Clears inherited Git state so fixtures cannot change the caller’s repository.
 - `checks/lib/has_match.sh` Checks for output matches while preserving command errors.
@@ -89,7 +91,7 @@ Paths are relative to `scripts/`.
 - `checks/lib/limits.sh` Shares worker limits so Lean jobs avoid oversubscribing the host.
 - `checks/lib/retention.py` Checks retention rows and resolves which row governs each file.
 - `checks/lib/shell_assignments.py` Parses Bash to catch declarations whose initializers can read stale values.
-- `checks/lib/workflow_checks.py` Matches workflow job names to the gate inventory and requires an explicit success from each landing job.
+- `checks/lib/workflow_checks.py` Matches workflow job names to the gate inventory, checks dependency cache and retry wiring across workflows and local actions, and requires an explicit success from each landing job.
 - `checks/oracle_fetch.sh` Tests fetch failures so missing or corrupt oracle artifacts block CI.
 - `checks/retention_manifest.sh` Checks that all files have a governing retention row.
 - `checks/root_inventory.sh` Checks the permitted root layout so additions are deliberate.
