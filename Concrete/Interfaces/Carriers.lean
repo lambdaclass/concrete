@@ -97,7 +97,9 @@ def FeaturePosition.block? : FeaturePosition → Option BlockId
 
 /-- Closed sum of unsupported backend features diagnosed at the selected emitter boundary.
 Every cause carries the offending construct, enclosing function and exact position, and
-projects to its single registered rule in `ConcreteSpec.Core.BackendPolicy`. -/
+projects to its single registered rule in `ConcreteSpec.Core.BackendPolicy`.
+The `profile` index is tied to the backend policy (`BackendPolicy.FeatureSupported`)
+by F6b's `firstUnsupported` contract rather than by an internal proof field here. -/
 inductive FeatureCause (_profile : Profile) where
   | unsupportedWidth (ty : IntTy) (fn : FnId) (position : FeaturePosition)
   | unsupportedOperation (op : BackendPolicy.Operation) (fn : FnId) (position : FeaturePosition)
@@ -143,9 +145,11 @@ inductive ElabRefusal where
   | sliceMismatch (expected actual : Slice)
   | source (cause : RefusalCause)
 
+/-- Failure channel shared by post-elaboration compiler stages. Checker refusals on
+both checked and unchecked routes use `.admission (.refused cause)` so there is one
+refusal representation across both routes. -/
 inductive StageFailure where
   | admission (failure : AdmissionFailure)
-  | checkerRefused (cause : RefusalCause)
   | resource (failure : ResourceRefusal)
   | unsupportedProfile (rule : RuleId)
   | unsupportedFeature (profile : Profile) (cause : FeatureCause profile)
@@ -750,91 +754,1288 @@ theorem CFG.occurrences_keys_nodup {P I T : Type} (fn : FnId)
     have hb2 : occ.block = other.id := block_occurrences_block_eq fn other trapOrigin hoccOther
     exact blocksUnique.1 (List.mem_map.mpr ⟨other, hother, (hb1.symm.trans hb2).symm⟩)
 
-/-- Explicit justification for omitting a source occurrence in an intra-IR pass. -/
+private theorem nodup_filter {α : Type} {l : List α} (p : α → Bool) (h : l.Nodup) :
+    (l.filter p).Nodup := by
+  induction l with
+  | nil => exact List.nodup_nil
+  | cons a rest ih =>
+    rw [List.nodup_cons] at h
+    rw [List.filter_cons]
+    cases hp : p a
+    · simp only [Bool.false_eq_true, ↓reduceIte]
+      exact ih h.2
+    · simp only [↓reduceIte, List.nodup_cons]
+      refine ⟨fun hmem => h.1 (List.mem_filter.mp hmem).1, ih h.2⟩
+
+private theorem nodup_eraseDups_aux {α : Type} [BEq α] [LawfulBEq α] :
+    ∀ (n : Nat) (l : List α), l.length ≤ n → l.eraseDups.Nodup
+  | 0, [], _ => by simp
+  | 0, _ :: _, hlen => by cases hlen
+  | n + 1, [], _ => by simp
+  | n + 1, a :: rest, hlen => by
+    rw [List.eraseDups_cons, List.nodup_cons]
+    refine ⟨?_, nodup_eraseDups_aux n (rest.filter fun b => !b == a) ?_⟩
+    · intro hmem
+      have hf := (List.mem_eraseDups.mp hmem)
+      have hne := (List.mem_filter.mp hf).2
+      simp at hne
+    · have hle : (rest.filter fun b => !b == a).length ≤ rest.length := List.length_filter_le _ _
+      exact Nat.le_trans hle (Nat.le_of_succ_le_succ hlen)
+
+private theorem nodup_eraseDups {α : Type} [BEq α] [LawfulBEq α] (l : List α) :
+    l.eraseDups.Nodup :=
+  nodup_eraseDups_aux l.length l (Nat.le_refl _)
+
+private theorem eraseDups_eq_self {α : Type} [BEq α] [LawfulBEq α] {l : List α} (h : l.Nodup) :
+    l.eraseDups = l := by
+  induction l with
+  | nil => rfl
+  | cons a rest ih =>
+    rw [List.nodup_cons] at h
+    rw [List.eraseDups_cons]
+    have hfilt : rest.filter (fun b => !b == a) = rest := by
+      rw [List.filter_eq_self]
+      intro b hb
+      have hne : b ≠ a := fun heq => h.1 (heq ▸ hb)
+      simp [hne]
+    rw [hfilt, ih h.2]
+
+private theorem filter_eraseDups_aux {α : Type} [BEq α] [LawfulBEq α] :
+    ∀ (n : Nat) (l : List α) (p : α → Bool), l.length ≤ n →
+      l.eraseDups.filter p = (l.filter p).eraseDups
+  | 0, [], _, _ => by simp
+  | 0, _ :: _, _, hlen => by cases hlen
+  | n + 1, [], _, _ => by simp
+  | n + 1, a :: rest, p, hlen => by
+    have hrest : (rest.filter fun b => !b == a).length ≤ n :=
+      Nat.le_trans (List.length_filter_le _ _) (Nat.le_of_succ_le_succ hlen)
+    rw [List.eraseDups_cons, List.filter_cons, List.filter_cons]
+    cases hp : p a
+    · simp only [Bool.false_eq_true, ↓reduceIte]
+      rw [filter_eraseDups_aux n (rest.filter fun b => !b == a) p hrest]
+      have hEq : (rest.filter fun b => !b == a).filter p = rest.filter p := by
+        rw [List.filter_filter]
+        refine List.filter_congr fun b _ => ?_
+        cases hpb : p b
+        · simp
+        · have hne : b ≠ a := fun heq => by rw [heq, hp] at hpb; cases hpb
+          simp [hne]
+      rw [hEq]
+    · simp only [↓reduceIte, List.eraseDups_cons]
+      rw [filter_eraseDups_aux n (rest.filter fun b => !b == a) p hrest]
+      congr 2
+      rw [List.filter_filter, List.filter_filter]
+      refine List.filter_congr fun b _ => Bool.and_comm _ _
+
+private theorem filter_eraseDups {α : Type} [BEq α] [LawfulBEq α] (l : List α) (p : α → Bool) :
+    l.eraseDups.filter p = (l.filter p).eraseDups :=
+  filter_eraseDups_aux l.length l p (Nat.le_refl _)
+
+private theorem removeAll_eraseDups {α : Type} [BEq α] [LawfulBEq α] (l s : List α) :
+    l.eraseDups.removeAll s = (l.removeAll s).eraseDups :=
+  filter_eraseDups l (fun x => !List.elem x s)
+
+private theorem removeAll_eq_of_mem_iff {α : Type} [BEq α] [LawfulBEq α] (l s₁ s₂ : List α)
+    (h : ∀ x, x ∈ s₁ ↔ x ∈ s₂) :
+    l.removeAll s₁ = l.removeAll s₂ := by
+  unfold List.removeAll
+  refine List.filter_congr fun x _ => ?_
+  congr 1
+  cases h1 : List.elem x s₁ <;> cases h2 : List.elem x s₂
+  · rfl
+  · exfalso
+    have hm2 : x ∈ s₂ := List.mem_of_elem_eq_true h2
+    have hm1 : x ∈ s₁ := (h x).mpr hm2
+    have ht1 : List.elem x s₁ = true := List.elem_eq_true_of_mem hm1
+    rw [h1] at ht1; cases ht1
+  · exfalso
+    have hm1 : x ∈ s₁ := List.mem_of_elem_eq_true h1
+    have hm2 : x ∈ s₂ := (h x).mp hm1
+    have ht2 : List.elem x s₂ = true := List.elem_eq_true_of_mem hm2
+    rw [h2] at ht2; cases ht2
+  · rfl
+
+private theorem filter_false_on_mem {α : Type} (p : α → Bool) (xs : List α)
+    (h : ∀ x ∈ xs, p x = false) : xs.filter p = [] := by
+  induction xs with
+  | nil => rfl
+  | cons a rest ih =>
+    rw [List.filter_cons, h a List.mem_cons_self]
+    exact ih fun x hx => h x (List.mem_cons_of_mem a hx)
+
+private theorem removeAll_self_eq_nil {α : Type} [BEq α] [LawfulBEq α] (l : List α) :
+    l.removeAll l = [] := by
+  unfold List.removeAll
+  exact filter_false_on_mem _ l fun x hx => by
+    simp only [List.elem_eq_true_of_mem hx, Bool.not_true]
+
+private theorem removeAll_append {α : Type} [BEq α] (l₁ l₂ s : List α) :
+    (l₁ ++ l₂).removeAll s = l₁.removeAll s ++ l₂.removeAll s :=
+  List.filter_append (l₁ := l₁) (l₂ := l₂)
+
+private theorem removeAll_flatMap_filter_ne {α β : Type} [BEq α] [LawfulBEq α]
+    [BEq β] [LawfulBEq β] (a : α) (rest : List α) (f : α → List β) :
+    ((rest.filter fun b => !b == a).flatMap f).removeAll (f a) =
+      (rest.flatMap f).removeAll (f a) := by
+  induction rest with
+  | nil => rfl
+  | cons b bs ih =>
+    rw [List.filter_cons, List.flatMap_cons, removeAll_append]
+    cases hba : (b == a)
+    · simp only [Bool.not_false, ↓reduceIte, List.flatMap_cons, removeAll_append, ih]
+    · have heq : b = a := eq_of_beq hba
+      subst heq
+      simp only [Bool.not_true, Bool.false_eq_true, ↓reduceIte, removeAll_self_eq_nil, List.nil_append, ih]
+
+private theorem eraseDups_flatMap_eraseDups_left_aux {α β : Type} [BEq α] [LawfulBEq α]
+    [BEq β] [LawfulBEq β] :
+    ∀ (n : Nat) (xs : List α) (f : α → List β), xs.length ≤ n →
+      (xs.eraseDups.flatMap f).eraseDups = (xs.flatMap f).eraseDups
+  | 0, [], _, _ => by simp
+  | 0, _ :: _, _, hlen => by cases hlen
+  | n + 1, [], _, _ => by simp
+  | n + 1, a :: rest, f, hlen => by
+    have hrest : (rest.filter fun b => !b == a).length ≤ n :=
+      Nat.le_trans (List.length_filter_le _ _) (Nat.le_of_succ_le_succ hlen)
+    rw [List.eraseDups_cons, List.flatMap_cons, List.flatMap_cons,
+      List.eraseDups_append, List.eraseDups_append]
+    congr 1
+    rw [← removeAll_eraseDups,
+      eraseDups_flatMap_eraseDups_left_aux n (rest.filter fun b => !b == a) f hrest,
+      removeAll_eraseDups, removeAll_flatMap_filter_ne]
+
+private theorem eraseDups_flatMap_eraseDups_left {α β : Type} [BEq α] [LawfulBEq α]
+    [BEq β] [LawfulBEq β] (xs : List α) (f : α → List β) :
+    (xs.eraseDups.flatMap f).eraseDups = (xs.flatMap f).eraseDups :=
+  eraseDups_flatMap_eraseDups_left_aux xs.length xs f (Nat.le_refl _)
+
+private theorem eraseDups_flatMap_eraseDups_right {α β : Type} [BEq β] [LawfulBEq β]
+    (xs : List α) (f : α → List β) :
+    (xs.flatMap fun x => (f x).eraseDups).eraseDups = (xs.flatMap f).eraseDups := by
+  induction xs with
+  | nil => rfl
+  | cons a rest ih =>
+    rw [List.flatMap_cons, List.flatMap_cons, List.eraseDups_append, List.eraseDups_append]
+    rw [eraseDups_eq_self (nodup_eraseDups (f a))]
+    congr 1
+    rw [removeAll_eq_of_mem_iff _ (f a).eraseDups (f a) (fun _ => List.mem_eraseDups)]
+    rw [← removeAll_eraseDups, ih, removeAll_eraseDups]
+
+private theorem eraseDups_flatMap_assoc {α β γ : Type} [BEq β] [LawfulBEq β] [BEq γ] [LawfulBEq γ]
+    (xs : List α) (g : α → List β) (f : β → List γ) :
+    ((xs.flatMap g).eraseDups.flatMap f).eraseDups =
+      (xs.flatMap fun x => ((g x).flatMap f).eraseDups).eraseDups := by
+  rw [eraseDups_flatMap_eraseDups_left, List.flatMap_assoc, ← eraseDups_flatMap_eraseDups_right]
+
+private theorem alist_lookup_mem {κ α : Type} [DecidableEq κ] {l : AList κ α} {k : κ} {v : α}
+    (h : AList.lookup l k = some v) : (k, v) ∈ l := by
+  induction l with
+  | nil => cases h
+  | cons hd tl ih =>
+    rcases hd with ⟨k', v'⟩
+    simp only [AList.lookup] at h
+    split at h
+    · rename_i heq
+      subst heq
+      cases Option.some.inj h
+      exact List.mem_cons_self
+    · exact List.mem_cons_of_mem _ (ih h)
+
+private theorem alist_lookup_of_mem {κ α : Type} [DecidableEq κ] {l : AList κ α}
+    (hn : (List.map Prod.fst l).Nodup) {k : κ} {v : α} (h : (k, v) ∈ l) :
+    AList.lookup l k = some v := by
+  induction l with
+  | nil => cases h
+  | cons hd tl ih =>
+    rcases hd with ⟨k', v'⟩
+    rw [List.map_cons, List.nodup_cons] at hn
+    rcases List.mem_cons.mp h with heq | htl
+    · cases heq
+      simp [AList.lookup]
+    · have hne : k' ≠ k := fun eq => hn.1 (eq ▸ List.mem_map.mpr ⟨(k, v), htl, rfl⟩)
+      simp [AList.lookup, hne]
+      exact ih hn.2 htl
+
+private theorem alist_lookup_none_iff {κ α : Type} [DecidableEq κ] {l : AList κ α} {k : κ} :
+    AList.lookup l k = none ↔ ∀ v, (k, v) ∉ l := by
+  induction l with
+  | nil => simp [AList.lookup]
+  | cons hd tl ih =>
+    rcases hd with ⟨k', v'⟩
+    simp only [AList.lookup]
+    split
+    · rename_i heq
+      subst heq
+      constructor
+      · intro h; cases h
+      · intro h; exact absurd List.mem_cons_self (h v')
+    · rename_i hne
+      rw [ih]
+      constructor
+      · intro h v hmem
+        rcases List.mem_cons.mp hmem with heq | htl
+        · cases heq; exact hne rfl
+        · exact h v htl
+      · intro h v htl
+        exact h v (List.mem_cons_of_mem _ htl)
+
+private theorem alist_lookup_append {κ α : Type} [DecidableEq κ] (l₁ l₂ : AList κ α) (k : κ) :
+    AList.lookup (l₁ ++ l₂) k = match AList.lookup l₁ k with
+      | some v => some v
+      | none => AList.lookup l₂ k := by
+  induction l₁ with
+  | nil => rfl
+  | cons hd tl ih =>
+    rcases hd with ⟨k', v'⟩
+    simp only [List.cons_append, AList.lookup]
+    split
+    · rfl
+    · exact ih
+
+private theorem alist_lookup_map_values {κ α β : Type} [DecidableEq κ]
+    (f : κ → α → β) (l : AList κ α) (k : κ) :
+    AList.lookup (List.map (fun p => (p.1, f p.1 p.2)) l) k = (AList.lookup l k).map (f k) := by
+  induction l with
+  | nil => rfl
+  | cons hd tl ih =>
+    rcases hd with ⟨k', v'⟩
+    simp only [List.map_cons, AList.lookup]
+    split
+    · rename_i heq; subst heq; rfl
+    · exact ih
+
+private theorem alist_lookup_filter_key {κ α : Type} [DecidableEq κ]
+    (p : κ → Bool) (l : AList κ α) (k : κ) :
+    AList.lookup (l.filter fun entry => p entry.1) k =
+      if p k then AList.lookup l k else none := by
+  induction l with
+  | nil =>
+    cases p k <;> rfl
+  | cons hd tl ih =>
+    rcases hd with ⟨k', v'⟩
+    simp only [List.filter_cons]
+    cases hpk' : p k'
+    · simp only [Bool.false_eq_true, ↓reduceIte, ih, AList.lookup]
+      cases hpk : p k
+      · rfl
+      · simp only [↓reduceIte]
+        split
+        · rename_i heq; subst heq; rw [hpk'] at hpk; cases hpk
+        · rfl
+    · simp only [↓reduceIte, AList.lookup]
+      split
+      · rename_i heq; subst heq; simp [hpk']
+      · exact ih
+
+private theorem mapM_option_some_iff {α β : Type} (f : α → Option β) (xs : List α) :
+    (xs.mapM f).isSome = true ↔ ∀ x ∈ xs, (f x).isSome = true := by
+  induction xs with
+  | nil => simp
+  | cons a rest ih =>
+    simp only [List.mapM_cons]
+    cases hfa : f a with
+    | none =>
+      simp only [bind, Option.bind, Option.isSome_none, Bool.false_eq_true, false_iff]
+      intro hall
+      have h := hall a List.mem_cons_self
+      simp [hfa] at h
+    | some b =>
+      cases hm : rest.mapM f with
+      | none =>
+        simp only [bind, Option.bind, Option.isSome_none, Bool.false_eq_true, false_iff]
+        intro hall
+        have h := ih.mpr fun x hx => hall x (List.mem_cons_of_mem a hx)
+        simp [hm] at h
+      | some bs =>
+        simp only [bind, Option.bind, pure, Option.isSome_some, true_iff]
+        intro x hx
+        rcases List.mem_cons.mp hx with rfl | hrest
+        · simp [hfa]
+        · exact ih.mp (by simp [hm]) x hrest
+
+private theorem mapM_option_length {α β : Type} {f : α → Option β} {xs : List α} {ys : List β}
+    (h : xs.mapM f = some ys) : ys.length = xs.length := by
+  induction xs generalizing ys with
+  | nil =>
+    simp only [List.mapM_nil, pure, Option.some.injEq] at h
+    subst h; rfl
+  | cons a rest ih =>
+    simp only [List.mapM_cons, bind, Option.bind] at h
+    cases hfa : f a with
+    | none => simp [hfa] at h
+    | some b =>
+      simp only [hfa] at h
+      cases hm : rest.mapM f with
+      | none => simp [hm] at h
+      | some bs =>
+        simp only [hm, pure, Option.some.injEq] at h
+        subst h
+        simp [ih hm]
+
+/-- Explicit justification for omitting a source occurrence in an intra-IR pass.
+Elimination applies only to unreachable code or unused, pure, non-trapping computations;
+contributors to a fused or merged output remain in `Account.mapped`. -/
 inductive EliminationReason where
   | unreachableFunction
   | unreachableBlock
   | deadValue
-  | mergedInto (target : Occurrence)
   deriving DecidableEq, Repr
 
 /-- Purely executable occurrence-accounting witness for an intra-IR pass `a → b`.
-`mapped` records the source occurrence in `a` behind every output occurrence in `b`.
-`eliminated` justifies every source occurrence in `a` not reached by `mapped`. -/
+`mapped` maps each output occurrence in `b` to its contributing source occurrences in `a`
+(supporting both copying — multiple output images — and fusion — multiple contributors),
+with unique output keys (`mappedKeysNodup`) and duplicate-free contributor lists
+(`mappedSourcesNodup`).
+`eliminated` justifies every omitted source occurrence in `a`, with unique source keys
+(`eliminatedKeysNodup`) and disjointness from mapped sources (`disjoint`). -/
 structure Account where
-  mapped : AList Occurrence Occurrence
+  mapped : AList Occurrence (List Occurrence)
   eliminated : AList Occurrence EliminationReason
-  deriving DecidableEq, Repr
+  mappedKeysNodup : (List.map Prod.fst mapped).Nodup := by decide
+  mappedSourcesNodup : ∀ entry ∈ mapped, entry.2.Nodup := by decide
+  eliminatedKeysNodup : (List.map Prod.fst eliminated).Nodup := by decide
+  disjoint : ∀ entry ∈ mapped, ∀ src ∈ entry.2, AList.lookup eliminated src = none := by decide
+  deriving DecidableEq
 
-/-- Identity accounting witness mapping every occurrence to itself with no eliminations. -/
+instance : Repr Account where
+  reprPrec account prec := reprPrec (account.mapped, account.eliminated) prec
+
+/-- Contributing source occurrences recorded for output occurrence `out`. -/
+def Account.sourcesOf (account : Account) (out : Occurrence) : List Occurrence :=
+  (AList.lookup account.mapped out).getD []
+
+/-- Output occurrences in `account.mapped` to which `src` contributes. -/
+def Account.imagesOf (account : Account) (src : Occurrence) : List Occurrence :=
+  account.mapped.filterMap fun (out, srcs) =>
+    if srcs.contains src then some out else none
+
+/-- Relational view of `account.mapped`: `src` contributes to output `out`. -/
+def Account.MapsTo (account : Account) (out src : Occurrence) : Prop :=
+  src ∈ account.sourcesOf out
+
+/-- `src` contributes to at least one output occurrence in `account`. -/
+def Account.Mapped (account : Account) (src : Occurrence) : Prop :=
+  ∃ out, account.MapsTo out src
+
+/-- `src` is justified as eliminated in `account`. -/
+def Account.Eliminated (account : Account) (src : Occurrence) : Prop :=
+  ∃ reason, AList.lookup account.eliminated src = some reason
+
+/-- Complete, consistent occurrence-accounting witness for a pass with input occurrences
+`inputs` and output occurrences `outputs`:
+- every output key of `mapped` belongs to `outputs`, and every output in `outputs` traces
+  to at least one contributing source in `inputs`;
+- every referenced source and every eliminated key belongs to `inputs`;
+- every source in `inputs` is either mapped to some output or explicitly eliminated. -/
+def Account.Valid (inputs outputs : List Occurrence) (account : Account) : Prop :=
+  (∀ out ∈ List.map Prod.fst account.mapped, out ∈ outputs) ∧
+  (∀ out ∈ outputs, ∃ src, account.MapsTo out src) ∧
+  (∀ out src, account.MapsTo out src → src ∈ inputs) ∧
+  (∀ src ∈ List.map Prod.fst account.eliminated, src ∈ inputs) ∧
+  (∀ src ∈ inputs, account.Mapped src ∨ account.Eliminated src)
+
+/-- Extensional equivalence of two accounting witnesses: they induce the exact same
+output-to-source relation and justify the exact same set of eliminated sources. -/
+def Account.Equiv (a b : Account) : Prop :=
+  (∀ out src, a.MapsTo out src ↔ b.MapsTo out src) ∧
+  (∀ src, a.Eliminated src ↔ b.Eliminated src)
+
+theorem Account.Equiv.refl (a : Account) : Account.Equiv a a :=
+  ⟨fun _ _ => Iff.rfl, fun _ => Iff.rfl⟩
+
+theorem Account.Equiv.symm {a b : Account} (h : Account.Equiv a b) : Account.Equiv b a :=
+  ⟨fun out src => (h.1 out src).symm, fun src => (h.2 src).symm⟩
+
+theorem Account.Equiv.trans {a b c : Account}
+    (hab : Account.Equiv a b) (hbc : Account.Equiv b c) : Account.Equiv a c :=
+  ⟨fun out src => (hab.1 out src).trans (hbc.1 out src),
+    fun src => (hab.2 src).trans (hbc.2 src)⟩
+
+theorem Account.sourcesOf_nodup (account : Account) (out : Occurrence) :
+    (account.sourcesOf out).Nodup := by
+  unfold Account.sourcesOf
+  cases h : AList.lookup account.mapped out with
+  | none => exact List.nodup_nil
+  | some srcs => exact account.mappedSourcesNodup (out, srcs) (alist_lookup_mem h)
+
+theorem Account.mapsTo_iff_mem_mapped (account : Account) (out src : Occurrence) :
+    account.MapsTo out src ↔ ∃ srcs, (out, srcs) ∈ account.mapped ∧ src ∈ srcs := by
+  unfold Account.MapsTo Account.sourcesOf
+  constructor
+  · intro h
+    cases hlook : AList.lookup account.mapped out with
+    | none => simp [hlook] at h
+    | some srcs =>
+      simp only [hlook, Option.getD_some] at h
+      exact ⟨srcs, alist_lookup_mem hlook, h⟩
+  · rintro ⟨srcs, hmem, hsrc⟩
+    rw [alist_lookup_of_mem account.mappedKeysNodup hmem]
+    exact hsrc
+
+theorem Account.mem_imagesOf_iff (account : Account) (src out : Occurrence) :
+    out ∈ account.imagesOf src ↔ account.MapsTo out src := by
+  rw [Account.mapsTo_iff_mem_mapped]
+  unfold Account.imagesOf
+  rw [List.mem_filterMap]
+  constructor
+  · rintro ⟨⟨o, srcs⟩, hmem, hres⟩
+    cases hc : srcs.contains src
+    · simp only [hc, Bool.false_eq_true, ↓reduceIte] at hres
+      cases hres
+    · simp only [hc, ↓reduceIte, Option.some.injEq] at hres
+      subst hres
+      exact ⟨srcs, hmem, List.mem_of_elem_eq_true hc⟩
+  · rintro ⟨srcs, hmem, hsrc⟩
+    refine ⟨(out, srcs), hmem, ?_⟩
+    simp only [List.contains_eq_mem, hsrc, decide_true, ↓reduceIte]
+
+theorem Account.mapped_iff_any (account : Account) (src : Occurrence) :
+    account.Mapped src ↔ (account.mapped.any fun entry => entry.2.contains src) = true := by
+  unfold Account.Mapped
+  rw [List.any_eq_true]
+  constructor
+  · rintro ⟨out, hmap⟩
+    obtain ⟨srcs, hmem, hsrc⟩ := (account.mapsTo_iff_mem_mapped out src).mp hmap
+    exact ⟨(out, srcs), hmem, List.elem_eq_true_of_mem hsrc⟩
+  · rintro ⟨⟨out, srcs⟩, hmem, hc⟩
+    exact ⟨out, (account.mapsTo_iff_mem_mapped out src).mpr ⟨srcs, hmem, List.mem_of_elem_eq_true hc⟩⟩
+
+theorem Account.eliminated_iff_isSome (account : Account) (src : Occurrence) :
+    account.Eliminated src ↔ (AList.lookup account.eliminated src).isSome = true := by
+  unfold Account.Eliminated
+  cases h : AList.lookup account.eliminated src with
+  | none => simp
+  | some reason => simp
+
+theorem Account.not_eliminated_of_mapped (account : Account) {src : Occurrence}
+    (h : account.Mapped src) : ¬ account.Eliminated src := by
+  obtain ⟨out, hmap⟩ := h
+  obtain ⟨srcs, hmem, hsrc⟩ := (account.mapsTo_iff_mem_mapped out src).mp hmap
+  rintro ⟨reason, hlook⟩
+  have hnone := account.disjoint (out, srcs) hmem src hsrc
+  rw [hnone] at hlook
+  cases hlook
+
+/-- Identity accounting witness mapping every occurrence in `occurrences` to itself
+with no eliminations. -/
 def Account.identity (occurrences : List Occurrence) : Account where
-  mapped := occurrences.map fun occ => (occ, occ)
+  mapped := occurrences.eraseDups.map fun occ => (occ, [occ])
   eliminated := []
+  mappedKeysNodup := by
+    rw [List.map_map]
+    simpa [Function.comp_def] using nodup_eraseDups occurrences
+  mappedSourcesNodup := by
+    intro entry hmem
+    obtain ⟨occ, _, rfl⟩ := List.mem_map.mp hmem
+    exact List.nodup_cons.mpr ⟨List.not_mem_nil, List.nodup_nil⟩
+  eliminatedKeysNodup := List.nodup_nil
+  disjoint := by
+    intro _ _ _ _
+    rfl
 
 /-- Identity accounting witness for an IR program at any insertion point. -/
 def Account.identityFor {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
     {point : IRPoint} (ir : AtLang lang profile point) : Account :=
   Account.identity ((AtLang.occurrences ir).map Prod.fst)
 
-private def Account.resolveMerged (second : Account) (target : Occurrence) :
-    Option EliminationReason :=
-  match second.mapped.find? (fun pair => pair.2 == target) with
-  | some (outOcc, _) => some (.mergedInto outOcc)
-  | none => AList.lookup second.eliminated target
+theorem Account.lookup_identity_of_mem {occs : List Occurrence} {occ : Occurrence}
+    (h : occ ∈ occs) :
+    AList.lookup (Account.identity occs).mapped occ = some [occ] := by
+  apply alist_lookup_of_mem (Account.identity occs).mappedKeysNodup
+  exact List.mem_map.mpr ⟨occ, List.mem_eraseDups.mpr h, rfl⟩
+
+theorem Account.lookup_identity_of_not_mem {occs : List Occurrence} {occ : Occurrence}
+    (h : occ ∉ occs) :
+    AList.lookup (Account.identity occs).mapped occ = none := by
+  rw [alist_lookup_none_iff]
+  intro srcs hmem
+  obtain ⟨occ', hocc', heq⟩ := List.mem_map.mp hmem
+  cases Prod.mk.inj heq |>.1
+  exact h (List.mem_eraseDups.mp hocc')
+
+theorem Account.sourcesOf_identity (occs : List Occurrence) (occ : Occurrence) :
+    (Account.identity occs).sourcesOf occ = if occ ∈ occs then [occ] else [] := by
+  unfold Account.sourcesOf
+  split
+  · rename_i hmem
+    rw [Account.lookup_identity_of_mem hmem]; rfl
+  · rename_i hnot
+    rw [Account.lookup_identity_of_not_mem hnot]; rfl
+
+theorem Account.mapsTo_identity_iff (occs : List Occurrence) (out src : Occurrence) :
+    (Account.identity occs).MapsTo out src ↔ out ∈ occs ∧ src = out := by
+  unfold Account.MapsTo
+  rw [Account.sourcesOf_identity]
+  split
+  · rename_i hmem
+    simp [hmem]
+  · rename_i hnot
+    simp [hnot]
+
+theorem Account.identity_valid (occs : List Occurrence) :
+    (Account.identity occs).Valid occs occs := by
+  refine ⟨?_, ?_, ?_, ?_, ?_⟩
+  · intro out hout
+    rw [Account.identity, List.map_map] at hout
+    obtain ⟨occ, hocc, rfl⟩ := List.mem_map.mp hout
+    exact List.mem_eraseDups.mp hocc
+  · intro out hout
+    exact ⟨out, (Account.mapsTo_identity_iff occs out out).mpr ⟨hout, rfl⟩⟩
+  · intro out src hmap
+    obtain ⟨hout, rfl⟩ := (Account.mapsTo_identity_iff occs out src).mp hmap
+    exact hout
+  · intro _ hmem
+    cases hmem
+  · intro src hsrc
+    exact Or.inl ⟨src, (Account.mapsTo_identity_iff occs src src).mpr ⟨hsrc, rfl⟩⟩
+
+private def Account.composeMapped (first second : Account) : AList Occurrence (List Occurrence) :=
+  List.map (fun (occC, srcsB) => (occC, (srcsB.flatMap first.sourcesOf).eraseDups)) second.mapped
+
+private def Account.composeEliminated (first second : Account)
+    (mapped : AList Occurrence (List Occurrence)) : AList Occurrence EliminationReason :=
+  let surviving (occA : Occurrence) : Bool :=
+    mapped.any fun entry => entry.2.contains occA
+  let fromFirst := first.eliminated.filter fun entry => !surviving entry.1
+  let candidateSources := (first.mapped.flatMap Prod.snd).eraseDups
+  let fromSecond := candidateSources.filterMap fun occA =>
+    if surviving occA || (AList.lookup fromFirst occA).isSome then none
+    else match (first.imagesOf occA).mapM (AList.lookup second.eliminated) with
+      | some (reason :: _) => some (occA, reason)
+      | _ => none
+  fromFirst ++ fromSecond
+
+private theorem nodup_filterMap_key {α β : Type} {xs : List α} (f : α → Option β)
+    (h : xs.Nodup) :
+    ((xs.filterMap fun a => (f a).map (a, ·)).map Prod.fst).Nodup := by
+  induction xs with
+  | nil => exact List.nodup_nil
+  | cons a rest ih =>
+    rw [List.nodup_cons] at h
+    rw [List.filterMap_cons]
+    cases hfa : f a with
+    | none =>
+      exact ih h.2
+    | some b =>
+      simp only [Option.map_some, List.map_cons, List.nodup_cons]
+      refine ⟨?_, ih h.2⟩
+      intro hmem
+      obtain ⟨⟨k, v⟩, hkv, heq⟩ := List.mem_map.mp hmem
+      dsimp only at heq
+      subst heq
+      obtain ⟨a', ha', hmap⟩ := List.mem_filterMap.mp hkv
+      cases hfa' : f a' with
+      | none => simp [hfa'] at hmap
+      | some b' =>
+        simp only [hfa', Option.map_some, Option.some.injEq, Prod.mk.injEq] at hmap
+        exact h.1 (hmap.1 ▸ ha')
+
+private theorem nodup_composeEliminated_keys (first second : Account)
+    (mapped : AList Occurrence (List Occurrence)) :
+    (List.map Prod.fst (Account.composeEliminated first second mapped)).Nodup := by
+  unfold Account.composeEliminated
+  dsimp only
+  let surviving : Occurrence → Bool := fun occA => mapped.any fun entry => entry.2.contains occA
+  let fromFirst := first.eliminated.filter fun entry => !surviving entry.1
+  let candidateSources := (first.mapped.flatMap Prod.snd).eraseDups
+  let pickReason : Occurrence → Option EliminationReason := fun occA =>
+    if surviving occA || (AList.lookup fromFirst occA).isSome then none
+    else match (first.imagesOf occA).mapM (AList.lookup second.eliminated) with
+      | some (reason :: _) => some reason
+      | _ => none
+  have hFromSecondEq :
+      (candidateSources.filterMap fun occA =>
+        if surviving occA || (AList.lookup fromFirst occA).isSome then none
+        else match (first.imagesOf occA).mapM (AList.lookup second.eliminated) with
+          | some (reason :: _) => some (occA, reason)
+          | _ => none) =
+      candidateSources.filterMap (fun occA => (pickReason occA).map (occA, ·)) := by
+    congr 1
+    funext occA
+    dsimp only [pickReason]
+    cases surviving occA || (AList.lookup fromFirst occA).isSome
+    · simp only [Bool.false_eq_true, ↓reduceIte]
+      cases (first.imagesOf occA).mapM (AList.lookup second.eliminated) with
+      | none => rfl
+      | some rs => cases rs <;> rfl
+    · rfl
+  change (List.map Prod.fst (fromFirst ++ (candidateSources.filterMap fun occA =>
+    if surviving occA || (AList.lookup fromFirst occA).isSome then none
+    else match (first.imagesOf occA).mapM (AList.lookup second.eliminated) with
+      | some (reason :: _) => some (occA, reason)
+      | _ => none))).Nodup
+  rw [hFromSecondEq, List.map_append]
+  have hNodupFirst : (List.map Prod.fst fromFirst).Nodup := by
+    have hEq : List.map Prod.fst fromFirst =
+        (List.map Prod.fst first.eliminated).filter fun occA => !surviving occA := by
+      change List.map Prod.fst (first.eliminated.filter fun entry => !surviving entry.1) = _
+      induction first.eliminated with
+      | nil => rfl
+      | cons hd tl ih =>
+        rw [List.filter_cons, List.map_cons, List.filter_cons]
+        cases !surviving hd.1 <;> simp [ih]
+    rw [hEq]
+    exact nodup_filter _ first.eliminatedKeysNodup
+  have hNodupSecond : (List.map Prod.fst (candidateSources.filterMap fun occA => (pickReason occA).map (occA, ·))).Nodup :=
+    nodup_filterMap_key pickReason (nodup_eraseDups _)
+  refine nodup_append_of_disjoint hNodupFirst hNodupSecond ?_
+  intro occA h1 h2
+  obtain ⟨⟨k, r⟩, hkr, rfl⟩ := List.mem_map.mp h1
+  obtain ⟨⟨k2, r2⟩, hkr2, heq⟩ := List.mem_map.mp h2
+  dsimp only at heq
+  subst heq
+  obtain ⟨a', _, hmap⟩ := List.mem_filterMap.mp hkr2
+  cases hp : pickReason a' with
+  | none => simp [hp] at hmap
+  | some r' =>
+    simp only [hp, Option.map_some, Option.some.injEq, Prod.mk.injEq] at hmap
+    obtain ⟨rfl, rfl⟩ := hmap
+    have hlook : AList.lookup fromFirst a' = some r :=
+      alist_lookup_of_mem hNodupFirst hkr
+    dsimp only [pickReason] at hp
+    rw [hlook] at hp
+    simp at hp
+
+private theorem composeEliminated_disjoint (first second : Account)
+    (mapped : AList Occurrence (List Occurrence)) :
+    ∀ entry ∈ mapped, ∀ src ∈ entry.2,
+      AList.lookup (Account.composeEliminated first second mapped) src = none := by
+  intro entry hEntry src hSrc
+  have hSurv : (mapped.any fun e => e.2.contains src) = true :=
+    List.any_eq_true.mpr ⟨entry, hEntry, List.elem_eq_true_of_mem hSrc⟩
+  rw [alist_lookup_none_iff]
+  intro reason hmem
+  unfold Account.composeEliminated at hmem
+  rcases List.mem_append.mp hmem with hFirst | hSecond
+  · have hf := (List.mem_filter.mp hFirst).2
+    dsimp only at hf
+    rw [hSurv] at hf
+    cases hf
+  · obtain ⟨a', _, hmap⟩ := List.mem_filterMap.mp hSecond
+    cases hs : (mapped.any fun e => e.2.contains a')
+    · simp only [hs, Bool.false_or] at hmap
+      split at hmap
+      · cases hmap
+      · split at hmap
+        · cases Option.some.inj hmap
+          rw [hSurv] at hs; cases hs
+        · cases hmap
+    · simp only [hs, Bool.true_or, ↓reduceIte] at hmap
+      cases hmap
 
 /-- Compose two sequential occurrence-accounting witnesses `first` (`a → b`) and
-`second` (`b → c`) into a finite executable witness for `a → c`. -/
+`second` (`b → c`) by relational composition on `mapped` and full elimination
+justification on omitted sources. -/
 def Account.compose (first second : Account) : Account :=
-  let mapped := second.mapped.filterMap fun (occC, occB) =>
-    (AList.lookup first.mapped occB).map fun occA => (occC, occA)
-  let surviving (occA : Occurrence) : Bool :=
-    mapped.any fun pair => pair.2 == occA
-  let fromFirst := first.eliminated.filterMap fun (occA, reason) =>
-    if surviving occA then none
-    else match reason with
-      | .mergedInto targetB => (Account.resolveMerged second targetB).map (occA, ·)
-      | other => some (occA, other)
-  let initialSeen := fromFirst.map Prod.fst
-  let (_, fromSecondRev) := first.mapped.foldl
-    (fun (acc : List Occurrence × List (Occurrence × EliminationReason)) (pair : Occurrence × Occurrence) =>
-      let (seen, out) := acc
-      let (occB, occA) := pair
-      if surviving occA || seen.contains occA then (seen, out)
-      else match AList.lookup second.eliminated occB with
-        | some reason => (occA :: seen, (occA, reason) :: out)
-        | none => (seen, out))
-    (initialSeen, [])
-  { mapped := mapped, eliminated := fromFirst ++ fromSecondRev.reverse }
+  let mapped := Account.composeMapped first second
+  { mapped := mapped
+    eliminated := Account.composeEliminated first second mapped
+    mappedKeysNodup := by
+      unfold mapped Account.composeMapped
+      rw [List.map_map]
+      simpa [Function.comp_def] using second.mappedKeysNodup
+    mappedSourcesNodup := by
+      intro entry hmem
+      obtain ⟨⟨occC, srcsB⟩, _, rfl⟩ := List.mem_map.mp hmem
+      exact nodup_eraseDups _
+    eliminatedKeysNodup := nodup_composeEliminated_keys first second mapped
+    disjoint := composeEliminated_disjoint first second mapped }
 
-theorem Account.lookup_identity_of_mem {occs : List Occurrence} (nodup : occs.Nodup)
-    {occ : Occurrence} (h : occ ∈ occs) :
-    AList.lookup (Account.identity occs).mapped occ = some occ := by
-  induction occs with
-  | nil => cases h
-  | cons a rest ih =>
-    rw [List.nodup_cons] at nodup
-    rcases List.mem_cons.mp h with rfl | hrest
-    · simp [Account.identity, AList.lookup]
-    · have hne : a ≠ occ := fun heq => nodup.1 (heq ▸ hrest)
-      simp [Account.identity, AList.lookup, hne]
-      exact ih nodup.2 hrest
-
-theorem Account.mem_compose_mapped_iff (first second : Account) (occC occA : Occurrence) :
-    (occC, occA) ∈ (Account.compose first second).mapped ↔
-      ∃ occB, (occC, occB) ∈ second.mapped ∧ AList.lookup first.mapped occB = some occA := by
-  unfold Account.compose
+theorem Account.sourcesOf_compose (first second : Account) (occC : Occurrence) :
+    (Account.compose first second).sourcesOf occC =
+      ((second.sourcesOf occC).flatMap first.sourcesOf).eraseDups := by
+  unfold Account.sourcesOf Account.compose Account.composeMapped
   dsimp only
-  rw [List.mem_filterMap]
+  have hLook := alist_lookup_map_values (fun _ (srcsB : List Occurrence) => (srcsB.flatMap first.sourcesOf).eraseDups)
+    second.mapped occC
+  change (AList.lookup (List.map (fun p => (p.1, (p.2.flatMap first.sourcesOf).eraseDups)) second.mapped) occC).getD [] = _
+  rw [hLook]
+  cases AList.lookup second.mapped occC <;> rfl
+
+/-- Relational composition law for `Account.compose`: `occA` contributes to `occC` in
+`first ∘ second` iff some intermediate `occB` connects them. -/
+theorem Account.mapsTo_compose_iff (first second : Account) (occC occA : Occurrence) :
+    (Account.compose first second).MapsTo occC occA ↔
+      ∃ occB, second.MapsTo occC occB ∧ first.MapsTo occB occA := by
+  unfold Account.MapsTo
+  rw [Account.sourcesOf_compose, List.mem_eraseDups, List.mem_flatMap]
+
+theorem Account.eliminated_compose_iff (first second : Account) (occA : Occurrence) :
+    (Account.compose first second).Eliminated occA ↔
+      ¬ (Account.compose first second).Mapped occA ∧
+      (first.Eliminated occA ∨
+        (first.Mapped occA ∧ ∀ occB, first.MapsTo occB occA → second.Eliminated occB)) := by
+  rw [Account.eliminated_iff_isSome]
+  let mapped := Account.composeMapped first second
+  let surviving : Occurrence → Bool := fun x => mapped.any fun entry => entry.2.contains x
+  have hSurvIff : surviving occA = true ↔ (Account.compose first second).Mapped occA :=
+    (Account.mapped_iff_any (Account.compose first second) occA).symm
+  let fromFirst := first.eliminated.filter fun entry => !surviving entry.1
+  let candidateSources := (first.mapped.flatMap Prod.snd).eraseDups
+  let fromSecond := candidateSources.filterMap fun x =>
+    if surviving x || (AList.lookup fromFirst x).isSome then none
+    else match (first.imagesOf x).mapM (AList.lookup second.eliminated) with
+      | some (reason :: _) => some (x, reason)
+      | _ => none
+  change (AList.lookup (fromFirst ++ fromSecond) occA).isSome = true ↔ _
+  rw [alist_lookup_append]
+  have hLookFirst : AList.lookup fromFirst occA =
+      if !surviving occA then AList.lookup first.eliminated occA else none :=
+    alist_lookup_filter_key (fun x => !surviving x) first.eliminated occA
+  cases hSurv : surviving occA
+  · have hNotMapped : ¬ (Account.compose first second).Mapped occA := by
+      intro hm; have ht := hSurvIff.mpr hm; rw [hSurv] at ht; cases ht
+    rw [hLookFirst]
+    simp only [hSurv, Bool.not_false, ↓reduceIte]
+    cases hElim1 : AList.lookup first.eliminated occA with
+    | some r1 =>
+      simp only [Option.isSome_some, true_iff]
+      exact ⟨hNotMapped, Or.inl ⟨r1, hElim1⟩⟩
+    | none =>
+      have hNotElim1 : ¬ first.Eliminated occA := by
+        rintro ⟨r, hr⟩; rw [hElim1] at hr; cases hr
+      have hFromFirstNone : AList.lookup fromFirst occA = none := by
+        rw [hLookFirst]; simp [hSurv, hElim1]
+      have hFromSecondIff :
+          (AList.lookup fromSecond occA).isSome = true ↔
+            first.Mapped occA ∧ ∀ occB, first.MapsTo occB occA → second.Eliminated occB := by
+        constructor
+        · intro hSome
+          cases hLook2 : AList.lookup fromSecond occA with
+          | none => simp [hLook2] at hSome
+          | some r2 =>
+            have hMem := alist_lookup_mem hLook2
+            obtain ⟨x, hxCand, hMap⟩ := List.mem_filterMap.mp hMem
+            cases hCond : surviving x || (AList.lookup fromFirst x).isSome
+            · simp only [hCond, Bool.false_eq_true, ↓reduceIte] at hMap
+              cases hM : (first.imagesOf x).mapM (AList.lookup second.eliminated) with
+              | none => simp [hM] at hMap
+              | some rs =>
+                cases rs with
+                | nil => simp [hM] at hMap
+                | cons r0 rs' =>
+                  simp only [hM, Option.some.injEq, Prod.mk.injEq] at hMap
+                  obtain ⟨rfl, rfl⟩ := hMap
+                  have hxFlat : x ∈ first.mapped.flatMap Prod.snd := List.mem_eraseDups.mp hxCand
+                  obtain ⟨⟨outB, srcsA⟩, hMemB, hxIn⟩ := List.mem_flatMap.mp hxFlat
+                  have hMapped1 : first.Mapped x :=
+                    ⟨outB, (first.mapsTo_iff_mem_mapped outB x).mpr ⟨srcsA, hMemB, hxIn⟩⟩
+                  refine ⟨hMapped1, fun occB hMapsTo => ?_⟩
+                  have hImg : occB ∈ first.imagesOf x := (first.mem_imagesOf_iff x occB).mpr hMapsTo
+                  have hAll := (mapM_option_some_iff (AList.lookup second.eliminated) (first.imagesOf x)).mp
+                    (by simp [hM]) occB hImg
+                  exact (second.eliminated_iff_isSome occB).mpr hAll
+            · simp only [hCond, ↓reduceIte] at hMap
+              cases hMap
+        · rintro ⟨hMapped1, hAllElim⟩
+          obtain ⟨out0, hMaps0⟩ := hMapped1
+          obtain ⟨srcs0, hMem0, hIn0⟩ := (first.mapsTo_iff_mem_mapped out0 occA).mp hMaps0
+          have hCand : occA ∈ candidateSources :=
+            List.mem_eraseDups.mpr (List.mem_flatMap.mpr ⟨(out0, srcs0), hMem0, hIn0⟩)
+          have hImg0 : out0 ∈ first.imagesOf occA := (first.mem_imagesOf_iff occA out0).mpr hMaps0
+          have hMapMSome : ((first.imagesOf occA).mapM (AList.lookup second.eliminated)).isSome = true := by
+            rw [mapM_option_some_iff]
+            intro occB hImg
+            exact (second.eliminated_iff_isSome occB).mp
+              (hAllElim occB ((first.mem_imagesOf_iff occA occB).mp hImg))
+          cases hM : (first.imagesOf occA).mapM (AList.lookup second.eliminated) with
+          | none => simp [hM] at hMapMSome
+          | some rs =>
+            cases rs with
+            | nil =>
+              have hLen := mapM_option_length hM
+              cases hImgs : first.imagesOf occA with
+              | nil => rw [hImgs] at hImg0; cases hImg0
+              | cons _ _ => rw [hImgs] at hLen; cases hLen
+            | cons r0 rs' =>
+              have hMem2 : (occA, r0) ∈ fromSecond := by
+                refine List.mem_filterMap.mpr ⟨occA, hCand, ?_⟩
+                simp only [hSurv, hFromFirstNone, Option.isSome_none, Bool.or_self,
+                  Bool.false_eq_true, ↓reduceIte, hM]
+              cases hLook2 : AList.lookup fromSecond occA with
+              | none =>
+                exact absurd hMem2 ((alist_lookup_none_iff.mp hLook2) r0)
+              | some _ => rfl
+      rw [hFromSecondIff]
+      constructor
+      · intro h; exact ⟨hNotMapped, Or.inr h⟩
+      · rintro ⟨_, h1 | h2⟩
+        · exact absurd h1 hNotElim1
+        · exact h2
+  · have hMapped : (Account.compose first second).Mapped occA := hSurvIff.mp hSurv
+    have hLookFirstNone : AList.lookup fromFirst occA = none := by
+      rw [hLookFirst]; simp [hSurv]
+    rw [hLookFirstNone]
+    have hLookSecondNone : AList.lookup fromSecond occA = none := by
+      rw [alist_lookup_none_iff]
+      intro r hmem
+      obtain ⟨x, _, hmap⟩ := List.mem_filterMap.mp hmem
+      cases hCond : surviving x || (AList.lookup fromFirst x).isSome
+      · simp only [hCond, Bool.false_eq_true, ↓reduceIte] at hmap
+        cases hM : (first.imagesOf x).mapM (AList.lookup second.eliminated) with
+        | none => simp [hM] at hmap
+        | some rs =>
+          cases rs with
+          | nil => simp [hM] at hmap
+          | cons _ _ =>
+            simp only [hM, Option.some.injEq, Prod.mk.injEq] at hmap
+            obtain ⟨rfl, _⟩ := hmap
+            simp [hSurv] at hCond
+      · simp only [hCond, ↓reduceIte] at hmap
+        cases hmap
+    rw [hLookSecondNone]
+    simp [hMapped]
+
+/-- Composition preserves every source occurrence: if every source of `first` is mapped
+or eliminated and every output of `first` is mapped or eliminated by `second`, then
+every source is mapped or eliminated in `Account.compose first second`. -/
+theorem Account.compose_preserves_sources {occsA occsB : List Occurrence}
+    {first second : Account}
+    (hFirstCovers : ∀ src ∈ occsA, first.Mapped src ∨ first.Eliminated src)
+    (hFirstOutputs : ∀ out ∈ List.map Prod.fst first.mapped, out ∈ occsB)
+    (hSecondCovers : ∀ src ∈ occsB, second.Mapped src ∨ second.Eliminated src) :
+    ∀ src ∈ occsA,
+      (Account.compose first second).Mapped src ∨
+        (Account.compose first second).Eliminated src := by
+  intro src hSrc
+  cases hMapped : ((Account.compose first second).mapped.any fun e => e.2.contains src)
+  · right
+    have hNotMapped : ¬ (Account.compose first second).Mapped src := by
+      intro hm
+      have ht := (Account.mapped_iff_any (Account.compose first second) src).mp hm
+      rw [hMapped] at ht; cases ht
+    rw [Account.eliminated_compose_iff]
+    refine ⟨hNotMapped, ?_⟩
+    rcases hFirstCovers src hSrc with hMap1 | hElim1
+    · right
+      refine ⟨hMap1, fun occB hMaps1 => ?_⟩
+      obtain ⟨srcsA, hMemB, _⟩ := (first.mapsTo_iff_mem_mapped occB src).mp hMaps1
+      have hOutB : occB ∈ occsB := hFirstOutputs occB (List.mem_map.mpr ⟨(occB, srcsA), hMemB, rfl⟩)
+      rcases hSecondCovers occB hOutB with ⟨occC, hMaps2⟩ | hElim2
+      · exfalso
+        exact hNotMapped ⟨occC, (Account.mapsTo_compose_iff first second occC src).mpr
+          ⟨occB, hMaps2, hMaps1⟩⟩
+      · exact hElim2
+    · exact Or.inl hElim1
+  · left
+    exact (Account.mapped_iff_any (Account.compose first second) src).mpr hMapped
+
+/-- Composition of two valid accounting witnesses is a valid accounting witness. -/
+theorem Account.compose_valid {occsA occsB occsC : List Occurrence}
+    {first second : Account}
+    (hFirst : first.Valid occsA occsB) (hSecond : second.Valid occsB occsC) :
+    (Account.compose first second).Valid occsA occsC := by
+  refine ⟨?_, ?_, ?_, ?_, ?_⟩
+  · intro out hOut
+    unfold Account.compose Account.composeMapped at hOut
+    dsimp only at hOut
+    rw [List.map_map] at hOut
+    exact hSecond.1 out (by simpa [Function.comp_def] using hOut)
+  · intro outC hOutC
+    obtain ⟨occB, hMaps2⟩ := hSecond.2.1 outC hOutC
+    have hInB : occB ∈ occsB := hSecond.2.2.1 outC occB hMaps2
+    obtain ⟨srcA, hMaps1⟩ := hFirst.2.1 occB hInB
+    exact ⟨srcA, (Account.mapsTo_compose_iff first second outC srcA).mpr ⟨occB, hMaps2, hMaps1⟩⟩
+  · intro out src hMaps
+    obtain ⟨occB, _, hMaps1⟩ := (Account.mapsTo_compose_iff first second out src).mp hMaps
+    exact hFirst.2.2.1 occB src hMaps1
+  · intro src hMem
+    obtain ⟨⟨k, r⟩, hkr, rfl⟩ := List.mem_map.mp hMem
+    have hElim : (Account.compose first second).Eliminated k :=
+      ⟨r, alist_lookup_of_mem (Account.compose first second).eliminatedKeysNodup hkr⟩
+    obtain ⟨_, hElim1 | ⟨⟨occB, hMaps1⟩, _⟩⟩ := (Account.eliminated_compose_iff first second k).mp hElim
+    · obtain ⟨r1, hr1⟩ := hElim1
+      exact hFirst.2.2.2.1 k (List.mem_map.mpr ⟨(k, r1), alist_lookup_mem hr1, rfl⟩)
+    · exact hFirst.2.2.1 occB k hMaps1
+  · exact Account.compose_preserves_sources hFirst.2.2.2.2 hFirst.1 hSecond.2.2.2.2
+
+/-- Exact structural associativity of `Account.compose` on `mapped`. -/
+theorem Account.compose_assoc_mapped (first second third : Account) :
+    (Account.compose (Account.compose first second) third).mapped =
+      (Account.compose first (Account.compose second third)).mapped := by
+  change Account.composeMapped (Account.compose first second) third =
+    Account.composeMapped first (Account.compose second third)
+  unfold Account.composeMapped
+  change _ = List.map (fun (occC, srcsB) => (occC, (srcsB.flatMap first.sourcesOf).eraseDups))
+    (Account.composeMapped second third)
+  unfold Account.composeMapped
+  rw [List.map_map]
+  refine List.map_congr_left fun entry _ => ?_
+  rcases entry with ⟨occD, srcsC⟩
+  dsimp only [Function.comp_def]
+  congr 1
+  have hFun :
+      (Account.compose first second).sourcesOf =
+      (fun occC => ((second.sourcesOf occC).flatMap first.sourcesOf).eraseDups) := by
+    funext occC
+    exact Account.sourcesOf_compose first second occC
+  rw [hFun]
+  exact (eraseDups_flatMap_assoc srcsC second.sourcesOf first.sourcesOf).symm
+
+theorem Account.compose_assoc_mapsTo (first second third : Account) (out src : Occurrence) :
+    (Account.compose (Account.compose first second) third).MapsTo out src ↔
+      (Account.compose first (Account.compose second third)).MapsTo out src := by
+  unfold Account.MapsTo Account.sourcesOf
+  rw [Account.compose_assoc_mapped]
+
+theorem Account.compose_assoc_eliminated (first second third : Account)
+    (hSecond : ∀ out, (∃ src, first.MapsTo out src) → second.Mapped out ∨ second.Eliminated out)
+    (src : Occurrence) :
+    (Account.compose (Account.compose first second) third).Eliminated src ↔
+      (Account.compose first (Account.compose second third)).Eliminated src := by
+  have hMappedEq :
+      (Account.compose (Account.compose first second) third).Mapped src ↔
+        (Account.compose first (Account.compose second third)).Mapped src := by
+    unfold Account.Mapped
+    constructor
+    · rintro ⟨out, h⟩; exact ⟨out, (Account.compose_assoc_mapsTo first second third out src).mp h⟩
+    · rintro ⟨out, h⟩; exact ⟨out, (Account.compose_assoc_mapsTo first second third out src).mpr h⟩
+  rw [Account.eliminated_compose_iff (Account.compose first second) third,
+    Account.eliminated_compose_iff first (Account.compose second third)]
   constructor
-  · rintro ⟨⟨c, b⟩, hmem, hmap⟩
-    cases hlook : AList.lookup first.mapped b with
-    | none => simp [hlook] at hmap
-    | some a =>
-      simp only [hlook, Option.map_some, Option.some.injEq, Prod.mk.injEq] at hmap
-      obtain ⟨rfl, rfl⟩ := hmap
-      exact ⟨b, hmem, hlook⟩
-  · rintro ⟨occB, hmem, hlook⟩
-    exact ⟨(occC, occB), hmem, by simp [hlook]⟩
+  · rintro ⟨hNotL, hElimAB | ⟨hMapAB, hAllC⟩⟩
+    · have hNotR : ¬ (Account.compose first (Account.compose second third)).Mapped src :=
+        fun h => hNotL (hMappedEq.mpr h)
+      refine ⟨hNotR, ?_⟩
+      obtain ⟨hNotAB, hElimA | ⟨hMapA, hAllB⟩⟩ := (Account.eliminated_compose_iff first second src).mp hElimAB
+      · exact Or.inl hElimA
+      · right
+        refine ⟨hMapA, fun occB hMapsA => ?_⟩
+        rw [Account.eliminated_compose_iff]
+        have hNotBC : ¬ (Account.compose second third).Mapped occB := by
+          rintro ⟨occD, hMapsBC⟩
+          exact hNotR ⟨occD, (Account.mapsTo_compose_iff first (Account.compose second third) occD src).mpr
+            ⟨occB, hMapsBC, hMapsA⟩⟩
+        exact ⟨hNotBC, Or.inl (hAllB occB hMapsA)⟩
+    · have hNotR : ¬ (Account.compose first (Account.compose second third)).Mapped src :=
+        fun h => hNotL (hMappedEq.mpr h)
+      obtain ⟨occC0, hMapsAB0⟩ := hMapAB
+      obtain ⟨occB0, _, hMapsA0⟩ := (Account.mapsTo_compose_iff first second occC0 src).mp hMapsAB0
+      refine ⟨hNotR, Or.inr ⟨⟨occB0, hMapsA0⟩, fun occB hMapsA => ?_⟩⟩
+      rw [Account.eliminated_compose_iff]
+      have hNotBC : ¬ (Account.compose second third).Mapped occB := by
+        rintro ⟨occD, hMapsBC⟩
+        exact hNotR ⟨occD, (Account.mapsTo_compose_iff first (Account.compose second third) occD src).mpr
+          ⟨occB, hMapsBC, hMapsA⟩⟩
+      refine ⟨hNotBC, ?_⟩
+      rcases hSecond occB ⟨src, hMapsA⟩ with hMapB | hElimB
+      · right
+        refine ⟨hMapB, fun occC hMapsB => ?_⟩
+        exact hAllC occC ((Account.mapsTo_compose_iff first second occC src).mpr ⟨occB, hMapsB, hMapsA⟩)
+      · exact Or.inl hElimB
+  · rintro ⟨hNotR, hElimA | ⟨hMapA, hAllBC⟩⟩
+    · have hNotL : ¬ (Account.compose (Account.compose first second) third).Mapped src :=
+        fun h => hNotR (hMappedEq.mp h)
+      refine ⟨hNotL, Or.inl ?_⟩
+      rw [Account.eliminated_compose_iff]
+      have hNotAB : ¬ (Account.compose first second).Mapped src := by
+        rintro ⟨occC, hMapsAB⟩
+        obtain ⟨occB, _, hMapsA⟩ := (Account.mapsTo_compose_iff first second occC src).mp hMapsAB
+        exact first.not_eliminated_of_mapped ⟨occB, hMapsA⟩ hElimA
+      exact ⟨hNotAB, Or.inl hElimA⟩
+    · have hNotL : ¬ (Account.compose (Account.compose first second) third).Mapped src :=
+        fun h => hNotR (hMappedEq.mp h)
+      refine ⟨hNotL, ?_⟩
+      cases hAB : ((Account.compose first second).mapped.any fun e => e.2.contains src)
+      · left
+        have hNotAB : ¬ (Account.compose first second).Mapped src := by
+          intro hm
+          have ht := (Account.mapped_iff_any (Account.compose first second) src).mp hm
+          rw [hAB] at ht; cases ht
+        rw [Account.eliminated_compose_iff]
+        refine ⟨hNotAB, Or.inr ⟨hMapA, fun occB hMapsA => ?_⟩⟩
+        obtain ⟨_, hElimB | ⟨⟨occC, hMapsB⟩, _⟩⟩ :=
+          (Account.eliminated_compose_iff second third occB).mp (hAllBC occB hMapsA)
+        · exact hElimB
+        · exfalso
+          exact hNotAB ⟨occC, (Account.mapsTo_compose_iff first second occC src).mpr ⟨occB, hMapsB, hMapsA⟩⟩
+      · right
+        have hMapAB : (Account.compose first second).Mapped src :=
+          (Account.mapped_iff_any (Account.compose first second) src).mpr hAB
+        refine ⟨hMapAB, fun occC hMapsAB => ?_⟩
+        obtain ⟨occB, hMapsB, hMapsA⟩ := (Account.mapsTo_compose_iff first second occC src).mp hMapsAB
+        obtain ⟨_, hElimB | ⟨_, hAllC⟩⟩ :=
+          (Account.eliminated_compose_iff second third occB).mp (hAllBC occB hMapsA)
+        · exact absurd hElimB (second.not_eliminated_of_mapped ⟨occC, hMapsB⟩)
+        · exact hAllC occC hMapsB
+
+/-- Composition is associative up to `Account.Equiv` whenever `second` accounts for every
+output reached in `first`. -/
+theorem Account.compose_assoc (first second third : Account)
+    (hSecond : ∀ out, (∃ src, first.MapsTo out src) → second.Mapped out ∨ second.Eliminated out) :
+    Account.Equiv
+      (Account.compose (Account.compose first second) third)
+      (Account.compose first (Account.compose second third)) :=
+  ⟨Account.compose_assoc_mapsTo first second third,
+    Account.compose_assoc_eliminated first second third hSecond⟩
+
+theorem Account.compose_assoc_of_valid {occsA occsB occsC : List Occurrence}
+    {first second : Account} (third : Account)
+    (hFirst : first.Valid occsA occsB) (hSecond : second.Valid occsB occsC) :
+    Account.Equiv
+      (Account.compose (Account.compose first second) third)
+      (Account.compose first (Account.compose second third)) := by
+  refine Account.compose_assoc first second third fun out hReach => ?_
+  obtain ⟨src, hMaps⟩ := hReach
+  obtain ⟨srcs, hMem, _⟩ := (first.mapsTo_iff_mem_mapped out src).mp hMaps
+  exact hSecond.2.2.2.2 out (hFirst.1 out (List.mem_map.mpr ⟨(out, srcs), hMem, rfl⟩))
+
+/-- `Account.identity` is an exact left unit on `mapped` whenever `occsA` covers every
+source referenced by `account.mapped`. -/
+theorem Account.compose_identity_left_mapped {occsA : List Occurrence} {account : Account}
+    (hSrc : ∀ out src, account.MapsTo out src → src ∈ occsA) :
+    (Account.compose (Account.identity occsA) account).mapped = account.mapped := by
+  change Account.composeMapped (Account.identity occsA) account = account.mapped
+  unfold Account.composeMapped
+  refine (List.map_congr_left fun entry hEntry => ?_).trans (List.map_id account.mapped)
+  rcases entry with ⟨out, srcs⟩
+  dsimp only [id]
+  have hFlat : srcs.flatMap (Account.identity occsA).sourcesOf = srcs := by
+    have hAll : ∀ s ∈ srcs, (Account.identity occsA).sourcesOf s = [s] := by
+      intro s hs
+      have hMem : s ∈ occsA :=
+        hSrc out s ((account.mapsTo_iff_mem_mapped out s).mpr ⟨srcs, hEntry, hs⟩)
+      rw [Account.sourcesOf_identity, ite_eq_left hMem]
+    clear hEntry hSrc
+    induction srcs with
+    | nil => rfl
+    | cons s rest ih =>
+      rw [List.flatMap_cons, hAll s List.mem_cons_self, List.singleton_append,
+        ih (fun s' hs' => hAll s' (List.mem_cons_of_mem s hs'))]
+  rw [hFlat, eraseDups_eq_self (account.mappedSourcesNodup (out, srcs) hEntry)]
+
+/-- `Account.identity` is an exact left unit on `eliminated` lookups whenever `occsA` covers
+every source mapped or eliminated by `account`. -/
+theorem Account.compose_identity_left_eliminated_lookup {occsA : List Occurrence} {account : Account}
+    (hSrc : ∀ out src, account.MapsTo out src → src ∈ occsA)
+    (hElim : ∀ src, account.Eliminated src → src ∈ occsA)
+    (src : Occurrence) :
+    AList.lookup (Account.compose (Account.identity occsA) account).eliminated src =
+      AList.lookup account.eliminated src := by
+  have hMappedEq : (Account.compose (Account.identity occsA) account).mapped = account.mapped :=
+    Account.compose_identity_left_mapped hSrc
+  cases hLook : AList.lookup account.eliminated src with
+  | none =>
+    cases hLookC : AList.lookup (Account.compose (Account.identity occsA) account).eliminated src with
+    | none => rfl
+    | some r =>
+      exfalso
+      have hElimC : (Account.compose (Account.identity occsA) account).Eliminated src := ⟨r, hLookC⟩
+      obtain ⟨_, hElimId | ⟨hMappedId, hAll⟩⟩ :=
+        (Account.eliminated_compose_iff (Account.identity occsA) account src).mp hElimC
+      · obtain ⟨_, hr⟩ := hElimId; cases hr
+      · obtain ⟨out, hMapsId⟩ := hMappedId
+        obtain ⟨hOutIn, rfl⟩ := (Account.mapsTo_identity_iff occsA out src).mp hMapsId
+        obtain ⟨r0, hr0⟩ := hAll src ((Account.mapsTo_identity_iff occsA src src).mpr ⟨hOutIn, rfl⟩)
+        rw [hLook] at hr0; cases hr0
+  | some reason =>
+    have hSrcIn : src ∈ occsA := hElim src ⟨reason, hLook⟩
+    have hNotSurv : ((Account.composeMapped (Account.identity occsA) account).any
+        fun e => e.2.contains src) = false := by
+      cases hAny : (Account.composeMapped (Account.identity occsA) account).any fun e => e.2.contains src
+      · rfl
+      · exfalso
+        have hMapC : (Account.compose (Account.identity occsA) account).Mapped src :=
+          (Account.mapped_iff_any (Account.compose (Account.identity occsA) account) src).mpr hAny
+        obtain ⟨out, hMapsC⟩ := hMapC
+        have hMapsAcc : account.MapsTo out src := by
+          unfold Account.MapsTo Account.sourcesOf at hMapsC ⊢
+          rwa [hMappedEq] at hMapsC
+        exact account.not_eliminated_of_mapped ⟨out, hMapsAcc⟩ ⟨reason, hLook⟩
+    have hImgEq : (Account.identity occsA).imagesOf src = [src] := by
+      unfold Account.imagesOf Account.identity
+      dsimp only
+      have hNodup := nodup_eraseDups occsA
+      have hMem : src ∈ occsA.eraseDups := List.mem_eraseDups.mpr hSrcIn
+      generalize occsA.eraseDups = xs at hNodup hMem ⊢
+      induction xs with
+      | nil => cases hMem
+      | cons a rest ih =>
+        rw [List.nodup_cons] at hNodup
+        rw [List.map_cons, List.filterMap_cons]
+        rcases List.mem_cons.mp hMem with rfl | hrest
+        · simp only [List.contains_cons, beq_self_eq_true, Bool.true_or, ↓reduceIte]
+          congr 1
+          have hNil : (rest.map fun occ => (occ, [occ])).filterMap
+              (fun x => if x.2.contains src then some x.1 else none) = [] := by
+            rw [List.filterMap_eq_nil_iff]
+            intro entry hentry
+            obtain ⟨occ, hocc, rfl⟩ := List.mem_map.mp hentry
+            have hne : src ≠ occ := fun eq => hNodup.1 (eq ▸ hocc)
+            simp [hne]
+          exact hNil
+        · have hne : src ≠ a := fun eq => hNodup.1 (eq ▸ hrest)
+          simp only [List.contains_cons, beq_iff_eq, hne, List.contains_nil, Bool.or_false,
+            ↓reduceIte]
+          exact ih hNodup.2 hrest
+    have hCand : src ∈ ((Account.identity occsA).mapped.flatMap Prod.snd).eraseDups := by
+      rw [List.mem_eraseDups, List.mem_flatMap]
+      exact ⟨(src, [src]), List.mem_map.mpr ⟨src, List.mem_eraseDups.mpr hSrcIn, rfl⟩,
+        List.mem_singleton_self src⟩
+    have hMemComp : (src, reason) ∈ (Account.compose (Account.identity occsA) account).eliminated := by
+      unfold Account.compose Account.composeEliminated
+      dsimp only
+      apply List.mem_append_right
+      refine List.mem_filterMap.mpr ⟨src, hCand, ?_⟩
+      change (if ((Account.composeMapped (Account.identity occsA) account).any fun e => e.2.contains src) ||
+          (AList.lookup ([] : AList Occurrence EliminationReason) src).isSome
+        then none
+        else match ((Account.identity occsA).imagesOf src).mapM (AList.lookup account.eliminated) with
+          | some (r :: _) => some (src, r)
+          | _ => none) = some (src, reason)
+      rw [hNotSurv, hImgEq]
+      simp only [AList.lookup, Option.isSome_none, Bool.or_self, Bool.false_eq_true, ↓reduceIte,
+        List.mapM_cons, List.mapM_nil, hLook, bind, Option.bind, pure]
+    exact alist_lookup_of_mem (Account.compose (Account.identity occsA) account).eliminatedKeysNodup hMemComp
+
+/-- `Account.identity` is a left unit for `Account.compose`. -/
+theorem Account.compose_identity_left {occsA : List Occurrence} {account : Account}
+    (hSrc : ∀ out src, account.MapsTo out src → src ∈ occsA)
+    (hElim : ∀ src, account.Eliminated src → src ∈ occsA) :
+    Account.Equiv (Account.compose (Account.identity occsA) account) account := by
+  constructor
+  · intro out src
+    unfold Account.MapsTo Account.sourcesOf
+    rw [Account.compose_identity_left_mapped hSrc]
+  · intro src
+    unfold Account.Eliminated
+    rw [Account.compose_identity_left_eliminated_lookup hSrc hElim]
+
+theorem Account.compose_identity_left_of_valid {occsA occsB : List Occurrence} {account : Account}
+    (hValid : account.Valid occsA occsB) :
+    Account.Equiv (Account.compose (Account.identity occsA) account) account :=
+  Account.compose_identity_left hValid.2.2.1 fun src ⟨r, hr⟩ =>
+    hValid.2.2.2.1 src (List.mem_map.mpr ⟨(src, r), alist_lookup_mem hr, rfl⟩)
+
+/-- `Account.identity` is an exact right unit on `sourcesOf` whenever `occsB` covers every
+output key of `account.mapped`. -/
+theorem Account.compose_identity_right_sourcesOf {occsB : List Occurrence} {account : Account}
+    (hOut : ∀ out ∈ List.map Prod.fst account.mapped, out ∈ occsB) (out : Occurrence) :
+    (Account.compose account (Account.identity occsB)).sourcesOf out = account.sourcesOf out := by
+  rw [Account.sourcesOf_compose, Account.sourcesOf_identity]
+  split
+  · simp only [List.flatMap_cons, List.flatMap_nil, List.append_nil]
+    exact eraseDups_eq_self (account.sourcesOf_nodup out)
+  · rename_i hNot
+    simp only [List.flatMap_nil, List.eraseDups_nil]
+    symm
+    unfold Account.sourcesOf
+    cases hLook : AList.lookup account.mapped out with
+    | none => rfl
+    | some srcs =>
+      exfalso
+      exact hNot (hOut out (List.mem_map.mpr ⟨(out, srcs), alist_lookup_mem hLook, rfl⟩))
+
+/-- `Account.identity` is an exact right unit on `eliminated` whenever `occsB` covers every
+output key of `account.mapped`. -/
+theorem Account.compose_identity_right_eliminated {occsB : List Occurrence} {account : Account}
+    (hOut : ∀ out ∈ List.map Prod.fst account.mapped, out ∈ occsB) :
+    (Account.compose account (Account.identity occsB)).eliminated = account.eliminated := by
+  unfold Account.compose Account.composeEliminated
+  dsimp only
+  have hFromSecond :
+      ((account.mapped.flatMap Prod.snd).eraseDups.filterMap fun occA =>
+        if (Account.composeMapped account (Account.identity occsB)).any (fun e => e.2.contains occA) ||
+            (AList.lookup (account.eliminated.filter fun e =>
+              !(Account.composeMapped account (Account.identity occsB)).any fun m => m.2.contains e.1) occA).isSome
+        then none
+        else match (account.imagesOf occA).mapM (AList.lookup (Account.identity occsB).eliminated) with
+          | some (reason :: _) => some (occA, reason)
+          | _ => none) = [] := by
+    rw [List.filterMap_eq_nil_iff]
+    intro occA _
+    split
+    · rfl
+    · cases hImgs : account.imagesOf occA with
+      | nil => rfl
+      | cons b rest =>
+        simp [Account.identity, AList.lookup]
+  rw [hFromSecond, List.append_nil]
+  rw [List.filter_eq_self]
+  intro entry hEntry
+  rcases entry with ⟨src, reason⟩
+  simp only [Bool.not_eq_true']
+  cases hAny : (Account.composeMapped account (Account.identity occsB)).any fun e => e.2.contains src
+  · rfl
+  · exfalso
+    have hMapC : (Account.compose account (Account.identity occsB)).Mapped src :=
+      (Account.mapped_iff_any (Account.compose account (Account.identity occsB)) src).mpr hAny
+    obtain ⟨out, hMapsC⟩ := hMapC
+    have hMapsAcc : account.MapsTo out src := by
+      unfold Account.MapsTo at hMapsC ⊢
+      rwa [Account.compose_identity_right_sourcesOf hOut out] at hMapsC
+    exact account.not_eliminated_of_mapped ⟨out, hMapsAcc⟩
+      ⟨reason, alist_lookup_of_mem account.eliminatedKeysNodup hEntry⟩
+
+/-- `Account.identity` is a right unit for `Account.compose`. -/
+theorem Account.compose_identity_right {occsB : List Occurrence} {account : Account}
+    (hOut : ∀ out ∈ List.map Prod.fst account.mapped, out ∈ occsB) :
+    Account.Equiv (Account.compose account (Account.identity occsB)) account := by
+  constructor
+  · intro out src
+    unfold Account.MapsTo
+    rw [Account.compose_identity_right_sourcesOf hOut out]
+  · intro src
+    unfold Account.Eliminated
+    rw [Account.compose_identity_right_eliminated hOut]
+
+theorem Account.compose_identity_right_of_valid {occsA occsB : List Occurrence} {account : Account}
+    (hValid : account.Valid occsA occsB) :
+    Account.Equiv (Account.compose account (Account.identity occsB)) account :=
+  Account.compose_identity_right hValid.1
+
+/-- When `identity` is built on `account`'s exact output key list, right composition is
+structurally equal to `account`. -/
+theorem Account.compose_identity_right_eq (account : Account) :
+    Account.compose account (Account.identity (List.map Prod.fst account.mapped)) = account := by
+  have hOut : ∀ out ∈ List.map Prod.fst account.mapped, out ∈ List.map Prod.fst account.mapped :=
+    fun _ h => h
+  have hElim := Account.compose_identity_right_eliminated hOut
+  have hMapped : (Account.compose account (Account.identity (List.map Prod.fst account.mapped))).mapped =
+      account.mapped := by
+    change Account.composeMapped account (Account.identity (List.map Prod.fst account.mapped)) = account.mapped
+    unfold Account.composeMapped Account.identity
+    dsimp only
+    rw [eraseDups_eq_self account.mappedKeysNodup, List.map_map, List.map_map]
+    refine (List.map_congr_left fun entry hEntry => ?_).trans (List.map_id account.mapped)
+    rcases entry with ⟨out, srcs⟩
+    dsimp only [Function.comp_def, id]
+    simp only [List.flatMap_cons, List.flatMap_nil, List.append_nil]
+    have hSrc : account.sourcesOf out = srcs := by
+      unfold Account.sourcesOf
+      rw [alist_lookup_of_mem account.mappedKeysNodup hEntry]; rfl
+    rw [hSrc, eraseDups_eq_self (account.mappedSourcesNodup (out, srcs) hEntry)]
+  cases hC : Account.compose account (Account.identity (List.map Prod.fst account.mapped))
+  cases account
+  simp only [hC] at hMapped hElim
+  simp only [Account.mk.injEq]
+  exact ⟨hMapped, hElim⟩
+
+/-- Composition respects `Account.Equiv` in both arguments. -/
+theorem Account.compose_congr {a₁ a₂ b₁ b₂ : Account}
+    (ha : Account.Equiv a₁ a₂) (hb : Account.Equiv b₁ b₂) :
+    Account.Equiv (Account.compose a₁ b₁) (Account.compose a₂ b₂) := by
+  have hMaps : ∀ out src, (Account.compose a₁ b₁).MapsTo out src ↔ (Account.compose a₂ b₂).MapsTo out src := by
+    intro out src
+    rw [Account.mapsTo_compose_iff, Account.mapsTo_compose_iff]
+    constructor
+    · rintro ⟨mid, h2, h1⟩; exact ⟨mid, (hb.1 out mid).mp h2, (ha.1 mid src).mp h1⟩
+    · rintro ⟨mid, h2, h1⟩; exact ⟨mid, (hb.1 out mid).mpr h2, (ha.1 mid src).mpr h1⟩
+  refine ⟨hMaps, fun src => ?_⟩
+  rw [Account.eliminated_compose_iff, Account.eliminated_compose_iff]
+  have hMapC : (Account.compose a₁ b₁).Mapped src ↔ (Account.compose a₂ b₂).Mapped src :=
+    ⟨fun ⟨o, h⟩ => ⟨o, (hMaps o src).mp h⟩, fun ⟨o, h⟩ => ⟨o, (hMaps o src).mpr h⟩⟩
+  have hMapA : a₁.Mapped src ↔ a₂.Mapped src :=
+    ⟨fun ⟨o, h⟩ => ⟨o, (ha.1 o src).mp h⟩, fun ⟨o, h⟩ => ⟨o, (ha.1 o src).mpr h⟩⟩
+  constructor
+  · rintro ⟨hNot, hElim | ⟨hM, hAll⟩⟩
+    · exact ⟨fun h => hNot (hMapC.mpr h), Or.inl ((ha.2 src).mp hElim)⟩
+    · exact ⟨fun h => hNot (hMapC.mpr h), Or.inr ⟨hMapA.mp hM,
+        fun occB hB => (hb.2 occB).mp (hAll occB ((ha.1 occB src).mpr hB))⟩⟩
+  · rintro ⟨hNot, hElim | ⟨hM, hAll⟩⟩
+    · exact ⟨fun h => hNot (hMapC.mp h), Or.inl ((ha.2 src).mpr hElim)⟩
+    · exact ⟨fun h => hNot (hMapC.mp h), Or.inr ⟨hMapA.mpr hM,
+        fun occB hB => (hb.2 occB).mpr (hAll occB ((ha.1 occB src).mp hB))⟩⟩
 
 def Profile.llvmTriple (profile : Profile) : String :=
   match profile.backendTarget with
@@ -856,18 +2057,13 @@ inductive LLVMRole where
   | launcher
   deriving DecidableEq, Repr
 
-/-- One structured LLVM IR module carrying its checked target header and body items.
-The structured body has no target directive or raw-text escape hatch. -/
+/-- One structured LLVM IR module carrying its body items.
+The target datalayout and triple header is derived exclusively from the resolved
+`Profile` inside `LLVMInput.bytesAt`; the structured body has no target directive
+or raw-text escape hatch, so a mismatched header is unrepresentable. -/
 structure LLVMModule where
-  triple : String
-  dataLayout : String
   items : List Backend.LLVM.Item
   deriving BEq
-
-/-- Render a single LLVM module's checked header and structured items to UTF-8 bytes. -/
-def LLVMModule.bytes (mod : LLVMModule) : ByteArray :=
-  (s!"target datalayout = \"{mod.dataLayout}\"\ntarget triple = \"{mod.triple}\"\n" ++
-    Backend.LLVM.render mod.items).toUTF8
 
 /-- Two-module LLVM handoff: structured component and launcher modules plus the
 exact trap table shared between them. -/
@@ -876,24 +2072,17 @@ structure LLVMInput (_profile : Profile) where
   launcher : LLVMModule
   sites : TrapTable
 
-/-- Build a two-module `LLVMInput` stamped with `profile`'s target triple and data layout
-on both roles. -/
-def LLVMInput.ofProfile (profile : Profile)
-    (componentItems launcherItems : List Backend.LLVM.Item)
-    (sites : TrapTable) : LLVMInput profile where
-  component := ⟨profile.llvmTriple, profile.llvmDataLayout, componentItems⟩
-  launcher := ⟨profile.llvmTriple, profile.llvmDataLayout, launcherItems⟩
-  sites := sites
-
 /-- Select the structured LLVM module for `role`. -/
 def LLVMInput.moduleAt {profile : Profile} (input : LLVMInput profile) : LLVMRole → LLVMModule
   | .component => input.component
   | .launcher => input.launcher
 
-/-- Render the exact bytes passed to the LLVM toolchain for the selected role.
+/-- Render the exact bytes passed to the LLVM toolchain for the selected role,
+rendering the target header from the resolved `profile`'s data layout and triple.
 The structured body has no target directive or raw-text escape hatch. -/
 def LLVMInput.bytesAt {profile : Profile} (input : LLVMInput profile) (role : LLVMRole) : ByteArray :=
-  (input.moduleAt role).bytes
+  (s!"target datalayout = \"{profile.llvmDataLayout}\"\ntarget triple = \"{profile.llvmTriple}\"\n" ++
+    Backend.LLVM.render (input.moduleAt role).items).toUTF8
 
 /-- The exact pair of rendered LLVM IR byte arrays handed to the external toolchain
 and bound by `P_print` / `llvmBehaviors`. -/
@@ -910,12 +2099,10 @@ def LLVMInput.packageBytes {profile : Profile} (input : LLVMInput profile) : LLV
   component := input.bytesAt .component
   launcher := input.bytesAt .launcher
 
-theorem LLVMInput.ofProfile_moduleAt (profile : Profile)
-    (componentItems launcherItems : List Backend.LLVM.Item)
+theorem LLVMInput.moduleAt_mk {profile : Profile} (component launcher : LLVMModule)
     (sites : TrapTable) (role : LLVMRole) :
-    (LLVMInput.ofProfile profile componentItems launcherItems sites).moduleAt role =
-      ⟨profile.llvmTriple, profile.llvmDataLayout,
-        match role with | .component => componentItems | .launcher => launcherItems⟩ := by
+    ({ component, launcher, sites } : LLVMInput profile).moduleAt role =
+      match role with | .component => component | .launcher => launcher := by
   cases role <;> rfl
 
 theorem LLVMPackageBytes.bytesAt_mk (component launcher : ByteArray) (role : LLVMRole) :
@@ -951,5 +2138,139 @@ theorem BackendOutput.eq_llvm {profile : Profile} (h : profile.backend = .llvm) 
 theorem BackendOutput.eq_lcb {profile : Profile} (h : profile.backend = .lcb) :
     BackendOutput profile = LCBInput profile := by
   unfold BackendOutput; rw [h]
+
+/-! ### Controls for F-1, F-2, and N-1 -/
+
+section Controls
+
+private def ctrlFn : FnId :=
+  ⟨⟨⟨⟨"pkg"⟩, ⟨⟨"0"⟩⟩⟩, [⟨"mod"⟩], by decide⟩, ⟨"main"⟩⟩
+
+private def ctrlOcc (idx : Nat) : Occurrence := ⟨ctrlFn, ⟨0⟩, .instruction idx⟩
+
+-- F-2 counterexample control: fusion (`first` maps `o10` to `[o1, o2]`) composed with
+-- `second` (`o20` from `[o10]`) preserves both contributors; `o2` appears among `o20`'s sources.
+example :
+    let o1 := ctrlOcc 1
+    let o2 := ctrlOcc 2
+    let o10 := ctrlOcc 10
+    let o20 := ctrlOcc 20
+    let first : Account := { mapped := [(o10, [o1, o2])], eliminated := [] }
+    let second : Account := { mapped := [(o20, [o10])], eliminated := [] }
+    let composed := Account.compose first second
+    composed.sourcesOf o20 = [o1, o2] ∧
+    o2 ∈ composed.sourcesOf o20 ∧
+    composed.MapsTo o20 o1 ∧
+    composed.MapsTo o20 o2 ∧
+    composed.eliminated = [] ∧
+    composed.Valid [o1, o2] [o20] := by
+  refine ⟨rfl, ?_, ?_, ?_, rfl, ?_⟩
+  · exact List.mem_cons_of_mem _ List.mem_cons_self
+  · exact List.mem_cons_self
+  · exact List.mem_cons_of_mem _ List.mem_cons_self
+  · refine ⟨?_, ?_, ?_, ?_, ?_⟩
+    · intro out hout
+      rcases List.mem_singleton.mp hout with rfl
+      exact List.mem_singleton_self _
+    · intro out hout
+      rcases List.mem_singleton.mp hout with rfl
+      exact ⟨ctrlOcc 1, List.mem_cons_self⟩
+    · intro out src hmaps
+      change src ∈ (Account.compose { mapped := [(ctrlOcc 10, [ctrlOcc 1, ctrlOcc 2])], eliminated := [] }
+        { mapped := [(ctrlOcc 20, [ctrlOcc 10])], eliminated := [] }).sourcesOf out at hmaps
+      by_cases h : out = ctrlOcc 20
+      · subst h
+        exact hmaps
+      · simp [Account.sourcesOf, Account.compose, Account.composeMapped, AList.lookup, Ne.symm h] at hmaps
+    · intro _ hmem; cases hmem
+    · intro src hsrc
+      rcases List.mem_cons.mp hsrc with rfl | hrest
+      · exact Or.inl ⟨ctrlOcc 20, List.mem_cons_self⟩
+      · rcases List.mem_singleton.mp hrest with rfl
+        exact Or.inl ⟨ctrlOcc 20, List.mem_cons_of_mem _ List.mem_cons_self⟩
+
+-- F-2 negative controls: no `Account` value can exist with duplicate output keys or with a
+-- mapped contributor simultaneously listed in `eliminated`; `.mergedInto` is removed.
+example :
+    let o1 := ctrlOcc 1
+    let o2 := ctrlOcc 2
+    let o10 := ctrlOcc 10
+    (¬ ∃ a : Account, a.mapped = [(o10, [o1]), (o10, [o2])]) ∧
+    (¬ ∃ a : Account, a.mapped = [(o10, [o1, o2])] ∧ a.eliminated = [(o2, .deadValue)]) := by
+  refine ⟨?_, ?_⟩
+  · rintro ⟨a, h⟩
+    have hnd := a.mappedKeysNodup
+    rw [h] at hnd
+    exact (show ¬ (List.map Prod.fst ([(ctrlOcc 10, [ctrlOcc 1]), (ctrlOcc 10, [ctrlOcc 2])] :
+      AList Occurrence (List Occurrence))).Nodup from by decide) hnd
+  · rintro ⟨a, hm, he⟩
+    have hd := a.disjoint
+    rw [hm, he] at hd
+    exact (show ¬ (∀ entry ∈ ([(ctrlOcc 10, [ctrlOcc 1, ctrlOcc 2])] : AList Occurrence (List Occurrence)),
+      ∀ src ∈ entry.2, AList.lookup [(ctrlOcc 2, EliminationReason.deadValue)] src = none) from by decide) hd
+
+example : EliminationReason := by
+  fail_if_success exact EliminationReason.mergedInto (ctrlOcc 10)
+  exact .deadValue
+
+-- F-2 copy + partial elimination + diamond fusion + full elimination + incomplete pass controls.
+example :
+    let o1 := ctrlOcc 1
+    let o10 := ctrlOcc 10
+    let o11 := ctrlOcc 11
+    let o20 := ctrlOcc 20
+    let copyPass : Account := { mapped := [(o10, [o1]), (o11, [o1])], eliminated := [] }
+    let partialDead : Account := { mapped := [(o20, [o11])], eliminated := [(o10, .deadValue)] }
+    let diamondFuse : Account := { mapped := [(o20, [o10, o11])], eliminated := [] }
+    let bothDead : Account :=
+      { mapped := [], eliminated := [(o10, .deadValue), (o11, .unreachableBlock)] }
+    let incompleteDrop : Account := { mapped := [], eliminated := [(o10, .deadValue)] }
+    (Account.compose copyPass partialDead).sourcesOf o20 = [o1] ∧
+    (Account.compose copyPass partialDead).eliminated = [] ∧
+    (Account.compose copyPass diamondFuse).sourcesOf o20 = [o1] ∧
+    AList.lookup (Account.compose copyPass bothDead).eliminated o1 = some .deadValue ∧
+    AList.lookup (Account.compose copyPass incompleteDrop).eliminated o1 = none := by
+  decide
+
+-- F-1 negative control: wrong target header fields are unrepresentable in `LLVMModule` and
+-- `LLVMInput`, and the redundant `LLVMInput.ofProfile` constructor is removed.
+example (p : Profile) : LLVMInput p := by
+  fail_if_success exact (⟨⟨"wrong", p.llvmDataLayout, []⟩, ⟨p.llvmTriple, p.llvmDataLayout, []⟩, #[]⟩ : LLVMInput p)
+  fail_if_success exact (⟨"wrong", p.llvmDataLayout, []⟩ : LLVMModule)
+  fail_if_success exact LLVMInput.ofProfile p [] [] #[]
+  exact ⟨⟨[]⟩, ⟨[]⟩, #[]⟩
+
+-- F-1 positive control: `LLVMInput.bytesAt` renders the resolved profile's data layout and triple
+-- for both roles, and changing the profile changes the rendered bytes for identical module items.
+example :
+    let linuxP : Profile := ⟨.llvm, .x86_64Linux, 64, 4096⟩
+    let macP : Profile := ⟨.llvm, .aarch64Macos, 64, 4096⟩
+    let compMod : LLVMModule := ⟨[.blank]⟩
+    let launchMod : LLVMModule := ⟨[]⟩
+    let linuxIn : LLVMInput linuxP := ⟨compMod, launchMod, #[]⟩
+    let macIn : LLVMInput macP := ⟨compMod, launchMod, #[]⟩
+    linuxIn.bytesAt .component =
+      (s!"target datalayout = \"{linuxP.llvmDataLayout}\"\ntarget triple = \"{linuxP.llvmTriple}\"\n\n").toUTF8 ∧
+    linuxIn.bytesAt .launcher =
+      (s!"target datalayout = \"{linuxP.llvmDataLayout}\"\ntarget triple = \"{linuxP.llvmTriple}\"\n").toUTF8 ∧
+    macIn.bytesAt .launcher =
+      (s!"target datalayout = \"{macP.llvmDataLayout}\"\ntarget triple = \"{macP.llvmTriple}\"\n").toUTF8 ∧
+    linuxIn.packageBytes.bytesAt .component = linuxIn.bytesAt .component ∧
+    linuxIn.packageBytes.bytesAt .launcher = linuxIn.bytesAt .launcher ∧
+    linuxIn.bytesAt .launcher ≠ macIn.bytesAt .launcher := by
+  intro linuxP macP compMod launchMod linuxIn macIn
+  refine ⟨rfl, rfl, rfl, rfl, rfl, ?_⟩
+  intro h
+  have hBytes : (linuxIn.bytesAt .launcher).data.toList = (macIn.bytesAt .launcher).data.toList :=
+    congrArg (fun b => b.data.toList) h
+  exact (show (linuxIn.bytesAt .launcher).data.toList ≠ (macIn.bytesAt .launcher).data.toList from by decide) hBytes
+
+-- N-1 control: checker refusals on both routes use `.admission (.refused cause)`; no duplicate
+-- `StageFailure.checkerRefused` constructor exists.
+example (cause : RefusalCause) : StageFailure := by
+  fail_if_success exact StageFailure.checkerRefused cause
+  exact .admission (.refused cause)
+
+end Controls
 
 end Concrete.Interfaces
