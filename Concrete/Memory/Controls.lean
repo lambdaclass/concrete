@@ -1,5 +1,6 @@
 import Concrete.Memory.Refinement
 import Concrete.Memory.StepSimulation
+import Concrete.Memory.Validate
 import ConcreteSpec.Proofs.Memory
 
 namespace Concrete.Memory
