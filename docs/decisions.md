@@ -31,6 +31,51 @@ This approves [R-0724](../ROADMAP.md#r-0724) item 2:
 - `ConcreteSpec/Spec/` stays plain, readable Lean and never imports `ConcreteSpec.Tactics` or `ConcreteSpec.Tactics.*` (enforced by [`scripts/checks/spec_imports.sh`](../scripts/checks/spec_imports.sh)); `ConcreteSpec/Proofs/`, `ConcreteSpecEvidence/`, and `Concrete/` may import `ConcreteSpec.Tactics`.
 - Every tactic must elaborate to proof terms depending only on `propext` and `Quot.sound` (never `Classical.choice`, `grind`, or classical `simp` sets); Lean's kernel, `leanchecker`, `con-leche`, `nanoda`, and `#print axioms` controls continue to check every proof term.
 
+<a id="decided-2026-11-28-refusal-precedence"></a>
+## Decided 2026-11-28 — Refusal precedence (stage order)
+
+Status: decided (delegated Slice 0/1 decision)
+Source: delegated under the [November 25 delegation](#decided-2026-11-25-freeze-and-grammar) (item 7: Claude, Codex and agy all agree; reported to the owner; scoped to Slices 0 and 1).
+
+Owner delegation and first-error rule, verbatim:
+
+> please talk with agy and codex to decide these things, just tell me at the end what you guys decide. always do what is the best long term play
+
+> make sure everything is LL1 and very clear and the best long term thing
+
+> Each file is checked separately, and checking a file stops at its first error.
+
+([29-list item 12](#recovered-29-12), answered "yes".)
+
+Verdicts (unanimous): Claude **AGREE / ACCEPT**, Codex **AGREE / ACCEPT**, agy **AGREE / ACCEPT**.
+
+**Decided rule:** **stage order, first violation in source order within a stage.** Each file reports the refusal of the first stage that fails, in the order lexer, then parser, then checker. Within that stage, the earliest primary occurrence wins. The phrase "first violation in source order" across stages came from coordinator briefs, not from the owner, and is retired.
+
+### Contract shape
+
+Compilation proceeds through the staged pipeline ([pipeline decision](#decided-project-pipeline-2026-11-06)): `Project/File` → `Encoding` → `Lexing` → `Stream Coordinates` → `Complete Recognition Parse` → `Slice Eligibility` → `Surface Preparation` → `Core Checking`.
+
+1. **Domain-before-judgment across stages.** A later stage's judgment is defined only on a valid complete output of its predecessor. An earlier stage's failure stops compilation before any downstream stage runs, giving every refusal a reproducible audit (replay preceding stages successfully, then replay the issuing stage on their output; [PHILOSOPHY.md](PHILOSOPHY.md)). Both checked and unchecked routes share the front end identically; route-specific checking begins only on eligible, prepared input.
+2. **Lexer.** Whole-file encoding validation (`checkSource` / `Surface0.SourceOk`) precedes token recognition. It stops at the first invalid UTF-8 byte sequence (truncated, invalid or unexpected continuation, overlong, surrogate, or code point above `U+10FFFF`), raw NUL (`U+0000`, `0x00`), or raw BOM (`U+FEFF`, `0xEF 0xBB 0xBF`) anywhere in source (`Slice0Rules.Lexed@2`); space (`0x20`), tab (`0x09`), LF (`0x0A`), and CR (`0x0D`, including CRLF per [source line endings](#mechanical-defaults-and-owner-veto-list)) are valid whitespace (`Surface0.Whitespace`). Token recognition then stops at the first unrecognized character, forbidden raw scalar in a literal or comment, invalid escape, malformed integer, or unterminated literal (`Slice0Rules.Lexed@2`), or at a measured resource limit (`Slice0Rules.WithinLimit@1`), preserving distinct resource refusal.
+3. **Parser.** On a complete token stream, coordinate validation runs first (reporting the exact location refusal before grammar execution), followed by the certified LL(1) recognition grammar through physical EOF:
+   - **Malformed** (no complete derivation in any slice): refuses with `Slice0Rules.Parsed@1` at the first unexpected token, trailing token, or zero-width physical EOF (computed from the entry file after trailing trivia). Never classified as unsupported ([slice-0 surface decision](#decided-slice0-surface-2026-11-06)).
+   - **Unsupported at `source.slice`** (complete derivation exists with least admitting grammar slice `required > source.slice`, computed as the maximum across all selected rows and token forms including integer radix): refuses as unsupported carrying whole-stream `required` and the earliest out-of-slice witness in source order (tracked separately so a later increase in `required` preserves the first witness: `Slice0Rules.AdmittedProduction@3` or `Slice0Rules.DecimalLiteral@1`).
+   - **Eligible** (`required ≤ source.slice`): passes the located syntax tree to elaboration.
+4. **Surface preparation and Core checking.** Surface preparation checks the entry name (`Slice0Rules.EntryName@1`), then visits the body in a single left-to-right pass (earliest binder or RHS violation; immediate `Slice0Rules.ReachableBody@1` on a statement after `return`; `Slice0Rules.Returns@1` at `}` on fallthrough). Core checking inspects declarations in source order, statements left-to-right, then terminator discharge.
+5. **Multi-file builds.** With modules, the same precedence applies per file. Import-dependent judgments become available once resolution has the interface it needs, and parallel scheduling does not affect which refusal a file receives.
+
+### Expected freeze outputs
+
+Offsets are 0-based half-open byte ranges `[start, stop)` (1-based `line:col`) in a one-line entry file starting with `fn main() -> u8 { ` (18-byte prefix). Each row applies identically to checked and unchecked routes unless noted.
+
+| Input after the opening brace | Whole-file classification | Expected result |
+|---|---|---|
+| `return ; @ }` | Invalid (lexically malformed; no slice admits) | Both slices, both routes: `Slice0Rules.Lexed@2` at `@` `[27, 28)` (1:28). *(Lex-passing neighbor `return ; }` → `Slice0Rules.Parsed@1` at `;` `[25, 26)` 1:26.)* |
+| `return missing }` | Malformed (no slice admits) | Both slices, both routes: `Slice0Rules.Parsed@1` at `}` `[33, 34)` (1:34). *(Complete neighbor `return missing; }` → `Slice0Rules.LocalBound@1` at `missing` `[25, 32)` 1:26.)* |
+| `return 255 + 1 @ }` | Invalid (lexically malformed; no slice admits) | Both slices, both routes: `Slice0Rules.Lexed@2` at `@` `[33, 34)` (1:34); never reaches arithmetic checking or a runtime trap. *(Without `@`: `return 255 + 1 }` → `Slice0Rules.Parsed@1` at `}` `[33, 34)` 1:34. Complete neighbor `return 255 + 1; }`: checked → `Slice0Rules.AdditionFits@1` at `+` `[29, 30)` 1:30; unchecked → compiles and traps at runtime at `+` site 0, exit 134.)* |
+| `let Option {} = 1; return 0; }` | Complete wider derivation; least grammar slice 1 | Slice 0 (both routes): `Slice0Rules.AdmittedProduction@3` at `{` `[29, 30)` (1:30). Slice 1 (both routes): passes parsing and reports undeclared struct `Option` at `[22, 28)` (1:23) during surface elaboration. *(Colon neighbor `let Option: u8 = 1; return Option; }` → Slice 0 `Slice0Rules.UnreservedLocal@2` at `Option` `[22, 28)` 1:23. Malformed neighbors: ending after `1` → `Slice0Rules.Parsed@1` at EOF `[35, 35)`; ending with `1 }` → `Slice0Rules.Parsed@1` at `}` `[36, 37)`; bare `let Option {} = 1` → `Slice0Rules.Parsed@1` at `let` `[0, 3)`.)* |
+| `return (42); }` | Complete and eligible; least grammar slice 0 | Accepted on both routes (registry, checked driver, unchecked driver; exit 42, empty stdout and stderr). Literal `42` at `[26, 28)`, return statement `[18, 30)`, closing brace `}` at `[31, 32)`. |
+
 <a id="decided-2026-11-27-result-position"></a>
 ## Decided 2026-11-27 — First slice for function result types
 

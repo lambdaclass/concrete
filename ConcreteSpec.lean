@@ -1,4 +1,5 @@
 import ConcreteSpec.Proofs.GrammarPrediction
+import ConcreteSpec.Proofs.EarlyProposal
 import ConcreteSpec.Proofs.GrammarData
 import ConcreteSpec.Proofs.Hybrid
 import ConcreteSpec.Proofs.Memory

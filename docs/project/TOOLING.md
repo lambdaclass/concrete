@@ -50,7 +50,7 @@ Paths are relative to `scripts/`.
 - `checks/compiler/slice0_repro.sh` Compares independent builds to catch nondeterministic outputs.
 - `checks/compiler/slice0_trusted_base.lean` Prints the compiler premises and axioms for baseline comparison.
 - `checks/compiler/slice0_trusted_base.sh` Checks the premise and axiom baseline so trust changes are visible.
-- `checks/compiler/refusal_mutation_controls.py` Compares the working audit and supplied historical audits on each compiled pipeline mutation, and checks the unreachable-statement fixture against a changed specification span.
+- `checks/compiler/refusal_mutation_controls.py` Compares the working audit and supplied historical audits on each compiled pipeline mutation, checks the unreachable-statement fixture against a changed specification span, and checks backend-policy refusal controls against changed rule revisions.
 - `checks/compiler/tests.sh` Checks native LLVM and LCB execution against the test manifest.
 - `checks/lib/repro_compare.py` Compares outputs by build stage to locate reproducibility failures.
 - `checks/lib/slice0_common.sh` Shares Slice 0 setup and checks so compiler gates use consistent inputs.

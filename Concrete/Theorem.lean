@@ -929,12 +929,53 @@ example : bothEntriesRefuse r"fn main() -> u8 { let Option {} = 1; return 0; }"
     (.parser .outsideProduction ⟨29, 30, 1, 30, ⟨0⟩⟩) ⟨``Slice0Rules.AdmittedProduction, 3⟩ := by
   with_unfolding_all exact ⟨rfl, rfl, rfl, rfl⟩
 
--- Unchecked arithmetic can continue through this prefix to the later call.
+-- Stage order (docs/decisions.md#decided-2026-11-28-refusal-precedence):
+-- parser runs before Core checking on both routes, so both checked and unchecked
+-- report AdmittedProduction@3 on abort() rather than checked arithmetic overflow.
+open ConcreteSpec.Core in
+example : bothEntriesRefuse r"fn main() -> u8 { let x: u8 = 255 + 1; abort(); }"
+    (.parser .outsideProduction ⟨39, 44, 1, 40, ⟨0⟩⟩) ⟨``Slice0Rules.AdmittedProduction, 3⟩ := by
+  with_unfolding_all exact ⟨rfl, rfl, rfl, rfl⟩
+
+-- Stage-order refusal precedence controls across lexer, parser, surface preparation and Core.
+open ConcreteSpec.Core in
 example :
-    let text := r"fn main() -> u8 { let x: u8 = 255 + 1; abort(); }"
-    (do Stages.unchecked (← Stages.Input.load "main.con" text.toUTF8)) =
-      .error (.source (.parser .outsideProduction ⟨39, 44, 1, 40, ⟨0⟩⟩)) := by
-  with_unfolding_all rfl
+    bothEntriesRefuse r"fn main() -> u8 { return ; @ }"
+      (.lexical .character ⟨27, 28, 1, 28, ⟨0⟩⟩) ⟨``Slice0Rules.Lexed, 2⟩ ∧
+    bothEntriesRefuse r"fn main() -> u8 { return ; }"
+      (.parser .unexpectedToken ⟨25, 26, 1, 26, ⟨0⟩⟩) ⟨``Slice0Rules.Parsed, 1⟩ ∧
+    bothEntriesRefuse r"fn main() -> u8 { return missing }"
+      (.parser .unexpectedToken ⟨33, 34, 1, 34, ⟨0⟩⟩) ⟨``Slice0Rules.Parsed, 1⟩ ∧
+    bothEntriesRefuse r"fn main() -> u8 { return 255 + 1 @ }"
+      (.lexical .character ⟨33, 34, 1, 34, ⟨0⟩⟩) ⟨``Slice0Rules.Lexed, 2⟩ ∧
+    bothEntriesRefuse r"fn main() -> u8 { return 255 + 1 }"
+      (.parser .unexpectedToken ⟨33, 34, 1, 34, ⟨0⟩⟩) ⟨``Slice0Rules.Parsed, 1⟩ ∧
+    bothEntriesRefuse r"fn main() -> u8 { let Option {} = 1 }"
+      (.parser .unexpectedToken ⟨36, 37, 1, 37, ⟨0⟩⟩) ⟨``Slice0Rules.Parsed, 1⟩ ∧
+    bothEntriesRefuse r"fn main() -> u8 { let Option {} = 1"
+      (.parser .unexpectedEnd ⟨35, 35, 1, 36, ⟨0⟩⟩) ⟨``Slice0Rules.Parsed, 1⟩ ∧
+    bothEntriesRefuse r"let Option {} = 1"
+      (.parser .unexpectedToken ⟨0, 3, 1, 1, ⟨0⟩⟩) ⟨``Slice0Rules.Parsed, 1⟩ := by
+  with_unfolding_all
+    exact ⟨⟨rfl, rfl, rfl, rfl⟩, ⟨rfl, rfl, rfl, rfl⟩, ⟨rfl, rfl, rfl, rfl⟩, ⟨rfl, rfl, rfl, rfl⟩,
+      ⟨rfl, rfl, rfl, rfl⟩, ⟨rfl, rfl, rfl, rfl⟩, ⟨rfl, rfl, rfl, rfl⟩, ⟨rfl, rfl, rfl, rfl⟩⟩
+
+-- Complete neighbors advance past lexing and parsing to surface preparation or Core checking.
+open ConcreteSpec.Core in
+example :
+    let missingBytes := r"fn main() -> u8 { return missing; }".toUTF8
+    let missingCause : ConcreteSpec.StageInterface.RefusalCause :=
+      .surface (.unknownLocal "missing" ⟨25, 32, 1, 26, ⟨0⟩⟩)
+    ((Stages.Input.load "main.con" missingBytes).bind Stages.compile) = .error (.source missingCause) ∧
+    ((Stages.Input.load "main.con" missingBytes).bind Stages.unchecked) = .error (.source missingCause) ∧
+    missingCause.rule = ⟨``Slice0Rules.LocalBound, 1⟩ ∧
+    ExactRefusal r"fn main() -> u8 { return 255 + 1; }"
+      ⟨``Slice0Rules.AdditionFits, 1⟩ ⟨29, 30, 1, 30, ⟨0⟩⟩ ∧
+    ((Stages.Input.load "main.con" r"fn main() -> u8 { return 255 + 1; }".toUTF8).bind Stages.unchecked).isOk = true ∧
+    ((Stages.Input.load "main.con" r"fn main() -> u8 { return (42); }".toUTF8).bind Stages.compile).isOk = true ∧
+    ((Stages.Input.load "main.con" r"fn main() -> u8 { return (42); }".toUTF8).bind Stages.unchecked).isOk = true := by
+  with_unfolding_all
+    exact ⟨rfl, rfl, rfl, ⟨_, rfl, rfl, Refusal.source_diagnosticAt_iff _⟩, rfl, rfl, rfl⟩
 
 -- A parser token advertising either payload-bearing terminal must supply its value.
 example (t : ConcreteSpec.Surface0.TokenValue) (ident : t.kind = .ident) : ∃ name, t = .name name := by

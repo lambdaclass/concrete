@@ -139,6 +139,125 @@ theorem begin_decreases {memory : Interfaces.Memory lang profile} {q q' : Memory
   rw [pc]
   omega
 
+private def decExistsLt (P : Nat → Prop) [DecidablePred P] :
+    (bound : Nat) → Decidable (∃ n < bound, P n)
+  | 0 => isFalse fun ⟨_, hlt, _⟩ => Nat.not_lt_zero _ hlt
+  | k + 1 =>
+    match decExistsLt P k with
+    | isTrue h => isTrue (let ⟨n, hlt, hp⟩ := h; ⟨n, Nat.lt_succ_of_lt hlt, hp⟩)
+    | isFalse hlt =>
+      match inferInstanceAs (Decidable (P k)) with
+      | isTrue hk => isTrue ⟨k, Nat.lt_succ_self k, hk⟩
+      | isFalse hnk => isFalse fun ⟨n, hlt', hp⟩ =>
+        match Nat.eq_or_lt_of_le (Nat.le_of_lt_succ hlt') with
+        | .inl rfl => hnk hp
+        | .inr hlt'' => hlt ⟨n, hlt'', hp⟩
+
+private def decExistsMem {α : Type} (P : α → Prop) [DecidablePred P] :
+    (xs : List α) → Decidable (∃ x ∈ xs, P x)
+  | [] => isFalse fun ⟨_, hm, _⟩ => nomatch hm
+  | x :: rest =>
+    match inferInstanceAs (Decidable (P x)) with
+    | isTrue hx => isTrue ⟨x, .head _, hx⟩
+    | isFalse hnx =>
+      match decExistsMem P rest with
+      | isTrue h => isTrue (let ⟨y, hy, hp⟩ := h; ⟨y, .tail _ hy, hp⟩)
+      | isFalse hrest => isFalse fun ⟨y, hy, hp⟩ =>
+        match List.mem_cons.mp hy with
+        | .inl rfl => hnx hp
+        | .inr hy' => hrest ⟨y, hy', hp⟩
+
+/-- Finite, constructive decision procedure for `ReservationsFit`: every fitting
+allocation chooses a space from the finite list `target.spaces` and a base below `ceiling`. -/
+def decidableReservationsFit (target : Target) (ceiling : Nat) :
+    (layouts : List Layout) → (heap : Mem.Memory) →
+    Decidable (Interfaces.Memory.ReservationsFit target ceiling layouts heap)
+  | [], _ => isTrue trivial
+  | layout :: rest, heap =>
+    let step (space : AddrSpace) (base : Nat) : Prop :=
+      heap.Fits target (Mem.candidate space base layout.size layout.align) ceiling ∧
+      Interfaces.Memory.ReservationsFit target ceiling rest
+        ⟨(⟨heap.next⟩, Mem.candidate space base layout.size layout.align) :: heap.blocks, heap.next + 1⟩
+    letI : ∀ space base, Decidable (step space base) := fun space base =>
+      letI := decidableReservationsFit target ceiling rest
+        ⟨(⟨heap.next⟩, Mem.candidate space base layout.size layout.align) :: heap.blocks, heap.next + 1⟩
+      inferInstanceAs (Decidable (_ ∧ _))
+    letI : ∀ space, Decidable (∃ base < ceiling, step space base) := fun space =>
+      decExistsLt (step space) ceiling
+    match decExistsMem (fun space => ∃ base < ceiling, step space base) target.spaces with
+    | isTrue h =>
+      isTrue (by
+        obtain ⟨space, _, base, _, hfits, hrest⟩ := h
+        exact ⟨space, base, ⟨heap.next⟩, _, by unfold Mem.Memory.alloc; dsimp only; exact ite_eq_left hfits, hrest⟩)
+    | isFalse hno =>
+      isFalse (by
+        rintro ⟨space, base, _, _, halloc, hrest⟩
+        unfold Mem.Memory.alloc at halloc
+        dsimp only at halloc
+        split at halloc
+        · rename_i hfits
+          cases halloc
+          exact hno ⟨space, hfits.2.2.2.2.2.2, base,
+            Nat.lt_of_le_of_lt (Nat.le_add_right _ _) hfits.2.2.1, hfits, hrest⟩
+        · cases halloc)
+
+/-- Constructive decision procedure for `ParamSpaceFits`. -/
+def decidableParamSpaceFits (memory : Interfaces.Memory lang profile)
+    (params : List (Sigma (MemoryPlace language.operands.Ty)))
+    (state : MemoryRegisters language profile)
+    (ceiling : Nat := profile.memoryTarget.addressCeiling) :
+    Decidable (memory.ParamSpaceFits params state ceiling) :=
+  decidableReservationsFit profile.memoryTarget ceiling
+    (memory.freshLayouts state (params.map fun p : Sigma (MemoryPlace language.operands.Ty) => p.2.logical.root))
+    state.bytes
+
+/-- Constructive decision procedure for whether `memory.Begins q root` admits a successor. -/
+def decidableBeginsExists (memory : Interfaces.Memory lang profile)
+    (q : MemoryRegisters language profile) (root : PlaceId)
+    (ceiling : Nat := profile.memoryTarget.addressCeiling) :
+    Decidable (∃ opened, memory.Begins q root opened ceiling) :=
+  if hlive : root ∈ q.live then
+    isFalse fun ⟨_, hfresh, _⟩ => hfresh hlive
+  else
+    match hcls : memory.classAt q.frame root with
+    | none =>
+      isFalse (by
+        rintro ⟨_, _, ⟨hv, _⟩ | ⟨hm, _⟩⟩
+        · rw [hcls] at hv; cases hv
+        · rw [hcls] at hm; cases hm)
+    | some .virtual =>
+      isTrue ⟨{q with live := root :: q.live}, hlive, .inl ⟨hcls, rfl⟩⟩
+    | some .materialized =>
+      match hlay : memory.layoutAt q.frame root with
+      | none =>
+        isFalse (by
+          rintro ⟨_, _, ⟨hv, _⟩ | ⟨_, _, hl, _⟩⟩
+          · rw [hcls] at hv; cases hv
+          · rw [hlay] at hl; cases hl)
+      | some layout =>
+        if hz : layout.size = 0 then
+          isTrue ⟨{q with live := root :: q.live}, hlive, .inr ⟨hcls, layout, hlay, .inl ⟨hz, rfl⟩⟩⟩
+        else
+          match decidableReservationsFit profile.memoryTarget ceiling [layout] q.bytes with
+          | isTrue h =>
+            isTrue (by
+              obtain ⟨space, base, block, bytes, halloc, _⟩ := h
+              let opened : MemoryRegisters language profile :=
+                { q with
+                  live := root :: q.live
+                  bytes := bytes
+                  materialized := (root, ⟨⟨space, base, some block⟩, layout.size, layout.align⟩) :: q.materialized }
+              exact ⟨opened, hlive, .inr ⟨hcls, layout, hlay,
+                .inr ⟨Nat.pos_of_ne_zero hz, space, base, block, bytes, halloc, rfl⟩⟩⟩)
+          | isFalse hno =>
+            isFalse (by
+              rintro ⟨_, _, ⟨hv, _⟩ | ⟨_, layout', hlay', hsz⟩⟩
+              · rw [hcls] at hv; cases hv
+              · cases Option.some.inj (hlay.symm.trans hlay')
+                rcases hsz with ⟨hz', _⟩ | ⟨_, space, base, block, bytes, halloc, _⟩
+                · exact hz hz'
+                · exact hno ⟨space, base, block, bytes, halloc, trivial⟩)
+
 /-- A begin that is valid with unlimited space can either commit on this target
 or report exhaustion at its original checkpoint. -/
 theorem begin_progress {memory : Interfaces.Memory lang profile} {q : MemoryRegisters language profile}
@@ -150,9 +269,11 @@ theorem begin_progress {memory : Interfaces.Memory lang profile} {q : MemoryRegi
       (Dst.step memory q {q with resourceExhausted := true} ∧
         Dst.result memory {q with resourceExhausted := true} .resourceExhausted) := by
   have ready : memory.terminalObservation q = none := by
-    simp [Interfaces.Memory.terminalObservation, running, found, pc, inst, Interfaces.Memory.instructionTrap]
-  by_cases space : ∃ opened, memory.Begins q root opened
-  · obtain ⟨opened, began⟩ := space
+    simp only [Interfaces.Memory.terminalObservation, running, Bool.false_eq_true, ↓reduceIte,
+      found, pc, inst, Interfaces.Memory.instructionTrap, bind, Option.bind]
+  match decidableBeginsExists memory q root with
+  | isTrue space =>
+    obtain ⟨opened, began⟩ := space
     have flags : opened.resourceExhausted = false ∧ opened.effects = q.effects := by
       rcases began.2 with ⟨_, rfl⟩ | ⟨_, _, _, ⟨_, rfl⟩ | ⟨_, _, _, _, _, _, rfl⟩⟩ <;> exact ⟨running, rfl⟩
     refine .inl ⟨opened, began, Interfaces.Memory.silent_step ready ?_ flags.2⟩
@@ -162,7 +283,8 @@ theorem begin_progress {memory : Interfaces.Memory lang profile} {q : MemoryRegi
     refine ⟨block, found, ?_⟩
     simp only [pc, inst]
     exact ⟨opened, began, rfl⟩
-  · have failed : memory.BeginExhausted q root := ⟨valid, space⟩
+  | isFalse space =>
+    have failed : memory.BeginExhausted q root := ⟨valid, space⟩
     refine .inr ⟨Interfaces.Memory.silent_step ready ?_ rfl, memory.exhausted_result rfl⟩
     unfold Interfaces.Memory.Step
     simp only [running, Bool.false_eq_true, ite_false, ite_true, true_and]
