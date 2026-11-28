@@ -14,44 +14,143 @@ private def dropBinders : Nat → Expr → Expr
   | n + 1, .forallE _ _ body _ => dropBinders n body
   | _, type => type
 
+private partial def resultIsType (env : Environment) (seen : Std.HashSet Name := {}) : Expr → Bool
+  | .forallE _ _ body _ => resultIsType env seen body
+  | .mdata _ body => resultIsType env seen body
+  | .letE _ _ value body _ => resultIsType env seen (body.instantiate1 value).headBeta
+  | .sort (.succ _) => true
+  | e =>
+    let e := e.headBeta
+    match e.getAppFn.constName? with
+    | some name =>
+      if seen.contains name then false
+      else match env.find? name with
+        | some (.defnInfo info) =>
+          resultIsType env (seen.insert name) ((mkAppN info.value e.getAppArgs).headBeta)
+        | _ => false
+    | none => false
+
+private def instantiateBinders (count : Nat) (type : Expr) (args : Array Expr) : Expr :=
+  go count 0 type
+where
+  go : Nat → Nat → Expr → Expr
+    | 0, _, e => e
+    | rem + 1, idx, .forallE _ _ body _ =>
+      if h : idx < args.size then
+        go rem (idx + 1) (body.instantiate1 args[idx]).headBeta
+      else
+        go rem (idx + 1) body
+    | _ + 1, _, e => e
+
 private partial def modelBinder (env : Environment) (type : Expr) (functionType := false)
-    (seen : Std.HashSet Name := {}) : Bool :=
+    (seen : Std.HashSet Name := {}) (forbidAnyTypeFn := false) : Bool :=
+  let type := type.headBeta
   match type with
-  | .forallE _ _ body _ => modelBinder env body true seen
+  | .mdata _ body => modelBinder env body functionType seen forbidAnyTypeFn
+  | .letE _ _ value body _ =>
+    modelBinder env (body.instantiate1 value).headBeta functionType seen forbidAnyTypeFn
+  | .forallE _ _ body _ => modelBinder env body true seen forbidAnyTypeFn
+  | .lam _ _ body _ => modelBinder env body false seen forbidAnyTypeFn
   | .sort _ => true
   | _ =>
     match type.getAppFn.constName? with
     | none => false
     | some name =>
+      let args := type.getAppArgs
       modelTypes.contains name ||
         (functionType && [``Bool, ``Nat, ``UInt8, ``ByteArray, ``List, ``Option, ``Except,
           ``ConcreteSpec.Core.Res].contains name) ||
         if seen.contains name then false else
-          let seen := seen.insert name
+          let seen' := seen.insert name
           match env.find? name with
           | some (.defnInfo info) =>
-            modelBinder env ((mkAppN info.value type.getAppArgs).headBeta) functionType seen
+            modelBinder env ((mkAppN info.value args).headBeta) functionType seen' forbidAnyTypeFn
+          | some (.recInfo info) =>
+            let minorStart := info.numParams + info.numMotives
+            let minorStop := minorStart + info.numMinors
+            (List.range info.numMinors).any fun offset =>
+              let idx := minorStart + offset
+              if h : idx < args.size then
+                idx < minorStop && modelBinder env args[idx] false seen' forbidAnyTypeFn
+              else false
           | some (.inductInfo info) =>
             -- PassFunctions has a separately checked executable schema.
             -- Behavior carries observations, including trace data indexed by time.
-            ![``PassFunctions, ``Behavior].contains name && !(dropBinders info.numParams info.type).isForall &&
-              (match dropBinders info.numParams info.type with | .sort (.succ _) => true | _ => false) &&
-              info.ctors.any fun ctor =>
-                match env.find? ctor with
-                | some (.ctorInfo ctor) => fieldsCarryModel env (dropBinders ctor.numParams ctor.type) seen
-                | _ => false
+            ![``PassFunctions, ``Behavior].contains name && resultIsType env {} info.type &&
+              ((functionType && forbidAnyTypeFn && ![``Unit, ``PUnit, ``Empty, ``PEmpty].contains name) ||
+                appliedTypeParamsCarryModel env info.numParams 0 info.type args seen forbidAnyTypeFn ||
+                indexDomainsCarryModel env info.numParams
+                  (instantiateBinders info.numParams info.type args) args seen' forbidAnyTypeFn ||
+                info.ctors.any fun ctor =>
+                  match env.find? ctor with
+                  | some (.ctorInfo ctor) =>
+                    fieldsCarryModel env (instantiateBinders ctor.numParams ctor.type args)
+                      seen' forbidAnyTypeFn
+                  | _ => false)
           | _ => false
 where
-  fieldsCarryModel (env : Environment) (type : Expr) (seen : Std.HashSet Name) : Bool :=
+  appliedTypeParamsCarryModel (env : Environment) (numParams idx : Nat) (e : Expr)
+      (args : Array Expr) (seen : Std.HashSet Name) (forbidAnyTypeFn : Bool) : Bool :=
+    if idx < numParams then
+      match e with
+      | .forallE _ paramDomain body _ =>
+        if h : idx < args.size then
+          let arg := args[idx]
+          let argCarries :=
+            if resultIsType env {} paramDomain then
+              modelBinder env arg false seen forbidAnyTypeFn
+            else false
+          argCarries ||
+            appliedTypeParamsCarryModel env numParams (idx + 1)
+              (body.instantiate1 arg).headBeta args seen forbidAnyTypeFn
+        else false
+      | _ => false
+    else false
+  indexDomainsCarryModel (env : Environment) (idx : Nat) (e : Expr)
+      (args : Array Expr) (seen : Std.HashSet Name) (forbidAnyTypeFn : Bool) : Bool :=
+    match e with
+    | .forallE _ indexDomain body _ =>
+      modelBinder env indexDomain false seen forbidAnyTypeFn ||
+        let next :=
+          if h : idx < args.size then (body.instantiate1 args[idx]).headBeta else body
+        indexDomainsCarryModel env (idx + 1) next args seen forbidAnyTypeFn
+    | _ => false
+  fieldsCarryModel (env : Environment) (type : Expr) (seen : Std.HashSet Name)
+      (forbidAnyTypeFn : Bool) : Bool :=
     match type with
-    | .forallE _ field body _ => modelBinder env field false seen || fieldsCarryModel env body seen
+    | .forallE _ field body _ =>
+      modelBinder env field false seen forbidAnyTypeFn ||
+        fieldsCarryModel env body seen forbidAnyTypeFn
     | _ => false
 
-private partial def passTypeCarriesModel (env : Environment) (type : Expr) : Bool :=
+private partial def passTypeCarriesModel (env : Environment) (type : Expr)
+    (seen : Std.HashSet Name := {}) : Bool :=
+  let type := type.headBeta
   match type with
+  | .mdata _ body => passTypeCarriesModel env body seen
+  | .letE _ _ value body _ => passTypeCarriesModel env (body.instantiate1 value).headBeta seen
   | .forallE _ domain body _ =>
-    modelBinder env domain || passTypeCarriesModel env body
-  | type => modelBinder env type || type.getAppArgs.any (passTypeCarriesModel env)
+    modelBinder env domain false {} true || passTypeCarriesModel env body seen
+  | type =>
+    match type.getAppFn.constName? with
+    | some name =>
+      if !seen.contains name then
+        match env.find? name with
+        | some (.defnInfo info) =>
+          let unfolded := (mkAppN info.value type.getAppArgs).headBeta
+          if unfolded.isForall then
+            passTypeCarriesModel env unfolded (seen.insert name)
+          else
+            modelBinder env type false {} true ||
+              type.getAppArgs.any (passTypeCarriesModel env · seen)
+        | _ =>
+          modelBinder env type false {} true ||
+            type.getAppArgs.any (passTypeCarriesModel env · seen)
+      else
+        modelBinder env type false {} true
+    | none =>
+      modelBinder env type false {} true ||
+        type.getAppArgs.any (passTypeCarriesModel env · seen)
 
 private def badPassField (env : Environment) (record : Name) : Option Name := do
   let structureInfo ← getStructureInfo? env record
@@ -233,6 +332,85 @@ private inductive PlantedConstructor : Prop where
 private structure PlantedPassBundle where
   run : Source → Except LexRefusal WrappedModel
 
+-- Indexed type-family controls (ISS-0114): hidden decoder, model-valued index,
+-- polymorphic family instantiated with a model, alias, nested executable results,
+-- and genuine data-only indexed families (custom and registered) that must pass.
+private inductive PlantedIndexedDecoder : Nat → Type where
+  | intro (decode : ByteArray → Option UInt8) : PlantedIndexedDecoder 0
+
+private def plantedIndexedDecoder : Prop :=
+  ∀ carrier : PlantedIndexedDecoder 0, carrier = carrier
+
+private abbrev PlantedIndexedAlias (n : Nat) := PlantedIndexedDecoder n
+
+private def plantedIndexedAlias : Prop :=
+  ∀ carrier : PlantedIndexedAlias 0, carrier = carrier
+
+private inductive PlantedModelIndex : (ByteArray → Option UInt8) → Type where
+  | unit : PlantedModelIndex (fun _ => none)
+
+private def plantedModelIndex : Prop :=
+  ∀ carrier : PlantedModelIndex (fun _ => none), carrier = carrier
+
+private inductive PlantedCoreIndex : CoreLanguage → Type where
+  | unit : PlantedCoreIndex (sliceLanguage slice0)
+
+private def plantedCoreIndex : Prop :=
+  ∀ carrier : PlantedCoreIndex (sliceLanguage slice0), carrier = carrier
+
+private inductive DataIndexedFamily.{u} (α : Type u) : Nat → Type u where
+  | zero : DataIndexedFamily α 0
+  | cons {n : Nat} (head : α) (tail : DataIndexedFamily α n) : DataIndexedFamily α (n + 1)
+
+private def plantedPolyIndexedModel : Prop :=
+  ∀ carrier : DataIndexedFamily CoreLanguage 1, carrier = carrier
+
+private def plantedPolyIndexedNested : Prop :=
+  ∀ carrier : DataIndexedFamily (DataIndexedFamily (ByteArray → Option UInt8) 0) 1,
+    carrier = carrier
+
+private def plantedPolyIndexedAlias : Prop :=
+  ∀ carrier : DataIndexedFamily Model 0, carrier = carrier
+
+private def plantedMatchIndexed : Bool → Type
+  | true => Nat
+  | false => ByteArray → Option UInt8
+
+private def plantedMatchIndexedProp (flag : Bool) : Prop :=
+  ∀ carrier : plantedMatchIndexed flag, carrier = carrier
+
+private structure PlantedIndexedPassBundle where
+  run : Source → Except LexRefusal (Option (PlantedIndexedDecoder 0))
+
+private structure PlantedPolyIndexedPassBundle where
+  run : Source → Except LexRefusal (List (DataIndexedFamily WrappedModel 1))
+
+private structure PlantedModelIndexPassBundle where
+  run : Source → Except LexRefusal (PlantedModelIndex (fun _ => none))
+
+private structure PlantedNestedFnPassBundle where
+  run : Source → Except LexRefusal (Option (Source → TokenStream))
+
+private abbrev PassResultAlias (α : Type) := Source → Except LexRefusal α
+
+private structure PlantedAliasPassBundle where
+  run : PassResultAlias (PlantedIndexedDecoder 0)
+
+private def passingDataIndexed : Prop :=
+  ∀ carrier : DataIndexedFamily Nat 2, carrier = carrier
+
+private def passingRegisteredIndexed (ty : (sliceLanguage slice0).operands.Ty)
+    (tys : List (sliceLanguage slice0).operands.Ty) : Prop :=
+  ∀ (r : Read (sliceLanguage slice0).operands.Ty (sliceLoweringLanguage slice0).literal ty)
+    (args : Args (Read (sliceLanguage slice0).operands.Ty (sliceLoweringLanguage slice0).literal) tys),
+    r = r ∧ args = args
+
+private structure PassingDataIndexedPassBundle where
+  run : Source → Except LexRefusal (DataIndexedFamily UInt8 3)
+
+private structure PassingAliasPassBundle where
+  run : PassResultAlias (DataIndexedFamily UInt8 3)
+
 -- The explicit schema also catches unstructured relation parameters at the
 -- boundary, even if their types are never declared as semantic model records.
 example {slice : Slice} {profile : Profile} (passes : Passes slice profile) (unchecked : Bool)
@@ -296,5 +474,27 @@ run_cmd do
     throwError "End-to-end audit accepted a planted decoder as an inductive constructor field"
   unless badPassField env ``PlantedPassBundle == some `run do
     throwError "End-to-end audit accepted a planted decoder in the executable pass bundle"
+  -- Indexed type-family controls (ISS-0114): each planted indexed family must fail
+  -- with its exact open semantic binder, and genuine data-only indexed families must pass.
+  for (name, binder) in [(``plantedIndexedDecoder, `carrier),
+      (``plantedIndexedAlias, `carrier),
+      (``plantedModelIndex, `carrier),
+      (``plantedCoreIndex, `carrier),
+      (``plantedPolyIndexedModel, `carrier),
+      (``plantedPolyIndexedNested, `carrier),
+      (``plantedPolyIndexedAlias, `carrier),
+      (``plantedMatchIndexedProp, `carrier)] do
+    unless check env (.const name []) == some (privateToUserName name, binder) do
+      throwError "End-to-end audit accepted a planted indexed semantic family in {name}"
+  for bundle in [``PlantedIndexedPassBundle, ``PlantedPolyIndexedPassBundle,
+      ``PlantedModelIndexPassBundle, ``PlantedNestedFnPassBundle, ``PlantedAliasPassBundle] do
+    unless badPassField env bundle == some `run do
+      throwError "End-to-end audit accepted a planted indexed family in executable pass bundle {bundle}"
+  for passing in [``passingDataIndexed, ``passingRegisteredIndexed] do
+    if let some (origin, binder) := check env (.const passing []) then
+      throwError "End-to-end audit rejected genuine data-only indexed family {passing} ({binder} in {origin})"
+  for bundle in [``PassingDataIndexedPassBundle, ``PassingAliasPassBundle] do
+    if let some field := badPassField env bundle then
+      throwError "End-to-end audit rejected genuine data-only indexed pass bundle {bundle} at field {field}"
 
 end EndToEndAudit

@@ -1,18 +1,25 @@
 import ConcreteSpec.Spec.TableVerifier
 import ConcreteSpec.Spec.GrammarData
+import ConcreteSpec.Spec.EarlyProposal
+import ConcreteSpec.Proofs.EarlyProposal
 
 open ConcreteSpec.GrammarVerification ConcreteSpec.GrammarData
 open Concrete.LL1
 
-private def catalog : RawGrammar :=
-  ⟨Nonterminal.count, ConcreteSpec.Surface0.Terminal.count, numberedGrammar productionIds⟩
+private def catalog : RawGrammar := earlyRawGrammar
 
 -- The real catalog must fit by kernel reduction of the input dimensions alone.
 -- The quantified control also rules out hidden tests on the generated program.
-example : representable catalog := by decide +kernel
+example : representable catalog := earlyRawGrammar_representable
 example (g : RawGrammar) (shape : g.valid) (words : g.layout.scratch+1 < UInt64.size)
     (indices : g.cfg.prods.length < UInt64.size) : representable g := by
   simp only [representable, shape, words, indices, decide_true, Bool.and_self]
+
+-- The production certificate is proved structurally in ConcreteSpec.Proofs.EarlyProposal,
+-- never by kernel reduction of the full verifyRun execution.
+example : ValidCertificate earlyRawGrammar (fun a => earlyProposal.getD a 0) := earlyProposal_valid
+example : (compileTableVerifier earlyRawGrammar).accepts earlyProposal earlyRawGrammar.budget = true :=
+  earlyProposal_accepted
 
 /-- Small independently calculated proposals exercise the kernel's reduction of
 the same word machine used by the executable controls. Require the right length
@@ -40,11 +47,18 @@ private def exportRows (g : RawGrammar) : String :=
     String.intercalate " " (toString lhs :: rhs.map fun | .t t => s!"t{t}" | .n n => s!"n{n}")
   String.intercalate "\n" (s!"{g.nonterminals} {g.terminals} {g.cfg.start}" :: lines) ++ "\n"
 
-private def proposal (g : RawGrammar) : IO (Array UInt64) := do
+private def rawProposal (g : RawGrammar) : IO String := do
   let result ← IO.Process.output
     {cmd := "python3", args := #["-I", "scripts/spec/grammar_proposal.py"]} (some (exportRows g))
   unless result.exitCode == 0 do throw (IO.userError result.stderr)
-  let words := result.stdout.trimAscii.toString.splitOn " "
+  return result.stdout
+
+private def encodeProposal (words : Array UInt64) : String :=
+  String.intercalate " " (words.toList.map fun w => toString w.toNat) ++ "\n"
+
+private def proposal (g : RawGrammar) : IO (Array UInt64) := do
+  let stdout ← rawProposal g
+  let words := stdout.trimAscii.toString.splitOn " "
   let some numbers := words.mapM String.toNat? | throw (IO.userError "invalid proposal encoding")
   unless numbers.all (· < UInt64.size) do throw (IO.userError "word exceeds UInt64")
   return numbers.toArray.map Nat.toUInt64
@@ -58,12 +72,73 @@ private def exercise (label : String) (g : RawGrammar) : IO (Array UInt64) := do
 
 def main (args : List String) : IO Unit := do
   if args == ["--export"] then IO.print (exportRows catalog); return
+  -- Byte-exact reproducibility: regenerate twice from scripts/spec/grammar_proposal.py
+  -- and confirm both match ConcreteSpec.Spec.EarlyProposal.earlyProposal identically.
+  let run1 ← rawProposal catalog
+  let run2 ← rawProposal catalog
+  unless run1 == run2 do
+    throw (IO.userError "producer is not reproducible across two invocations")
+  let encoded := encodeProposal earlyProposal
+  unless run1.toUTF8 == encoded.toUTF8 do
+    throw (IO.userError "stored earlyProposal differs byte-for-byte from scripts/spec/grammar_proposal.py")
   let full ← exercise "early grammar" catalog
+  unless full == earlyProposal do
+    throw (IO.userError "decoded proposal differs from stored earlyProposal")
   let fullVerifier := compileTableVerifier catalog
-  let fnCell := catalog.layout.cell Nonterminal.program.ctorIdx (ConcreteSpec.Surface0.Terminal.fn.ctorIdx+1)
-  unless full[fnCell]? == some 1 && !fullVerifier.accepts (full.set! fnCell 0) catalog.budget do
-    throw (IO.userError "full grammar lost the fn prediction or accepted its deletion")
-  unless full == (← proposal catalog) do throw (IO.userError "producer is not reproducible")
+  let (fullSteps, fullVerdict) :=
+    ConcreteSpec.StageGrammar.verifyRun fullVerifier.program ⟨0, earlyProposal⟩ catalog.budget
+  unless earlyProposal.size == fullVerifier.words && fullVerdict == some true &&
+      catalog.positions ≤ fullSteps && fullSteps ≤ catalog.budget &&
+      fullVerifier.accepts earlyProposal catalog.budget do
+    throw (IO.userError "compiled verifyRun rejected stored earlyProposal or violated step bounds")
+  let fl := catalog.layout
+  unless fullVerifier.accepts (earlyProposal.set! fl.scratch 0xffffffffffffffff) catalog.budget do
+    throw (IO.userError "initial scratch word changed full earlyProposal acceptance")
+  -- Single-word cell, rank, nullability, productivity and unfounded-fact mutants on earlyProposal.
+  let fnCell := fl.cell Nonterminal.program.ctorIdx (ConcreteSpec.Surface0.Terminal.fn.ctorIdx + 1)
+  let eofProgramCell := fl.cell Nonterminal.program.ctorIdx 0
+  let retProgramCell := fl.cell Nonterminal.program.ctorIdx (ConcreteSpec.Surface0.Terminal.return_.ctorIdx + 1)
+  let letBodyCell := fl.cell Nonterminal.body.ctorIdx (ConcreteSpec.Surface0.Terminal.let_.ctorIdx + 1)
+  let rankProg := fl.rank Nonterminal.program.ctorIdx
+  let rankStructs := fl.rank Nonterminal.structs.ctorIdx
+  unless earlyProposal[fnCell]? == some 1 do
+    throw (IO.userError "full grammar lost the fn prediction")
+  for (label, addr, word) in [
+      ("full missing cell", fnCell, (0 : UInt64)),
+      ("full spurious EOF cell", eofProgramCell, 1),
+      ("full spurious non-EOF cell", retProgramCell, 1),
+      ("full wrong-index cell (different lhs)", fnCell, 2),
+      ("full wrong-index cell (same lhs)", letBodyCell, (ProductionId.retStmt.ctorIdx + 1).toUInt64),
+      ("full out-of-range cell index", fnCell, 0xffffffffffffffff),
+      ("full rank zero", rankProg, 0),
+      ("full rank non-decreasing", rankProg, earlyProposal[rankStructs]!),
+      ("full missing nullability", fl.nullNt Nonterminal.structs.ctorIdx, 0),
+      ("full unfounded nullability", fl.nullNt Nonterminal.program.ctorIdx, 1),
+      ("full missing productivity (program)", fl.productive Nonterminal.program.ctorIdx, 0),
+      ("full missing productivity (atom)", fl.productive Nonterminal.atom.ctorIdx, 0),
+      ("full unfounded FIRST", fl.firstNt Nonterminal.program.ctorIdx (ConcreteSpec.Surface0.Terminal.return_.ctorIdx + 1), 1),
+      ("full missing FOLLOW seed", fl.follow Nonterminal.program.ctorIdx 0, 0),
+      ("full unfounded FOLLOW", fl.follow Nonterminal.program.ctorIdx (ConcreteSpec.Surface0.Terminal.fn.ctorIdx + 1), 1)] do
+    unless addr < earlyProposal.size && earlyProposal[addr]! != word &&
+        !fullVerifier.accepts (earlyProposal.set! addr word) catalog.budget do
+      throw (IO.userError s!"{label} mutation escaped")
+  -- Wrong-length controls and decoded-table/rank identity checks on the production proposal.
+  let progIdx : Fin fl.n := ⟨Nonterminal.program.ctorIdx, by decide⟩
+  for wrongSize in [earlyProposal.pop, earlyProposal.push 0] do
+    unless !fullVerifier.accepts wrongSize catalog.budget &&
+        (decodeCells fl wrongSize).isNone && (decodeRank fl wrongSize progIdx).isNone do
+      throw (IO.userError "wrong full certificate dimensions accepted")
+  let some fullDecoded := decodeCells fl earlyProposal
+    | throw (IO.userError "failed to decode accepted full earlyProposal")
+  unless fullDecoded.size == fl.n * fl.c &&
+      fullDecoded[fnCell]? == some (some 0) &&
+      fullDecoded[eofProgramCell]? == some none &&
+      fullDecoded != fullDecoded.set! fnCell (some 1) do
+    throw (IO.userError "full decoded cell table lost identity or accepted cell substitution")
+  let some progRank := decodeRank fl earlyProposal progIdx
+    | throw (IO.userError "failed to decode accepted program rank")
+  unless progRank == earlyProposal[rankProg]!.toNat && progRank != progRank + 1 do
+    throw (IO.userError "full decoded rank lost identity or accepted rank substitution")
   -- S -> A t0 ; A -> epsilon | t1. The start is also nullable in the second toy.
   let g : RawGrammar := ⟨2, 2, 0, [(0,[.n 1,.t 0]), (1,[]), (1,[.t 1])]⟩
   let mem ← exercise "nullable prefix" g
