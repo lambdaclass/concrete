@@ -180,6 +180,54 @@ private theorem checkSignature_iff {Ty : Type} [DecidableEq Ty] {lang : Lowering
       decide_eq_true_eq, List.all_eq_true, ending, call]
     rfl
 
+private def checkDeclarations (declarations : Declarations) : Bool :=
+  decide ((List.map Prod.fst declarations).Nodup) &&
+  decide (((List.map Prod.snd declarations).map ConcreteSpec.StructDecl.name).Nodup) &&
+  declarations.all fun entry =>
+    decide (entry.2.name ≠ ⟨"main"⟩ ∧ (entry.2.fields.map Prod.fst).Nodup ∧ entry.2.name = entry.1.name)
+
+private theorem checkDeclarations_iff (declarations : Declarations) :
+    checkDeclarations declarations = true ↔ DeclarationsWF declarations := by
+  simp only [checkDeclarations, Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true,
+    DeclarationsWF, ConcreteSpec.DeclsOk, List.mem_map, Prod.forall]
+  constructor
+  · rintro ⟨⟨hkeys, hnames⟩, hall⟩
+    refine ⟨hkeys, ⟨hnames, ?_⟩, fun id decl hmem => (hall id decl hmem).2.2⟩
+    rintro d ⟨⟨id, decl⟩, hmem, rfl⟩
+    exact ⟨(hall id decl hmem).1, (hall id decl hmem).2.1⟩
+  · rintro ⟨hkeys, ⟨hnames, hdecls⟩, hmatch⟩
+    refine ⟨⟨hkeys, hnames⟩, fun id decl hmem => ?_⟩
+    obtain ⟨hne, hfields⟩ := hdecls decl ⟨(id, decl), hmem, rfl⟩
+    exact ⟨hne, hfields, hmatch id decl hmem⟩
+
+private def checkMutableLocals {Ty G : Type} (functions : AList FnId (LocalTypes Ty × G))
+    (mutableLocals : AList FnId (List PlaceId)) : Bool :=
+  decide ((List.map Prod.fst mutableLocals).Nodup) &&
+  mutableLocals.all fun entry =>
+    functions.any fun fnEntry =>
+      decide (fnEntry.1 = entry.1) &&
+      entry.2.all fun root => fnEntry.2.1.any fun loc => decide (loc.1 = root)
+
+private theorem checkMutableLocals_iff {Ty G : Type} (functions : AList FnId (LocalTypes Ty × G))
+    (mutableLocals : AList FnId (List PlaceId)) :
+    checkMutableLocals functions mutableLocals = true ↔
+      MutableLocalsWF functions mutableLocals := by
+  simp only [checkMutableLocals, Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true,
+    List.any_eq_true, MutableLocalsWF, Prod.forall]
+  constructor
+  · rintro ⟨hkeys, hall⟩
+    refine ⟨hkeys, fun fn roots hmem => ?_⟩
+    obtain ⟨⟨fn', locals, graph⟩, hfnMem, rfl, hroots⟩ := hall fn roots hmem
+    refine ⟨locals, graph, hfnMem, fun root hroot => ?_⟩
+    obtain ⟨⟨p, ty⟩, hpMem, rfl⟩ := hroots root hroot
+    exact ⟨ty, hpMem⟩
+  · rintro ⟨hkeys, hall⟩
+    refine ⟨hkeys, fun fn roots hmem => ?_⟩
+    obtain ⟨locals, graph, hfnMem, hroots⟩ := hall fn roots hmem
+    refine ⟨(fn, locals, graph), hfnMem, rfl, fun root hroot => ?_⟩
+    obtain ⟨ty, hlocMem⟩ := hroots root hroot
+    exact ⟨(root, ty), hlocMem, rfl⟩
+
 /-- Check the shared Memory boundary, also used by the frozen SSA contract
 through its Memory view. -/
 def checkHandoff {Ty : Type} [DecidableEq Ty] {lang : LoweringLanguage Ty}
@@ -193,7 +241,9 @@ def checkHandoff {Ty : Type} [DecidableEq Ty] {lang : LoweringLanguage Ty}
     Concrete.CFG.check graph Sigma.fst Sigma.fst && checkSignature memory fn graph) &&
   decide (memory.entry ∈ List.map Prod.fst memory.functions) &&
   memory.origins.all (fun origin => Concrete.CFG.checkSpan memory.project origin.lexical) &&
-  memory.layouts.all (fun table => table.2.all (fun slot => slot.2.WellFormed profile.memoryTarget))
+  memory.layouts.all (fun table => table.2.all (fun slot => slot.2.WellFormed profile.memoryTarget)) &&
+  checkDeclarations memory.declarations &&
+  checkMutableLocals memory.functions memory.mutableLocals
 
 theorem checkHandoff_iff {Ty : Type} [DecidableEq Ty] {lang : LoweringLanguage Ty}
     {profile : Profile} (memory : Interfaces.Memory lang profile) :
@@ -206,16 +256,17 @@ theorem checkHandoff_iff {Ty : Type} [DecidableEq Ty] {lang : LoweringLanguage T
     simp [invalid] at hb
   simp only [checkHandoff, Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true,
     Concrete.CFG.check_iff, checkSignature_iff, Concrete.CFG.checkSpan_iff,
+    checkDeclarations_iff, checkMutableLocals_iff,
     Interfaces.Memory.HandoffWF, Interfaces.Memory.LayoutsWF, Interfaces.Memory.TablesWF, Prod.forall]
   constructor
-  · rintro ⟨⟨⟨⟨⟨⟨keys, storage⟩, layouts⟩, graphs⟩, entry⟩, origins⟩, geometry⟩
+  · rintro ⟨⟨⟨⟨⟨⟨⟨⟨keys, storage⟩, layouts⟩, graphs⟩, entry⟩, origins⟩, geometry⟩, decls⟩, muts⟩
     exact ⟨⟨keys.1, keys.2.1, keys.2.2.1, keys.2.2.2, storage, layouts, fun fn locals graph h =>
       let ⟨⟨unique, cfg, _⟩, sig⟩ := graphs fn locals graph h
-      ⟨unique, cfg, sig⟩⟩, entry, origins, geometry⟩
-  · rintro ⟨⟨fns, sigs, classes, slots, storage, layouts, graphs⟩, entry, origins, geometry⟩
-    exact ⟨⟨⟨⟨⟨⟨⟨fns, sigs, classes, slots⟩, storage⟩, layouts⟩, fun fn locals graph h =>
+      ⟨unique, cfg, sig⟩⟩, entry, origins, geometry, decls, muts⟩
+  · rintro ⟨⟨fns, sigs, classes, slots, storage, layouts, graphs⟩, entry, origins, geometry, decls, muts⟩
+    exact ⟨⟨⟨⟨⟨⟨⟨⟨⟨fns, sigs, classes, slots⟩, storage⟩, layouts⟩, fun fn locals graph h =>
       let ⟨unique, cfg, sig⟩ := graphs fn locals graph h
-      ⟨⟨unique, cfg, valid sig⟩, sig⟩⟩, entry⟩, origins⟩, geometry⟩
+      ⟨⟨unique, cfg, valid sig⟩, sig⟩⟩, entry⟩, origins⟩, geometry⟩, decls⟩, muts⟩
 
 private theorem ownerAccess_without_conflict (owners : Own.State) (id : Hybrid.Place)
     (mode : Own.Mode) (loan : Own.Loan) (active : loan ∈ owners.loans)

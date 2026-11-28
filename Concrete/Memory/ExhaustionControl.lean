@@ -335,21 +335,24 @@ private def ssaBound (n : Nat) : SSAState :=
 
 private theorem ssa_wf : recurSSA.WF (language := Language) := by
   letI := Language.typeDecidableEq
-  exact (checkHandoff_iff _).mp (by with_unfolding_all decide)
+  exact ⟨(SSA.checkRegisterFormation_eq_true_iff _).mp (by with_unfolding_all decide),
+    (checkHandoff_iff _).mp (by with_unfolding_all decide)⟩
 
 private theorem bir_wf : recurBIR.WF (language := Language) := by
-  refine ⟨?_, by with_unfolding_all decide, by with_unfolding_all decide,
-    by with_unfolding_all decide, fun _ h => (List.not_mem_nil h).elim, ?_⟩
+  refine ⟨(BIR.checkRegisterFormation_eq_true_iff _).mp (by with_unfolding_all decide),
+    ?_, by with_unfolding_all decide,
+    fun o ho => ssa_wf.memoryView.origins_bind o (by with_unfolding_all exact ho),
+    fun _ h => (List.not_mem_nil h).elim, ?_⟩
   · intro fn member block present _ _
     cases List.mem_singleton.mp member
     change block ∈ [_] at present
     cases List.mem_singleton.mp present
     contradiction
   · rw [← ssa_bir_view_eq]
-    exact ⟨ssa_wf.1, ssa_wf.2.2.2⟩
+    exact ssa_wf.memoryView
 
 private theorem ssa_builds_bir : BuildsBIR (language := Language) recurSSA recurBIR := by
-  refine ⟨rfl, bir_wf.1, ?_, ⟨fun _ h => h, fun _ h => h⟩, by with_unfolding_all decide,
+  refine ⟨rfl, bir_wf.trapSlotsWF, ?_, ⟨fun _ h => h, fun _ h => h⟩, by with_unfolding_all decide,
     ⟨rfl, rfl, by rw [ssa_bir_view_eq]; rfl⟩, Interfaces.BIR.refinesOfViewEq ssa_bir_view_eq⟩
   intro fn member block present _ _ trap
   cases List.mem_singleton.mp member
@@ -549,16 +552,17 @@ namespace TransferProgressControls
 
 private abbrev baseLang := sliceLanguage slice0
 local instance : DecidableEq baseLang.operands.Ty := baseLang.typeDecidableEq
-private abbrev u8Ty : baseLang.operands.Ty := .inl (.scalar (.int .u8))
-private abbrev boolTy : baseLang.operands.Ty := .inl (.scalar .bool)
-private abbrev backingTy : baseLang.operands.Ty := .inr false
-private abbrev pairTy : baseLang.operands.Ty := .inr true
 private abbrev lowering := sliceLoweringLanguage slice0
 private abbrev profile : Profile := ⟨.lcb, .x86_64Linux, 4, 4096⟩
 private abbrev mir := bindReturnControl slice0
 private abbrev origin := mir.functions[0].2.2.blocks[0].body[0].origin
 private abbrev calleeFn : FnId := ⟨mir.entry.module, ⟨"callee"⟩⟩
+private abbrev backingDecl : DeclId := ⟨mir.entry.module, ⟨"Backing"⟩⟩
 private abbrev pairDecl : DeclId := ⟨mir.entry.module, ⟨"Pair"⟩⟩
+private abbrev u8Ty : baseLang.operands.Ty := .scalar (.int .u8)
+private abbrev boolTy : baseLang.operands.Ty := .scalar .bool
+private abbrev backingTy : baseLang.operands.Ty := .nominal backingDecl
+private abbrev pairTy : baseLang.operands.Ty := .nominal pairDecl
 private def pairFld : FieldId := ⟨.struct pairDecl, ⟨"x"⟩⟩
 private abbrev pairVal : baseLang.operands.Val := .other pairDecl
 private abbrev u8Val : baseLang.operands.Val := .scalar (.int .u8 42)
@@ -584,9 +588,9 @@ private abbrev Language (full : Bool) : CoreLanguage := {baseLang with
     else if ty == pairTy && bs == [42] then some pairVal
     else baseLang.literal ty bs
   activeFields := fun _ ty v =>
-    match ty, v with
-    | .inr true, .other d => if d == pairDecl then some [pairFld] else none
-    | _, _ => none
+    match v with
+    | .other d => if ty == pairTy && d == pairDecl then some [pairFld] else none
+    | _ => none
   fieldType := fun ty f =>
     if ty == pairTy && f == pairFld then some u8Ty else none
   field := fun v path =>
@@ -932,19 +936,19 @@ theorem branch_transfer_control (full : Bool) :
         intro e hm _
         cases List.mem_singleton.mp hm
         cases full <;> decide)
-  refine ⟨wf, reached, Interfaces.Memory.BranchAt.progress (language := Language full) wf.2.2.2 br valid, ?_⟩
+  refine ⟨wf, reached, Interfaces.Memory.BranchAt.progress (language := Language full) wf.layoutsWF br valid, ?_⟩
   cases full with
   | true =>
     have noFit : ¬ (branchMemory true).ParamSpaceFits (language := Language true) u8Param arrive :=
       no_u8_in_full (.head _)
-    have ex := (Interfaces.Memory.BranchAt.exhausted_iff (language := Language true) wf.2.2.2 br).mpr
+    have ex := (Interfaces.Memory.BranchAt.exhausted_iff (language := Language true) wf.layoutsWF br).mpr
       ⟨⟨farCeiling, valid⟩, noFit⟩
-    exact ⟨ex.1, ex.2, fun h => noFit ((Interfaces.Memory.BranchAt.normal_iff_fit (language := Language true) wf.2.2.2 br valid).mp h)⟩
+    exact ⟨ex.1, ex.2, fun h => noFit ((Interfaces.Memory.BranchAt.normal_iff_fit (language := Language true) wf.layoutsWF br valid).mp h)⟩
   | false =>
     have fits : (branchMemory false).ParamSpaceFits (language := Language false) u8Param arrive := by
       with_unfolding_all exact ⟨⟨0⟩, 1, ⟨1⟩, _, rfl, trivial⟩
-    exact ⟨Interfaces.Memory.BranchAt.normal_of_fit (language := Language false) wf.2.2.2 br valid fits,
-      fun h => ((Interfaces.Memory.BranchAt.exhausted_iff (language := Language false) wf.2.2.2 br).mp h).2 fits⟩
+    exact ⟨Interfaces.Memory.BranchAt.normal_of_fit (language := Language false) wf.layoutsWF br valid fits,
+      fun h => ((Interfaces.Memory.BranchAt.exhausted_iff (language := Language false) wf.layoutsWF br).mp h).2 fits⟩
 
 /-! #### 2. Call (`CallAt`) control -/
 
@@ -999,19 +1003,19 @@ theorem call_transfer_control (full : Bool) :
         intro e hm _
         cases List.mem_singleton.mp hm
         cases full <;> decide)
-  refine ⟨wf, reached, Interfaces.Memory.CallAt.progress (language := Language full) wf.2.2.2 call valid, ?_⟩
+  refine ⟨wf, reached, Interfaces.Memory.CallAt.progress (language := Language full) wf.layoutsWF call valid, ?_⟩
   cases full with
   | true =>
     have noFit : ¬ (callMemory true).ParamSpaceFits (language := Language true) u8Param arrive :=
       no_u8_in_full (.head _)
-    have ex := (Interfaces.Memory.CallAt.exhausted_iff (language := Language true) wf.2.2.2 call).mpr
+    have ex := (Interfaces.Memory.CallAt.exhausted_iff (language := Language true) wf.layoutsWF call).mpr
       ⟨⟨farCeiling, valid⟩, noFit⟩
-    exact ⟨ex.1, ex.2, fun h => noFit ((Interfaces.Memory.CallAt.normal_iff_fit (language := Language true) wf.2.2.2 call valid).mp h)⟩
+    exact ⟨ex.1, ex.2, fun h => noFit ((Interfaces.Memory.CallAt.normal_iff_fit (language := Language true) wf.layoutsWF call valid).mp h)⟩
   | false =>
     have fits : (callMemory false).ParamSpaceFits (language := Language false) u8Param arrive := by
       with_unfolding_all exact ⟨⟨0⟩, 1, ⟨1⟩, _, rfl, trivial⟩
-    exact ⟨Interfaces.Memory.CallAt.normal_of_fit (language := Language false) wf.2.2.2 call valid fits,
-      fun h => ((Interfaces.Memory.CallAt.exhausted_iff (language := Language false) wf.2.2.2 call).mp h).2 fits⟩
+    exact ⟨Interfaces.Memory.CallAt.normal_of_fit (language := Language false) wf.layoutsWF call valid fits,
+      fun h => ((Interfaces.Memory.CallAt.exhausted_iff (language := Language false) wf.layoutsWF call).mp h).2 fits⟩
 
 /-! #### 3. Return (`ReturnAt`) control -/
 
@@ -1138,20 +1142,20 @@ theorem return_transfer_control (full : Bool) :
           · cases hlive
           · cases List.mem_singleton.mp tail
             decide)
-  refine ⟨wf, reached, Interfaces.Memory.ReturnAt.progress (language := Language full) wf.2.2.2 ret valid, ?_⟩
+  refine ⟨wf, reached, Interfaces.Memory.ReturnAt.progress (language := Language full) wf.layoutsWF ret valid, ?_⟩
   cases full with
   | true =>
     have noFit : ¬ (retMemory true).ParamSpaceFits (language := Language true) u8Param resume :=
       no_u8_in_full (.head _)
-    have ex := (Interfaces.Memory.ReturnAt.exhausted_iff (language := Language true) wf.2.2.2 ret unbacked).mpr
+    have ex := (Interfaces.Memory.ReturnAt.exhausted_iff (language := Language true) wf.layoutsWF ret unbacked).mpr
       ⟨⟨farCeiling, valid⟩, noFit⟩
-    exact ⟨ex.1, ex.2, fun h => noFit ((Interfaces.Memory.ReturnAt.normal_iff_fit (language := Language true) wf.2.2.2 ret unbacked valid).mp h)⟩
+    exact ⟨ex.1, ex.2, fun h => noFit ((Interfaces.Memory.ReturnAt.normal_iff_fit (language := Language true) wf.layoutsWF ret unbacked valid).mp h)⟩
   | false =>
     have fits : (retMemory false).ParamSpaceFits (language := Language false) u8Param resume := by
       with_unfolding_all exact ⟨⟨0⟩, 1, ⟨2⟩, _, rfl, trivial⟩
     exact ⟨no_u8_when_callee_holds_byte,
-      Interfaces.Memory.ReturnAt.normal_of_fit (language := Language false) wf.2.2.2 ret valid fits,
-      fun h => ((Interfaces.Memory.ReturnAt.exhausted_iff (language := Language false) wf.2.2.2 ret unbacked).mp h).2 fits⟩
+      Interfaces.Memory.ReturnAt.normal_of_fit (language := Language false) wf.layoutsWF ret valid fits,
+      fun h => ((Interfaces.Memory.ReturnAt.exhausted_iff (language := Language false) wf.layoutsWF ret unbacked).mp h).2 fits⟩
 
 /-! #### 4. Destructure (`DestructureAt`) control -/
 
@@ -1231,21 +1235,21 @@ theorem destructure_transfer_control (full : Bool) :
         intro e hm _
         cases List.mem_singleton.mp hm
         cases full <;> decide)
-  refine ⟨wf, reached, Interfaces.Memory.DestructureAt.progress (language := Language full) wf.2.2.2 destr valid, ?_⟩
+  refine ⟨wf, reached, Interfaces.Memory.DestructureAt.progress (language := Language full) wf.layoutsWF destr valid, ?_⟩
   cases full with
   | true =>
     have noFit : ¬ (destrMemory true).ParamSpaceFits (language := Language true)
         (destrBindings.map Prod.snd) (destrState true) :=
       no_u8_in_full (.head _)
-    have ex := (Interfaces.Memory.DestructureAt.exhausted_iff (language := Language true) wf.2.2.2 destr).mpr
+    have ex := (Interfaces.Memory.DestructureAt.exhausted_iff (language := Language true) wf.layoutsWF destr).mpr
       ⟨⟨farCeiling, valid⟩, noFit⟩
-    exact ⟨ex.1, ex.2, fun h => noFit ((Interfaces.Memory.DestructureAt.normal_iff_fit (language := Language true) wf.2.2.2 destr valid).mp h)⟩
+    exact ⟨ex.1, ex.2, fun h => noFit ((Interfaces.Memory.DestructureAt.normal_iff_fit (language := Language true) wf.layoutsWF destr valid).mp h)⟩
   | false =>
     have fits : (destrMemory false).ParamSpaceFits (language := Language false)
         (destrBindings.map Prod.snd) (destrState false) := by
       with_unfolding_all exact ⟨⟨0⟩, 1, ⟨1⟩, _, rfl, trivial⟩
-    exact ⟨Interfaces.Memory.DestructureAt.normal_of_fit (language := Language false) wf.2.2.2 destr valid fits,
-      fun h => ((Interfaces.Memory.DestructureAt.exhausted_iff (language := Language false) wf.2.2.2 destr).mp h).2 fits⟩
+    exact ⟨Interfaces.Memory.DestructureAt.normal_of_fit (language := Language false) wf.layoutsWF destr valid fits,
+      fun h => ((Interfaces.Memory.DestructureAt.exhausted_iff (language := Language false) wf.layoutsWF destr).mp h).2 fits⟩
 
 end TransferProgressControls
 

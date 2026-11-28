@@ -54,34 +54,34 @@ structure StepLanguage (language : CoreLanguage) (profile : Profile)
     (∃ res, language.operation env op tys ty vals tgt [] before res [] before) ∨
     (∀ res, ¬ language.operation env op tys ty vals tgt [] before res [] before)
 
-def SliceValidVal : EarlyTy ⊕ Bool → EarlyValue → Prop
-  | .inl (.scalar (.int intTy)), .scalar (.int actual n) => actual = intTy ∧ intTy.InRange n
-  | .inl (.scalar .bool), .scalar (.bool _) => True
-  | .inl (.scalar .unit), .scalar .unit => True
-  | .inl (.scalar .char), .scalar (.char c) => CVal.Valid (.char c)
-  | .inl (.nominal id), .other actual => actual = id
+def SliceValidVal : EarlyTy → EarlyValue → Prop
+  | .scalar (.int intTy), .scalar (.int actual n) => actual = intTy ∧ intTy.InRange n
+  | .scalar .bool, .scalar (.bool _) => True
+  | .scalar .unit, .scalar .unit => True
+  | .scalar .char, .scalar (.char c) => CVal.Valid (.char c)
+  | .nominal id, .other actual => actual = id
   | _, _ => False
 
 private def earlyOpMirror (env : Declarations) (op : Operator)
-    (types : List (EarlyTy ⊕ Bool)) (ty : EarlyTy ⊕ Bool) (values : List EarlyValue) : Res EarlyValue :=
+    (types : List EarlyTy) (ty : EarlyTy) (values : List EarlyValue) : Res EarlyValue :=
   match op, types, ty, values with
-  | .named ⟨"destructureEmpty"⟩, [.inl (.nominal id)], .inl (.scalar .unit), [.other actual] =>
+  | .named ⟨"destructureEmpty"⟩, [.nominal id], .scalar .unit, [.other actual] =>
     if actual = id && env.emptyLinear id then .ok (.scalar .unit) else .stuck
-  | .named ⟨"constructEmpty"⟩, [], .inl (.nominal id), [] =>
+  | .named ⟨"constructEmpty"⟩, [], .nominal id, [] =>
     if env.emptyLinear id then .ok (.other id) else .stuck
-  | .read, [.inl (.nominal src)], .inl (.nominal dst), [.other value] =>
+  | .read, [.nominal src], .nominal dst, [.other value] =>
     if src = dst && value = dst && env.emptyLinear dst then .ok (.other value) else .stuck
-  | .read, [.inl (.scalar input)], .inl (.scalar result), [.scalar value] =>
+  | .read, [.scalar input], .scalar result, [.scalar value] =>
     if input = result ∧ value.ty = result then .ok (.scalar value) else .stuck
-  | .arithmetic (.plain .add), [.inl (.scalar (.int left)), .inl (.scalar (.int right))],
-      .inl (.scalar (.int result)), [.scalar (.int lt l), .scalar (.int rt r)] =>
+  | .arithmetic (.plain .add), [.scalar (.int left), .scalar (.int right)],
+      .scalar (.int result), [.scalar (.int lt l), .scalar (.int rt r)] =>
     if left = result ∧ right = result ∧ lt = result ∧ rt = result then
       (plain result .add l r).map (CoreValue.scalar ∘ CVal.int result)
     else .stuck
   | _, _, _, _ => .stuck
 
 private theorem earlyOpMirror_valid (env : Declarations)
-    (op : Operator) (tys : List (EarlyTy ⊕ Bool)) (ty : EarlyTy ⊕ Bool) (vals : List EarlyValue)
+    (op : Operator) (tys : List EarlyTy) (ty : EarlyTy) (vals : List EarlyValue)
     (res : EarlyValue) (hvals : Pairwise2 SliceValidVal tys vals) :
     earlyOpMirror env op tys ty vals = .ok res → SliceValidVal ty res := by
   fun_cases earlyOpMirror env op tys ty vals <;> intro hop
@@ -136,40 +136,34 @@ theorem sliceLanguage_stepLanguage (slice : Slice) (profile : Profile) :
   noFields _ _ := rfl
   noActiveFields env ty v fs h := by
     cases ty with
-    | inr _ => cases h
-    | inl ety =>
-      cases ety with
+    | scalar _ => cases h
+    | nominal id =>
+      cases v with
       | scalar _ => cases h
-      | nominal id =>
-        cases v with
-        | scalar _ => cases h
-        | other actual =>
-          simp only [sliceLanguage] at h
-          split at h
-          · cases h; rfl
-          · contradiction
+      | other actual =>
+        simp only [sliceLanguage] at h
+        split at h
+        · cases h; rfl
+        · contradiction
   pureOp _ _ _ _ _ _ _ _ _ _ _ h := ⟨h.1, h.2.2.1, h.2.2.2⟩
   opStoreIndep _ _ _ _ _ _ _ _ _ h := ⟨h.1, h.2.1, h.2.2.1, rfl⟩
   literalValid ty bs v h := by
     cases ty with
-    | inr _ => cases h
-    | inl ety =>
-      cases ety with
-      | nominal _ => cases h
-      | scalar sty =>
-        cases sty with
-        | bool | unit | char => cases h
-        | int intTy =>
-          simp only [sliceLanguage] at h
-          split at h
-          · rename_i hlen
-            cases h
-            refine ⟨rfl, ofBits_inRange_constructive intTy _ ?_⟩
-            have hlt := Mem.leValue_lt (bs.map UInt8.toFin)
-            rw [List.length_map, hlen] at hlt
-            rw [← Mem.intByte_power]
-            exact hlt
-          · contradiction
+    | nominal _ => cases h
+    | scalar sty =>
+      cases sty with
+      | bool | unit | char => cases h
+      | int intTy =>
+        simp only [sliceLanguage] at h
+        split at h
+        · rename_i hlen
+          cases h
+          refine ⟨rfl, ofBits_inRange_constructive intTy _ ?_⟩
+          have hlt := Mem.leValue_lt (bs.map UInt8.toFin)
+          rw [List.length_map, hlen] at hlt
+          rw [← Mem.intByte_power]
+          exact hlt
+        · contradiction
   operationValid env op tys ty vals _ _ _ res _ _ hvals h := by
     obtain ⟨_, hop, _, _⟩ := h
     exact earlyOpMirror_valid env op tys ty vals res hvals (by with_unfolding_all exact hop)
@@ -179,42 +173,43 @@ theorem sliceLanguage_stepLanguage (slice : Slice) (profile : Profile) :
       | mk _ bt _ _ => cases bt <;> rfl
     rw [htgt] at hlay
     cases ty with
-    | inr _ => with_unfolding_all simp [sliceLanguage] at hlay
-    | inl ety =>
-      cases ety with
-      | nominal id =>
-        with_unfolding_all simp only [sliceLanguage, Slice0Layout.linuxX8664Profile,
-          Slice0Layout.Profile.withByteOrder, bind, Option.bind, Option.pure_def] at hlay
-        split at hlay
+    | nominal id =>
+      with_unfolding_all simp only [sliceLanguage, Slice0Layout.linuxX8664Profile,
+        Slice0Layout.Profile.withByteOrder] at hlay
+      split at hlay
+      · split at hlay
         · contradiction
-        · split at hlay
-          · simp only [Slice0Layout.query, Slice0Layout.Layout.byteSize,
+        · rename_i shape heq
+          split at heq
+          · cases heq
+            simp only [Slice0Layout.query, Slice0Layout.Layout.byteSize,
               Slice0Layout.Layout.alignment, Option.some.injEq] at hlay
             cases hlay
             exact (Nat.lt_irrefl 0 hpos).elim
           · contradiction
-      | scalar sty =>
-        cases sty with
-        | bool | unit | char => with_unfolding_all simp [sliceLanguage] at hlay
-        | int intTy =>
-          with_unfolding_all simp only [sliceLanguage, Slice0Layout.linuxX8664Profile,
-            Slice0Layout.Profile.withByteOrder, bind, Option.bind, Option.pure_def] at hlay
-          split at hlay
-          · contradiction
-          · have hfits : intTy.byteSize ≤ linuxX8664.maxObject := by cases intTy <;> decide
-            simp only [Slice0Layout.query, hfits, ↓reduceDIte, Slice0Layout.Layout.byteSize,
-              Slice0Layout.Layout.alignment, Option.some.injEq] at hlay
-            subst layout
-            refine ⟨intTy, rfl, rfl, ?_⟩
-            intro v hv
-            cases v with
-            | other _ => exact hv.elim
-            | scalar sv =>
-              cases sv with
-              | bool _ | unit | char _ => exact hv.elim
-              | int actual n =>
-                obtain ⟨rfl, hr⟩ := hv
-                exact ⟨n, rfl, hr⟩
+      · contradiction
+    | scalar sty =>
+      cases sty with
+      | bool | unit | char => with_unfolding_all simp [sliceLanguage] at hlay
+      | int intTy =>
+        with_unfolding_all simp only [sliceLanguage, Slice0Layout.linuxX8664Profile,
+          Slice0Layout.Profile.withByteOrder] at hlay
+        split at hlay
+        · have hfits : intTy.byteSize ≤ linuxX8664.maxObject := by cases intTy <;> decide
+          simp only [Slice0Layout.query, hfits, ↓reduceDIte, Slice0Layout.Layout.byteSize,
+            Slice0Layout.Layout.alignment, Option.some.injEq] at hlay
+          subst layout
+          refine ⟨intTy, rfl, rfl, ?_⟩
+          intro v hv
+          cases v with
+          | other _ => exact hv.elim
+          | scalar sv =>
+            cases sv with
+            | bool _ | unit | char _ => exact hv.elim
+            | int actual n =>
+              obtain ⟨rfl, hr⟩ := hv
+              exact ⟨n, rfl, hr⟩
+        · contradiction
   opDecidable env op tys ty vals _ _ := by
     cases hop : earlyOpMirror env op tys ty vals with
     | ok res => exact .inl ⟨res, rfl, by with_unfolding_all exact hop, rfl, rfl⟩
@@ -239,6 +234,8 @@ private def instChange (inst : MemoryInst lang) (root : PlaceId) : Option Bool :
   | .call _ dst .. => if dst.any (·.2.logical.root == root) then some true else none
   | .destructure _ bindings =>
     if bindings.any (·.2.2.logical.root == root) then some true else none
+  | .addWithOverflow _ dst flag _ _ =>
+    if dst.logical.root = root || flag.logical.root = root then some true else none
   | .assign .. => none
 
 private def instIsBegin : MemoryInst lang → Bool
@@ -307,7 +304,7 @@ private theorem staticStep_begin_def {locals : LocalTypes Ty} {op : LocatedOp (M
       simp only [staticStep, instChange, hinst]
       by_cases eq : dst.logical.root = r <;> simp [eq]
     · cases hdef
-  | assign _ _ | beginLifetime _ | endLifetime _ | destructure _ _ | call _ _ _ _ =>
+  | assign _ _ | addWithOverflow _ _ _ _ _ | beginLifetime _ | endLifetime _ | destructure _ _ | call _ _ _ _ =>
     simp [definitionRoot, hinst] at hdef
 
 private theorem dynamicStep_begin_def {locals : LocalTypes Ty} {op : LocatedOp (MemoryInst lang)} {root : PlaceId}
@@ -329,7 +326,7 @@ private theorem dynamicStep_begin_def {locals : LocalTypes Ty} {op : LocatedOp (
       simp only [instChange]
       by_cases eq : dst.logical.root = r <;> simp [eq]
     · cases hdef
-  | assign _ _ | beginLifetime _ | endLifetime _ | destructure _ _ | call _ _ _ _ =>
+  | assign _ _ | addWithOverflow _ _ _ _ _ | beginLifetime _ | endLifetime _ | destructure _ _ | call _ _ _ _ =>
     simp [definitionRoot, hinst] at hdef
 
 private theorem bodyPlacement_dynamicFold_eq {locals : LocalTypes Ty} {live : PlaceId → Option Bool}
@@ -541,6 +538,8 @@ private def reclassInst (cls : PlaceId → StorageClass) : MemoryInst lang → M
   | .assign dst src => .assign (reclassPlace cls dst) (reclassRead cls src)
   | .op dst op args checks addresses =>
     .op (reclassPlace cls dst) op (reclassArgs cls args) checks (addresses.map (reclassParam cls))
+  | .addWithOverflow t dst flag lhs rhs =>
+    .addWithOverflow t (reclassPlace cls dst) (reclassPlace cls flag) (reclassRead cls lhs) (reclassRead cls rhs)
   | .beginLifetime p => .beginLifetime p
   | .endLifetime p => .endLifetime p
   | .destructure src bindings =>
@@ -625,6 +624,8 @@ private theorem reclassGraph_eq_prepare {language : CoreLanguage} {lang : Loweri
                   change Args.cons _ _ = Args.cons _ _
                   congr 1
                   · cases a <;> rfl
+              | addWithOverflow t dst flag lhs rhs =>
+                cases lhs <;> cases rhs <;> rfl
               | beginLifetime _ => rfl
               | endLifetime _ => rfl
               | destructure src bindings => rfl
@@ -873,6 +874,7 @@ private def InstVirtual {Ty : Type} {lowering : LoweringLanguage Ty} :
   | .assign dst src => dst.storage = .virtual ∧ ReadVirtual src
   | .op dst _ args _ addrs =>
     dst.storage = .virtual ∧ ArgsVirtual args ∧ ∀ a ∈ addrs, a.2.storage = .virtual
+  | .addWithOverflow .. => False
   | .beginLifetime _ => False
   | .endLifetime _ => True
   | .destructure src bs =>
@@ -1209,15 +1211,15 @@ private def observeHosted (memory : Interfaces.Memory lang profile)
     (state : MemoryRegisters language profile) : Option Concrete.Contracts.Observation := do
   match ← memory.terminalObservation state with
   | .returned status bytes => return .returned status bytes
-  | .trapped status kind span bytes =>
+  | .trapped status kind _ bytes =>
     let block ← memory.blockAt state
     let origin ← match block.body[state.instruction]? with
       | some op => some op.origin
       | none => match block.ending with
         | .trap _ origin => some origin
         | _ => none
-    let file ← memory.project.files[span.file.index]?
-    return .trapped status kind ⟨⟨origin.operation.id⟩, ⟨file.path.render.text, span.line, span.col⟩⟩ bytes
+    let site ← runtimeSite memory.project origin
+    return .trapped status kind site bytes
   | .startupRefused status bytes => return .startupRefused status bytes
   | .resourceExhausted => return .resourceExhausted
 
@@ -2110,7 +2112,7 @@ private theorem sourceInv_step (hl : StepLanguage language profile ValidVal)
         hss.active.initSubLive, hss.active.initIffVals, hss.active.valsValid,
         hss.active.noMat, hss.active.noZero, hss.active.noMoved, hss.active.noAddr⟩,
         hss.callers, hss.callersVirtual, by simp [heffsNil, hss.noEffects], hss.noOwn, hss.noNextAddr, hss.notExhausted⟩
-    | beginLifetime root =>
+    | beginLifetime _ | addWithOverflow _ _ _ _ _ =>
       have hvir := (logicalView_graphVirtual mir (AList.lookup_mem hfn) srcBlock
         (List.mem_of_find?_eq_some (by rwa [Array.find?_toList]))).2.1 op (List.mem_of_getElem? hget)
       rw [hkind] at hvir; exact hvir.elim
@@ -2930,7 +2932,7 @@ private theorem targetInv_begin_valid {mir : MIR lang profile} {memory : Interfa
     · have hpos : 0 < lay.size := Nat.pos_of_ne_zero hz
       have hck : memory.TransferCheckpoint q profile.memoryTarget.addressCeiling :=
         targetStateWF_transferCheckpoint ht.stateWF (Nat.le_refl _)
-      have hfits := Interfaces.Memory.ParamSpaceFits.at_bound handoff.handoff.2.2.2 hck
+      have hfits := Interfaces.Memory.ParamSpaceFits.at_bound handoff.handoff.layoutsWF hck
         [⟨ty, ⟨⟨root, []⟩, .materialized⟩⟩]
       simp only [Interfaces.Memory.ParamSpaceFits, Interfaces.Memory.freshLayouts,
         Interfaces.Memory.freshLayoutsFrom, List.map_cons, List.map_nil,
@@ -3184,6 +3186,25 @@ private theorem targetInv_step (hl : StepLanguage language profile ValidVal)
                     by change afterRead.live.contains r = _; rw [hla, hl']⟩⟩
             · exact ht.callersAligned c (hca ▸ hc')
           exact ⟨hfinWF, hcalleeAlign, hcallersAlign⟩
+      | addWithOverflow _ _ _ _ _ =>
+        have hnoBeg : ∀ op' ∈ (reclassBlock (fnCls mir q.frame locals) srcBlock).body,
+            instIsBegin op'.instruction = false := by
+          intro op' hop'
+          simp only [reclassBlock, List.mem_map] at hop'
+          obtain ⟨sOp, hsOp, rfl⟩ := hop'
+          exact (reclassInst_noBegin _ _).trans (instVirtual_noBegin ((hfc.virtualGraph srcBlock
+            ((array_find_id_iff hfc.srcWF.1).mp hbc.srcFind).1).2.1 sOp hsOp))
+        have hbp := bodyPlacement_at_pc hbc.placedB.body hnoBeg (fun i => !instIsBegin i) (fun _ => rfl) (Nat.le_of_lt hlt)
+        rcases hbp.2.2 op hget with ⟨_, _, hbg, _⟩ | ⟨_, hsrcCls, _, _⟩
+        · rw [hkind] at hbg; cases hbg
+        · simp only [reclassBlock, List.getElem?_map] at hsrcCls
+          obtain ⟨sOp, hsget, hsrcCls⟩ := Option.map_eq_some_iff.mp hsrcCls
+          have hvir := (hfc.virtualGraph srcBlock
+            ((array_find_id_iff hfc.srcWF.1).mp hbc.srcFind).1).2.1 sOp (List.mem_of_getElem? hsget)
+          cases hsk : sOp.instruction with
+          | addWithOverflow _ _ _ _ _ => rw [hsk] at hvir; exact hvir.elim
+          | bind _ _ | assign _ _ | op _ _ _ _ _ | beginLifetime _ | endLifetime _ | destructure _ _ | call _ _ _ _ =>
+            rw [← hsrcCls, hsk, reclassInst] at hkind; cases hkind
     | none =>
       rw [hget] at hbody
       obtain ⟨hpcLen, hctrl⟩ := hbody
@@ -3999,6 +4020,7 @@ private theorem related_instructionTrap_eq (hl : StepLanguage language profile V
       obtain ⟨_, hp', _⟩ := hops.1 pair.1 pair.2 hq
       simp [hp']
   | bind _ _ | assign _ _ | beginLifetime _ | endLifetime _ | destructure _ _ => rfl
+  | addWithOverflow _ _ _ _ _ => exact hvir.elim
 
 private theorem related_canEnd_eq {mir : MIR lang profile} {memory : Interfaces.Memory lang profile}
     (ok : lowerGraph (language := language) mir = .ok memory)
@@ -5404,7 +5426,7 @@ private theorem writeParams_paramsValid (hl : StepLanguage language profile Vali
   have hck : memory.TransferCheckpoint q ceil := targetStateWF_transferCheckpoint ht hge
   have hfits0 : Interfaces.Memory.ReservationsFit profile.memoryTarget ceil
       (memory.freshLayoutsFrom q.frame q.live (srcPs.map fun p => p.2.logical.root)) q.bytes := by
-    have hf := Interfaces.Memory.ParamSpaceFits.at_bound handoff.handoff.2.2.2 hck physPs
+    have hf := Interfaces.Memory.ParamSpaceFits.at_bound handoff.handoff.layoutsWF hck physPs
     have hmapEq : (physPs.map fun p => p.2.logical.root) = (srcPs.map fun p => p.2.logical.root) := by
       simp [physPs, List.map_map, Function.comp_def, reclassParam, reclassPlace]
     show Interfaces.Memory.ReservationsFit profile.memoryTarget (memory.transferCeiling q (physPs.map fun p => p.2.logical.root))
@@ -6044,7 +6066,7 @@ private theorem frameAligned_decode {mir : MIR lang profile} {memory : Interface
         cases hlu : (AList.lookup locals dst.logical.root).isSome with
         | true => simp only [hlu, ↓reduceIte, Option.some.injEq] at hdef; subst hdef; exact hlu
         | false => simp only [hlu, Bool.false_eq_true, ↓reduceIte] at hdef; cases hdef
-      | assign _ _ | beginLifetime _ | endLifetime _ | destructure _ _ | call _ _ _ _ =>
+      | assign _ _ | beginLifetime _ | endLifetime _ | destructure _ _ | call _ _ _ _ | addWithOverflow _ _ _ _ _ =>
         rw [horg] at hdef; cases hdef
     have hnotLive : q.live.contains root = false :=
       targetInv_static_sound hbc halign hblkEq root
@@ -6319,7 +6341,7 @@ private theorem transfer_source_to_target (hl : StepLanguage language profile Va
     rw [hfqA, hparamsEq]] at hvalid
   match decidableParamSpaceFits memory physDst.params {afterQ with block := edge.target, instruction := 0} with
   | isTrue hfits =>
-    obtain ⟨q', hwpQ, _, hreQ'⟩ := hvalid.physical handoff.handoff.2.2.2 hfits
+    obtain ⟨q', hwpQ, _, hreQ'⟩ := hvalid.physical handoff.handoff.layoutsWF hfits
     exact .inl ⟨q', ⟨vals, afterQ, physDst, hreadsQ, hdstBlkQ, htyQ, hwpQ⟩, hreQ'.trans hreAfterQ⟩
   | isFalse hfits =>
     exact .inr ⟨_, vals, afterQ, physDst, hreadsQ, hdstBlkQ, htyQ, hvalid.exhausted_of_no_space hfits⟩
@@ -6624,7 +6646,7 @@ private theorem correspondence_advance (hl : StepLanguage language profile Valid
           src_step_of_raw hobsPNone hmirStep hs.noEffects,
           ⟨hrep2, hfa', by change ∀ pair ∈ storedP.callers.zip storedQ.callers, _; rw [hcp2, hcp1, hcpA, hcq2, hcqA]; exact hr.suspended,
             by simp [hs2.noEffects, ht2.noEffects]⟩⟩
-      | beginLifetime _ => rw [hkind] at hsrcVir; exact hsrcVir.elim
+      | beginLifetime _ | addWithOverflow _ _ _ _ _ => rw [hkind] at hsrcVir; exact hsrcVir.elim
       | endLifetime root =>
         rw [hkind] at hbody
         obtain ⟨endedQ, hendQ, rfl⟩ := hbody
@@ -6910,7 +6932,7 @@ private theorem correspondence_advance (hl : StepLanguage language profile Valid
                 cases sd with
                 | none => cases hd
                 | some sdd => simp only [Option.map_some, Option.some.injEq] at hd; subst hd; rfl
-              | bind _ _ | assign _ _ | op _ _ _ _ _ | beginLifetime _ | endLifetime _ | destructure _ _ =>
+              | bind _ _ | assign _ _ | op _ _ _ _ _ | beginLifetime _ | endLifetime _ | destructure _ _ | addWithOverflow _ _ _ _ _ =>
                 rw [← hsrcCls, hsk, reclassInst] at hckind; cases hckind
           exact callerDest_reclass (fnCls mir callerQ.caller.frame cl)
             (hs.callersVirtual callerP (by rw [hcallP]; exact .head _))
@@ -7450,7 +7472,7 @@ private theorem src_step_decidable (hl : StepLanguage language profile ValidVal)
                 subst hopsNil; subst heffsNil
                 rw [← hchgEq, hprepP] at hop'
                 exact hnoOp res' hop'
-      | beginLifetime _ => rw [hkind] at hsrcVir; exact hsrcVir.elim
+      | beginLifetime _ | addWithOverflow _ _ _ _ _ => rw [hkind] at hsrcVir; exact hsrcVir.elim
       | endLifetime root =>
         rcases src_ends_decidable (mir := mir) p root with ⟨ended, hend⟩ | hno
         · refine .inl ⟨ended.advance, ?_⟩
@@ -7691,7 +7713,7 @@ private theorem correspondence_progress (hl : StepLanguage language profile Vali
       | some physOp =>
         cases hinst : physOp.instruction with
         | beginLifetime root => exact .inl ⟨physOp, root, rfl, hinst⟩
-        | bind _ _ | assign _ _ | op _ _ _ _ _ | endLifetime _ | destructure _ _ | call _ _ _ _ =>
+        | bind _ _ | assign _ _ | op _ _ _ _ _ | endLifetime _ | destructure _ _ | call _ _ _ _ | addWithOverflow _ _ _ _ _ =>
           exact .inr fun op' root h hbi => by
             cases Option.some.inj h; rw [hinst] at hbi; cases hbi
     rcases hbegDec with ⟨physOp, root, hgetQ, hbegInst⟩ | hnotBeg
@@ -7867,7 +7889,7 @@ private theorem correspondence_progress (hl : StepLanguage language profile Vali
                 change memory.Writes (Interfaces.Memory.applyOperation afterQ false (Interfaces.Memory.operationStore afterQ false)) _ res storedQ
                 rw [applyOperation_id htA.active.noAddr (fun c hc => (htA.callers c hc).noAddr)]
                 exact hfqA ▸ hwQ
-            | beginLifetime _ => rw [hkind] at hsrcVir; exact hsrcVir.elim
+            | beginLifetime _ | addWithOverflow _ _ _ _ _ => rw [hkind] at hsrcVir; exact hsrcVir.elim
             | endLifetime root =>
               rw [hkind] at hinstP
               obtain ⟨endedP, hendP', _⟩ := hinstP
@@ -8007,7 +8029,7 @@ private theorem correspondence_progress (hl : StepLanguage language profile Vali
                 rw [← hparamsEq] at hvalid
                 match decidableParamSpaceFits memory physCEntry.params qC0 with
                 | isTrue hfits =>
-                  obtain ⟨q', hwpQ, _, hreQ'⟩ := hvalid.physical handoff.handoff.2.2.2 hfits
+                  obtain ⟨q', hwpQ, _, hreQ'⟩ := hvalid.physical handoff.handoff.layoutsWF hfits
                   refine .inr ⟨q', hstepOfOutcome q' ?_ hreQ'⟩
                   rw [hphysEq, hkind]
                   exact ⟨hnoTrapQ, vals, afterQ, physCG, physCEntry, hreadsQ,
@@ -8120,7 +8142,7 @@ private theorem correspondence_progress (hl : StepLanguage language profile Vali
                       cases sd with
                       | none => cases hd
                       | some sdd => simp only [Option.map_some, Option.some.injEq] at hd; subst hd; rfl
-                    | bind _ _ | assign _ _ | op _ _ _ _ _ | beginLifetime _ | endLifetime _ | destructure _ _ =>
+                    | bind _ _ | assign _ _ | op _ _ _ _ _ | beginLifetime _ | endLifetime _ | destructure _ _ | addWithOverflow _ _ _ _ _ =>
                       rw [← hsrcCls, hsk, reclassInst] at hckind; cases hckind
                 exact callerDest_reclass (fnCls mir callerQ.caller.frame cl)
                   (hs.callersVirtual callerP (by rw [hcallP]; exact .head _))
@@ -8196,7 +8218,7 @@ private theorem correspondence_progress (hl : StepLanguage language profile Vali
               rw [← hdestMap] at hvalid
               match decidableParamSpaceFits memory callerQ.destination.toList qRes with
               | isTrue hfits =>
-                obtain ⟨q', hwpQ, _, hreQ'⟩ := hvalid.physical handoff.handoff.2.2.2 hfits
+                obtain ⟨q', hwpQ, _, hreQ'⟩ := hvalid.physical handoff.handoff.layoutsWF hfits
                 refine .inr ⟨q', hstepCtrl q' ?_ hreQ'⟩
                 rw [hbc.placedB.ending.symm]; dsimp only [reclassBlock]; rw [hendS]
                 exact ⟨callerQ, restQ, vals, afterQ, endedQ, hcallQ, hmapOp ▸ hreadsQ, hendLocsQ, htyQ, hwpQ⟩
@@ -8278,7 +8300,7 @@ private def computeSourceStep (mir : MIR lang profile) (memory : Interfaces.Memo
       let res ← memory.loadValue q' physDst
       let stored ← computeSrcWriteParams mir [⟨_, dst⟩] [res] afterP
       some {stored.advance with effects := stored.effects ++ []}
-    | .beginLifetime _ => none
+    | .beginLifetime _ | .addWithOverflow _ _ _ _ _ => none
     | .endLifetime root => some (computeSrcEndLocals [root] p).advance
     | .destructure (ty := dty) src _ => do
       let (_, afterP) ← mir.logicalView.readValue p
@@ -8505,7 +8527,7 @@ private theorem computeSourceStep_of_step (hl : StepLanguage language profile Va
         have hwpRes : mir.logicalView.ParamOutcome [⟨_, dst⟩] [res] afterP storedP false :=
           .cons hbegP hwP (.nil _)
         simp only [hreadsP, hfnQ, hloadQ', computeSrcWriteParams_of_writeParams hwpRes]
-    | beginLifetime _ => rw [hkind] at hsrcVir; exact hsrcVir.elim
+    | beginLifetime _ | addWithOverflow _ _ _ _ _ => rw [hkind] at hsrcVir; exact hsrcVir.elim
     | endLifetime root =>
       rw [hkind] at hinstP
       obtain ⟨endedP, hendP, rfl⟩ := hinstP
@@ -8828,7 +8850,7 @@ theorem lowerGraph_lowersMemory {language : CoreLanguage} {lang : LoweringLangua
         · exact ih (finite_next fin tick) _ hs r'
     exact follow path ⟨start, init, .nil _⟩ p ⟨p, atEntry, .nil _⟩ rel
   refine ⟨static.project, static.entry, static.origins, static.layouts, ⟨static.signatures, static.declarations⟩,
-    static.promotion, static.handoff.1, sourceWF.1, ?_, ?_⟩
+    static.promotion, static.retainedRoots, static.handoff.layoutsWF, static.handoff.1, sourceWF.1, ?_, ?_⟩
   · intro safe
     refine ⟨?_, fun _ run => correspondence_divergence hl ok sourceWF safe run, ?_⟩
     · intro q o fin obs

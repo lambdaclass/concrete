@@ -24,6 +24,8 @@ private def lifetimeChange (instruction : MemoryInst lang) (root : PlaceId) : Op
   | .call _ dst .. => if dst.any (·.2.logical.root == root) then some true else none
   | .destructure _ bindings =>
     if bindings.any (·.2.2.logical.root == root) then some true else none
+  | .addWithOverflow _ dst flag _ _ =>
+    if dst.logical.root = root || flag.logical.root = root then some true else none
   | .assign .. => none
 
 private abbrev Entry := BlockId × Bool
@@ -376,6 +378,7 @@ structure GraphHandoff (mir : MIR lowering profile) (memory : Interfaces.Memory 
   origins : PreservesOrigins mir.origins memory.origins
   layouts : LayoutsMatch language.layout memory
   promotion : PromotionSound (language := language) mir memory
+  retainedRoots : RetainsTypedRoots mir memory
   handoff : memory.HandoffWF
   placement : ∃ prepared, prepareGraph (language := language) mir = .ok prepared ∧
     ∀ fn locals graph, (fn, locals, graph) ∈ prepared.functions →
@@ -437,12 +440,35 @@ theorem lowerGraph_handoff {mir : MIR lowering profile} {memory : Interfaces.Mem
           obtain ⟨y, hy, rel⟩ := walk.forward _ hx
           exact ⟨y, hy, ((shape rel).2.2.origins o).mpr member⟩
       have fnKeys := ids.symm.trans keys
-      refine ⟨rfl, rfl, rfl, rfl, rfl, ?_, layouts, promoted, ?_, ?_⟩
+      have prepDecls : List.map (fun e => (e.1, e.2.1)) graphs.functions =
+          List.map (fun e => (e.1, e.2.1)) (mir.logicalView (language := language)).functions := by
+        unfold prepareGraph at prep
+        simp only [bind, Except.bind] at prep
+        split at prep
+        · cases prep
+        · cases prep
+          simp [List.map_map, Function.comp_def]
+      have invEq : List.map (fun e => (e.1, e.2.1)) memory.functions =
+          List.map (fun e => (e.1, e.2.1)) (mir.logicalView (language := language)).functions :=
+        decls.symm.trans prepDecls
+      have hRetained : RetainsTypedRoots mir memory :=
+        RetainsTypedRoots.of_logicalView_inventories_eq invEq source.1
+      have hMut : MutableLocalsWF memory.functions memory.mutableLocals := by
+        refine ⟨source.mutableLocalsWF.1, fun fn roots hmem => ?_⟩
+        obtain ⟨locals, _, hlogFn, hroots⟩ := source.mutableLocalsWF.2 fn roots hmem
+        have hpair : (fn, locals) ∈ List.map (fun e => (e.1, e.2.1)) memory.functions := by
+          rw [invEq]
+          exact List.mem_map.mpr ⟨(fn, locals, _), hlogFn, rfl⟩
+        obtain ⟨⟨fn', locals', graph'⟩, hmemFn, heq⟩ := List.mem_map.mp hpair
+        obtain ⟨rfl, rfl⟩ := Prod.mk.inj heq
+        exact ⟨locals', graph', hmemFn, hroots⟩
+      refine ⟨rfl, rfl, rfl, rfl, rfl, ?_, layouts, promoted, hRetained, ?_, ?_⟩
       · rw [← logicalView_origins mir]
         exact ⟨fun o => (origins o).mp, fun o => (origins o).mpr⟩
       · refine ⟨⟨fnKeys ▸ source.1.1, source.1.2.1, storageKeys ▸ source.1.1,
             layoutKeys ▸ source.1.1, storage, slots, ?_⟩,
-          fnKeys ▸ source.2.1, fun o h => source.2.2.1 o ((origins o).mp h), geometry⟩
+          fnKeys ▸ source.2.1, fun o h => source.2.2.1 o ((origins o).mp h), geometry,
+          source.declarationsWF, hMut⟩
         intro fn locals graph hm
         obtain ⟨⟨oldFn, oldLocals, src⟩, hs, rel⟩ := walk.backward _ hm
         obtain ⟨rfl, rfl, placement⟩ := shape rel

@@ -713,15 +713,18 @@ namespace Concrete.SSA
 
 open Concrete.Interfaces ConcreteSpec.Core ConcreteSpec.Core.SourcePathSpan ConcreteSpec.StageInterface
 
-/-- Validate SSA at its frozen boundary using the shared Memory handoff check. -/
+/-- Validate SSA at its frozen boundary using `RegisterFormation` and the shared Memory handoff check. -/
 def checkHandoff {language : CoreLanguage} {lang : LoweringLanguage language.operands.Ty}
     {profile : Profile} (ssa : Interfaces.SSA lang profile) : Bool :=
-  @Memory.checkHandoff _ language.typeDecidableEq _ _ (ssa.memoryView (language := language))
+  ssa.checkRegisterFormation (language := language) &&
+    @Memory.checkHandoff _ language.typeDecidableEq _ _ (ssa.memoryView (language := language))
 
 theorem checkHandoff_iff {language : CoreLanguage} {lang : LoweringLanguage language.operands.Ty}
     {profile : Profile} (ssa : Interfaces.SSA lang profile) :
-    checkHandoff (language := language) ssa = true ↔ ssa.WF (language := language) :=
-  @Memory.checkHandoff_iff _ language.typeDecidableEq _ _ (ssa.memoryView (language := language))
+    checkHandoff (language := language) ssa = true ↔ ssa.WF (language := language) := by
+  simp only [checkHandoff, Bool.and_eq_true, Interfaces.SSA.checkRegisterFormation_eq_true_iff,
+    @Memory.checkHandoff_iff _ language.typeDecidableEq _ _ (ssa.memoryView (language := language)),
+    Interfaces.SSA.WF]
 
 private abbrev controlLanguage := sliceLoweringLanguage slice0
 private def controlProfile : Profile := ⟨.lcb, .x86_64Linux, 0, 4096⟩

@@ -103,7 +103,26 @@ private def parseAndElaborate (tokens : ParserView) : Option (CoreInput (sliceLa
 
 -- Exercise the registered parser implementation and exact elaboration function.
 example : parseAndElaborate returnTokens = some expected := by
-  with_unfolding_all rfl
+  let sp (a b : Nat) : ConcreteSpec.Surface0.Span := ⟨a, b, 1, a + 1, ⟨0⟩⟩
+  let prog : ConcreteSpec.Surface0.Program :=
+    ⟨"main", sp 3 7, [.ret (.integer 42 none (sp 25 27)) (sp 18 28)], sp 29 30⟩
+  have hsurf : ConcreteSpec.Surface0.Derives (returnTokens.tokens.toList.map toSurface0Token) prog :=
+    .main (sp 0 2) (sp 3 7) (sp 7 8) (sp 8 9) (sp 10 12) (sp 13 15) (sp 16 17) (sp 29 30)
+      (.ret (sp 18 24) (sp 27 28) (.expr (.integer 42 none (sp 25 27)) (.nil _)) .nil)
+  obtain ⟨tree, steps, hder, hdec⟩ :=
+    (earlyGrammar_slice0_equiv returnTokens.tokens.toList prog).mpr hsurf
+  have hwf : returnTokens.WF := rfl
+  have hrun : ((sliceParser slice0).run returnTokens).2 = some (.ok ⟨returnTokens.source, .inl tree⟩) :=
+    (sliceParser_ok_derives_iff slice0 returnTokens (.inl tree)).mpr ⟨hwf, steps, hder⟩
+  have helab : elaborate slice0 ⟨returnTokens.source, .inl tree⟩ =
+      .ok (.pending source.project (.zero prog) rfl) := by
+    rw [elaborate_slice0_inl returnTokens.source tree rfl, show Concrete.Elab.surfaceProgram tree = some prog from hdec]
+    rfl
+  unfold parseAndElaborate
+  rw [hrun]
+  dsimp only [Bind.bind, Option.bind, Except.toOption]
+  rw [helab]
+  rfl
 
 -- A parser-view token can have the same payload and still carry an invalid end offset.
 example :
@@ -121,21 +140,21 @@ example :
 -- An empty body crosses elaboration intact and receives its refusal at preparation.
 example :
     ((elaborate slice0 ⟨source, .inl (.node .program [
-      .leaf ⟨⟨⟨0⟩, 3, 7, 1, 4⟩, .name "main"⟩, .node .body []])⟩).toOption.map (·.prepare)) =
-      some (.error (.surface (.fallthrough ⟨3, 7, 1, 4, ⟨0⟩⟩) : RefusalCause)) := rfl
-
-example :
-    elaborate slice0 ⟨source, .inr true⟩ =
-      .error (.unexpectedExtension ⟨0⟩) := rfl
+      .node .declList [],
+      .leaf ⟨⟨⟨0⟩, 3, 7, 1, 4⟩, .name "main"⟩,
+      .leaf ⟨⟨⟨0⟩, 13, 15, 1, 14⟩, .fixed .u8 rfl⟩,
+      .node .body [],
+      .leaf ⟨⟨⟨0⟩, 29, 30, 1, 30⟩, .fixed .rbrace rfl⟩])⟩).toOption.map (·.prepare)) =
+      some (.error (.surface (.fallthrough ⟨29, 30, 1, 30, ⟨0⟩⟩) : RefusalCause)) := rfl
 
 private def slice1 : Slice := ⟨⟨1, by decide⟩⟩
 
 example :
-    elaborate slice1 ⟨{source with slice := slice1}, .inr true⟩ =
+    elaborate slice1 ⟨{source with slice := slice1}, .inl (.node .body [])⟩ =
       .error (.unsupportedSlice slice1) := rfl
 
 example :
-    elaborate slice0 ⟨{source with slice := slice1}, .inr true⟩ =
+    elaborate slice0 ⟨{source with slice := slice1}, .inl (.node .body [])⟩ =
       .error (.sliceMismatch slice0 sliceOne) := rfl
 
 private def profile : Profile := ⟨.lcb, .x86_64Linux, 3, 4096⟩
@@ -150,8 +169,7 @@ private def fragmentPasses (slice : Slice) : Passes slice profile where
   lowerMemory _ := .error (.invalidInput ⟨``elaborate, 1⟩)
   buildSSA _ := .error (.invalidInput ⟨``elaborate, 1⟩)
   buildBIR _ := .error (.invalidInput ⟨``elaborate, 1⟩)
-  emitLLVM _ := .error (.invalidInput ⟨``elaborate, 1⟩)
-  emitLCB _ := .error (.invalidInput ⟨``elaborate, 1⟩)
+  emit _ := .error (.invalidInput ⟨``elaborate, 1⟩)
 
 private abbrev elaborationPasses := fragmentPasses slice0
 
@@ -259,7 +277,7 @@ private theorem refusedStatic {v pos why rule} (typed : ConcreteSpec.Admission.S
     simp [rejected, Except.map, Except.mapError]
   · change (if v.slice = v.slice then _ else _)
     rw [ite_eq_left rfl]
-    exact ⟨_, rejected, rfl⟩
+    exact ⟨_, rejected, ConcreteSpec.Admission.checkStatic_refused rejected, rfl⟩
   · intro target mir lowered
     have ok := (ConcreteSpec.Admission.checkStatic_iff lowered.1.1).2 lowered.1
     rw [rejected] at ok
@@ -750,8 +768,8 @@ private theorem overflowWF : overflowCore.WF := by
     · exact ⟨⟨⟨0⟩, 25, 28, by decide, 1, 26, by decide, by decide⟩, _, rfl, rfl, by decide, rfl, rfl, rfl, rfl⟩
     · exact ⟨⟨⟨0⟩, 31, 32, by decide, 1, 32, by decide, by decide⟩, _, rfl, rfl, by decide, rfl, rfl, rfl, rfl⟩
 
-private theorem overflowHandoff : overflowMIR.logicalView.HandoffWF := by
-  refine ⟨?_, List.mem_singleton_self _, ?_, nofun⟩
+private theorem overflowHandoff : overflowMIR.HandoffWF (language := sliceLanguage slice0) := by
+  refine ⟨⟨?_, List.mem_singleton_self _, ?_, nofun, ⟨.nil, ⟨.nil, nofun⟩, nofun⟩, ⟨.nil, nofun⟩⟩, ?_⟩
   · with_unfolding_all
       refine ⟨.cons nofun .nil, .cons nofun .nil, .cons nofun .nil, .nil, ?_, nofun, ?_⟩
       · intro fn classes member
@@ -776,6 +794,10 @@ private theorem overflowHandoff : overflowMIR.logicalView.HandoffWF := by
     · exact (overflowWF.1.2.2.2.2.2 _ _ (.head _)).2
     · cases List.mem_singleton.mp last
       exact (overflowWF.1.2.2.2.2.2 _ _ (.tail _ (.head _))).2
+  · intro fn locals graph hfn place ty hloc _
+    cases List.mem_singleton.mp hfn
+    cases List.mem_singleton.mp hloc
+    exact ⟨.scalar 1 1, rfl, by decide⟩
 
 private theorem overflowConsumes : ConsumesEvidence overflowCore [] overflowMIR := by
   refine ⟨by decide, ?_, ?_, ?_, overflowWF.2.1⟩
