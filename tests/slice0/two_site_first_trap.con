@@ -1,0 +1,4 @@
+fn main() -> u8 {
+    let a: u8 = 150 + 106;
+    return a + 1;
+}
