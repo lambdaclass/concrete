@@ -29,6 +29,7 @@ import ConcreteSpec.Proofs.OwnErasure
 
 import ConcreteSpec.StageInterface
 import ConcreteSpec.StageGrammar
+import ConcreteSpec.Proofs.StageParser
 import ConcreteSpec.Admission
 import ConcreteSpec.Admission.Controls
 import ConcreteSpec.IntegratedCore
