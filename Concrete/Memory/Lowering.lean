@@ -1,4 +1,5 @@
 import Concrete.Memory
+import ConcreteSpec.Tactics
 
 namespace Concrete.Memory
 
@@ -154,7 +155,7 @@ private theorem rootLayouts_match (mir : MIR lang profile) (fn : FnId)
     RootLayoutsMatch (language := language) mir fn locals slots := by
   induction locals generalizing slots with
   | nil =>
-    cases ok
+    invert_step ok
     exact ⟨.slnil, fun _ _ => nofun, fun _ _ => nofun⟩
   | cons pair rest ih =>
     obtain ⟨root, ty⟩ := pair
@@ -163,40 +164,31 @@ private theorem rootLayouts_match (mir : MIR lang profile) (fn : FnId)
     simp only [← rootLayouts.eq_1] at ok
     cases cls : storageClass (language := language) mir fn root ty with
     | virtual =>
-      simp only [cls, pure, Except.pure, bind, Except.bind] at ok
+      simp only [cls, bind, Except.bind, pure, Except.pure] at ok
       have tail := ih ok
-      refine ⟨tail.keys.cons _, ?_, ?_⟩
+      refine ⟨tail.keys.cons _, ?_, fun p d mem => ?_⟩
       · intro p t mem c
-        rcases List.mem_cons.mp mem with eq | mem
-        · cases eq; rw [cls] at c; contradiction
-        · exact tail.complete p t mem c
-      · intro p d mem
-        obtain ⟨t, ht, c, l, wf⟩ := tail.sound p d mem
+        crush_mem at mem
+        · rw [cls] at c; contradiction
+        · exact tail.complete p t ‹_› c
+      · obtain ⟨t, ht, c, l, wf⟩ := tail.sound p d mem
         exact ⟨t, .tail _ ht, c, l, wf⟩
     | materialized =>
-      cases layout : language.layout mir.declarations profile.memoryTarget ty with
-      | none => simp [cls, layout, bind, Except.bind, throw] at ok
-      | some d =>
-        by_cases wf : d.WellFormed profile.memoryTarget
-        case neg => simp [cls, layout, wf, bind, Except.bind, throw] at ok
-        simp only [cls, layout, ite_eq_left wf] at ok
-        cases hr : rootLayouts mir fn rest with
-        | error e => simp [hr, pure, Except.pure, bind, Except.bind] at ok
-        | ok ds =>
-          simp only [hr, pure, Except.pure, bind, Except.bind, Except.ok.injEq] at ok
-          subst slots
-          have tail := ih hr
-          refine ⟨tail.keys.cons_cons _, ?_, ?_⟩
-          · intro p t mem c
-            rcases List.mem_cons.mp mem with eq | mem
-            · cases eq; exact ⟨d, .head _, layout⟩
-            · obtain ⟨slot, hm, desc⟩ := tail.complete p t mem c
-              exact ⟨slot, .tail _ hm, desc⟩
-          · intro p slot mem
-            rcases List.mem_cons.mp mem with eq | mem
-            · cases eq; exact ⟨ty, .head _, cls, layout, wf⟩
-            · obtain ⟨t, hm, c, desc, valid⟩ := tail.sound p slot mem
-              exact ⟨t, .tail _ hm, c, desc, valid⟩
+      simp only [cls] at ok
+      crush_except
+      subst_vars
+      have tail := ih ‹_›
+      refine ⟨tail.keys.cons_cons _, ?_, ?_⟩
+      · intro p t mem c
+        crush_mem at mem
+        · exact ⟨_, .head _, ‹_›⟩
+        · obtain ⟨slot, hm, desc⟩ := tail.complete p t ‹_› c
+          exact ⟨slot, .tail _ hm, desc⟩
+      · intro p slot mem
+        crush_mem at mem
+        · exact ⟨ty, .head _, cls, ‹_›, ‹_›⟩
+        · obtain ⟨t, hm, c, desc, valid⟩ := tail.sound p slot ‹_›
+          exact ⟨t, .tail _ hm, c, desc, valid⟩
 
 /-- Storage-annotated CFGs awaiting lifetime placement. The source MIR
 still owns the project, entry and signatures at this point. -/

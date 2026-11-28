@@ -37,8 +37,36 @@ def inspect(module, temp):
                 "lean", "--run", str(ROOT / "scripts/proofs/imports.lean"), module])
 
 
+def is_tactics_module(module):
+    return module == 'ConcreteSpec.Tactics' or module.startswith('ConcreteSpec.Tactics.')
+
+
+def drop_import(source, module):
+    actual, spans, _ = module_imports(source, MODULES)
+    for mod, (start, end) in zip(actual, spans):
+        if mod == module:
+            line_end = source.find('\n', end)
+            line_end = len(source) if line_end < 0 else line_end + 1
+            stop = line_end if not source[end:line_end].strip() else end
+            return source[:start] + source[stop:]
+    return source
+
+
+def tactic_import_needed(source, module, temp, search):
+    """A tactic module contributes no kernel constants; witness necessity by elaboration."""
+    without = drop_import(source, module)
+    probe = temp.with_name('ProbeWithoutTactic.lean')
+    probe.write_text(rename_examples(without, lambda line: f'⟪import-example⟫{line}'))
+    result = subprocess.run(
+        ['bash', str(ROOT / 'scripts/checks/lib/bounded.sh'), '300',
+         'lake', 'env', 'env', 'LEAN_PATH=' + search, 'lean',
+         '-DwarningAsError=true', '-DautoImplicit=false', '-R', str(temp.parent), str(probe)],
+        cwd=ROOT, text=True, capture_output=True)
+    return result.returncode != 0
+
+
 def dependencies(source, temp, built_module=None, *, dropped=None):
-    module_imports(source, MODULES)
+    actual, _, _ = module_imports(source, MODULES)
     temp.write_text(rename_examples(source, lambda line: f'⟪import-example⟫{line}'))
     search = str(temp.parent) + ':' + run(['lake', 'env', 'printenv', 'LEAN_PATH']).strip()
     run(['lake', 'env', 'env', 'LEAN_PATH=' + search, 'lean', '-DwarningAsError=true',
@@ -54,8 +82,13 @@ def dependencies(source, temp, built_module=None, *, dropped=None):
         if named(output) != named(built):
             raise SystemExit(f'probe/built .olean dependency mismatch: {built_module}\n'
                              f'probe: {named(output)}\nbuilt: {named(built)}')
-    deps = sorted(line.removeprefix('IMPORT ') for line in output.splitlines()
-                  if line.startswith('IMPORT '))
+    deps = {line.removeprefix('IMPORT ') for line in output.splitlines()
+            if line.startswith('IMPORT ')}
+    for module in actual:
+        if is_tactics_module(module) and module not in deps:
+            if tactic_import_needed(source, module, temp, search):
+                deps.add(module)
+    deps = sorted(deps)
     if not deps:
         raise SystemExit('imports: empty dependency population')
     return deps
@@ -218,7 +251,23 @@ def controls(temp):
     # Removing just the command retains its trailing comment and legal header.
     if matches(missing, dependencies(missing, temp)):
         raise SystemExit('missing-direct-import control accepted')
-    print('imports: extra, transitive-only, commented-header and rewrite controls pass')
+    if 'ConcreteSpec.Tactics' in MODULES:
+        used_tactics = (
+            'import ConcreteSpec.Spec.Basics\n'
+            'import ConcreteSpec.Tactics\n'
+            'open ConcreteSpec\n'
+            'theorem tacticUseControl (x : Option Nat) (y : Nat)\n'
+            '    (h : (do let a ← x; pure (a + 1)) = some y) : ∃ a, a + 1 = y := by\n'
+            '  crush_option at h\n'
+            '  exact ⟨_, h⟩\n'
+            'def tacticBaseControl : Name := ⟨"t"⟩\n'
+        )
+        unused_tactics = 'import ConcreteSpec.Tactics\n' + good
+        if not matches(used_tactics, dependencies(used_tactics, temp)):
+            raise SystemExit('used ConcreteSpec.Tactics import control rejected')
+        if matches(unused_tactics, dependencies(unused_tactics, temp)):
+            raise SystemExit('unused ConcreteSpec.Tactics import control accepted')
+    print('imports: extra, transitive-only, commented-header, tactics and rewrite controls pass')
 
 
 def main():

@@ -1,5 +1,6 @@
 import Concrete.Interfaces.Contracts
 import ConcreteSpec.Proofs.Memory
+import ConcreteSpec.Tactics
 
 namespace Concrete.Interfaces.Memory
 
@@ -371,47 +372,41 @@ private theorem Rel.writeValue {memory : Memory lang profile} {q stored : Memory
       Rel memory stored.frame c d stored.materialized ss stored.bytes n' ∧
       WriteFrame q stored ∧ occupied n' = occupied n ∧ occupied stored.bytes = occupied q.bytes := by
   obtain ⟨init, auth⟩ := h.permits p
-  simp only [Memory.writeValue, ← init, ← auth, show (reback q ss n).live = q.live by rfl] at put ⊢
-  split at put
-  · contradiction
-  · rename_i ok
+  simp only [Memory.writeValue, ← init, ← auth, show (reback q ss n).live = q.live by frame_auto] at put ⊢
+  crush_ite at put
+  · rename_i ok _ _
+    rw [ite_eq_right ok]
+    crush_option at put
+    subst stored
+    exact ⟨n, Option.bind_eq_some_iff.mpr ⟨_, ‹_›, Option.bind_eq_some_iff.mpr ⟨_, ‹_›, rfl⟩⟩,
+      h, by frame_auto, rfl, rfl⟩
+  · rename_i ok _ _
     rw [ite_eq_right ok]
     obtain ⟨owners, permitted, put⟩ := Option.bind_eq_some_iff.mp put
     simp only [permitted, Option.bind_eq_bind, Option.bind_some]
     let changed := markWritten q p owners
     have same : markWritten (reback q ss n) p owners = reback changed ss n := rfl
     rw [same]
-    cases cls : p.storage
-    · simp only [cls] at put
-      obtain ⟨value, encoded, eq⟩ := Option.bind_eq_some_iff.mp put
-      cases eq
-      exact ⟨n, Option.bind_eq_some_iff.mpr ⟨value, encoded, rfl⟩, h,
-        ⟨rfl, rfl, rfl, rfl, rfl⟩, rfl, rfl⟩
-    · simp only [cls] at put
-      dsimp only at ⊢
-      split at put
-      · rename_i zero
-        rw [ite_eq_left (by exact zero)]
-        obtain ⟨value, encoded, eq⟩ := Option.bind_eq_some_iff.mp put
-        cases eq
-        exact ⟨n, Option.bind_eq_some_iff.mpr ⟨value, encoded, rfl⟩, h,
-          ⟨rfl, rfl, rfl, rfl, rfl⟩, rfl, rfl⟩
-      · rename_i nz
-        rw [ite_eq_right (by exact nz)]
-        obtain ⟨a, ra, runs, enc, m', writes, result⟩ := (by
-          simpa only [Option.bind_eq_bind, Option.bind_eq_some_iff] using put :
-          ∃ a, _ ∧ ∃ runs, _ ∧ ∃ m', _ ∧ _)
-        cases result
-        have h' : Rel memory changed.frame c d changed.materialized ss changed.bytes n := h
-        have ranges := h'.rangeAt p.logical
-        rw [show memory.rangeAt changed p.logical = some a from ra] at ranges
-        generalize hb : memory.rangeAt (reback changed ss n) p.logical = rb at ranges
-        cases ranges with
-        | @some _ b w =>
-          obtain ⟨n', tail, agree, on', om'⟩ := w.storeRuns h' runs writes
-          refine ⟨n', ?_, agree, ⟨rfl, rfl, rfl, rfl, rfl⟩, on', om'⟩
-          exact Option.bind_eq_some_iff.mpr ⟨b, rfl, Option.bind_eq_some_iff.mpr
-            ⟨runs, enc, Option.bind_eq_some_iff.mpr ⟨n', tail, rfl⟩⟩⟩
+    crush_ite at put
+    · rename_i zero
+      rw [ite_eq_left (by exact zero)]
+      crush_option at put
+      subst stored
+      exact ⟨n, Option.bind_eq_some_iff.mpr ⟨_, ‹_›, rfl⟩, h, by frame_auto, rfl, rfl⟩
+    · rename_i nz
+      rw [ite_eq_right (by exact nz)]
+      crush_option at put
+      subst stored
+      have h' : Rel memory changed.frame c d changed.materialized ss changed.bytes n := h
+      have ranges := h'.rangeAt p.logical
+      rw [show memory.rangeAt changed p.logical = some _ from ‹_›] at ranges
+      generalize hb : memory.rangeAt (reback changed ss n) p.logical = rb at ranges
+      cases ranges with
+      | @some _ b w =>
+        obtain ⟨n', tail, agree, on', om'⟩ := w.storeRuns h' _ ‹_›
+        refine ⟨n', ?_, agree, by frame_auto, on', om'⟩
+        exact Option.bind_eq_some_iff.mpr ⟨b, rfl, Option.bind_eq_some_iff.mpr
+          ⟨_, ‹_›, Option.bind_eq_some_iff.mpr ⟨n', tail, rfl⟩⟩⟩
 
 private theorem Rel.writes {memory : Memory lang profile} {q stored : MemoryRegisters language profile}
     {ss n c d} (h : Rel memory q.frame c d q.materialized ss q.bytes n) {ty} {p : MemoryPlace _ ty} {v}

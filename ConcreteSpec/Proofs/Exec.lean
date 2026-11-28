@@ -2,6 +2,7 @@ import ConcreteSpec.Spec.Basics
 import ConcreteSpec.Spec.Exec
 import ConcreteSpec.Spec.Ident
 import ConcreteSpec.Spec.Outcome
+import ConcreteSpec.Tactics
 
 /-!
 # Execution, structured exits and cleanup boundaries (F09a/E1–F10/E4)
@@ -662,96 +663,45 @@ private theorem exit_pass_plan_inv {P : Program O} {e : Exit O.Val} {k pre pre' 
   | cons f pre =>
     have next : step P ⟨.exiting e, L, st, f :: (pre ++ k)⟩ =
         some (.next ⟨.exiting e, L', st', pre' ++ k⟩) := exit_step_next_inv h
-    have finish (hL : L = L') (hk : pre ++ k = pre' ++ k) :
-        L = L' ∧ pre = pre' := ⟨hL, List.append_cancel_right hk⟩
     cases f with
     | seq t =>
-      simp only [step, stepExit, Option.some.injEq, Out.next.injEq, Config.mk.injEq] at next
-      obtain ⟨_, hL, hst, hk⟩ := next
-      subst st'
-      obtain ⟨rfl, rfl⟩ := finish hL hk
-      refine ⟨?_, rfl, rfl, .nil⟩
-      intro hp f₀ hf₀
-      cases hf₀ with
-      | head => trivial
-      | tail _ hf₀ => exact hp f₀ hf₀
+      unfold_step step, stepExit at next
+      invert_step next
+      have hk' := List.append_cancel_right ‹_›
+      subst pre'
+      exact ⟨by forall_cons, rfl, rfl, .nil⟩
     | scope b dm ds =>
       cases ds with
-      | cons d ds => simp [step, stepExit, startCleanup] at next
+      | cons d ds => unfold_step step, stepExit, startCleanup at next
       | nil =>
-        cases hd : dropOut O dm L st with
-        | none => simp [step, stepExit, hd] at next
-        | some stDrop =>
-          simp only [step, stepExit, hd, Option.map_some, Option.some.injEq, Out.next.injEq,
-            Config.mk.injEq] at next
-          obtain ⟨_, hL, hst, hk⟩ := next
-          have hk' := List.append_cancel_right hk
-          subst pre'
-          subst L'
-          subst st'
-          refine ⟨?_, rfl, rfl, .drop hd .nil⟩
-          intro hp f₀ hf₀
-          cases hf₀ with
-          | head => trivial
-          | tail _ hf₀ => exact hp f₀ hf₀
-    | test l cr t body site dm =>
-      cases hd : dropOut O dm L st with
-      | none => simp [step, stepExit, hd] at next
-      | some stDrop =>
-        simp only [step, stepExit, hd, Option.map_some, Option.some.injEq, Out.next.injEq,
-          Config.mk.injEq] at next
-        obtain ⟨_, hL, hst, hk⟩ := next
-        have hk' := List.append_cancel_right hk
+        crush_option [step, stepExit] at next
+        invert_step next
+        have hk' := List.append_cancel_right ‹_›
         subst pre'
-        subst L'
-        subst st'
-        refine ⟨?_, rfl, rfl, .drop hd .nil⟩
-        intro hp f₀ hf₀
-        cases hf₀ with
-        | head => trivial
-        | tail _ hf₀ => exact hp f₀ hf₀
+        exact ⟨by forall_cons, rfl, rfl, .drop ‹_› .nil⟩
+    | test l cr t body site dm =>
+      crush_option [step, stepExit] at next
+      invert_step next
+      have hk' := List.append_cancel_right ‹_›
+      subst pre'
+      exact ⟨by forall_cons, rfl, rfl, .drop ‹_› .nil⟩
     | body l cr t body site =>
       cases e with
       | ret v =>
-        simp only [step, stepExit, Option.some.injEq, Out.next.injEq, Config.mk.injEq] at next
-        obtain ⟨_, hL, hst, hk⟩ := next
-        obtain ⟨rfl, rfl⟩ := finish hL hk
-        subst st'
-        refine ⟨?_, rfl, rfl, .nil⟩
-        intro hp f₀ hf₀
-        cases hf₀ with
-        | head => trivial
-        | tail _ hf₀ => exact hp f₀ hf₀
-      | brk l' =>
-        by_cases he : l' = l
-        · simp [step, stepExit, he] at next
-        · simp only [step, stepExit, he, ↓reduceIte, Option.some.injEq, Out.next.injEq,
-            Config.mk.injEq] at next
-          obtain ⟨_, hL, hst, hk⟩ := next
-          obtain ⟨rfl, rfl⟩ := finish hL hk
-          subst st'
-          refine ⟨?_, rfl, rfl, .nil⟩
-          intro hp f₀ hf₀
-          cases hf₀ with
-          | head => exact he
-          | tail _ hf₀ => exact hp f₀ hf₀
-      | cont l' =>
-        by_cases he : l' = l
-        · simp [step, stepExit, he] at next
-        · simp only [step, stepExit, he, ↓reduceIte, Option.some.injEq, Out.next.injEq,
-            Config.mk.injEq] at next
-          obtain ⟨_, hL, hst, hk⟩ := next
-          obtain ⟨rfl, rfl⟩ := finish hL hk
-          subst st'
-          refine ⟨?_, rfl, rfl, .nil⟩
-          intro hp f₀ hf₀
-          cases hf₀ with
-          | head => exact he
-          | tail _ hf₀ => exact hp f₀ hf₀
+        unfold_step step, stepExit at next
+        invert_step next
+        have hk' := List.append_cancel_right ‹_›
+        subst pre'
+        exact ⟨by forall_cons, rfl, rfl, .nil⟩
+      | brk l' | cont l' =>
+        crush_option [step, stepExit] at next
+        invert_step next
+        have hk' := List.append_cancel_right ‹_›
+        subst pre'
+        exact ⟨by forall_cons, rfl, rfl, .nil⟩
     | functionEnd => exact False.elim (hbound rfl)
-    | resume p => simp [step, stepExit] at next
-    | ret dst caller =>
-      cases e <;> simp [step, stepExit] at next
+    | resume p => unfold_step step, stepExit at next
+    | ret dst caller => cases e <;> (crush_option [step, stepExit] at next; try invert_step next)
 
 
 /-- Helper (inversion). A cleanup dispatch step selects the head registration and preserves
@@ -1777,84 +1727,43 @@ private theorem rules_exec_complete_inv {P : Program O} (s : Stmt O)
     (hs : step P ⟨.exec s, L, st, k⟩ = some (.next c')) :
     Rules P ⟨.exec s, L, st, k⟩ none .silent c' := by
   cases s with
-  | skip => cases hs; exact .skip
-  | seq s t => cases hs; exact .seq
-  | block b s => cases hs; exact .block
-  | loop l cr test body site => cases hs; exact .loop
-  | brk l => cases hs; exact .brk
-  | cont l => cases hs; exact .cont
-  | abort site => cases hs; exact .abort
+  | skip => invert_step hs; exact .skip
+  | seq s t => invert_step hs; exact .seq
+  | block b s => invert_step hs; exact .block
+  | loop l cr test body site => invert_step hs; exact .loop
+  | brk l => invert_step hs; exact .brk
+  | cont l => invert_step hs; exact .cont
+  | abort site => invert_step hs; exact .abort
   | defer f args site =>
-    simp only [step, Option.map_eq_some_iff] at hs
-    obtain ⟨k', hr, h⟩ := hs
-    cases h
-    exact .defer ((registered_representation _ _ _).mpr hr)
+    crush_option [step] at hs
+    invert_step hs
+    exact .defer ((registered_representation _ _ _).mpr ‹_›)
   | bind x e site =>
-    cases he : O.eval L st e with
-    | stuck => simp [step, he, onRes] at hs
-    | trap kd => simp only [step, he, onRes, Option.some.injEq, Out.next.injEq] at hs
-                 cases hs; exact .bindTrap he
-    | ok val =>
-      obtain ⟨v, st₁⟩ := val
-      simp only [step, he, onRes, Option.map_eq_some_iff] at hs
-      obtain ⟨st₂, hb, h⟩ := hs
-      cases h
-      exact .bind he hb
+    crush_option [step, onRes] at hs
+    · invert_step hs; exact .bind ‹_› ‹_›
+    · invert_step hs; exact .bindTrap ‹_›
   | assign x e site =>
-    cases he : O.eval L st e with
-    | stuck => simp [step, he, onRes] at hs
-    | trap kd => simp only [step, he, onRes, Option.some.injEq, Out.next.injEq] at hs
-                 cases hs; exact .assignTrap he
-    | ok val =>
-      obtain ⟨v, st₁⟩ := val
-      simp only [step, he, onRes, Option.bind_eq_some_iff, Option.map_eq_some_iff] at hs
-      obtain ⟨old, hl, st₂, hb, h⟩ := hs
-      cases h
-      exact .assign he hl hb
+    crush_option [step, onRes] at hs
+    · invert_step hs; exact .assign ‹_› ‹_› ‹_›
+    · invert_step hs; exact .assignTrap ‹_›
   | cond e yes no site =>
-    cases he : O.eval L st e with
-    | stuck => simp [step, he, onRes] at hs
-    | trap kd => simp only [step, he, onRes, Option.some.injEq, Out.next.injEq] at hs
-                 cases hs; exact .condTrap he
-    | ok val =>
-      obtain ⟨v, st₁⟩ := val
-      simp only [step, he, onRes, Option.map_eq_some_iff] at hs
-      obtain ⟨b, ht, h⟩ := hs
-      cases b <;> cases h
-      · exact .condfalse he ht
-      · exact .condtrue he ht
+    crush_option [step, onRes] at hs
+    · invert_step hs; exact .condtrue ‹_› ‹_›
+    · invert_step hs
+      exact .condfalse ‹_› (by simp only [Bool.eq_false_iff.mpr ‹_›] at *; assumption)
+    · invert_step hs; exact .condTrap ‹_›
   | ret e site =>
-    cases he : O.eval L st e with
-    | stuck => simp [step, he, onRes] at hs
-    | trap kd => simp only [step, he, onRes, Option.some.injEq, Out.next.injEq] at hs
-                 cases hs; exact .retTrap he
-    | ok val =>
-      obtain ⟨v, st₁⟩ := val
-      simp only [step, he, onRes, Option.some.injEq, Out.next.injEq] at hs
-      cases hs; exact .ret he
+    crush_option [step, onRes] at hs
+    · invert_step hs; exact .ret ‹_›
+    · invert_step hs; exact .retTrap ‹_›
   | call dst f args site =>
-    cases he : evalArgs O L st args with
-    | stuck => simp [step, he, onRes] at hs
-    | trap kd =>
-      simp only [step, he, onRes, Option.some.injEq, Out.next.injEq] at hs
-      cases hs; exact .callTrap ((arguments_representation _ _ _ _).mpr he)
-    | ok val =>
-      obtain ⟨vs, st₁⟩ := val
-      simp only [step, he, onRes, Option.bind_eq_some_iff] at hs
-      obtain ⟨fn, hl, hs⟩ := hs
-      split at hs
-      next har =>
-        obtain ⟨st₂, hb, h⟩ := Option.map_eq_some_iff.mp hs
-        cases h
-        exact .call ((arguments_representation _ _ _ _).mpr he) hl har hb
-      next => contradiction
+    crush_option [step, onRes] at hs
+    · invert_step hs; exact .call ((arguments_representation _ _ _ _).mpr ‹_›) ‹_› ‹_› ‹_›
+    · invert_step hs; exact .callTrap ((arguments_representation _ _ _ _).mpr ‹_›)
   | prim dst p args site =>
-    cases he : evalArgs O L st args with
-    | stuck => simp [step, he, onRes] at hs
-    | trap kd =>
-      simp only [step, he, onRes, Option.some.injEq, Out.next.injEq] at hs
-      cases hs; exact .primTrap ((arguments_representation _ _ _ _).mpr he)
-    | ok val => simp [step, he, onRes] at hs
+    crush_option [step, onRes] at hs
+    invert_step hs
+    exact .primTrap ((arguments_representation _ _ _ _).mpr ‹_›)
 
 /-- Helper (inversion). Normal-completion completeness by frame and operand-result cases. -/
 private theorem rules_done_complete_inv {P : Program O}
