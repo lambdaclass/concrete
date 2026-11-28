@@ -7294,8 +7294,6 @@ _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.rules_done_complete_i
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.rules_done_complete_inv._simp_1_6	Quot.sound propext
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.rules_done_complete_inv._simp_1_7	Quot.sound propext
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.rules_exec_complete_inv	Quot.sound propext
-_private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.rules_exec_complete_inv._simp_1_2	Quot.sound propext
-_private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.rules_exec_complete_inv._simp_1_7	Quot.sound propext
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.rules_exit_complete_inv	Quot.sound propext
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.rules_exit_complete_inv._simp_1_18	Quot.sound propext
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.rules_request_complete_inv	Quot.sound propext

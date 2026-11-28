@@ -176,6 +176,43 @@ end Witness{index}
                 self.assertEqual(rc, 0)
                 self.assertIn(command, output.getvalue())
 
+    def test_tactics_quotations_and_code_pattern(self):
+        good_macro = 'namespace ConcreteSpec.Tactics\nmacro "ok_rfl" : tactic => `(tactic| rfl)\nend ConcreteSpec.Tactics\n'
+        with self.assertRaises(lexer.LexError):
+            lexer.lex(good_macro)
+        self.assertIn("rfl", lexer.lex(good_macro, allow_quotations=True))
+        for bad_q in (
+            'macro "c" : tactic => `(tactic| /- comment -/ rfl)\n',
+            'macro "c" : tactic => `(tactic| -- comment\n rfl)\n',
+            'macro "u" : tactic => `(tactic| rfl\n',
+        ):
+            with self.subTest(bad_q=bad_q), self.assertRaises(lexer.LexError):
+                lexer.lex(bad_q, allow_quotations=True)
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "T.lean"
+            p.write_text(
+                'namespace ConcreteSpec.Tactics\n'
+                'macro "bad1" : tactic => `(tactic| sorry)\n'
+                'unsafe def bad2 : Nat := 0\n'
+                'def okQuoted : String := "extern"\n'
+                'def «unsafe» : Nat := 1\n'
+                'end ConcreteSpec.Tactics\n'
+            )
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                rc = lexer.scan(
+                    r'\bsorry\b', [p],
+                    header=lexer.TACTICS_HEADER,
+                    code_pattern=r'\b(axiom|implemented_by|extern|unsafe)\b',
+                    allow_quotations=True,
+                    first_command=lexer.FIRST_COMMAND_TACTICS,
+                )
+            self.assertEqual(rc, 0)
+            self.assertEqual(out.getvalue().splitlines(), [
+                f'{p}:2: macro "bad1" : tactic => `(tactic| sorry)',
+                f'{p}:3: unsafe def bad2 : Nat := 0',
+            ])
+
 
 if __name__ == "__main__":
     unittest.main()

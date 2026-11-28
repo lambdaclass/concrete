@@ -14,6 +14,23 @@ the earlier behaviour, the answer below governs, and the code follows as its new
 
 The shape of Core was approved provisionally on 2026-11-05 ([stage A2a](#decided-2026-11-05)): it binds the design, and the owner freezes Core at stage A2c, after the four design theorems are proved against the proposed `Spec.lean` and the integration stage A2i (2026-11-06) is accepted (freeze timing revised to 0.1 on [2026-11-22](#decided-2026-11-22-roadmap-reordering)). The project and architecture decisions are recorded here too, [below](#decided-project).
 
+<a id="decided-2026-11-28-proof-tactics"></a>
+## Decided 2026-11-28 — Constructive proof tactics in `ConcreteSpec/Tactics/`
+
+Status: decided
+Source: owner
+
+Owner's answer (2026-11-28), verbatim:
+
+> yes to tactics
+
+This approves [R-0724](../ROADMAP.md#r-0724) item 2:
+
+- `ConcreteSpec/Tactics/` (root import [`ConcreteSpec/Tactics.lean`](../ConcreteSpec/Tactics.lean)) may define custom constructive proof tactics using Lean's `macro`, `macro_rules`, `syntax`, `elab`, and `elab_rules`.
+- [`scripts/proofs/trust_ban.sh`](../scripts/proofs/trust_ban.sh) narrows its lexical `macro`/`macro_rules`/`syntax`/`elab`/`elab_rules` ban so those keywords are refused everywhere except `ConcreteSpec/Tactics/`. Every other trust ban (`sorry`, `sorryAx`, `admit`, `native_decide`, `axiom`, `implemented_by`, `extern`, `unsafe`, meta execution, options, outside imports) remains enforced everywhere, including inside `ConcreteSpec/Tactics/`.
+- `ConcreteSpec/Spec/` stays plain, readable Lean and never imports `ConcreteSpec.Tactics` or `ConcreteSpec.Tactics.*` (enforced by [`scripts/checks/spec_imports.sh`](../scripts/checks/spec_imports.sh)); `ConcreteSpec/Proofs/`, `ConcreteSpecEvidence/`, and `Concrete/` may import `ConcreteSpec.Tactics`.
+- Every tactic must elaborate to proof terms depending only on `propext` and `Quot.sound` (never `Classical.choice`, `grind`, or classical `simp` sets); Lean's kernel, `leanchecker`, `con-leche`, `nanoda`, and `#print axioms` controls continue to check every proof term.
+
 <a id="decided-2026-11-27-result-position"></a>
 ## Decided 2026-11-27 — First slice for function result types
 

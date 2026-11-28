@@ -53,19 +53,26 @@ fi
 
 BANNED_AXIOM_RE='^(sorryAx|Lean[.]ofReduceBool|Lean[.]ofReduceNat|Lean[.]trustCompiler)$|[.]_native[.]'
 TRUST_WORD_RE='\b(sorry|sorryAx|admit|native_decide|ofReduceBool|ofReduceNat|trustCompiler|skipKernelTC)\b|\+native\b|\bnative»?\s*:=|\bDecide[.]Config\b'
+# Code-token trust bans enforced everywhere (including ConcreteSpec/Tactics/), matched on
+# code tokens only so string literals and quoted identifiers like `«unsafe»` or `"extern"`
+# in language/grammar definitions are not confused with Lean trust-bypassing declarations.
+CODE_TRUST_WORD_RE='\b(axiom|implemented_by|extern|unsafe)\b'
 BANNED_WORD_RE="$TRUST_WORD_RE"'|\bdecide\s*(?:\(\s*config\b|[+-])'
 # A single +kernel moves closed reduction into Lean's kernel. Keep all other compiler
 # configurations barred, including additional options on subsequent lines.
 DECIDE_CONFIG_ITEM_RE='[+-]|\(\s*(?:«[^»]*»|[^\s():]+)\s*:='
 COMPILER_WORD_RE="$TRUST_WORD_RE|\bdecide\s*(?:(?!\+kernel\b)(?:$DECIDE_CONFIG_ITEM_RE)|\+kernel\b\s*(?:$DECIDE_CONFIG_ITEM_RE))"
-# The source scan is lexical, so it holds only for the syntax it lexes: Lean core's. A syntax
-# extension could make Lean read a literal differently from the scan (a macro taking `s!` before a
-# plain string), so the sources may define none and import nothing outside the library (only Init,
-# implicitly, which is where s!, m! and f! live). They set no option either: the library builds with
-# warningAsError (checked below in lakefile.toml), so a `sorry` that elaborates anywhere, whatever
-# tactic produced it (`stop` is `repeat sorry`), fails the build; `set_option warningAsError false`
-# would undo that. Nor do they run meta code (run_cmd, run_tac, #eval and the like).
-EXTENSION_RE='#eval\b|\b(run_cmd|run_tac|run_elab|run_meta|set_option|macro|macro_rules|syntax|notation|infix|infixl|infixr|prefix|postfix|elab|elab_rules|declare_syntax_cat|initialize|builtin_initialize)\b'
+# The source scan is lexical, so it holds only for the syntax it lexes: Lean core's. Under the
+# 2026-11-28 owner decision ("yes to tactics", R-0724 item 2), tactic-definition commands
+# (`macro`, `macro_rules`, `syntax`, `elab`, `elab_rules`) are permitted ONLY in
+# `ConcreteSpec/Tactics/` and remain refused everywhere else (`ConcreteSpec/Spec/`,
+# `ConcreteSpec/Proofs/`, `ConcreteSpecEvidence/`, `Concrete/`). Every other ban (trust words,
+# `axiom`, `implemented_by`, `extern`, `unsafe`, meta execution, options, outside imports)
+# continues to apply everywhere, including inside `ConcreteSpec/Tactics/`.
+TACTIC_EXT_RE='\b(macro|macro_rules|syntax|elab|elab_rules)\b'
+META_EXT_RE='#eval\b|\b(run_cmd|run_tac|run_elab|run_meta|set_option|notation|infix|infixl|infixr|prefix|postfix|declare_syntax_cat|initialize|builtin_initialize)\b'
+EXTENSION_RE="$META_EXT_RE|$TACTIC_EXT_RE"
+TACTICS_WORD_RE="$BANNED_WORD_RE|$META_EXT_RE"
 
 # banned FILE → `<constant> (<axiom>)` for every constant of a PROOF_MODE=constants listing with a banned axiom
 banned() {
@@ -76,8 +83,9 @@ banned() {
 declared() { awk -F'\t' '$2 == "axiom" { print $1 }' "$1"; }
 # scan FILE... → `file:line: text` for every banned word, syntax extension, option, meta command or
 # outside import outside comments; exit 3 when a source cannot be lexed (lean_lex.py)
-scan_evidence() { python3 "$PROOFS_DIR/lean_lex.py" scan-evidence "$BANNED_WORD_RE|$EXTENSION_RE" "$@"; }
-scan() { python3 "$PROOFS_DIR/lean_lex.py" scan "$BANNED_WORD_RE|$EXTENSION_RE" "$@"; }
+scan_evidence() { python3 "$PROOFS_DIR/lean_lex.py" scan-evidence --code-re "$CODE_TRUST_WORD_RE" "$BANNED_WORD_RE|$EXTENSION_RE" "$@"; }
+scan() { python3 "$PROOFS_DIR/lean_lex.py" scan --code-re "$CODE_TRUST_WORD_RE" "$BANNED_WORD_RE|$EXTENSION_RE" "$@"; }
+scan_tactics() { python3 "$PROOFS_DIR/lean_lex.py" scan-tactics --code-re "$CODE_TRUST_WORD_RE" "$TACTICS_WORD_RE" "$@"; }
 
 echo "=== E/D: the environment ==="
 for pkg in ConcreteSpec ConcreteSpecEvidence; do
@@ -106,9 +114,22 @@ done
 
 echo "=== S: the sources ==="
 mapfile -t SRC < <({ echo ConcreteSpec.lean; find ConcreteSpec -name '*.lean'; } | sort)
-W=$(scan "${SRC[@]}"); RC=$?
-[ "$RC" = 0 ] && [ "${#SRC[@]}" -ge 10 ] && [ -z "$W" ] && ok "none of the ${#SRC[@]} source files spells a banned word outside comments" \
-  || no "the source scan (rc=$RC) of ${#SRC[@]} files: $(printf '%s\n' "$W" | head -5 | tr '\n' '|')"
+NON_TACTICS_SRC=()
+TACTICS_SRC=()
+for src_file in "${SRC[@]}"; do
+  case "$src_file" in
+    ConcreteSpec/Tactics/*) TACTICS_SRC+=("$src_file") ;;
+    *) NON_TACTICS_SRC+=("$src_file") ;;
+  esac
+done
+W=$(scan "${NON_TACTICS_SRC[@]}"); RC=$?
+[ "$RC" = 0 ] && [ "${#NON_TACTICS_SRC[@]}" -ge 10 ] && [ -z "$W" ] \
+  && ok "none of the ${#NON_TACTICS_SRC[@]} non-tactic ConcreteSpec source files spells a banned word or extension outside comments" \
+  || no "the non-tactic source scan (rc=$RC) of ${#NON_TACTICS_SRC[@]} files: $(printf '%s\n' "$W" | head -5 | tr '\n' '|')"
+W=$(scan_tactics "${TACTICS_SRC[@]}"); RC=$?
+[ "$RC" = 0 ] && [ "${#TACTICS_SRC[@]}" -ge 1 ] && [ -z "$W" ] \
+  && ok "all ${#TACTICS_SRC[@]} ConcreteSpec/Tactics source files obey the narrowed trust ban" \
+  || no "the tactics source scan (rc=$RC) of ${#TACTICS_SRC[@]} files: $(printf '%s\n' "$W" | head -5 | tr '\n' '|')"
 
 { echo ConcreteSpecEvidence.lean && find ConcreteSpecEvidence -name '*.lean'; } > "$TMP/evidence-sources.txt" \
   || { no "evidence source inventory failed"; finish; }
@@ -137,7 +158,7 @@ done
 # include Lean's premise-reporting API and the pinned backend, so scan their header
 # grammar separately; no compiler file is exempt from the ban.
 mapfile -t COMPILER_SRC < <({ printf "%s\n" Concrete.lean Main.lean; find Concrete -name '*.lean'; } | sort)
-scan_compiler() { python3 "$PROOFS_DIR/lean_lex.py" scan-compiler "$COMPILER_WORD_RE|$EXTENSION_RE" "$@"; }
+scan_compiler() { python3 "$PROOFS_DIR/lean_lex.py" scan-compiler --code-re "$CODE_TRUST_WORD_RE" "$COMPILER_WORD_RE|$EXTENSION_RE" "$@"; }
 W=$(scan_compiler "${COMPILER_SRC[@]}"); RC=$?
 [ "$RC" = 0 ] && [ -z "$W" ] && ok "all compiler sources obey the trust ban" \
   || no "compiler source scan (rc=$RC): $(printf '%s\n' "$W" | head -5 | tr '\n' '|')"
@@ -566,6 +587,194 @@ X=$(nonstandard "$TMP/exc.tsv")
   && ! has_match -F "C.lean:3»" <<<"$X" \
   && ok "control: an example proved by decide +native and one closed by stop are reported, rfl is not, and the word example in a string is no example ($(echo $X | tr '\n' ' '))" \
   || no "control: rewritten examples: $N, rows $(grep -c . "$TMP/exc.tsv"), reported '$X'"
+# Narrowed tactic-ban controls (R-0724 item 2, 2026-11-28 owner decision):
+# a macro in Spec still fails, a macro in Tactics passes, and unsafe/trust-bypassing
+# declarations in Tactics still fail.
+mkdir -p "$TMP/tactics-ctl/ConcreteSpec/Spec" "$TMP/tactics-ctl/ConcreteSpec/Tactics"
+printf '%s\n' 'namespace ConcreteSpec.Spec' 'macro "spec_bad" : tactic => `(tactic| rfl)' 'end ConcreteSpec.Spec' \
+  > "$TMP/tactics-ctl/ConcreteSpec/Spec/MacroControl.lean"
+W=$(scan "$TMP/tactics-ctl/ConcreteSpec/Spec/MacroControl.lean" 2>&1); RC=$?
+if [ "$RC" = 3 ] || [ -n "$W" ]; then
+  ok "control: a macro in ConcreteSpec/Spec/ is still refused (rc=$RC)"
+else
+  no "control: a macro in ConcreteSpec/Spec/ unexpectedly passed scan"
+fi
+printf '%s\n' 'namespace ConcreteSpec.Spec' 'syntax "spec_bad_syn" : tactic' 'end ConcreteSpec.Spec' \
+  > "$TMP/tactics-ctl/ConcreteSpec/Spec/SyntaxControl.lean"
+W=$(scan "$TMP/tactics-ctl/ConcreteSpec/Spec/SyntaxControl.lean"); RC=$?
+[ "$RC" = 0 ] && has_match -F 'syntax "spec_bad_syn" : tactic' <<<"$W" \
+  && ok "control: syntax/macro keywords in ConcreteSpec/Spec/ are still refused" \
+  || no "control: syntax keyword in ConcreteSpec/Spec/ was not refused (rc=$RC): $W"
+
+printf '%s\n' 'namespace ConcreteSpec.Tactics' 'syntax "tac_ok_syn" : tactic' \
+  'macro_rules | `(tactic| tac_ok_syn) => `(tactic| rfl)' \
+  'macro "tac_ok" : tactic => `(tactic| tac_ok_syn)' 'end ConcreteSpec.Tactics' \
+  > "$TMP/tactics-ctl/ConcreteSpec/Tactics/MacroPass.lean"
+W=$(scan_tactics "$TMP/tactics-ctl/ConcreteSpec/Tactics/MacroPass.lean"); RC=$?
+[ "$RC" = 0 ] && [ -z "$W" ] \
+  && ok "control: macro/syntax/macro_rules in ConcreteSpec/Tactics/ passes" \
+  || no "control: valid tactic macro in ConcreteSpec/Tactics/ was rejected (rc=$RC): $W"
+
+for bad_tac in \
+  'unsafe def badUnsafe : Nat := 0' \
+  'axiom badAxiom : False' \
+  '@[implemented_by badImpl] def badImp : Nat := 0' \
+  '@[extern "c_bad"] opaque badExt : Nat' \
+  'macro "badSorry" : tactic => `(tactic| sorry)' \
+  'macro "badNative" : tactic => `(tactic| native_decide)' \
+  'set_option warningAsError false' \
+  'run_cmd pure ()' \
+  '#eval 1 + 1' \
+  'import Lean' \
+  'import ConcreteSpec.Spec.Basics'; do
+  printf '%s\n' 'namespace ConcreteSpec.Tactics' "$bad_tac" 'end ConcreteSpec.Tactics' \
+    > "$TMP/tactics-ctl/ConcreteSpec/Tactics/BadControl.lean"
+  W=$(scan_tactics "$TMP/tactics-ctl/ConcreteSpec/Tactics/BadControl.lean"); RC=$?
+  [ "$RC" = 0 ] && [ -n "$W" ] \
+    && ok "control: ConcreteSpec/Tactics/ scan rejects $bad_tac" \
+    || no "control: ConcreteSpec/Tactics/ scan missed $bad_tac (rc=$RC): $W"
+done
+
+for bad_hdr in 'import Lean' 'import ConcreteSpec.Spec.Basics'; do
+  printf '%s\n' "$bad_hdr" 'namespace ConcreteSpec.Tactics' 'end ConcreteSpec.Tactics' \
+    > "$TMP/tactics-ctl/ConcreteSpec/Tactics/BadHdr.lean"
+  W=$(scan_tactics "$TMP/tactics-ctl/ConcreteSpec/Tactics/BadHdr.lean"); RC=$?
+  [ "$RC" = 0 ] && [ -n "$W" ] \
+    && ok "control: ConcreteSpec/Tactics/ scan rejects header $bad_hdr" \
+    || no "control: ConcreteSpec/Tactics/ scan missed header $bad_hdr (rc=$RC): $W"
+done
+
+# Constructive tactic axiom control: run `#print axioms` on a theorem proved with every tactic
+# in `ConcreteSpec/Tactics/` and verify every one depends ONLY on `propext` and `Quot.sound`
+# (never `Classical.choice`, `sorryAx`, or native axioms). Also verify the parser rejects a
+# theorem that depends on `Classical.choice`.
+cat > "$TMP/tactic-axioms-control.lean" <<'EOF'
+import ConcreteSpec.Tactics
+
+namespace TacticAxiomControl
+
+structure State where
+  x : Nat
+  y : Nat
+  flag : Bool
+
+inductive MiniStep : Nat → Nat → Prop where
+  | inc (n : Nat) : MiniStep n (n + 1)
+  | dbl (n : Nat) : MiniStep n (n + n)
+
+def miniMachine : Option Nat → Option Nat
+  | none => none
+  | some n => some (n + 1)
+
+theorem ctl_crush_option (x : Option Nat) (y : Nat)
+    (h : (do let a ← x; pure (a + 1)) = some y) : ∃ a, a + 1 = y := by
+  crush_option at h
+  exact ⟨_, h⟩
+
+theorem ctl_crush_except (x : Except String Nat) (y : Nat)
+    (h : (do let a ← x; pure (a + 1)) = .ok y) : ∃ a, a + 1 = y := by
+  crush_except at h
+  exact ⟨_, h⟩
+
+theorem ctl_invert_step (a b : Nat) (h : MiniStep a b) : a ≤ b := by
+  invert_step h
+  · exact Nat.le_succ _
+  · exact Nat.le_add_right _ _
+
+theorem ctl_unfold_step (n : Nat) : miniMachine (some n) = some (n + 1) := by
+  unfold_step miniMachine
+
+theorem ctl_frame_auto (s : State) (v : Nat) :
+    ({ s with x := v }).y = s.y ∧ ({ s with x := v }).flag = s.flag := by
+  frame_auto
+
+theorem ctl_crush_bool (a b : Bool) (h : (a && b) = true) : a = true ∧ b = true := by
+  crush_bool at h
+
+theorem ctl_crush_ite (b : Bool) (x : Nat) (h : (if b = true then some x else none) = some 3) :
+    b = true ∧ x = 3 := by
+  crush_ite at h
+  simp only [Option.some.injEq] at h
+  exact ⟨by assumption, h⟩
+
+theorem ctl_crush_mem (x a : Nat) (xs : List Nat) (h : x ∈ a :: xs) (hne : x ≠ a) : x ∈ xs := by
+  crush_mem at h
+
+theorem ctl_forall_cons (P : Nat → Prop) (a : Nat) (xs : List Nat)
+    (ha : P a) (hxs : ∀ x ∈ xs, P x) : ∀ x ∈ a :: xs, P x := by
+  forall_cons
+
+#print axioms ctl_crush_option
+#print axioms ctl_crush_except
+#print axioms ctl_invert_step
+#print axioms ctl_unfold_step
+#print axioms ctl_frame_auto
+#print axioms ctl_crush_bool
+#print axioms ctl_crush_ite
+#print axioms ctl_crush_mem
+#print axioms ctl_forall_cons
+
+end TacticAxiomControl
+EOF
+
+check_constructive_axioms() {
+  local log_file="$1"
+  local expected_count="$2"
+  python3 -I - "$log_file" "$expected_count" <<'PY'
+import re, sys
+text = open(sys.argv[1], encoding="utf-8").read()
+expected = int(sys.argv[2])
+allowed = {"propext", "Quot.sound"}
+seen = 0
+bad = []
+for line in text.splitlines():
+    m1 = re.match(r"^'([^']+)' does not depend on any axioms$", line.strip())
+    if m1:
+        seen += 1
+        continue
+    m2 = re.match(r"^'([^']+)' depends on axioms: \[([^\]]*)\]$", line.strip())
+    if m2:
+        seen += 1
+        name = m2.group(1)
+        axs = [a.strip() for a in m2.group(2).split(",") if a.strip()]
+        extra = [a for a in axs if a not in allowed]
+        if extra:
+            bad.append(f"{name}: {extra}")
+if seen != expected:
+    print(f"expected {expected} #print axioms lines, saw {seen}")
+    sys.exit(1)
+if bad:
+    print("forbidden axioms: " + "; ".join(bad))
+    sys.exit(1)
+PY
+}
+
+if "$LAKE" env lean "$TMP/tactic-axioms-control.lean" > "$TMP/tactic-axioms.out" 2> "$TMP/tactic-axioms.err"; then
+  if AMSG=$(check_constructive_axioms "$TMP/tactic-axioms.out" 9); then
+    ok "control: #print axioms confirms all 9 tactics elaborate using only propext/Quot.sound (no Classical.choice)"
+  else
+    no "control: constructive tactic axiom check failed: $AMSG"
+  fi
+else
+  no "control: tactic axiom probe failed to elaborate: $(head -5 "$TMP/tactic-axioms.out" "$TMP/tactic-axioms.err" | tr '\n' ' ')"
+fi
+
+cat > "$TMP/tactic-axioms-neg.lean" <<'EOF'
+theorem classicalNegativeControl (P : Prop) : P ∨ ¬ P := Classical.em P
+#print axioms classicalNegativeControl
+EOF
+if "$LAKE" env lean "$TMP/tactic-axioms-neg.lean" > "$TMP/tactic-axioms-neg.out" 2> "$TMP/tactic-axioms-neg.err"; then
+  if AMSG=$(check_constructive_axioms "$TMP/tactic-axioms-neg.out" 1); then
+    no "control: constructive axiom parser unexpectedly accepted Classical.choice"
+  elif has_match -F "Classical.choice" <<<"$AMSG"; then
+    ok "control: constructive axiom parser rejects Classical.choice ($AMSG)"
+  else
+    no "control: constructive axiom parser failed with unexpected message: $AMSG"
+  fi
+else
+  no "control: classical negative control failed to elaborate"
+fi
+
 # Scratch-workspace verification and isolation controls (ISS-0130).
 # Isolate git config once after production checks finish; never rely on `if ( set -e; ... )`
 # subshells (which suppress `set -e` in bash) — every step and required observation checks
