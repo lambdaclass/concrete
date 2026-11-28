@@ -510,14 +510,300 @@ def Materializable {language : CoreLanguage} {lang : LoweringLanguage language.o
         ∃ d, language.layout mir.declarations profile.memoryTarget ty = some d ∧
           d.WellFormed profile.memoryTarget = true
 
-/-- Every function and typed local root declared in `mir` is retained with the same type
-in `memory`, so lowering cannot drop or retype a root (including unused or materialized
-roots) to bypass layout or storage obligations. -/
+private theorem alist_lookup_mem_local {κ α : Type} [DecidableEq κ] {l : AList κ α} {k : κ} {v : α}
+    (h : AList.lookup l k = some v) : (k, v) ∈ l := by
+  induction l with
+  | nil => cases h
+  | cons hd tl ih =>
+    rcases hd with ⟨k', v'⟩
+    simp only [AList.lookup] at h
+    split at h
+    · rename_i heq
+      subst heq
+      cases Option.some.inj h
+      exact List.mem_cons_self
+    · exact List.mem_cons_of_mem _ (ih h)
+
+private theorem alist_lookup_of_mem_local {κ α : Type} [DecidableEq κ] {l : AList κ α}
+    (hNodup : (List.map Prod.fst l).Nodup) {k : κ} {v : α} (hMem : (k, v) ∈ l) :
+    AList.lookup l k = some v := by
+  induction l with
+  | nil => cases hMem
+  | cons hd tl ih =>
+    rcases hd with ⟨k', v'⟩
+    rw [List.map_cons, List.nodup_cons] at hNodup
+    simp only [AList.lookup]
+    cases hMem with
+    | head =>
+      simp only [↓reduceIte]
+    | tail _ hTail =>
+      split
+      · rename_i heq
+        subst heq
+        exact absurd (List.mem_map.mpr ⟨(k', v), hTail, rfl⟩) hNodup.1
+      · exact ih hNodup.2 hTail
+
+/-- Function-keyed typed root lookup in `mir` (polymorphic in the type carrier). -/
+def MIR.rootTypeAt {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    (mir : MIR lang profile) (fn : FnId) (place : PlaceId) : Option Ty :=
+  (AList.lookup mir.functions fn).bind fun entry => AList.lookup entry.1 place
+
+/-- Function-keyed typed root lookup in `memory` (polymorphic in the type carrier). -/
+def Memory.rootTypeAt {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    (memory : Memory lang profile) (fn : FnId) (place : PlaceId) : Option Ty :=
+  (AList.lookup memory.functions fn).bind fun entry => AList.lookup entry.1 place
+
+/-- Function-keyed typed root inventory equality in both directions under unique keys on
+both sides: `mir` and `memory` have duplicate-free function keys and duplicate-free
+per-function local root keys, declare the exact same set of functions, and declare the
+exact same typed local roots for every function (so lowering cannot drop, add, or retype
+any function or root). -/
 def RetainsTypedRoots {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
     (mir : MIR lang profile) (memory : Memory lang profile) : Prop :=
-  ∀ fn srcLocals srcGraph, (fn, srcLocals, srcGraph) ∈ mir.functions →
+  (List.map Prod.fst mir.functions).Nodup ∧
+  (List.map Prod.fst memory.functions).Nodup ∧
+  (∀ fn locals graph, (fn, locals, graph) ∈ mir.functions → (List.map Prod.fst locals).Nodup) ∧
+  (∀ fn locals graph, (fn, locals, graph) ∈ memory.functions → (List.map Prod.fst locals).Nodup) ∧
+  (∀ fn srcLocals srcGraph, (fn, srcLocals, srcGraph) ∈ mir.functions →
     ∃ dstLocals dstGraph, (fn, dstLocals, dstGraph) ∈ memory.functions ∧
-      ∀ place ty, (place, ty) ∈ srcLocals → (place, ty) ∈ dstLocals
+      ∀ place ty, (place, ty) ∈ srcLocals ↔ (place, ty) ∈ dstLocals) ∧
+  (∀ fn dstLocals dstGraph, (fn, dstLocals, dstGraph) ∈ memory.functions →
+    ∃ srcLocals srcGraph, (fn, srcLocals, srcGraph) ∈ mir.functions ∧
+      ∀ place ty, (place, ty) ∈ dstLocals ↔ (place, ty) ∈ srcLocals)
+
+theorem RetainsTypedRoots.mir_fns_nodup {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {mir : MIR lang profile} {memory : Memory lang profile}
+    (h : RetainsTypedRoots mir memory) :
+    (List.map Prod.fst mir.functions).Nodup :=
+  h.1
+
+theorem RetainsTypedRoots.memory_fns_nodup {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {mir : MIR lang profile} {memory : Memory lang profile}
+    (h : RetainsTypedRoots mir memory) :
+    (List.map Prod.fst memory.functions).Nodup :=
+  h.2.1
+
+theorem RetainsTypedRoots.mir_locals_nodup {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {mir : MIR lang profile} {memory : Memory lang profile}
+    (h : RetainsTypedRoots mir memory) {fn srcLocals srcGraph}
+    (hMem : (fn, srcLocals, srcGraph) ∈ mir.functions) :
+    (List.map Prod.fst srcLocals).Nodup :=
+  h.2.2.1 fn srcLocals srcGraph hMem
+
+theorem RetainsTypedRoots.memory_locals_nodup {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {mir : MIR lang profile} {memory : Memory lang profile}
+    (h : RetainsTypedRoots mir memory) {fn dstLocals dstGraph}
+    (hMem : (fn, dstLocals, dstGraph) ∈ memory.functions) :
+    (List.map Prod.fst dstLocals).Nodup :=
+  h.2.2.2.1 fn dstLocals dstGraph hMem
+
+theorem RetainsTypedRoots.forward {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {mir : MIR lang profile} {memory : Memory lang profile}
+    (h : RetainsTypedRoots mir memory) {fn srcLocals srcGraph}
+    (hMem : (fn, srcLocals, srcGraph) ∈ mir.functions) :
+    ∃ dstLocals dstGraph, (fn, dstLocals, dstGraph) ∈ memory.functions ∧
+      ∀ place ty, (place, ty) ∈ srcLocals ↔ (place, ty) ∈ dstLocals :=
+  h.2.2.2.2.1 fn srcLocals srcGraph hMem
+
+theorem RetainsTypedRoots.backward {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {mir : MIR lang profile} {memory : Memory lang profile}
+    (h : RetainsTypedRoots mir memory) {fn dstLocals dstGraph}
+    (hMem : (fn, dstLocals, dstGraph) ∈ memory.functions) :
+    ∃ srcLocals srcGraph, (fn, srcLocals, srcGraph) ∈ mir.functions ∧
+      ∀ place ty, (place, ty) ∈ dstLocals ↔ (place, ty) ∈ srcLocals :=
+  h.2.2.2.2.2 fn dstLocals dstGraph hMem
+
+theorem RetainsTypedRoots.fn_mem_iff {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {mir : MIR lang profile} {memory : Memory lang profile}
+    (h : RetainsTypedRoots mir memory) (fn : FnId) :
+    fn ∈ List.map Prod.fst mir.functions ↔ fn ∈ List.map Prod.fst memory.functions := by
+  constructor
+  · intro hIn
+    obtain ⟨⟨fn', srcLocals, srcGraph⟩, hMem, hEq⟩ := List.mem_map.mp hIn
+    dsimp only at hEq
+    subst hEq
+    obtain ⟨dstLocals, dstGraph, hDst, _⟩ := h.forward hMem
+    exact List.mem_map.mpr ⟨(fn', dstLocals, dstGraph), hDst, rfl⟩
+  · intro hIn
+    obtain ⟨⟨fn', dstLocals, dstGraph⟩, hMem, hEq⟩ := List.mem_map.mp hIn
+    dsimp only at hEq
+    subst hEq
+    obtain ⟨srcLocals, srcGraph, hSrc, _⟩ := h.backward hMem
+    exact List.mem_map.mpr ⟨(fn', srcLocals, srcGraph), hSrc, rfl⟩
+
+theorem RetainsTypedRoots.lookup_isSome_iff {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {mir : MIR lang profile} {memory : Memory lang profile}
+    (h : RetainsTypedRoots mir memory) (fn : FnId) :
+    (AList.lookup mir.functions fn).isSome ↔ (AList.lookup memory.functions fn).isSome := by
+  constructor
+  · intro hSome
+    cases hLk : AList.lookup mir.functions fn with
+    | none => rw [hLk] at hSome; cases hSome
+    | some entry =>
+      obtain ⟨srcLocals, srcGraph⟩ := entry
+      have hMem := alist_lookup_mem_local hLk
+      obtain ⟨dstLocals, dstGraph, hDst, _⟩ := h.forward hMem
+      rw [alist_lookup_of_mem_local h.memory_fns_nodup hDst]
+      rfl
+  · intro hSome
+    cases hLk : AList.lookup memory.functions fn with
+    | none => rw [hLk] at hSome; cases hSome
+    | some entry =>
+      obtain ⟨dstLocals, dstGraph⟩ := entry
+      have hMem := alist_lookup_mem_local hLk
+      obtain ⟨srcLocals, srcGraph, hSrc, _⟩ := h.backward hMem
+      rw [alist_lookup_of_mem_local h.mir_fns_nodup hSrc]
+      rfl
+
+theorem RetainsTypedRoots.rootTypeAt_eq {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {mir : MIR lang profile} {memory : Memory lang profile}
+    (h : RetainsTypedRoots mir memory) (fn : FnId) (place : PlaceId) :
+    mir.rootTypeAt fn place = memory.rootTypeAt fn place := by
+  unfold MIR.rootTypeAt Memory.rootTypeAt
+  cases hMir : AList.lookup mir.functions fn with
+  | none =>
+    cases hMem : AList.lookup memory.functions fn with
+    | none => rfl
+    | some dstEntry =>
+      have hSome : (AList.lookup mir.functions fn).isSome :=
+        (h.lookup_isSome_iff fn).mpr (by rw [hMem]; rfl)
+      rw [hMir] at hSome
+      cases hSome
+  | some srcEntry =>
+    obtain ⟨srcLocals, srcGraph⟩ := srcEntry
+    have hSrcMem := alist_lookup_mem_local hMir
+    obtain ⟨dstLocals, dstGraph, hDstMem, hEquiv⟩ := h.forward hSrcMem
+    rw [alist_lookup_of_mem_local h.memory_fns_nodup hDstMem]
+    simp only [Option.bind_some]
+    cases hSrcLk : AList.lookup srcLocals place with
+    | none =>
+      cases hDstLk : AList.lookup dstLocals place with
+      | none => rfl
+      | some ty =>
+        have hInSrc : (place, ty) ∈ srcLocals := (hEquiv place ty).mpr (alist_lookup_mem_local hDstLk)
+        have hEq := alist_lookup_of_mem_local (h.mir_locals_nodup hSrcMem) hInSrc
+        rw [hSrcLk] at hEq
+        cases hEq
+    | some ty =>
+      have hInDst : (place, ty) ∈ dstLocals := (hEquiv place ty).mp (alist_lookup_mem_local hSrcLk)
+      exact (alist_lookup_of_mem_local (h.memory_locals_nodup hDstMem) hInDst).symm
+
+/-- Constructive equivalence between `RetainsTypedRoots` and exact equality of function
+domains and function-keyed typed root lookups under unique keys on both sides. -/
+theorem RetainsTypedRoots.iff_lookup {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    (mir : MIR lang profile) (memory : Memory lang profile) :
+    RetainsTypedRoots mir memory ↔
+      (List.map Prod.fst mir.functions).Nodup ∧
+      (List.map Prod.fst memory.functions).Nodup ∧
+      (∀ fn locals graph, (fn, locals, graph) ∈ mir.functions → (List.map Prod.fst locals).Nodup) ∧
+      (∀ fn locals graph, (fn, locals, graph) ∈ memory.functions → (List.map Prod.fst locals).Nodup) ∧
+      (∀ fn, (AList.lookup mir.functions fn).isSome ↔ (AList.lookup memory.functions fn).isSome) ∧
+      (∀ fn place, mir.rootTypeAt fn place = memory.rootTypeAt fn place) := by
+  constructor
+  · intro h
+    exact ⟨h.mir_fns_nodup, h.memory_fns_nodup,
+      fun fn locals graph hm => h.mir_locals_nodup hm,
+      fun fn locals graph hm => h.memory_locals_nodup hm,
+      h.lookup_isSome_iff, h.rootTypeAt_eq⟩
+  · rintro ⟨hMirFns, hMemFns, hMirLocals, hMemLocals, hDom, hRootEq⟩
+    refine ⟨hMirFns, hMemFns, hMirLocals, hMemLocals, ?_, ?_⟩
+    · intro fn srcLocals srcGraph hSrcMem
+      have hSrcLk := alist_lookup_of_mem_local hMirFns hSrcMem
+      have hMemSome : (AList.lookup memory.functions fn).isSome :=
+        (hDom fn).mp (by rw [hSrcLk]; rfl)
+      cases hMemLk : AList.lookup memory.functions fn with
+      | none => rw [hMemLk] at hMemSome; cases hMemSome
+      | some dstEntry =>
+        obtain ⟨dstLocals, dstGraph⟩ := dstEntry
+        have hDstMem := alist_lookup_mem_local hMemLk
+        refine ⟨dstLocals, dstGraph, hDstMem, fun place ty => ?_⟩
+        have hEq := hRootEq fn place
+        unfold MIR.rootTypeAt Memory.rootTypeAt at hEq
+        rw [hSrcLk, hMemLk] at hEq
+        simp only [Option.bind_some] at hEq
+        constructor
+        · intro hIn
+          have hSL := alist_lookup_of_mem_local (hMirLocals fn srcLocals srcGraph hSrcMem) hIn
+          rw [hSL] at hEq
+          exact alist_lookup_mem_local hEq.symm
+        · intro hIn
+          have hDL := alist_lookup_of_mem_local (hMemLocals fn dstLocals dstGraph hDstMem) hIn
+          rw [hDL] at hEq
+          exact alist_lookup_mem_local hEq
+    · intro fn dstLocals dstGraph hDstMem
+      have hMemLk := alist_lookup_of_mem_local hMemFns hDstMem
+      have hMirSome : (AList.lookup mir.functions fn).isSome :=
+        (hDom fn).mpr (by rw [hMemLk]; rfl)
+      cases hSrcLk : AList.lookup mir.functions fn with
+      | none => rw [hSrcLk] at hMirSome; cases hMirSome
+      | some srcEntry =>
+        obtain ⟨srcLocals, srcGraph⟩ := srcEntry
+        have hSrcMem := alist_lookup_mem_local hSrcLk
+        refine ⟨srcLocals, srcGraph, hSrcMem, fun place ty => ?_⟩
+        have hEq := hRootEq fn place
+        unfold MIR.rootTypeAt Memory.rootTypeAt at hEq
+        rw [hSrcLk, hMemLk] at hEq
+        simp only [Option.bind_some] at hEq
+        constructor
+        · intro hIn
+          have hDL := alist_lookup_of_mem_local (hMemLocals fn dstLocals dstGraph hDstMem) hIn
+          rw [hDL] at hEq
+          exact alist_lookup_mem_local hEq
+        · intro hIn
+          have hSL := alist_lookup_of_mem_local (hMirLocals fn srcLocals srcGraph hSrcMem) hIn
+          rw [hSL] at hEq
+          exact alist_lookup_mem_local hEq.symm
+
+/-- Any lowering preserving the ordered `(fn, locals)` inventory (as production `prepareGraph`
+and `lowerGraph` do) satisfies `RetainsTypedRoots` under unique source keys. -/
+theorem RetainsTypedRoots.of_inventories_eq {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {mir : MIR lang profile} {memory : Memory lang profile}
+    (hInv : List.map (fun e => (e.1, e.2.1)) memory.functions =
+      List.map (fun e => (e.1, e.2.1)) mir.functions)
+    (hSrcFns : (List.map Prod.fst mir.functions).Nodup)
+    (hSrcLocals : ∀ fn locals graph, (fn, locals, graph) ∈ mir.functions →
+      (List.map Prod.fst locals).Nodup) :
+    RetainsTypedRoots mir memory := by
+  have hMemFnsEq : List.map Prod.fst memory.functions = List.map Prod.fst mir.functions := by
+    have h := congrArg (List.map Prod.fst) hInv
+    simpa only [List.map_map, Function.comp_def] using h
+  refine ⟨hSrcFns, hMemFnsEq ▸ hSrcFns, hSrcLocals, ?_, ?_, ?_⟩
+  · intro fn dstLocals dstGraph hDstMem
+    have hPair : (fn, dstLocals) ∈ List.map (fun e => (e.1, e.2.1)) mir.functions := by
+      rw [← hInv]
+      exact List.mem_map.mpr ⟨(fn, dstLocals, dstGraph), hDstMem, rfl⟩
+    obtain ⟨⟨srcFn, srcLocals, srcGraph⟩, hSrcMem, hEq⟩ := List.mem_map.mp hPair
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj hEq
+    exact hSrcLocals srcFn srcLocals srcGraph hSrcMem
+  · intro fn srcLocals srcGraph hSrcMem
+    have hPair : (fn, srcLocals) ∈ List.map (fun e => (e.1, e.2.1)) memory.functions := by
+      rw [hInv]
+      exact List.mem_map.mpr ⟨(fn, srcLocals, srcGraph), hSrcMem, rfl⟩
+    obtain ⟨⟨dstFn, dstLocals, dstGraph⟩, hDstMem, hEq⟩ := List.mem_map.mp hPair
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj hEq
+    exact ⟨dstLocals, dstGraph, hDstMem, fun _ _ => Iff.rfl⟩
+  · intro fn dstLocals dstGraph hDstMem
+    have hPair : (fn, dstLocals) ∈ List.map (fun e => (e.1, e.2.1)) mir.functions := by
+      rw [← hInv]
+      exact List.mem_map.mpr ⟨(fn, dstLocals, dstGraph), hDstMem, rfl⟩
+    obtain ⟨⟨srcFn, srcLocals, srcGraph⟩, hSrcMem, hEq⟩ := List.mem_map.mp hPair
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj hEq
+    exact ⟨srcLocals, srcGraph, hSrcMem, fun _ _ => Iff.rfl⟩
+
+/-- Direct corollary for any pass (such as `prepareGraph` composed with `placeFunction` in
+production `lowerGraph`) that maps each function's CFG while retaining `(fn, locals)`. -/
+theorem RetainsTypedRoots.of_map_functions {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {mir : MIR lang profile} {memory : Memory lang profile}
+    (lowerBody : FnId → LocalTypes Ty → MIRGraph lang → MemoryGraph lang)
+    (hFns : memory.functions = List.map (fun e =>
+      (e.1, e.2.1, lowerBody e.1 e.2.1 e.2.2)) mir.functions)
+    (hSrcFns : (List.map Prod.fst mir.functions).Nodup)
+    (hSrcLocals : ∀ fn locals graph, (fn, locals, graph) ∈ mir.functions →
+      (List.map Prod.fst locals).Nodup) :
+    RetainsTypedRoots mir memory := by
+  apply RetainsTypedRoots.of_inventories_eq _ hSrcFns hSrcLocals
+  rw [hFns, List.map_map]
+  rfl
 
 /-- The logical MIR frame used to verify Memory's representation of live places. -/
 structure LogicalFrame (Value : Type) where
@@ -2215,28 +2501,55 @@ theorem LowersMemory.layoutsWF {mir : MIR lang profile} {memory : Memory lang pr
     memory.LayoutsWF :=
   lowered.2.2.2.2.2.2.2.1
 
-private theorem alist_lookup_mem_local {κ α : Type} [DecidableEq κ] {l : AList κ α} {k : κ} {v : α}
-    (h : AList.lookup l k = some v) : (k, v) ∈ l := by
-  induction l with
-  | nil => cases h
-  | cons hd tl ih =>
-    rcases hd with ⟨k', v'⟩
-    simp only [AList.lookup] at h
-    split at h
-    · rename_i heq
-      subst heq
-      cases Option.some.inj h
-      exact List.mem_cons_self
-    · exact List.mem_cons_of_mem _ (ih h)
+theorem MIR.logicalView_inventories_eq (mir : MIR lang profile) :
+    List.map (fun e => (e.1, e.2.1)) (mir.logicalView (language := language)).functions =
+      List.map (fun e => (e.1, e.2.1)) mir.functions := by
+  simp only [MIR.logicalView, AList.map, List.map_map]
+  rfl
+
+/-- Bridge theorem for production `prepareGraph` / `lowerGraph`: any lowering whose
+`(fn, locals)` inventory matches `mir.logicalView.functions` under `mir.logicalView.TablesWF`
+satisfies bidirectional `RetainsTypedRoots mir memory`. -/
+theorem RetainsTypedRoots.of_logicalView_inventories_eq
+    {mir : MIR lang profile} {memory : Memory lang profile}
+    (hInv : List.map (fun e => (e.1, e.2.1)) memory.functions =
+      List.map (fun e => (e.1, e.2.1)) (mir.logicalView (language := language)).functions)
+    (hSrc : (mir.logicalView (language := language)).TablesWF) :
+    RetainsTypedRoots mir memory := by
+  have hInvMir : List.map (fun e => (e.1, e.2.1)) memory.functions =
+      List.map (fun e => (e.1, e.2.1)) mir.functions :=
+    hInv.trans (MIR.logicalView_inventories_eq (language := language) mir)
+  have hSrcFns : (List.map Prod.fst mir.functions).Nodup := by
+    have hKeys : List.map Prod.fst (mir.logicalView (language := language)).functions =
+        List.map Prod.fst mir.functions := by
+      have h := congrArg (List.map Prod.fst) (MIR.logicalView_inventories_eq (language := language) mir)
+      simpa only [List.map_map, Function.comp_def] using h
+    exact hKeys ▸ hSrc.1
+  have hSrcLocals : ∀ fn locals graph, (fn, locals, graph) ∈ mir.functions →
+      (List.map Prod.fst locals).Nodup := by
+    intro fn locals graph hMem
+    have hPair : (fn, locals) ∈ List.map (fun e => (e.1, e.2.1)) (mir.logicalView (language := language)).functions := by
+      rw [MIR.logicalView_inventories_eq (language := language) mir]
+      exact List.mem_map.mpr ⟨(fn, locals, graph), hMem, rfl⟩
+    obtain ⟨⟨logFn, logLocals, logicalGraph⟩, hLogMem, hEq⟩ := List.mem_map.mp hPair
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj hEq
+    exact (hSrc.2.2.2.2.2.2 logFn logLocals logicalGraph hLogMem).1
+  exact RetainsTypedRoots.of_inventories_eq hInvMir hSrcFns hSrcLocals
+
+theorem RetainsTypedRoots.logicalView {mir : MIR lang profile}
+    (hSrc : (mir.logicalView (language := language)).TablesWF) :
+    RetainsTypedRoots mir (mir.logicalView (language := language)) :=
+  RetainsTypedRoots.of_logicalView_inventories_eq rfl hSrc
 
 /-- Any MIR that lowers validly to `Memory` is `Materializable` on `profile`: retaining
-all typed roots, matching layouts, and enforcing `Layout.WellFormed` guarantees every
-non-scalar or escaping root admits a well-formed target layout in `mir.declarations`. -/
+the exact function-keyed typed root inventory in both directions, matching layouts, and
+enforcing `Layout.WellFormed` guarantees every non-scalar or escaping root admits a
+well-formed target layout in `mir.declarations`. -/
 theorem LowersMemory.materializable {mir : MIR lang profile} {memory : Memory lang profile}
     (lowered : LowersMemory (language := language) mir memory) :
     Materializable (language := language) mir := by
   intro fn srcLocals srcGraph hFn place ty hLocal hNeed
-  obtain ⟨dstLocals, dstGraph, hDstFn, hRetained⟩ := lowered.retainsTypedRoots fn srcLocals srcGraph hFn
+  obtain ⟨dstLocals, dstGraph, hDstFn, hRetained⟩ := lowered.retainsTypedRoots.forward hFn
   obtain ⟨classes, storage, hStorageFn, hStoragePlace, hVirtualIff⟩ :=
     lowered.2.2.2.2.2.1.1 fn srcLocals srcGraph hFn place ty hLocal
   have hMat : storage = .materialized := by
@@ -2248,7 +2561,7 @@ theorem LowersMemory.materializable {mir : MIR lang profile} {memory : Memory la
       · cases hs : language.scalarType ty <;> simp [hs] at hScalar hNone
       · exact absurd hEsc hNoEsc
   obtain ⟨classes', hStorageFn', hCase⟩ :=
-    lowered.2.2.2.1.1 fn dstLocals dstGraph hDstFn place ty (hRetained place ty hLocal)
+    lowered.2.2.2.1.1 fn dstLocals dstGraph hDstFn place ty ((hRetained place ty).mp hLocal)
   rw [hStorageFn] at hStorageFn'
   cases Option.some.inj hStorageFn'
   rcases hCase with hVirt | ⟨_, slots, d, hSlots, hDesc, hLayout⟩
@@ -2257,6 +2570,16 @@ theorem LowersMemory.materializable {mir : MIR lang profile} {memory : Memory la
   · refine ⟨d, lowered.2.2.2.2.1.2 ▸ hLayout, ?_⟩
     exact lowered.layoutsWF (fn, slots) (alist_lookup_mem_local hSlots)
       (place, d) (alist_lookup_mem_local hDesc)
+
+/-- Backward root accountability of `LowersMemory`: every function and typed local root
+present in `memory` was declared with the exact same type in `mir`. -/
+theorem LowersMemory.memoryRoot_declared {mir : MIR lang profile} {memory : Memory lang profile}
+    (lowered : LowersMemory (language := language) mir memory)
+    {fn dstLocals dstGraph} (hDstFn : (fn, dstLocals, dstGraph) ∈ memory.functions)
+    {place ty} (hLocal : (place, ty) ∈ dstLocals) :
+    ∃ srcLocals srcGraph, (fn, srcLocals, srcGraph) ∈ mir.functions ∧ (place, ty) ∈ srcLocals := by
+  obtain ⟨srcLocals, srcGraph, hSrcFn, hEquiv⟩ := lowered.retainsTypedRoots.backward hDstFn
+  exact ⟨srcLocals, srcGraph, hSrcFn, (hEquiv place ty).mp hLocal⟩
 
 def BIR.TrapsMatch {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
     (ssa : SSA lang profile) (bir : BIR lang profile) : Prop :=
@@ -2570,15 +2893,29 @@ theorem SSA.memoryView_addWithOverflow_aliased_not_tablesWF {ssa : SSA lang prof
 def SSA.Execution : Semantics (SSA lang profile) language.operands.Event :=
   BIR.registerExecution.onInput (SSA.memoryView (language := language))
 
-/-- A Memory instruction is a residual plain addition of width `t` when it performs
-`.arithmetic (.plain .add)` on `[lang.intTy t, lang.intTy t] → lang.intTy t` with at
-least one residual `.overflow` check. -/
+/-- Abbreviation for an SSA CFG block. -/
+abbrev SSABlock {Ty : Type} (lang : LoweringLanguage Ty) :=
+  Block (Sigma (SSAValue Ty)) (LocatedOp (SSAInst lang))
+    (Terminator (Sigma (SSARead Ty lang.literal)) (SSARead Ty lang.literal lang.bool))
+
+/-- A Memory instruction is a residual plain addition of width `t` writing `dst` from
+operands `lhs` and `rhs` when it performs `.arithmetic (.plain .add)` on
+`[lang.intTy t, lang.intTy t] → lang.intTy t` with at least one residual `.overflow` check. -/
+inductive MemoryInst.ResidualPlainAdd {Ty : Type} {lang : LoweringLanguage Ty}
+    (t : IntTy) (dst : MemoryPlace Ty (lang.intTy t))
+    (lhs rhs : MemoryRead Ty lang.literal (lang.intTy t)) : MemoryInst lang → Prop where
+  | mk {op : lang.operation (.arithmetic (.plain .add)) [lang.intTy t, lang.intTy t] (lang.intTy t)}
+      {checks : List OperationCheck} {addresses : List (Sigma (MemoryPlace Ty))}
+      (hRes : ∃ c ∈ checks, c.disposition = .residual ∧ c.trap = .overflow) :
+      MemoryInst.ResidualPlainAdd t dst lhs rhs
+        (.op (opcode := .arithmetic (.plain .add))
+          (types := [lang.intTy t, lang.intTy t]) (ty := lang.intTy t)
+          dst op (.cons lhs (.cons rhs .nil)) checks addresses)
+
+/-- A Memory instruction is a residual plain addition of width `t`. -/
 def MemoryInst.IsResidualPlainAdd {Ty : Type} {lang : LoweringLanguage Ty}
-    (t : IntTy) : MemoryInst lang → Prop
-  | @MemoryInst.op _ _ (.arithmetic (.plain .add)) types ty _ _ _ checks _ =>
-    types = [lang.intTy t, lang.intTy t] ∧ ty = lang.intTy t ∧
-    ∃ c ∈ checks, c.disposition = .residual ∧ c.trap = .overflow
-  | _ => False
+    (t : IntTy) (inst : MemoryInst lang) : Prop :=
+  ∃ dst lhs rhs, inst.ResidualPlainAdd t dst lhs rhs
 
 /-- A Memory instruction is a residual plain addition at any width. -/
 def MemoryInst.HasResidualAdd {Ty : Type} {lang : LoweringLanguage Ty} :
@@ -2587,65 +2924,763 @@ def MemoryInst.HasResidualAdd {Ty : Type} {lang : LoweringLanguage Ty} :
     ∃ c ∈ checks, c.disposition = .residual ∧ c.trap = .overflow
   | _ => False
 
-/-- A specific SSA block guards an `addWithOverflow` of width `t` at `origin`: the
-two-result instruction is the final instruction of `block.body`, its destinations are
-distinct, its terminator branches on the overflow flag with no trap-edge arguments, and
-the `true` successor is an empty trap block recording `.overflow` at the exact same `origin`. -/
+theorem MemoryInst.ResidualPlainAdd.hasResidualAdd {Ty : Type} {lang : LoweringLanguage Ty}
+    {t : IntTy} {dst : MemoryPlace Ty (lang.intTy t)}
+    {lhs rhs : MemoryRead Ty lang.literal (lang.intTy t)} {inst : MemoryInst lang}
+    (h : inst.ResidualPlainAdd t dst lhs rhs) : inst.HasResidualAdd := by
+  cases h with
+  | mk hRes => exact hRes
+
+theorem MemoryInst.ResidualPlainAdd.isResidualPlainAdd {Ty : Type} {lang : LoweringLanguage Ty}
+    {t : IntTy} {dst : MemoryPlace Ty (lang.intTy t)}
+    {lhs rhs : MemoryRead Ty lang.literal (lang.intTy t)} {inst : MemoryInst lang}
+    (h : inst.ResidualPlainAdd t dst lhs rhs) : inst.IsResidualPlainAdd t :=
+  ⟨dst, lhs, rhs, h⟩
+
+/-- A Memory CFG contains at least one residual plain addition. -/
+def MemoryGraph.HasResidualAdd {Ty : Type} {lang : LoweringLanguage Ty}
+    (graph : MemoryGraph lang) : Prop :=
+  ∃ block ∈ graph.blocks.toList, ∃ op ∈ block.body, op.instruction.HasResidualAdd
+
+/-- Virtual local renaming map from Memory `PlaceId`s to their current SSA read image. -/
+abbrev SSAEnv (Ty : Type) (lang : LoweringLanguage Ty) :=
+  PlaceId → Option (Sigma (SSARead Ty lang.literal))
+
+def SSAEnv.empty {Ty : Type} {lang : LoweringLanguage Ty} : SSAEnv Ty lang :=
+  fun _ => none
+
+def SSAEnv.set {Ty : Type} {lang : LoweringLanguage Ty}
+    (env : SSAEnv Ty lang) (root : PlaceId) (val : Sigma (SSARead Ty lang.literal)) :
+    SSAEnv Ty lang :=
+  fun p => if p = root then some val else env p
+
+/-- Parallel update of virtual local bindings from Memory block parameters and their
+corresponding SSA reads. Materialized parameters do not enter the virtual renaming. -/
+def SSAEnv.bindParams {Ty : Type} {lang : LoweringLanguage Ty}
+    (base : SSAEnv Ty lang) :
+    List (Sigma (MemoryPlace Ty)) → List (Sigma (SSARead Ty lang.literal)) → SSAEnv Ty lang
+  | [], _ => base
+  | _, [] => base
+  | ⟨_, mParam⟩ :: mRest, sArg :: sRest =>
+    let rest := SSAEnv.bindParams base mRest sRest
+    match mParam.storage with
+    | .virtual => rest.set mParam.logical.root sArg
+    | .materialized => rest
+
+/-- Every instruction in a read-preparation prefix is an `SSAInst.load`. -/
+def AllLoads {Ty : Type} {lang : LoweringLanguage Ty} :
+    List (LocatedOp (SSAInst lang)) → Prop
+  | [] => True
+  | op :: rest =>
+    (∃ (ty : Ty) (dst : SSAValue Ty ty) (src : Place Ty ty), op.instruction = .load dst src) ∧
+      AllLoads rest
+
+/-- `sRead` is the SSA image of Memory operand `mRead` under virtual renaming `env` and
+preceding operand loads `opLoads`:
+- a literal maps to the exact same literal;
+- a virtual read (`path = []`) resolves through `env` at its root with the exact type;
+- a materialized read resolves to an SSA value loaded from its exact logical place in `opLoads`. -/
+def ReadImage {Ty : Type} {lang : LoweringLanguage Ty}
+    (env : SSAEnv Ty lang) (opLoads : List (LocatedOp (SSAInst lang)))
+    {ty : Ty} (mRead : MemoryRead Ty lang.literal ty) (sRead : SSARead Ty lang.literal ty) : Prop :=
+  match mRead with
+  | .literal lit => sRead = .literal lit
+  | .copy place | .move place =>
+    match place.storage with
+    | .virtual => place.logical.path = [] ∧ env place.logical.root = some ⟨ty, sRead⟩
+    | .materialized =>
+      ∃ v, sRead = .value v ∧ ∃ lo ∈ opLoads, lo.instruction = .load v place.logical
+
+/-- Pointwise lift of `ReadImage` to typed operator argument lists. -/
+inductive ArgsImage {Ty : Type} {lang : LoweringLanguage Ty}
+    (env : SSAEnv Ty lang) (opLoads : List (LocatedOp (SSAInst lang))) :
+    {types : List Ty} → Args (MemoryRead Ty lang.literal) types →
+    Args (SSARead Ty lang.literal) types → Prop where
+  | nil : ArgsImage env opLoads .nil .nil
+  | cons {ty : Ty} {types : List Ty}
+      {mArg : MemoryRead Ty lang.literal ty} {sArg : SSARead Ty lang.literal ty}
+      {mRest : Args (MemoryRead Ty lang.literal) types}
+      {sRest : Args (SSARead Ty lang.literal) types} :
+      ReadImage env opLoads mArg sArg →
+      ArgsImage env opLoads mRest sRest →
+      ArgsImage env opLoads (.cons mArg mRest) (.cons sArg sRest)
+
+/-- Pointwise lift of `ReadImage` to sigma-typed operand lists (calls and CFG edges). -/
+inductive OperandsImage {Ty : Type} {lang : LoweringLanguage Ty}
+    (env : SSAEnv Ty lang) (opLoads : List (LocatedOp (SSAInst lang))) :
+    List (Sigma (MemoryRead Ty lang.literal)) →
+    List (Sigma (SSARead Ty lang.literal)) → Prop where
+  | nil : OperandsImage env opLoads [] []
+  | cons {ty : Ty}
+      {mArg : MemoryRead Ty lang.literal ty} {sArg : SSARead Ty lang.literal ty}
+      {mRest : List (Sigma (MemoryRead Ty lang.literal))}
+      {sRest : List (Sigma (SSARead Ty lang.literal))} :
+      ReadImage env opLoads mArg sArg →
+      OperandsImage env opLoads mRest sRest →
+      OperandsImage env opLoads (⟨ty, mArg⟩ :: mRest) (⟨ty, sArg⟩ :: sRest)
+
+/-- Lowering a destination write of `sRead` into `mDst` at `origin`:
+- a virtual destination (`path = []`) updates `env` with no store;
+- a materialized destination emits `⟨origin, .store mDst.logical sRead⟩` and leaves `env` unchanged. -/
+def WriteDest {Ty : Type} {lang : LoweringLanguage Ty}
+    (origin : Origin) {ty : Ty} (mDst : MemoryPlace Ty ty) (sRead : SSARead Ty lang.literal ty)
+    (env env' : SSAEnv Ty lang) (stores : List (LocatedOp (SSAInst lang))) : Prop :=
+  match mDst.storage with
+  | .virtual =>
+    mDst.logical.path = [] ∧ stores = [] ∧ env' = env.set mDst.logical.root ⟨ty, sRead⟩
+  | .materialized =>
+    stores = [⟨origin, .store mDst.logical sRead⟩] ∧ env' = env
+
+/-- Lowering destructure field destination bindings in order. -/
+inductive WriteBindings {Ty : Type} {lang : LoweringLanguage Ty} (origin : Origin) :
+    List (FieldId × Sigma (MemoryPlace Ty)) →
+    List (FieldId × Sigma (SSAValue Ty)) →
+    SSAEnv Ty lang → SSAEnv Ty lang → List (LocatedOp (SSAInst lang)) → Prop where
+  | nil (env : SSAEnv Ty lang) : WriteBindings origin [] [] env env []
+  | cons {field : FieldId} {ty : Ty} {mDst : MemoryPlace Ty ty} {sVal : SSAValue Ty ty}
+      {mRest : List (FieldId × Sigma (MemoryPlace Ty))}
+      {sRest : List (FieldId × Sigma (SSAValue Ty))}
+      {env envMid env' : SSAEnv Ty lang}
+      {s1 s2 : List (LocatedOp (SSAInst lang))} :
+      WriteDest origin mDst (.value sVal) env envMid s1 →
+      WriteBindings origin mRest sRest envMid env' s2 →
+      WriteBindings origin ((field, ⟨ty, mDst⟩) :: mRest) ((field, ⟨ty, sVal⟩) :: sRest)
+        env env' (s1 ++ s2)
+
+/-- Lowering parameter writes for materialized block or function parameters. -/
+inductive ParamStores {Ty : Type} {lang : LoweringLanguage Ty} :
+    List (Sigma (MemoryPlace Ty)) →
+    List (Sigma (SSARead Ty lang.literal)) →
+    List (LocatedOp (SSAInst lang)) → Prop where
+  | nil : ParamStores [] [] []
+  | consVirtual {ty : Ty} {mParam : MemoryPlace Ty ty} {sArg : SSARead Ty lang.literal ty}
+      {mRest : List (Sigma (MemoryPlace Ty))} {sRest : List (Sigma (SSARead Ty lang.literal))}
+      {stores : List (LocatedOp (SSAInst lang))} :
+      mParam.storage = .virtual →
+      ParamStores mRest sRest stores →
+      ParamStores (⟨ty, mParam⟩ :: mRest) (⟨ty, sArg⟩ :: sRest) stores
+  | consMaterialized {ty : Ty} {mParam : MemoryPlace Ty ty} {sArg : SSARead Ty lang.literal ty}
+      {mRest : List (Sigma (MemoryPlace Ty))} {sRest : List (Sigma (SSARead Ty lang.literal))}
+      {origin : Origin} {prefixOps stores : List (LocatedOp (SSAInst lang))} :
+      mParam.storage = .materialized →
+      (prefixOps = [⟨origin, .store mParam.logical sArg⟩] ∨
+       prefixOps = [⟨origin, .beginLifetime mParam.logical.root⟩, ⟨origin, .store mParam.logical sArg⟩]) →
+      ParamStores mRest sRest stores →
+      ParamStores (⟨ty, mParam⟩ :: mRest) (⟨ty, sArg⟩ :: sRest) (prefixOps ++ stores)
+
+/-- An SSA CFG edge `sEdge` to `sTarget` transfers virtual environment `envAfter` into
+`envTarget`: argument types match `sTarget.params`, and every root bound in `envTarget`
+either comes from a matching `(sEdge.arguments[idx], sTarget.params[idx])` transfer slot
+whose edge argument matches `envAfter`, or stays unchanged from `envAfter`. -/
+def EdgeTransfersEnv {Ty : Type} {lang : LoweringLanguage Ty}
+    (envAfter : SSAEnv Ty lang)
+    (sEdge : CFGEdge (Sigma (SSARead Ty lang.literal)))
+    (sTarget : SSABlock lang)
+    (envTarget : SSAEnv Ty lang) : Prop :=
+  sTarget.id = sEdge.target ∧
+  sEdge.arguments.map Sigma.fst = sTarget.params.map Sigma.fst ∧
+  ∀ root ty targetRead, envTarget root = some ⟨ty, targetRead⟩ →
+    (∃ (idx : Nat) (paramVal : SSAValue Ty ty) (argRead : SSARead Ty lang.literal ty),
+      targetRead = .value paramVal ∧
+      sTarget.params[idx]? = some (⟨ty, paramVal⟩ : Sigma (SSAValue Ty)) ∧
+      sEdge.arguments[idx]? = some (⟨ty, argRead⟩ : Sigma (SSARead Ty lang.literal)) ∧
+      envAfter root = some ⟨ty, argRead⟩) ∨
+    envAfter root = some ⟨ty, targetRead⟩
+
+/-- Lowering a Memory CFG edge `mEdge` to an SSA edge `sEdge` under `blockMap` and `envAt`. -/
+def EdgeLowers {Ty : Type} {lang : LoweringLanguage Ty}
+    (mGraph : MemoryGraph lang) (sGraph : SSAGraph lang)
+    (blockMap : BlockId → BlockId) (envAt : BlockId → SSAEnv Ty lang)
+    (env : SSAEnv Ty lang) (sPrefix : List (LocatedOp (SSAInst lang)))
+    (mEdge : CFGEdge (Sigma (MemoryRead Ty lang.literal)))
+    (sEdge : CFGEdge (Sigma (SSARead Ty lang.literal))) : Prop :=
+  ∃ mTarget ∈ mGraph.blocks.toList, mTarget.id = mEdge.target ∧
+    ∃ opLoads stores sArgReads,
+      sPrefix = opLoads ++ stores ∧
+      AllLoads opLoads ∧
+      OperandsImage env opLoads mEdge.arguments sArgReads ∧
+      ParamStores mTarget.params sArgReads stores ∧
+      ∃ sTarget ∈ sGraph.blocks.toList, sTarget.id = blockMap mEdge.target ∧
+        EdgeTransfersEnv (SSAEnv.bindParams env mTarget.params sArgReads) sEdge sTarget (envAt mEdge.target)
+
+/-- Lowering a Memory block terminator `mEnding` at the end of an SSA block segment. -/
+def TermLowers {Ty : Type} {lang : LoweringLanguage Ty}
+    (mGraph : MemoryGraph lang) (sGraph : SSAGraph lang)
+    (blockMap : BlockId → BlockId) (envAt : BlockId → SSAEnv Ty lang)
+    (env : SSAEnv Ty lang) (sRem : List (LocatedOp (SSAInst lang)))
+    (mEnding : MemoryTerm lang)
+    (sEnding : Terminator (Sigma (SSARead Ty lang.literal)) (SSARead Ty lang.literal lang.bool)) : Prop :=
+  match mEnding with
+  | .ret none => sRem = [] ∧ sEnding = .ret none
+  | .ret (some ⟨ty, mRead⟩) =>
+    ∃ (sRead : SSARead Ty lang.literal ty),
+      AllLoads sRem ∧ ReadImage env sRem mRead sRead ∧ sEnding = .ret (some ⟨ty, sRead⟩)
+  | .trap kind origin => sRem = [] ∧ sEnding = .trap kind origin
+  | .invalid => sRem = [] ∧ sEnding = .invalid
+  | .jump mEdge =>
+    ∃ sEdge, sEnding = .jump sEdge ∧
+      EdgeLowers mGraph sGraph blockMap envAt env sRem mEdge sEdge
+  | .branch mTest mYes mNo =>
+    ∃ sTest sYes sNo testLoads yesPrefix noPrefix,
+      sRem = testLoads ++ yesPrefix ++ noPrefix ∧
+      AllLoads testLoads ∧ ReadImage env testLoads mTest sTest ∧
+      sEnding = .branch sTest sYes sNo ∧
+      EdgeLowers mGraph sGraph blockMap envAt env yesPrefix mYes sYes ∧
+      EdgeLowers mGraph sGraph blockMap envAt env noPrefix mNo sNo
+
+/-- A specific SSA block `block` guards an `addWithOverflow` of width `t` at `origin`
+producing distinct `(dst, flag)` from operands `(lhs, rhs)`, branching on `flag` to an
+empty `.trap .overflow origin` block on `true` and supplying the wrapped value `.value dst`
+along `no` to continuation block `contBlock` as parameter `contVal` on `false`. -/
 def SSAGraph.BlockGuardsAddWithOverflow {Ty : Type} {lang : LoweringLanguage Ty}
-    (graph : SSAGraph lang)
-    (block : Block (Sigma (SSAValue Ty)) (LocatedOp (SSAInst lang))
-      (Terminator (Sigma (SSARead Ty lang.literal)) (SSARead Ty lang.literal lang.bool)))
+    (graph : SSAGraph lang) (block : SSABlock lang)
     (t : IntTy) (origin : Origin)
     (dst : SSAValue Ty (lang.intTy t)) (flag : SSAValue Ty lang.bool)
-    (lhs rhs : SSARead Ty lang.literal (lang.intTy t)) : Prop :=
+    (lhs rhs : SSARead Ty lang.literal (lang.intTy t))
+    (no : CFGEdge (Sigma (SSARead Ty lang.literal)))
+    (contBlock : SSABlock lang) (contVal : SSAValue Ty (lang.intTy t)) : Prop :=
   dst.id ≠ flag.id ∧
   block.body.getLast? = some ⟨origin, .addWithOverflow t dst flag lhs rhs⟩ ∧
-  ∃ yes no trapBlock,
+  ∃ yes trapBlock,
     block.ending = .branch (.value flag) yes no ∧
     yes.arguments = [] ∧
     trapBlock ∈ graph.blocks.toList ∧ trapBlock.id = yes.target ∧
     trapBlock.params = [] ∧ trapBlock.body = [] ∧
-    trapBlock.ending = .trap .overflow origin
+    trapBlock.ending = .trap .overflow origin ∧
+    contBlock ∈ graph.blocks.toList ∧ contBlock.id = no.target ∧
+    contBlock.id ≠ trapBlock.id ∧
+    no.arguments.map Sigma.fst = contBlock.params.map Sigma.fst ∧
+    ∃ idx : Nat,
+      no.arguments[idx]? = some (⟨lang.intTy t, .value dst⟩ : Sigma (SSARead Ty lang.literal)) ∧
+      contBlock.params[idx]? = some (⟨lang.intTy t, contVal⟩ : Sigma (SSAValue Ty))
 
-/-- Some block in `graph` guards an `addWithOverflow` of width `t` at `origin`. -/
+/-- Some block in `graph` guards an `addWithOverflow` of width `t` at `origin` on the
+given SSA operands `lhs` and `rhs`, supplying the wrapped value along `no` to `contBlock`
+as parameter `contVal` and branching to an empty `.overflow` trap block at `origin` on `true`. -/
 def SSAGraph.GuardsAddWithOverflow {Ty : Type} {lang : LoweringLanguage Ty}
-    (graph : SSAGraph lang) (t : IntTy) (origin : Origin) : Prop :=
-  ∃ block ∈ graph.blocks.toList, ∃ dst flag lhs rhs,
-    graph.BlockGuardsAddWithOverflow block t origin dst flag lhs rhs
+    (graph : SSAGraph lang) (t : IntTy) (origin : Origin)
+    (lhs rhs : SSARead Ty lang.literal (lang.intTy t))
+    (no : CFGEdge (Sigma (SSARead Ty lang.literal)))
+    (contBlock : SSABlock lang) (contVal : SSAValue Ty (lang.intTy t)) : Prop :=
+  ∃ block ∈ graph.blocks.toList, ∃ dst flag,
+    graph.BlockGuardsAddWithOverflow block t origin dst flag lhs rhs no contBlock contVal
 
-/-- Every residual plain addition in `memory` lowers in the same function of `ssa` to a
-guarded `addWithOverflow` at the exact same origin and width (and never to an unguarded
-plain `SSAInst.op`), and every `SSAInst.addWithOverflow` in `ssa` has distinct destinations
-and traces to either a matching guarded residual plain addition or an existing
-`MemoryInst.addWithOverflow` at the same origin in `memory`. Discharged checked-route
-additions therefore retain exact-once evidence consumption without spurious runtime guards. -/
+/-- Structural lowering of a Memory block tail `(mBody, mEnding)` into `sGraph` starting
+from SSA block `sBlock`, remaining SSA instructions `sRem`, and virtual renaming `env`,
+recording every emitted `(guardBlock, addWithOverflowOp)` occurrence in `emitted`. -/
+inductive SSAGraph.InstsLower {Ty : Type} {lang : LoweringLanguage Ty}
+    (mGraph : MemoryGraph lang) (sGraph : SSAGraph lang)
+    (blockMap : BlockId → BlockId) (envAt : BlockId → SSAEnv Ty lang) :
+    SSABlock lang → SSAEnv Ty lang →
+    List (LocatedOp (MemoryInst lang)) → MemoryTerm lang →
+    List (LocatedOp (SSAInst lang)) →
+    List (SSABlock lang × LocatedOp (SSAInst lang)) → Prop where
+  | nil {sBlock env mEnding sRem} :
+      TermLowers mGraph sGraph blockMap envAt env sRem mEnding sBlock.ending →
+      InstsLower mGraph sGraph blockMap envAt sBlock env [] mEnding sRem []
+  | bind {mOrigin ty} {mDst : MemoryPlace Ty ty} {mSrc : MemoryRead Ty lang.literal ty}
+      {mPost mEnding sBlock opLoads stores sRest} {sRead : SSARead Ty lang.literal ty}
+      {env env' emitted} :
+      AllLoads opLoads →
+      ReadImage env opLoads mSrc sRead →
+      WriteDest mOrigin mDst sRead env env' stores →
+      InstsLower mGraph sGraph blockMap envAt sBlock env' mPost mEnding sRest emitted →
+      InstsLower mGraph sGraph blockMap envAt sBlock env
+        (⟨mOrigin, .bind mDst mSrc⟩ :: mPost) mEnding (opLoads ++ stores ++ sRest) emitted
+  | assign {mOrigin ty} {mDst : MemoryPlace Ty ty} {mSrc : MemoryRead Ty lang.literal ty}
+      {mPost mEnding sBlock opLoads stores sRest} {sRead : SSARead Ty lang.literal ty}
+      {env env' emitted} :
+      AllLoads opLoads →
+      ReadImage env opLoads mSrc sRead →
+      WriteDest mOrigin mDst sRead env env' stores →
+      InstsLower mGraph sGraph blockMap envAt sBlock env' mPost mEnding sRest emitted →
+      InstsLower mGraph sGraph blockMap envAt sBlock env
+        (⟨mOrigin, .assign mDst mSrc⟩ :: mPost) mEnding (opLoads ++ stores ++ sRest) emitted
+  | op {mOrigin opcode types ty} {mDst : MemoryPlace Ty ty}
+      {op : lang.operation opcode types ty} {mArgs : Args (MemoryRead Ty lang.literal) types}
+      {checks addresses mPost mEnding sBlock opLoads stores sRest}
+      {sDst : SSAValue Ty ty} {sArgs : Args (SSARead Ty lang.literal) types}
+      {env env' emitted} :
+      ¬ (MemoryInst.op (opcode := opcode) mDst op mArgs checks addresses).HasResidualAdd →
+      AllLoads opLoads →
+      ArgsImage env opLoads mArgs sArgs →
+      WriteDest mOrigin mDst (.value sDst) env env' stores →
+      InstsLower mGraph sGraph blockMap envAt sBlock env' mPost mEnding sRest emitted →
+      InstsLower mGraph sGraph blockMap envAt sBlock env
+        (⟨mOrigin, .op mDst op mArgs checks addresses⟩ :: mPost) mEnding
+        (opLoads ++ [⟨mOrigin, .op sDst op sArgs (addresses.map fun p => ⟨p.1, p.2.logical⟩)⟩] ++
+          stores ++ sRest) emitted
+  | residualAdd {mOrigin t} {mDst : MemoryPlace Ty (lang.intTy t)}
+      {mLhs mRhs : MemoryRead Ty lang.literal (lang.intTy t)} {mInst : MemoryInst lang}
+      {mPost mEnding sBlock contBlock opLoads contStores restContBody}
+      {sDst : SSAValue Ty (lang.intTy t)} {sFlag : SSAValue Ty lang.bool}
+      {sLhs sRhs : SSARead Ty lang.literal (lang.intTy t)}
+      {no : CFGEdge (Sigma (SSARead Ty lang.literal))}
+      {contVal : SSAValue Ty (lang.intTy t)}
+      {env envAfter envCont emitted} :
+      mInst.ResidualPlainAdd t mDst mLhs mRhs →
+      AllLoads opLoads →
+      ReadImage env opLoads mLhs sLhs →
+      ReadImage env opLoads mRhs sRhs →
+      sGraph.BlockGuardsAddWithOverflow sBlock t mOrigin sDst sFlag sLhs sRhs no contBlock contVal →
+      (match mDst.storage with
+       | .virtual =>
+         mDst.logical.path = [] ∧
+         envAfter = env.set mDst.logical.root ⟨lang.intTy t, .value sDst⟩ ∧
+         EdgeTransfersEnv envAfter no contBlock envCont ∧
+         envCont mDst.logical.root = some ⟨lang.intTy t, .value contVal⟩ ∧
+         contStores = []
+       | .materialized =>
+         envAfter = env ∧
+         EdgeTransfersEnv envAfter no contBlock envCont ∧
+         contStores = [⟨mOrigin, .store mDst.logical (.value contVal)⟩]) →
+      contBlock.body = contStores ++ restContBody →
+      InstsLower mGraph sGraph blockMap envAt contBlock envCont mPost mEnding restContBody emitted →
+      InstsLower mGraph sGraph blockMap envAt sBlock env
+        (⟨mOrigin, mInst⟩ :: mPost) mEnding
+        (opLoads ++ [⟨mOrigin, .addWithOverflow t sDst sFlag sLhs sRhs⟩])
+        ((sBlock, ⟨mOrigin, .addWithOverflow t sDst sFlag sLhs sRhs⟩) :: emitted)
+  | addWithOverflow {mOrigin t} {mDst : MemoryPlace Ty (lang.intTy t)}
+      {mFlag : MemoryPlace Ty lang.bool}
+      {mLhs mRhs : MemoryRead Ty lang.literal (lang.intTy t)}
+      {mPost mEnding sBlock opLoads dstStores flagStores sRest}
+      {sDst : SSAValue Ty (lang.intTy t)} {sFlag : SSAValue Ty lang.bool}
+      {sLhs sRhs : SSARead Ty lang.literal (lang.intTy t)}
+      {env envMid env' emitted} :
+      sDst.id ≠ sFlag.id →
+      AllLoads opLoads →
+      ReadImage env opLoads mLhs sLhs →
+      ReadImage env opLoads mRhs sRhs →
+      WriteDest mOrigin mDst (.value sDst) env envMid dstStores →
+      WriteDest mOrigin mFlag (.value sFlag) envMid env' flagStores →
+      InstsLower mGraph sGraph blockMap envAt sBlock env' mPost mEnding sRest emitted →
+      InstsLower mGraph sGraph blockMap envAt sBlock env
+        (⟨mOrigin, .addWithOverflow t mDst mFlag mLhs mRhs⟩ :: mPost) mEnding
+        (opLoads ++ [⟨mOrigin, .addWithOverflow t sDst sFlag sLhs sRhs⟩] ++
+          dstStores ++ flagStores ++ sRest)
+        ((sBlock, ⟨mOrigin, .addWithOverflow t sDst sFlag sLhs sRhs⟩) :: emitted)
+  | beginLifetime {mOrigin place mPost mEnding sBlock sPrefix sRest env emitted} :
+      (sPrefix = [] ∨ sPrefix = [⟨mOrigin, .beginLifetime place⟩]) →
+      InstsLower mGraph sGraph blockMap envAt sBlock env mPost mEnding sRest emitted →
+      InstsLower mGraph sGraph blockMap envAt sBlock env
+        (⟨mOrigin, .beginLifetime place⟩ :: mPost) mEnding (sPrefix ++ sRest) emitted
+  | endLifetime {mOrigin place mPost mEnding sBlock sPrefix sRest env emitted} :
+      (sPrefix = [] ∨ sPrefix = [⟨mOrigin, .endLifetime place⟩]) →
+      InstsLower mGraph sGraph blockMap envAt sBlock
+        (fun p => if p = place then none else env p) mPost mEnding sRest emitted →
+      InstsLower mGraph sGraph blockMap envAt sBlock env
+        (⟨mOrigin, .endLifetime place⟩ :: mPost) mEnding (sPrefix ++ sRest) emitted
+  | destructure {mOrigin ty} {mSrc : MemoryPlace Ty ty}
+      {mBindings : List (FieldId × Sigma (MemoryPlace Ty))}
+      {sAgg : SSAAggregate Ty ty} {sBindings : List (FieldId × Sigma (SSAValue Ty))}
+      {mPost mEnding sBlock stores sRest env env' emitted} :
+      (match mSrc.storage with
+       | .virtual =>
+         mSrc.logical.path = [] ∧
+         ∃ v, env mSrc.logical.root = some ⟨ty, .value v⟩ ∧ sAgg = .register v
+       | .materialized => sAgg = .materialized mSrc.logical) →
+      WriteBindings mOrigin mBindings sBindings env env' stores →
+      InstsLower mGraph sGraph blockMap envAt sBlock env' mPost mEnding sRest emitted →
+      InstsLower mGraph sGraph blockMap envAt sBlock env
+        (⟨mOrigin, .destructure mSrc mBindings⟩ :: mPost) mEnding
+        (⟨mOrigin, .destructure sAgg sBindings⟩ :: (stores ++ sRest)) emitted
+  | call {mOrigin callee mDst mArgs checks mPost mEnding sBlock opLoads stores sRest}
+      {sDst : Option (Sigma (SSAValue Ty))} {sArgs : List (Sigma (SSARead Ty lang.literal))}
+      {env env' emitted} :
+      AllLoads opLoads →
+      OperandsImage env opLoads mArgs sArgs →
+      (match mDst with
+       | none => sDst = none ∧ stores = [] ∧ env' = env
+       | some ⟨ty, dstPlace⟩ =>
+         ∃ sVal : SSAValue Ty ty, sDst = some ⟨ty, sVal⟩ ∧
+           WriteDest mOrigin dstPlace (.value sVal) env env' stores) →
+      InstsLower mGraph sGraph blockMap envAt sBlock env' mPost mEnding sRest emitted →
+      InstsLower mGraph sGraph blockMap envAt sBlock env
+        (⟨mOrigin, .call callee mDst mArgs checks⟩ :: mPost) mEnding
+        (opLoads ++ [⟨mOrigin, .call callee sDst sArgs⟩] ++ stores ++ sRest) emitted
+
+/-- Every residual plain addition in `mBody` lowered by `InstsLower` produces a matching
+guarded `addWithOverflow` block in `sGraph` on the SSA images of its operands, supplying
+the wrapped value along `no` to its continuation block `contBlock` as `contVal`, and is
+recorded in `emitted`. -/
+theorem SSAGraph.InstsLower.residualAdd_guarded {Ty : Type} {lang : LoweringLanguage Ty}
+    {mGraph : MemoryGraph lang} {sGraph : SSAGraph lang}
+    {blockMap : BlockId → BlockId} {envAt : BlockId → SSAEnv Ty lang}
+    {sBlock : SSABlock lang} {env : SSAEnv Ty lang}
+    {mBody : List (LocatedOp (MemoryInst lang))} {mEnding : MemoryTerm lang}
+    {sRem : List (LocatedOp (SSAInst lang))}
+    {emitted : List (SSABlock lang × LocatedOp (SSAInst lang))}
+    (hLower : SSAGraph.InstsLower mGraph sGraph blockMap envAt sBlock env mBody mEnding sRem emitted)
+    (hSBlock : sBlock ∈ sGraph.blocks.toList)
+    {mOp : LocatedOp (MemoryInst lang)} (hMem : mOp ∈ mBody)
+    (hRes : mOp.instruction.HasResidualAdd) :
+    ∃ t mDst mLhs mRhs guardBlock sDst sFlag sLhs sRhs no contBlock contVal envHere opLoads,
+      mOp.instruction.ResidualPlainAdd t mDst mLhs mRhs ∧
+      AllLoads opLoads ∧
+      ReadImage envHere opLoads mLhs sLhs ∧
+      ReadImage envHere opLoads mRhs sRhs ∧
+      guardBlock ∈ sGraph.blocks.toList ∧
+      sGraph.BlockGuardsAddWithOverflow guardBlock t mOp.origin sDst sFlag sLhs sRhs no contBlock contVal ∧
+      (guardBlock, ⟨mOp.origin, .addWithOverflow t sDst sFlag sLhs sRhs⟩) ∈ emitted := by
+  induction hLower with
+  | nil _ => cases hMem
+  | bind _ _ _ _ ih =>
+    cases hMem with
+    | head => cases hRes
+    | tail _ hTail => exact ih hSBlock hTail
+  | assign _ _ _ _ ih =>
+    cases hMem with
+    | head => cases hRes
+    | tail _ hTail => exact ih hSBlock hTail
+  | op hNoRes _ _ _ _ ih =>
+    cases hMem with
+    | head => exact absurd hRes hNoRes
+    | tail _ hTail => exact ih hSBlock hTail
+  | @residualAdd mOrigin t mDst mLhs mRhs mInst mPost mEnding sBlock' contBlock
+      opLoads contStores restContBody sDst sFlag sLhs sRhs no contVal env' envAfter envCont
+      emitted' hPlain hLoads hLhsImg hRhsImg hGuard _ _ _ ih =>
+    cases hMem with
+    | head =>
+      exact ⟨t, mDst, mLhs, mRhs, sBlock', sDst, sFlag, sLhs, sRhs, no, contBlock, contVal,
+        env', opLoads, hPlain, hLoads, hLhsImg, hRhsImg, hSBlock, hGuard, List.mem_cons_self⟩
+    | tail _ hTail =>
+      have hContMem : contBlock ∈ sGraph.blocks.toList := by
+        obtain ⟨_, _, _, _, _, _, _, _, _, _, _, hCM, _⟩ := hGuard
+        exact hCM
+      obtain ⟨t', mDst', mLhs', mRhs', gb, sd, sf, sl, sr, no', cb, cv, eh, ol,
+        hp, hl, hli, hri, hgb, hbg, hem⟩ := ih hContMem hTail
+      exact ⟨t', mDst', mLhs', mRhs', gb, sd, sf, sl, sr, no', cb, cv, eh, ol,
+        hp, hl, hli, hri, hgb, hbg, List.mem_cons_of_mem _ hem⟩
+  | addWithOverflow _ _ _ _ _ _ _ ih =>
+    cases hMem with
+    | head => cases hRes
+    | tail _ hTail =>
+      obtain ⟨t', mDst', mLhs', mRhs', gb, sd, sf, sl, sr, no', cb, cv, eh, ol,
+        hp, hl, hli, hri, hgb, hbg, hem⟩ := ih hSBlock hTail
+      exact ⟨t', mDst', mLhs', mRhs', gb, sd, sf, sl, sr, no', cb, cv, eh, ol,
+        hp, hl, hli, hri, hgb, hbg, List.mem_cons_of_mem _ hem⟩
+  | beginLifetime _ _ ih =>
+    cases hMem with
+    | head => cases hRes
+    | tail _ hTail => exact ih hSBlock hTail
+  | endLifetime _ _ ih =>
+    cases hMem with
+    | head => cases hRes
+    | tail _ hTail => exact ih hSBlock hTail
+  | destructure _ _ _ ih =>
+    cases hMem with
+    | head => cases hRes
+    | tail _ hTail => exact ih hSBlock hTail
+  | call _ _ _ _ ih =>
+    cases hMem with
+    | head => cases hRes
+    | tail _ hTail => exact ih hSBlock hTail
+
+/-- Every `(sBlock, sOp)` recorded in `emitted` by `InstsLower` is a distinct-destination
+`SSAInst.addWithOverflow` that traces to either a matching guarded residual plain addition
+(with operand images and continuation) or an existing `MemoryInst.addWithOverflow` in `mBody`. -/
+theorem SSAGraph.InstsLower.emitted_sound {Ty : Type} {lang : LoweringLanguage Ty}
+    {mGraph : MemoryGraph lang} {sGraph : SSAGraph lang}
+    {blockMap : BlockId → BlockId} {envAt : BlockId → SSAEnv Ty lang}
+    {sBlock : SSABlock lang} {env : SSAEnv Ty lang}
+    {mBody : List (LocatedOp (MemoryInst lang))} {mEnding : MemoryTerm lang}
+    {sRem : List (LocatedOp (SSAInst lang))}
+    {emitted : List (SSABlock lang × LocatedOp (SSAInst lang))}
+    (hLower : SSAGraph.InstsLower mGraph sGraph blockMap envAt sBlock env mBody mEnding sRem emitted)
+    {emBlock : SSABlock lang} {sOp : LocatedOp (SSAInst lang)}
+    (hEm : (emBlock, sOp) ∈ emitted) :
+    ∃ t sDst sFlag sLhs sRhs mOp,
+      mOp ∈ mBody ∧
+      sOp = ⟨mOp.origin, .addWithOverflow t sDst sFlag sLhs sRhs⟩ ∧
+      sDst.id ≠ sFlag.id ∧
+      ((∃ mDst mLhs mRhs no contBlock contVal envHere opLoads,
+          mOp.instruction.ResidualPlainAdd t mDst mLhs mRhs ∧
+          AllLoads opLoads ∧
+          ReadImage envHere opLoads mLhs sLhs ∧
+          ReadImage envHere opLoads mRhs sRhs ∧
+          sGraph.BlockGuardsAddWithOverflow emBlock t mOp.origin sDst sFlag sLhs sRhs no contBlock contVal) ∨
+        (∃ mDst mFlag mLhs mRhs envHere opLoads,
+          mOp.instruction = .addWithOverflow t mDst mFlag mLhs mRhs ∧
+          AllLoads opLoads ∧
+          ReadImage envHere opLoads mLhs sLhs ∧
+          ReadImage envHere opLoads mRhs sRhs)) := by
+  induction hLower with
+  | nil _ => cases hEm
+  | bind _ _ _ _ ih =>
+    obtain ⟨t, sd, sf, sl, sr, mOp, hM, hEq, hNe, hCase⟩ := ih hEm
+    exact ⟨t, sd, sf, sl, sr, mOp, List.mem_cons_of_mem _ hM, hEq, hNe, hCase⟩
+  | assign _ _ _ _ ih =>
+    obtain ⟨t, sd, sf, sl, sr, mOp, hM, hEq, hNe, hCase⟩ := ih hEm
+    exact ⟨t, sd, sf, sl, sr, mOp, List.mem_cons_of_mem _ hM, hEq, hNe, hCase⟩
+  | op _ _ _ _ _ ih =>
+    obtain ⟨t, sd, sf, sl, sr, mOp, hM, hEq, hNe, hCase⟩ := ih hEm
+    exact ⟨t, sd, sf, sl, sr, mOp, List.mem_cons_of_mem _ hM, hEq, hNe, hCase⟩
+  | @residualAdd mOrigin t mDst mLhs mRhs mInst mPost mEnding sBlock' contBlock
+      opLoads contStores restContBody sDst sFlag sLhs sRhs no contVal env' envAfter envCont
+      emitted' hPlain hLoads hLhsImg hRhsImg hGuard _ _ _ ih =>
+    cases hEm with
+    | head =>
+      exact ⟨t, sDst, sFlag, sLhs, sRhs, ⟨mOrigin, mInst⟩, List.mem_cons_self, rfl, hGuard.1,
+        .inl ⟨mDst, mLhs, mRhs, no, contBlock, contVal, env', opLoads,
+          hPlain, hLoads, hLhsImg, hRhsImg, hGuard⟩⟩
+    | tail _ hTail =>
+      obtain ⟨t', sd, sf, sl, sr, mOp, hM, hEq, hNe, hCase⟩ := ih hTail
+      exact ⟨t', sd, sf, sl, sr, mOp, List.mem_cons_of_mem _ hM, hEq, hNe, hCase⟩
+  | @addWithOverflow mOrigin t mDst mFlag mLhs mRhs mPost mEnding sBlock' opLoads
+      dstStores flagStores sRest sDst sFlag sLhs sRhs env' envMid env'' emitted'
+      hNe hLoads hLhsImg hRhsImg _ _ _ ih =>
+    cases hEm with
+    | head =>
+      exact ⟨t, sDst, sFlag, sLhs, sRhs, ⟨mOrigin, .addWithOverflow t mDst mFlag mLhs mRhs⟩,
+        List.mem_cons_self, rfl, hNe,
+        .inr ⟨mDst, mFlag, mLhs, mRhs, env', opLoads, rfl, hLoads, hLhsImg, hRhsImg⟩⟩
+    | tail _ hTail =>
+      obtain ⟨t', sd, sf, sl, sr, mOp, hM, hEq, hNe', hCase⟩ := ih hTail
+      exact ⟨t', sd, sf, sl, sr, mOp, List.mem_cons_of_mem _ hM, hEq, hNe', hCase⟩
+  | beginLifetime _ _ ih =>
+    obtain ⟨t, sd, sf, sl, sr, mOp, hM, hEq, hNe, hCase⟩ := ih hEm
+    exact ⟨t, sd, sf, sl, sr, mOp, List.mem_cons_of_mem _ hM, hEq, hNe, hCase⟩
+  | endLifetime _ _ ih =>
+    obtain ⟨t, sd, sf, sl, sr, mOp, hM, hEq, hNe, hCase⟩ := ih hEm
+    exact ⟨t, sd, sf, sl, sr, mOp, List.mem_cons_of_mem _ hM, hEq, hNe, hCase⟩
+  | destructure _ _ _ ih =>
+    obtain ⟨t, sd, sf, sl, sr, mOp, hM, hEq, hNe, hCase⟩ := ih hEm
+    exact ⟨t, sd, sf, sl, sr, mOp, List.mem_cons_of_mem _ hM, hEq, hNe, hCase⟩
+  | call _ _ _ _ ih =>
+    obtain ⟨t, sd, sf, sl, sr, mOp, hM, hEq, hNe, hCase⟩ := ih hEm
+    exact ⟨t, sd, sf, sl, sr, mOp, List.mem_cons_of_mem _ hM, hEq, hNe, hCase⟩
+
+/-- Full CFG lowering correspondence for a function containing residual plain additions:
+every Memory block lowers instruction-by-instruction into `sGraph` under a grounded SSA
+renaming `envAt` (initialized from `mGraph.entry`'s parameters and propagated across every
+CFG edge via `EdgeTransfersEnv`), lowering every residual plain addition to a guarded
+`addWithOverflow` on the SSA images of its operands whose false edge supplies the wrapped
+value to the continuation lowering the remainder of the Memory block, and accounting for
+every `SSAInst.addWithOverflow` anywhere in `sGraph`. -/
+def SSAGraph.LowersFrom {Ty : Type} {lang : LoweringLanguage Ty}
+    (mGraph : MemoryGraph lang) (sGraph : SSAGraph lang) : Prop :=
+  ∃ (blockMap : BlockId → BlockId) (envAt : BlockId → SSAEnv Ty lang)
+    (emittedBy : BlockId → List (SSABlock lang × LocatedOp (SSAInst lang))),
+    blockMap mGraph.entry = sGraph.entry ∧
+    (∀ mBlock ∈ mGraph.blocks.toList,
+      ∃ sBlock ∈ sGraph.blocks.toList, sBlock.id = blockMap mBlock.id ∧
+        (mBlock.id = mGraph.entry →
+          mBlock.params.map Sigma.fst = sBlock.params.map Sigma.fst ∧
+          envAt mBlock.id =
+            SSAEnv.bindParams SSAEnv.empty mBlock.params
+              (sBlock.params.map fun p => ⟨p.1, .value p.2⟩) ∧
+          ∃ entryStores restBody,
+            ParamStores mBlock.params (sBlock.params.map fun p => ⟨p.1, .value p.2⟩) entryStores ∧
+            sBlock.body = entryStores ++ restBody ∧
+            SSAGraph.InstsLower mGraph sGraph blockMap envAt sBlock (envAt mBlock.id)
+              mBlock.body mBlock.ending restBody (emittedBy mBlock.id)) ∧
+        (mBlock.id ≠ mGraph.entry →
+          (∃ slot : Nat → Nat,
+            (∀ i j, i < mBlock.params.length → j < mBlock.params.length → slot i = slot j → i = j) ∧
+            ∀ i ty (mParam : MemoryPlace Ty ty),
+              mBlock.params[i]? = some ⟨ty, mParam⟩ → mParam.storage = .virtual →
+              mParam.logical.path = [] ∧
+              ∃ v : SSAValue Ty ty, sBlock.params[slot i]? = some ⟨ty, v⟩ ∧
+                envAt mBlock.id mParam.logical.root = some ⟨ty, .value v⟩) ∧
+          ((∀ b ∈ mGraph.blocks.toList, ∀ e ∈ b.ending.successors, e.target ≠ mBlock.id) →
+            ∀ root val, envAt mBlock.id root = some val →
+              ∃ p ∈ mBlock.params, p.2.storage = .virtual ∧ p.2.logical.root = root) ∧
+          SSAGraph.InstsLower mGraph sGraph blockMap envAt sBlock (envAt mBlock.id)
+            mBlock.body mBlock.ending sBlock.body (emittedBy mBlock.id))) ∧
+    (∀ sBlock ∈ sGraph.blocks.toList, ∀ sOp ∈ sBlock.body,
+      match sOp.instruction with
+      | .addWithOverflow .. =>
+        ∃ mBlock ∈ mGraph.blocks.toList, (sBlock, sOp) ∈ emittedBy mBlock.id
+      | _ => True)
+
+theorem SSAGraph.LowersFrom.residualAdd_guarded {Ty : Type} {lang : LoweringLanguage Ty}
+    {mGraph : MemoryGraph lang} {sGraph : SSAGraph lang}
+    (hLower : sGraph.LowersFrom mGraph)
+    {mBlock : MemoryBlock lang} (hMBlock : mBlock ∈ mGraph.blocks.toList)
+    {mOp : LocatedOp (MemoryInst lang)} (hMOp : mOp ∈ mBlock.body)
+    (hRes : mOp.instruction.HasResidualAdd) :
+    ∃ t mDst mLhs mRhs sLhs sRhs no contBlock contVal envHere opLoads,
+      mOp.instruction.ResidualPlainAdd t mDst mLhs mRhs ∧
+      AllLoads opLoads ∧
+      ReadImage envHere opLoads mLhs sLhs ∧
+      ReadImage envHere opLoads mRhs sRhs ∧
+      sGraph.GuardsAddWithOverflow t mOp.origin sLhs sRhs no contBlock contVal := by
+  obtain ⟨blockMap, envAt, emittedBy, _, hBlocks, _⟩ := hLower
+  obtain ⟨sBlock, hSBlock, _, hEntry, hNonEntry⟩ := hBlocks mBlock hMBlock
+  have hInst : ∃ sRem, SSAGraph.InstsLower mGraph sGraph blockMap envAt sBlock (envAt mBlock.id)
+      mBlock.body mBlock.ending sRem (emittedBy mBlock.id) := by
+    by_cases hEq : mBlock.id = mGraph.entry
+    · obtain ⟨_, _, _, restBody, _, _, hIL⟩ := hEntry hEq
+      exact ⟨restBody, hIL⟩
+    · exact ⟨sBlock.body, (hNonEntry hEq).2.2⟩
+  obtain ⟨sRem, hIL⟩ := hInst
+  obtain ⟨t, mDst, mLhs, mRhs, guardBlock, sDst, sFlag, sLhs, sRhs, no, contBlock, contVal,
+    envHere, opLoads, hPlain, hLoads, hLhsImg, hRhsImg, hGuardMem, hGuard, _⟩ :=
+    hIL.residualAdd_guarded hSBlock hMOp hRes
+  exact ⟨t, mDst, mLhs, mRhs, sLhs, sRhs, no, contBlock, contVal, envHere, opLoads,
+    hPlain, hLoads, hLhsImg, hRhsImg, ⟨guardBlock, hGuardMem, sDst, sFlag, hGuard⟩⟩
+
+/-- Every `SSAInst.addWithOverflow` in `sGraph` lowered via `LowersFrom mGraph` has distinct
+destinations and traces to either a matching guarded residual plain addition (with operand
+images and continuation) or an existing `MemoryInst.addWithOverflow` in `mGraph`. -/
+theorem SSAGraph.LowersFrom.addWithOverflow_accounted {Ty : Type} {lang : LoweringLanguage Ty}
+    {mGraph : MemoryGraph lang} {sGraph : SSAGraph lang}
+    (hLower : sGraph.LowersFrom mGraph)
+    {sBlock : SSABlock lang} (hSBlock : sBlock ∈ sGraph.blocks.toList)
+    {origin : Origin} {t : IntTy} {dst : SSAValue Ty (lang.intTy t)}
+    {flag : SSAValue Ty lang.bool} {lhs rhs : SSARead Ty lang.literal (lang.intTy t)}
+    (hSOp : ⟨origin, .addWithOverflow t dst flag lhs rhs⟩ ∈ sBlock.body) :
+    dst.id ≠ flag.id ∧
+    ∃ mBlock ∈ mGraph.blocks.toList, ∃ mOp ∈ mBlock.body, mOp.origin = origin ∧
+      ((∃ mDst mLhs mRhs no contBlock contVal envHere opLoads,
+          mOp.instruction.ResidualPlainAdd t mDst mLhs mRhs ∧
+          AllLoads opLoads ∧
+          ReadImage envHere opLoads mLhs lhs ∧
+          ReadImage envHere opLoads mRhs rhs ∧
+          sGraph.BlockGuardsAddWithOverflow sBlock t origin dst flag lhs rhs no contBlock contVal) ∨
+        (∃ mDst mFlag mLhs mRhs envHere opLoads,
+          mOp.instruction = .addWithOverflow t mDst mFlag mLhs mRhs ∧
+          AllLoads opLoads ∧
+          ReadImage envHere opLoads mLhs lhs ∧
+          ReadImage envHere opLoads mRhs rhs)) := by
+  obtain ⟨blockMap, envAt, emittedBy, _, hBlocks, hAccounted⟩ := hLower
+  obtain ⟨mBlock, hMBlock, hInEm⟩ :=
+    hAccounted sBlock hSBlock ⟨origin, .addWithOverflow t dst flag lhs rhs⟩ hSOp
+  obtain ⟨sEntry, _, _, hEntry, hNonEntry⟩ := hBlocks mBlock hMBlock
+  have hInst : ∃ sRem, SSAGraph.InstsLower mGraph sGraph blockMap envAt sEntry (envAt mBlock.id)
+      mBlock.body mBlock.ending sRem (emittedBy mBlock.id) := by
+    by_cases hEq : mBlock.id = mGraph.entry
+    · obtain ⟨_, _, _, restBody, _, _, hIL⟩ := hEntry hEq
+      exact ⟨restBody, hIL⟩
+    · exact ⟨sEntry.body, (hNonEntry hEq).2.2⟩
+  obtain ⟨sRem, hIL⟩ := hInst
+  obtain ⟨t', sDst', sFlag', sLhs', sRhs', mOp, hMOp, hOpEq, hNe, hCase⟩ :=
+    hIL.emitted_sound hInEm
+  have hParts := LocatedOp.mk.inj hOpEq
+  have hOrigEq : origin = mOp.origin := hParts.1
+  have hInstEq := hParts.2
+  cases hOrigEq
+  cases hInstEq
+  exact ⟨hNe, mBlock, hMBlock, mOp, hMOp, rfl, hCase⟩
+
+/-- Every residual plain addition in `memory` lowers in the same function of `ssa` through
+a structural SSA correspondence (`SSAGraph.LowersFrom`):
+- the guard block's last instruction is an `addWithOverflow` at the exact same origin and
+  width with distinct destinations, operating on the SSA images of the Memory op's arguments;
+- the true edge branches with no arguments to an empty `.trap .overflow` block at that origin;
+- the false edge supplies the wrapped value to the continuation block, which lowers the
+  remaining instructions and terminator of the Memory block;
+- no unguarded plain `SSAInst.op (.arithmetic (.plain .add))` appears at that origin; and
+- every `SSAInst.addWithOverflow` in `ssa` has distinct destinations and traces either to
+  that guarded lowering of a residual plain addition or to an existing `MemoryInst.addWithOverflow`
+  of the same width at the same origin in `memory` (preventing spurious runtime overflow guards
+  on discharged plain additions). -/
 def ResidualAddsMatch {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
     (memory : Memory lang profile) (ssa : SSA lang profile) : Prop :=
   (∀ fn mLocals mGraph, (fn, mLocals, mGraph) ∈ memory.functions →
-    ∀ mBlock ∈ mGraph.blocks.toList, ∀ mOp ∈ mBlock.body,
-      mOp.instruction.HasResidualAdd →
-        ∃ t sLocals sGraph, mOp.instruction.IsResidualPlainAdd t ∧
-          (fn, sLocals, sGraph) ∈ ssa.functions ∧
-          sGraph.GuardsAddWithOverflow t mOp.origin ∧
-          ∀ sBlock ∈ sGraph.blocks.toList, ∀ sOp ∈ sBlock.body,
-            sOp.origin = mOp.origin →
-              match sOp.instruction with
-              | @SSAInst.op _ _ (.arithmetic (.plain .add)) .. => False
-              | _ => True) ∧
+    mGraph.HasResidualAdd →
+      ∃ sLocals sGraph, (fn, sLocals, sGraph) ∈ ssa.functions ∧
+        sGraph.LowersFrom mGraph ∧
+        ∀ mBlock ∈ mGraph.blocks.toList, ∀ mOp ∈ mBlock.body,
+          mOp.instruction.HasResidualAdd →
+            ∀ sBlock ∈ sGraph.blocks.toList, ∀ sOp ∈ sBlock.body,
+              sOp.origin = mOp.origin →
+                match sOp.instruction with
+                | @SSAInst.op _ _ (.arithmetic (.plain .add)) .. => False
+                | _ => True) ∧
   ∀ fn sLocals sGraph, (fn, sLocals, sGraph) ∈ ssa.functions →
     ∀ sBlock ∈ sGraph.blocks.toList, ∀ sOp ∈ sBlock.body,
       match sOp.instruction with
-      | .addWithOverflow t dst flag lhs rhs =>
+      | .addWithOverflow t dst flag _ _ =>
         dst.id ≠ flag.id ∧
         ∃ mLocals mGraph, (fn, mLocals, mGraph) ∈ memory.functions ∧
-          ∃ mBlock ∈ mGraph.blocks.toList, ∃ mOp ∈ mBlock.body,
-            mOp.origin = sOp.origin ∧
-            ((mOp.instruction.IsResidualPlainAdd t ∧
-                sGraph.BlockGuardsAddWithOverflow sBlock t sOp.origin dst flag lhs rhs) ∨
-              match mOp.instruction with
-              | .addWithOverflow mt .. => mt = t
-              | _ => False)
+          ((mGraph.HasResidualAdd ∧ sGraph.LowersFrom mGraph) ∨
+            (¬ mGraph.HasResidualAdd ∧
+              ∃ mBlock ∈ mGraph.blocks.toList, ∃ mOp ∈ mBlock.body,
+                mOp.origin = sOp.origin ∧
+                match mOp.instruction with
+                | .addWithOverflow mt .. => mt = t
+                | _ => False))
       | _ => True
+
+/-- Every residual plain addition in `memory` has a matching SSA guard bound to the SSA
+images of its arguments, its overflow trap block, and its continuation receiving the wrapped value. -/
+theorem ResidualAddsMatch.guards_of_residualAdd {Ty : Type} {lang : LoweringLanguage Ty}
+    {profile : Profile} {memory : Memory lang profile} {ssa : SSA lang profile}
+    (hMatch : ResidualAddsMatch memory ssa)
+    {fn mLocals mGraph} (hFn : (fn, mLocals, mGraph) ∈ memory.functions)
+    {mBlock : MemoryBlock lang} (hMBlock : mBlock ∈ mGraph.blocks.toList)
+    {mOp : LocatedOp (MemoryInst lang)} (hMOp : mOp ∈ mBlock.body)
+    (hRes : mOp.instruction.HasResidualAdd) :
+    ∃ t mDst mLhs mRhs sLocals sGraph sLhs sRhs no contBlock contVal envHere opLoads,
+      mOp.instruction.ResidualPlainAdd t mDst mLhs mRhs ∧
+      (fn, sLocals, sGraph) ∈ ssa.functions ∧
+      AllLoads opLoads ∧
+      ReadImage envHere opLoads mLhs sLhs ∧
+      ReadImage envHere opLoads mRhs sRhs ∧
+      sGraph.GuardsAddWithOverflow t mOp.origin sLhs sRhs no contBlock contVal ∧
+      ∀ sBlock ∈ sGraph.blocks.toList, ∀ sOp ∈ sBlock.body,
+        sOp.origin = mOp.origin →
+          match sOp.instruction with
+          | @SSAInst.op _ _ (.arithmetic (.plain .add)) .. => False
+          | _ => True := by
+  obtain ⟨sLocals, sGraph, hSFn, hLower, hNoPlain⟩ :=
+    hMatch.1 fn mLocals mGraph hFn ⟨mBlock, hMBlock, mOp, hMOp, hRes⟩
+  obtain ⟨t, mDst, mLhs, mRhs, sLhs, sRhs, no, contBlock, contVal, envHere, opLoads,
+    hPlain, hLoads, hLhsImg, hRhsImg, hGuard⟩ :=
+    hLower.residualAdd_guarded hMBlock hMOp hRes
+  exact ⟨t, mDst, mLhs, mRhs, sLocals, sGraph, sLhs, sRhs, no, contBlock, contVal,
+    envHere, opLoads, hPlain, hSFn, hLoads, hLhsImg, hRhsImg, hGuard,
+    hNoPlain mBlock hMBlock mOp hMOp hRes⟩
+
+/-- Every `SSAInst.addWithOverflow` in an SSA graph satisfying `ResidualAddsMatch` has
+distinct result and overflow-flag destinations. -/
+theorem ResidualAddsMatch.addWithOverflow_distinct {Ty : Type} {lang : LoweringLanguage Ty}
+    {profile : Profile} {memory : Memory lang profile} {ssa : SSA lang profile}
+    (hMatch : ResidualAddsMatch memory ssa)
+    {fn sLocals sGraph} (hFn : (fn, sLocals, sGraph) ∈ ssa.functions)
+    {sBlock : SSABlock lang} (hBlock : sBlock ∈ sGraph.blocks.toList)
+    {origin : Origin} {t : IntTy} {dst : SSAValue Ty (lang.intTy t)}
+    {flag : SSAValue Ty lang.bool} {lhs rhs : SSARead Ty lang.literal (lang.intTy t)}
+    (hOp : ⟨origin, .addWithOverflow t dst flag lhs rhs⟩ ∈ sBlock.body) :
+    dst.id ≠ flag.id :=
+  (hMatch.2 fn sLocals sGraph hFn sBlock hBlock ⟨origin, .addWithOverflow t dst flag lhs rhs⟩ hOp).1
+
+/-- Backward accountability of `ResidualAddsMatch`: every `SSAInst.addWithOverflow` in `ssa`
+has distinct destinations and traces in the same function of `memory` to either a matching
+guarded residual plain addition (with operand images and continuation) or an existing
+`MemoryInst.addWithOverflow` of the same width at the same origin. -/
+theorem ResidualAddsMatch.addWithOverflow_accounted {Ty : Type} {lang : LoweringLanguage Ty}
+    {profile : Profile} {memory : Memory lang profile} {ssa : SSA lang profile}
+    (hMatch : ResidualAddsMatch memory ssa)
+    {fn sLocals sGraph} (hFn : (fn, sLocals, sGraph) ∈ ssa.functions)
+    {sBlock : SSABlock lang} (hBlock : sBlock ∈ sGraph.blocks.toList)
+    {origin : Origin} {t : IntTy} {dst : SSAValue Ty (lang.intTy t)}
+    {flag : SSAValue Ty lang.bool} {lhs rhs : SSARead Ty lang.literal (lang.intTy t)}
+    (hOp : ⟨origin, .addWithOverflow t dst flag lhs rhs⟩ ∈ sBlock.body) :
+    dst.id ≠ flag.id ∧
+    ∃ mLocals mGraph, (fn, mLocals, mGraph) ∈ memory.functions ∧
+      ∃ mBlock ∈ mGraph.blocks.toList, ∃ mOp ∈ mBlock.body, mOp.origin = origin ∧
+        ((∃ mDst mLhs mRhs no contBlock contVal envHere opLoads,
+            mOp.instruction.ResidualPlainAdd t mDst mLhs mRhs ∧
+            AllLoads opLoads ∧
+            ReadImage envHere opLoads mLhs lhs ∧
+            ReadImage envHere opLoads mRhs rhs ∧
+            sGraph.BlockGuardsAddWithOverflow sBlock t origin dst flag lhs rhs no contBlock contVal) ∨
+          match mOp.instruction with
+          | .addWithOverflow mt .. => mt = t
+          | _ => False) := by
+  obtain ⟨hNe, mLocals, mGraph, hMFn, hCases⟩ :=
+    hMatch.2 fn sLocals sGraph hFn sBlock hBlock ⟨origin, .addWithOverflow t dst flag lhs rhs⟩ hOp
+  refine ⟨hNe, mLocals, mGraph, hMFn, ?_⟩
+  rcases hCases with ⟨_, hLower⟩ | ⟨_, mBlock, hMB, mOp, hMO, hOrig, hInst⟩
+  · obtain ⟨_, mBlock, hMB, mOp, hMO, hOrig, hCase⟩ :=
+      hLower.addWithOverflow_accounted hBlock hOp
+    refine ⟨mBlock, hMB, mOp, hMO, hOrig, ?_⟩
+    rcases hCase with hRes | ⟨mDst, mFlag, mLhs, mRhs, _, _, hEq, _, _, _⟩
+    · exact .inl hRes
+    · rw [hEq]; exact .inr rfl
+  · exact ⟨mBlock, hMB, mOp, hMO, hOrig, .inr hInst⟩
 
 def BuildsSSA
     (memory : Memory lang profile) (ssa : SSA lang profile) : Prop :=
