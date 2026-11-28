@@ -23,6 +23,7 @@ cases = [
     ("main.con", r"return '\q';", "Slice0Rules.Lexed@2", "file 0", "27..28", "invalid byte escape (113)"),
     ("main.con", "return '!\0", "Slice0Rules.Lexed@2", "file 0", "27..28", "invalid source"),
     ("main.con", "return 1i\0", "Slice0Rules.Lexed@2", "file 0", "27..28", "invalid source"),
+    ("main.con", "\ufeffreturn 42;", "Slice0Rules.Lexed@2", "file 0", "18..19", "invalid source"),
     ("main.con", "return 42u8;", "Slice0Rules.ExpectedTypeLiteral@1", "file 0", "25..29", ""),
     ("main.con", "return 0x;", "Slice0Rules.Lexed@2", "file 0", "27..28", "missing digits"),
     ("main.con", "return '!x';", "Slice0Rules.Lexed@2", "file 0", "27..28", "unterminated byte literal"),
@@ -45,5 +46,28 @@ with TemporaryDirectory() as work:
         if (result.returncode != expected_exit or result.stdout or result.stderr.count("[rule ") != 1
                 or not result.stderr.rstrip().endswith(citation) or detail not in result.stderr):
             failures.append(f"{path} ({body}): expected {detail} {citation}, got {result.stderr.strip()}")
+    raw_refusals = [
+        ("bom.con", b"\xef\xbb\xbffn main() -> u8 { return 42; }\n",
+         "Slice0Rules.Lexed@2", "file 0", "0..1", "invalid source"),
+        ("bad_utf8.con", b"\xff\n",
+         "Slice0Rules.Lexed@2", "file 0", "0..1", "invalid source"),
+    ]
+    for path, content, rule, domain, span, detail in raw_refusals:
+        (Path(work) / path).write_bytes(content)
+        result = run([driver, "build", path, "-o", "out"], cwd=work, capture_output=True, text=True)
+        citation = f"[rule ConcreteSpec.Core.{rule}, {domain}, bytes {span}]"
+        if (result.returncode != 1 or result.stdout or result.stderr.count("[rule ") != 1
+                or not result.stderr.rstrip().endswith(citation) or detail not in result.stderr):
+            failures.append(f"{path}: expected {detail} {citation}, got {result.stderr.strip()}")
+    # Valid CRLF whitespace must compile on both backends and exit 42.
+    (Path(work) / "crlf.con").write_bytes(b"fn main() -> u8 {\r\n  return 42;\r\n}\r\n")
+    crlf_build = run([driver, "build", "crlf.con", "-o", "crlf-out"], cwd=work, capture_output=True, text=True)
+    if crlf_build.returncode != 0 or crlf_build.stderr:
+        failures.append(f"crlf.con: expected build success, got rc={crlf_build.returncode} stderr={crlf_build.stderr.strip()}")
+    else:
+        for exe in ("llvm.exe", "lcb.exe"):
+            exe_res = run([Path(work) / "crlf-out" / exe], capture_output=True)
+            if exe_res.returncode != 42 or exe_res.stdout or exe_res.stderr:
+                failures.append(f"crlf.con ({exe}): expected exit 42 with empty streams, got rc={exe_res.returncode}")
     if failures:
         raise SystemExit("\n".join(failures))

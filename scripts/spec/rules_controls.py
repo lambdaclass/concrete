@@ -377,4 +377,73 @@ writer.join(1)
 assert check.returncode == 0 and 'recovered 0.1s' in check.stdout and '1 registered rules' in check.stdout, check
 print('  ok   hung-first-attempt: retry validates real export and reports recovered')
 
+# Negative mutation control: changing any backend-policy rule revision from 1 to 3
+# in ConcreteSpec/Spec/BackendPolicy.lean must make scripts/spec/rules.lean FAIL.
+lean_env_info = json.loads(subprocess.check_output(
+    ['lake', 'env', 'python3', '-I', '-c',
+     'import json, os, shutil; print(json.dumps({"LEAN_PATH": os.environ["LEAN_PATH"], "lean": shutil.which("lean")}))'],
+    text=True))
+lean_bin = lean_env_info['lean']
+lean_search = lean_env_info['LEAN_PATH'].split(os.pathsep)
+spec_library = next(Path(entry).resolve() for entry in lean_search
+                    if (Path(entry) / 'ConcreteSpec/Spec/BackendPolicy.olean').is_file())
+policy_rel = Path('ConcreteSpec/Spec/BackendPolicy.lean')
+rules_rel = Path('ConcreteSpec/Spec/Rules.lean')
+policy_source = (root / policy_rel).read_text(encoding='utf-8')
+rules_source = (root / rules_rel).read_text(encoding='utf-8')
+policy_mutations = [
+    ('pristine', None, None, None),
+    ('intWidthRule-rev-3', 'def intWidthRule : RuleId := ⟨``IntWidthSupported, 1⟩',
+     'def intWidthRule : RuleId := ⟨``IntWidthSupported, 3⟩', 'BackendPolicy.IntWidthSupported'),
+    ('operationRule-rev-3', 'def operationRule : RuleId := ⟨``OperationSupported, 1⟩',
+     'def operationRule : RuleId := ⟨``OperationSupported, 3⟩', 'BackendPolicy.OperationSupported'),
+    ('storageFormRule-rev-3', 'def storageFormRule : RuleId := ⟨``StorageFormSupported, 1⟩',
+     'def storageFormRule : RuleId := ⟨``StorageFormSupported, 3⟩', 'BackendPolicy.StorageFormSupported'),
+    ('callRule-rev-3', 'def callRule : RuleId := ⟨``CallSupported, 1⟩',
+     'def callRule : RuleId := ⟨``CallSupported, 3⟩', 'BackendPolicy.CallSupported'),
+]
+shadow = tmp / 'backend-policy-shadow'
+(shadow / policy_rel.parent).mkdir(parents=True, exist_ok=True)
+skip_oleans = {policy_rel.with_suffix('.olean'), rules_rel.with_suffix('.olean')}
+for olean in (spec_library / 'ConcreteSpec').rglob('*.olean'):
+    rel = olean.relative_to(spec_library)
+    if rel not in skip_oleans:
+        dest = shadow / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.symlink_to(olean)
+shadow_env = dict(os.environ, LEAN_PATH=os.pathsep.join([str(shadow), *lean_search]))
+(shadow / rules_rel).write_text(rules_source, encoding='utf-8')
+for label, old, new, expected_rule in policy_mutations:
+    if old is None:
+        mutated = policy_source
+    else:
+        if policy_source.count(old) != 1:
+            raise SystemExit(f'{label}: expected one occurrence of {old!r} in {policy_rel}')
+        mutated = policy_source.replace(old, new)
+    (shadow / policy_rel).write_text(mutated, encoding='utf-8')
+    for mod in (policy_rel, rules_rel):
+        subprocess.run(
+            [lean_bin, f'--root={shadow}', '-DautoImplicit=false', '-DwarningAsError=true',
+             '-o', str(shadow / mod.with_suffix('.olean')), str(shadow / mod)],
+            env=shadow_env, check=True)
+    probe = subprocess.run(
+        [lean_bin, '--json', '-DautoImplicit=false', '-DwarningAsError=true',
+         str(root / 'scripts/spec/rules.lean')],
+        env=shadow_env, capture_output=True, text=True)
+    if old is None:
+        if probe.returncode != 0:
+            raise SystemExit(f'backend-policy-{label}: pristine scripts/spec/rules.lean failed:\n'
+                             f'{probe.stdout}{probe.stderr}')
+        print(f'  ok   backend-policy-{label}: scripts/spec/rules.lean passes', flush=True)
+    else:
+        diagnostics = [json.loads(line) for line in probe.stdout.splitlines() if line.startswith('{')]
+        errors = [row['data'] for row in diagnostics if row.get('severity') == 'error']
+        if (probe.returncode != 1 or not errors
+                or not all('Tactic `decide` proved that the proposition' in err and expected_rule in err
+                           for err in errors)):
+            raise SystemExit(f'backend-policy-{label}: expected decide rejection from scripts/spec/rules.lean '
+                             f'(rc={probe.returncode}):\n{probe.stdout}{probe.stderr}')
+        print(f'  ok   backend-policy-{label}: scripts/spec/rules.lean rejects changed revision', flush=True)
+    count += 1
+
 print(f'SPEC-RULES controls: PASS={count + 3}')

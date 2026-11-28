@@ -99,20 +99,60 @@ example : pathWitness "a b.con" ⟨``SourcePath.NoSpaces, 1⟩ = some (1, 7, tru
     pathWitness "" ⟨``SourcePath.Nonempty, 1⟩ = some (0, 0, true) := by
   with_unfolding_all exact ⟨rfl, rfl, rfl, rfl⟩
 
--- Backend policy rules are registered at revision 1 and distinguish LLVM and LCB profiles.
+-- Backend policy rules are pinned to their literal declaration names and literal
+-- revision 1, never compared against the constants supplying the IDs.
 open BackendPolicy in
 example :
-    (validateRule intWidthRule).isSome ∧ (validateRule { intWidthRule with rev := 2 }).isNone ∧
-    (validateRule operationRule).isSome ∧ (validateRule { operationRule with rev := 2 }).isNone ∧
-    (validateRule storageFormRule).isSome ∧ (validateRule { storageFormRule with rev := 2 }).isNone ∧
-    (validateRule callRule).isSome ∧ (validateRule { callRule with rev := 2 }).isNone ∧
+    BackendPolicy.rules =
+      [⟨`ConcreteSpec.Core.BackendPolicy.IntWidthSupported, 1⟩,
+       ⟨`ConcreteSpec.Core.BackendPolicy.OperationSupported, 1⟩,
+       ⟨`ConcreteSpec.Core.BackendPolicy.StorageFormSupported, 1⟩,
+       ⟨`ConcreteSpec.Core.BackendPolicy.CallSupported, 1⟩] ∧
+    (registeredRules.filter (·.name == `ConcreteSpec.Core.BackendPolicy.IntWidthSupported)).map (·.rev) = [1] ∧
+    (registeredRules.filter (·.name == `ConcreteSpec.Core.BackendPolicy.OperationSupported)).map (·.rev) = [1] ∧
+    (registeredRules.filter (·.name == `ConcreteSpec.Core.BackendPolicy.StorageFormSupported)).map (·.rev) = [1] ∧
+    (registeredRules.filter (·.name == `ConcreteSpec.Core.BackendPolicy.CallSupported)).map (·.rev) = [1] ∧
+    (validateRule ⟨`ConcreteSpec.Core.BackendPolicy.IntWidthSupported, 1⟩).isSome ∧
+    (validateRule ⟨`ConcreteSpec.Core.BackendPolicy.IntWidthSupported, 2⟩).isNone ∧
+    (validateRule ⟨`ConcreteSpec.Core.BackendPolicy.IntWidthSupported, 3⟩).isNone ∧
+    (validateRule ⟨`ConcreteSpec.Core.BackendPolicy.OperationSupported, 1⟩).isSome ∧
+    (validateRule ⟨`ConcreteSpec.Core.BackendPolicy.OperationSupported, 2⟩).isNone ∧
+    (validateRule ⟨`ConcreteSpec.Core.BackendPolicy.OperationSupported, 3⟩).isNone ∧
+    (validateRule ⟨`ConcreteSpec.Core.BackendPolicy.StorageFormSupported, 1⟩).isSome ∧
+    (validateRule ⟨`ConcreteSpec.Core.BackendPolicy.StorageFormSupported, 2⟩).isNone ∧
+    (validateRule ⟨`ConcreteSpec.Core.BackendPolicy.StorageFormSupported, 3⟩).isNone ∧
+    (validateRule ⟨`ConcreteSpec.Core.BackendPolicy.CallSupported, 1⟩).isSome ∧
+    (validateRule ⟨`ConcreteSpec.Core.BackendPolicy.CallSupported, 2⟩).isNone ∧
+    (validateRule ⟨`ConcreteSpec.Core.BackendPolicy.CallSupported, 3⟩).isNone ∧
     checkFeature (Profile.lcb .x86_64Linux) (.intWidth .u8) = .ok () ∧
     checkFeature (Profile.llvm .x86_64Linux) (.intWidth .u32) = .ok () ∧
-    checkFeature (Profile.lcb .x86_64Linux) (.intWidth .u32) = .error intWidthRule ∧
+    checkFeature (Profile.lcb .x86_64Linux) (.intWidth .u32) =
+      .error ⟨`ConcreteSpec.Core.BackendPolicy.IntWidthSupported, 1⟩ ∧
     checkFeature (Profile.lcb .x86_64Linux) (.operation .addWithOverflow) = .ok () ∧
-    checkFeature (Profile.lcb .x86_64Linux) (.operation (.arithmetic (.plain .div))) = .error operationRule ∧
+    checkFeature (Profile.lcb .x86_64Linux) (.operation (.arithmetic (.plain .div))) =
+      .error ⟨`ConcreteSpec.Core.BackendPolicy.OperationSupported, 1⟩ ∧
     checkFeature (Profile.lcb .x86_64Linux) (.storage .registerOnly) = .ok () ∧
-    checkFeature (Profile.llvm .x86_64Linux) (.storage .load) = .error storageFormRule ∧
+    checkFeature (Profile.llvm .x86_64Linux) (.storage .load) =
+      .error ⟨`ConcreteSpec.Core.BackendPolicy.StorageFormSupported, 1⟩ ∧
     checkFeature (Profile.lcb .aarch64Macos) (.call .unreachableCall) = .ok () ∧
-    checkFeature (Profile.lcb .aarch64Macos) (.call .reachableInternalCall) = .error callRule := by
+    checkFeature (Profile.lcb .aarch64Macos) (.call .reachableInternalCall) =
+      .error ⟨`ConcreteSpec.Core.BackendPolicy.CallSupported, 1⟩ := by
   decide
+
+-- Source encoding controls: CR / CRLF is valid whitespace on both routes, whereas
+-- raw NUL, raw BOM (U+FEFF) and invalid UTF-8 fail with Slice0Rules.Lexed@2.
+private def crlfSource : ByteArray := "fn main() -> u8 {\r\n  return 42;\r\n}\r\n".toUTF8
+private def bomSource : ByteArray := "\uFEFFfn main() -> u8 { return 42; }".toUTF8
+private def nulSource : ByteArray := ByteArray.mk (#[0] ++ "fn main() -> u8 { return 42; }".toUTF8.data)
+private def badUtf8Source : ByteArray := ByteArray.mk (#[0xFF] ++ "fn main() -> u8 { return 42; }".toUTF8.data)
+
+example :
+    ((Concrete.Stages.Input.load "main.con" crlfSource).bind Concrete.Stages.compile).isOk = true ∧
+    ((Concrete.Stages.Input.load "main.con" crlfSource).bind Concrete.Stages.unchecked).isOk = true ∧
+    ((Concrete.Stages.Input.load "main.con" bomSource).bind Concrete.Stages.compile) =
+      .error (.source (.lexical (.encoding .bom) ⟨0, 1, 1, 1, ⟨0⟩⟩)) ∧
+    ((Concrete.Stages.Input.load "main.con" nulSource).bind Concrete.Stages.compile) =
+      .error (.source (.lexical (.encoding .nul) ⟨0, 1, 1, 1, ⟨0⟩⟩)) ∧
+    ((Concrete.Stages.Input.load "main.con" badUtf8Source).bind Concrete.Stages.compile) =
+      .error (.source (.lexical (.encoding .tooLarge) ⟨0, 1, 1, 1, ⟨0⟩⟩)) := by
+  with_unfolding_all exact ⟨rfl, rfl, rfl, rfl, rfl⟩
