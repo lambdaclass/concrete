@@ -130,8 +130,8 @@ theorem begin_decreases {memory : Interfaces.Memory lang profile} {q q' : Memory
   simp only [atPC, kind] at inst
   obtain ⟨opened, begin, rfl⟩ := inst
   obtain ⟨frame, label, pc⟩ := begins_frame begin
-  have same : memory.blockAt opened.advance = memory.blockAt q := by
-    simp only [Interfaces.Memory.blockAt, MemoryRegisters.advance, frame, label]
+  have same : memory.blockAt opened.advance = memory.blockAt q :=
+    Interfaces.Memory.blockAt_congr frame label
   obtain ⟨within, _⟩ := List.getElem?_eq_some_iff.mp atPC
   unfold remainingInstructions
   rw [same, atBlock]
@@ -149,8 +149,9 @@ theorem begin_progress {memory : Interfaces.Memory lang profile} {q : MemoryRegi
     (∃ opened, memory.Begins q root opened ∧ Dst.step memory q opened.advance) ∨
       (Dst.step memory q {q with resourceExhausted := true} ∧
         Dst.result memory {q with resourceExhausted := true} .resourceExhausted) := by
-  have ready : memory.terminalObservation q = none := by
-    simp [Interfaces.Memory.terminalObservation, running, found, pc, inst, Interfaces.Memory.instructionTrap]
+  have ready : memory.terminalObservation q = none :=
+    Interfaces.Memory.terminalObservation_of_instruction running found pc
+      (inst ▸ Interfaces.Memory.instructionTrap_beginLifetime)
   by_cases space : ∃ opened, memory.Begins q root opened
   · obtain ⟨opened, began⟩ := space
     have flags : opened.resourceExhausted = false ∧ opened.effects = q.effects := by

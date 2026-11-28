@@ -864,11 +864,9 @@ private theorem open_backing_step {full : Bool} {m : M} {blk : MemoryBlock lower
     (cls : m.classAt (language := Language full) mir.entry backingRoot = some .materialized)
     (layoutOk : m.layoutAt (language := Language full) mir.entry backingRoot = some (.scalar (backingSize full) 1)) :
     (exec full).step m (baseStart full) (afterBacking full) := by
-  have ready : m.terminalObservation (language := Language full) (baseStart full) = none := by
-    unfold Interfaces.Memory.terminalObservation
-    rw [ite_eq_right (by simp [baseStart])]
-    simp only [bind, Option.bind, initEq, show (baseStart full).instruction = 0 from rfl, pc0,
-      Interfaces.Memory.instructionTrap]
+  have ready : m.terminalObservation (language := Language full) (baseStart full) = none :=
+    Interfaces.Memory.terminalObservation_of_instruction rfl initEq pc0
+      Interfaces.Memory.instructionTrap_beginLifetime
   refine Interfaces.Memory.silent_step ready ?_ rfl
   simp only [Interfaces.Memory.Step, show (baseStart full).resourceExhausted = false from rfl,
     show (afterBacking full).resourceExhausted = false from rfl, Bool.false_eq_true, ite_false]

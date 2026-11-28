@@ -55,6 +55,76 @@ theorem StepOutcome.terminatorAt {memory : Memory lang profile} {q next : Memory
   rw [pc] at body
   exact body.2
 
+theorem blockAt_congr {memory : Memory lang profile} {a b : MemoryRegisters language profile}
+    (frame : a.frame = b.frame) (block : a.block = b.block) :
+    memory.blockAt a = memory.blockAt b := by
+  simp only [blockAt, frame, block]
+
+theorem instructionTrap_call {memory : Memory lang profile}
+    {q read : MemoryRegisters language profile} {callee dst args checks values}
+    (evalArgs : memory.readOperands args q = some (values, read))
+    (noTrap : firstTrap (.call callee) values checks = none) :
+    memory.instructionTrap q (.call callee dst args checks) = none := by
+  simp only [instructionTrap, bind, Option.bind, evalArgs, noTrap]
+
+theorem instructionTrap_beginLifetime {memory : Memory lang profile}
+    {q : MemoryRegisters language profile} {root} :
+    memory.instructionTrap q (.beginLifetime root) = none := by
+  simp only [instructionTrap]
+
+theorem instructionTrap_destructure {memory : Memory lang profile}
+    {q : MemoryRegisters language profile} {ty} {src : MemoryPlace _ ty} {bindings} :
+    memory.instructionTrap q (.destructure src bindings) = none := by
+  simp only [instructionTrap]
+
+theorem terminalObservation_of_instruction {memory : Memory lang profile}
+    {q : MemoryRegisters language profile} {block op}
+    (running : q.resourceExhausted = false) (found : memory.blockAt q = some block)
+    (pc : block.body[q.instruction]? = some op)
+    (noTrap : memory.instructionTrap q op.instruction = none) :
+    memory.terminalObservation q = none := by
+  unfold terminalObservation
+  simp only [running, Bool.false_eq_true, ite_false, found, Option.bind_eq_bind,
+    Option.bind_some, pc, noTrap, Option.bind_none]
+
+theorem terminalObservation_of_jump {memory : Memory lang profile}
+    {q : MemoryRegisters language profile} {block edge}
+    (running : q.resourceExhausted = false) (found : memory.blockAt q = some block)
+    (pc : q.instruction = block.body.length) (ending : block.ending = .jump edge) :
+    memory.terminalObservation q = none := by
+  have endPC : block.body[block.body.length]? = none := List.getElem?_eq_none (Nat.le_refl _)
+  unfold terminalObservation
+  simp only [running, Bool.false_eq_true, ite_false, found, Option.bind_eq_bind,
+    Option.bind_some, pc, endPC, bne_self_eq_false, ending]
+
+theorem terminalObservation_of_branch {memory : Memory lang profile}
+    {q : MemoryRegisters language profile} {block test yes no}
+    (running : q.resourceExhausted = false) (found : memory.blockAt q = some block)
+    (pc : q.instruction = block.body.length) (ending : block.ending = .branch test yes no) :
+    memory.terminalObservation q = none := by
+  have endPC : block.body[block.body.length]? = none := List.getElem?_eq_none (Nat.le_refl _)
+  unfold terminalObservation
+  simp only [running, Bool.false_eq_true, ite_false, found, Option.bind_eq_bind,
+    Option.bind_some, pc, endPC, bne_self_eq_false, ending]
+
+theorem terminalObservation_of_nonEntry_ret {memory : Memory lang profile}
+    {q : MemoryRegisters language profile} {block operand caller rest}
+    (running : q.resourceExhausted = false) (found : memory.blockAt q = some block)
+    (pc : q.instruction = block.body.length) (ending : block.ending = .ret operand)
+    (callers : q.callers = caller :: rest) :
+    memory.terminalObservation q = none := by
+  have endPC : block.body[block.body.length]? = none := List.getElem?_eq_none (Nat.le_refl _)
+  unfold terminalObservation
+  cases operand with
+  | none =>
+    simp only [running, Bool.false_eq_true, ite_false, found, Option.bind_eq_bind,
+      Option.bind_some, pc, endPC, bne_self_eq_false, ending]
+  | some pair =>
+    obtain ⟨_, op⟩ := pair
+    simp only [running, Bool.false_eq_true, ite_false, found, Option.bind_eq_bind,
+      Option.bind_some, pc, endPC, bne_self_eq_false, ending, callers, List.isEmpty_cons,
+      Bool.not_false, Bool.true_or, ite_true]
+
 theorem ParamOutcome.empty {memory : Memory lang profile} {q next : MemoryRegisters language profile}
     {exhausting} (h : memory.ParamOutcome [] [] q next exhausting) : next = q ∧ exhausting = false := by
   cases exhausting

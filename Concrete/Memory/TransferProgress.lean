@@ -150,10 +150,7 @@ theorem JumpAt.checkpoint {memory : Memory lang profile} {q read dst edge vs}
   running := jump.running
   ready := by
     obtain ⟨entry, lookup, pc, ending⟩ := jump.source
-    have endPC : entry.body[entry.body.length]? = none := List.getElem?_eq_none (Nat.le_refl _)
-    unfold terminalObservation
-    simp only [jump.running, Bool.false_eq_true, ite_false, lookup, Option.bind_eq_bind,
-      Option.bind_some, pc, endPC, bne_self_eq_false, ending]
+    exact terminalObservation_of_jump jump.running lookup pc ending
   arriveEffects := (readOperands_frame jump.args).effects
   arriveRunning := (readOperands_frame jump.args).resourceExhausted.trans jump.running
   finishFrame _ := ⟨rfl, rfl⟩
@@ -199,10 +196,7 @@ theorem BranchAt.checkpoint {memory : Memory lang profile} {q read dst test yes 
   running := branch.running
   ready := by
     obtain ⟨entry, lookup, pc, ending⟩ := branch.source
-    have endPC : entry.body[entry.body.length]? = none := List.getElem?_eq_none (Nat.le_refl _)
-    unfold terminalObservation
-    simp only [branch.running, Bool.false_eq_true, ite_false, lookup, Option.bind_eq_bind,
-      Option.bind_some, pc, endPC, bne_self_eq_false, ending]
+    exact terminalObservation_of_branch branch.running lookup pc ending
   arriveEffects := by
     obtain ⟨_, _, readTest, _, readArgs⟩ := branch.cond
     exact (readOperands_frame readArgs).effects.trans (readValue_frame readTest).effects
@@ -215,8 +209,10 @@ theorem BranchAt.checkpoint {memory : Memory lang profile} {q read dst test yes 
     obtain ⟨entry, lookup, pc, ending⟩ := branch.source
     obtain ⟨val, afterTest, readTest, tested, readArgs⟩ := branch.cond
     have endPC : entry.body[q.instruction]? = none := List.getElem?_eq_none (Nat.le_of_eq pc.symm)
-    have sameTarget : memory.blockAt {afterTest with block := (if flag then yes else no).target} = some dst := by
-      simpa only [blockAt, (readValue_frame readTest).frame] using branch.target
+    have sameTarget : memory.blockAt {afterTest with block := (if flag then yes else no).target} = some dst :=
+      (blockAt_congr (a := {afterTest with block := (if flag then yes else no).target})
+        (b := {q with block := (if flag then yes else no).target})
+        (readValue_frame readTest).frame rfl).trans branch.target
     refine ⟨entry, lookup, ?_⟩
     simp only [endPC, ending]
     exact ⟨pc, val, afterTest, flag, readTest, tested, vs, read, dst, readArgs, sameTarget, branch.types, outcome⟩
@@ -229,8 +225,10 @@ theorem BranchAt.checkpoint {memory : Memory lang profile} {q read dst test yes 
     cases Option.some.inj (readTest.symm.trans readTest')
     cases Option.some.inj (tested.symm.trans tested')
     cases Option.some.inj (readArgs.symm.trans readArgs')
-    have sameTarget : memory.blockAt {afterTest with block := (if flag then yes else no).target} = some dst := by
-      simpa only [blockAt, (readValue_frame readTest).frame] using branch.target
+    have sameTarget : memory.blockAt {afterTest with block := (if flag then yes else no).target} = some dst :=
+      (blockAt_congr (a := {afterTest with block := (if flag then yes else no).target})
+        (b := {q with block := (if flag then yes else no).target})
+        (readValue_frame readTest).frame rfl).trans branch.target
     cases Option.some.inj (sameTarget.symm.trans target')
     exact ⟨next, outcome, rfl⟩
 
@@ -308,11 +306,8 @@ theorem CallAt.checkpoint {memory : Memory lang profile} {q read callee dst args
   running := call.running
   ready := by
     obtain ⟨block, op, lookup, pc, inst⟩ := call.source
-    have noInstTrap : memory.instructionTrap q (.call callee dst args checks) = none := by
-      simp only [instructionTrap, bind, Option.bind, call.evalArgs, call.noTrap]
-    unfold terminalObservation
-    simp only [call.running, Bool.false_eq_true, ite_false, lookup, Option.bind_eq_bind,
-      Option.bind_some, pc, inst, noInstTrap, Option.bind_none]
+    exact terminalObservation_of_instruction call.running lookup pc
+      (inst ▸ instructionTrap_call call.evalArgs call.noTrap)
   arriveEffects := (readOperands_frame call.evalArgs).effects
   arriveRunning := rfl
   finishFrame _ := ⟨rfl, rfl⟩
@@ -321,8 +316,8 @@ theorem CallAt.checkpoint {memory : Memory lang profile} {q read callee dst args
     obtain ⟨graph, hgraph, hentry⟩ := call.target
     have hbeq := Array.find?_some hentry
     have idEq : calleeEntry.id = graph.entry := beq_iff_eq.mp hbeq
-    have noInstTrap : memory.instructionTrap q (.call callee dst args checks) = none := by
-      simp only [instructionTrap, bind, Option.bind, call.evalArgs, call.noTrap]
+    have noInstTrap : memory.instructionTrap q (.call callee dst args checks) = none :=
+      instructionTrap_call call.evalArgs call.noTrap
     refine ⟨block, lookup, ?_⟩
     rw [pc]
     dsimp only
@@ -418,17 +413,7 @@ theorem ReturnAt.forward {memory : Memory lang profile} {q read ended operand ca
   running := ret.running
   ready := by
     obtain ⟨block, lookup, pc, ending⟩ := ret.source
-    have endPC : block.body[block.body.length]? = none := List.getElem?_eq_none (Nat.le_refl _)
-    unfold terminalObservation
-    cases operand with
-    | none =>
-      simp only [ret.running, Bool.false_eq_true, ite_false, lookup, Option.bind_eq_bind,
-        Option.bind_some, pc, endPC, bne_self_eq_false, ending]
-    | some pair =>
-      obtain ⟨_, op⟩ := pair
-      simp only [ret.running, Bool.false_eq_true, ite_false, lookup, Option.bind_eq_bind,
-        Option.bind_some, pc, endPC, bne_self_eq_false, ending, ret.callers, List.isEmpty_cons,
-        Bool.not_false, Bool.true_or, ite_true]
+    exact terminalObservation_of_nonEntry_ret ret.running lookup pc ending ret.callers
   arriveEffects := ret.release.frame.2.2.2.2.1.trans (readOperands_frame ret.args).effects
   arriveRunning := rfl
   finishFrame _ := ⟨rfl, rfl⟩
@@ -528,9 +513,8 @@ theorem DestructureAt.checkpoint {memory : Memory lang profile} {q read ty} {src
   running := destr.running
   ready := by
     obtain ⟨block, op, lookup, pc, inst⟩ := destr.source
-    unfold terminalObservation
-    simp only [destr.running, Bool.false_eq_true, ite_false, lookup, Option.bind_eq_bind,
-      Option.bind_some, pc, inst, instructionTrap, Option.bind_none]
+    exact terminalObservation_of_instruction destr.running lookup pc
+      (inst ▸ instructionTrap_destructure)
   arriveEffects := by
     obtain ⟨_, hread, _, _⟩ := destr.readSrc
     exact (readValue_frame hread).effects
