@@ -444,7 +444,7 @@ private def forgedOverflowDischarge : StageInterface.Discharge earlyFixtureLangu
     key := (overflowAddView.located.bindingOrigins[0]'(by decide)).2.evidenceKey
     obligation := ⟨⟨0⟩, .safety, 0⟩
     trap := .overflow
-    operands := [(.inl (.scalar (.int .u8)), .literal [200]), (.inl (.scalar (.int .u8)), .literal [56])] }
+    operands := [(.scalar (.int .u8), .literal [200]), (.scalar (.int .u8), .literal [56])] }
 
 -- `overflowAddCore` traps on `200 + 56`: `checkInput` refuses it with `CheckerRefuses`,
 -- it is not `Accepted`, and any forged discharge claiming non-overflow at site `⟨0⟩`
@@ -486,9 +486,9 @@ example :
     | some activeState =>
       have hreach : Exec.Steps m.body m.initial [] activeState := traceStep_steps m 1 m.initial activeState htr
       have hact : m.activeOperation activeState =
-          some (⟨0⟩, .expression (.inl (.add .u8 (.literal (.int .u8 200)) (.literal (.int .u8 56))))) := by
+          some (⟨0⟩, .expression (.add .u8 (.literal (.int .u8 200)) (.literal (.int .u8 56)))) := by
         have hev : (traceStep m 1 m.initial).bind m.activeOperation =
-            some (⟨0⟩, .expression (.inl (.add .u8 (.literal (.int .u8 200)) (.literal (.int .u8 56))))) := by
+            some (⟨0⟩, .expression (.add .u8 (.literal (.int .u8 200)) (.literal (.int .u8 56)))) := by
           with_unfolding_all rfl
         rw [htr] at hev; exact hev
       cases hstep : Exec.step m.body activeState with

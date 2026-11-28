@@ -23,42 +23,47 @@ example : testProfile.isa = .x86_64 ∧
     have order := congrArg Target.byteOrder h
     contradiction
 
--- The wrong backend's registered emitter cannot report success for the LCB profile.
-example (project : Project) (m : LoweringModels testLanguage testLowering testProfile) :
-    ¬ (r m parser).emitLLVM.success (testBIR project) ⟨testProfile.llvmTriple, testProfile.llvmDataLayout, [], #[]⟩ := by
+-- The wrong backend's metadata check rejects an LLVM handoff under the LCB profile.
+example (project : Project) :
+    ¬ LLVMMetadataMatches (testBIR project (profile := testProfile))
+      ⟨⟨[]⟩, ⟨Backend.Runtime.llvmDiagnostics []⟩, #[]⟩ := by
   intro success
   have backend := success.1
   contradiction
 
--- The emitter really returns Linux x86-64 bytes under the macOS AArch64 LLVM
+-- The emitter returns an empty launcher module under the macOS AArch64 LLVM
 -- profile. Handoff and refinement premises cannot make that result sound.
 example (project : Project) (m : LoweringModels testLanguage testLowering macLLVM)
-    (eligible : (r m parser).emitLLVM.inputInvariant (testBIR project)) :
-    ¬ (r m parser).emitLLVM.Checks := by
+    (eligible : (r m parser).emit.inputInvariant (testBIR project)) :
+    ¬ (r m parser).emit.Checks := by
   intro sound
   have success := (sound.1.1 (testBIR project)
-    ⟨testProfile.llvmTriple, testProfile.llvmDataLayout, [], #[]⟩ eligible rfl).2
-  exact (show testProfile.llvmTriple ≠ macLLVM.llvmTriple from by decide) success.2.1
+    ⟨⟨[]⟩, ⟨[]⟩, #[]⟩ eligible rfl).2
+  obtain ⟨diagnostics, hmap, hitems⟩ := success.2.2.2
+  cases Option.some.inj hmap
+  cases hitems
 
 example (project : Project) (m : LoweringModels testLanguage testLowering macLLVM) :
-    ¬ (r m parser).emitLLVM.success (testBIR project)
-      ⟨macLLVM.llvmTriple, testProfile.llvmDataLayout, [], #[]⟩ := by
+    ¬ (r m parser).emit.success (testBIR project)
+      ⟨⟨[]⟩, ⟨[]⟩, #[]⟩ := by
   intro success
-  exact (show testProfile.llvmDataLayout ≠ macLLVM.llvmDataLayout from by decide) success.2.2.1
+  obtain ⟨diagnostics, hmap, hitems⟩ := success.2.2.2
+  cases Option.some.inj hmap
+  cases hitems
 
--- Changing the module body while preserving its metadata leaves the exact
+-- Changing the component body while preserving its launcher and metadata leaves the exact
 -- printer invocation under P_print. Neither input gains a semantic judgment
 -- from the structural handoff check.
 example (project : Project) (m : LoweringModels testLanguage testLowering macLLVM) :
     let ir (status : Nat) : LLVMInput macLLVM :=
-      ⟨macLLVM.llvmTriple, macLLVM.llvmDataLayout,
-        [.define false (.integer .u32) .body [], .label .entry,
-          .terminator (.ret (.integer .u32, .immediate ⟨status⟩)), .endFunction], #[]⟩
-    (r m parser).emitLLVM.kind = .namedPremise "P_print" ∧
+      ⟨⟨[.define false (.integer .u32) .body [], .label .entry,
+          .terminator (.ret (.integer .u32, .immediate ⟨status⟩)), .endFunction]⟩,
+       ⟨Backend.Runtime.llvmDiagnostics []⟩, #[]⟩
+    (r m parser).emit.kind = .namedPremise "P_print" ∧
     LLVMMetadataMatches (testBIR project) (ir 0) ∧
     LLVMMetadataMatches (testBIR project) (ir 42) ∧
-    (ir 0).moduleBytes.data.toList ≠ (ir 42).moduleBytes.data.toList := by
-  refine ⟨rfl, ⟨rfl, rfl, rfl, rfl⟩, ⟨rfl, rfl, rfl, rfl⟩, ?_⟩
+    (ir 0).packageBytes.component.data.toList ≠ (ir 42).packageBytes.component.data.toList := by
+  refine ⟨rfl, ⟨rfl, rfl, [], rfl, rfl⟩, ⟨rfl, rfl, [], rfl, rfl⟩, ?_⟩
   decide
 
 -- Four BIR definitions exceed the registered profile's three-slot ceiling.
@@ -66,14 +71,14 @@ example (project : Project) (m : LoweringModels testLanguage testLowering testPr
     let block : Block _ _ _ := ⟨⟨0⟩, [⟨(), ⟨0⟩⟩, ⟨(), ⟨1⟩⟩, ⟨(), ⟨2⟩⟩, ⟨(), ⟨3⟩⟩], [], .ret none, []⟩
     let bir : BIR testLowering testProfile :=
       { testBIR project (profile := testProfile) with functions := [(Exec.Demo.mainF, [], ⟨⟨0⟩, #[block]⟩)] }
-    ¬ (r m parser).emitLCB.inputInvariant bir := by
+    ¬ (r m parser).emit.inputInvariant bir := by
   dsimp
   intro eligible
-  exact (show ¬ 4 ≤ 3 from by decide) eligible.2.1
+  exact (show ¬ 4 ≤ 3 from by decide) eligible.2.2.1
 
 -- Validate the exact output of the candidate emitter before publishing its job.
 example (project : Project) (m : LoweringModels testLanguage testLowering testProfile) :
-    ∃ reason, (r m parser).emitLCB.run (testBIR project) = .error (.invalidLCBJob reason) :=
+    ∃ reason, (r m parser).emit.run (testBIR project) = .error (.invalidLCBJob reason) :=
   ⟨_, by with_unfolding_all rfl⟩
 
 end
@@ -192,43 +197,47 @@ theorem birReturnTables (project : Project) (profile : Profile) :
         exact ⟨rfl, nofun⟩
 
 private def llvmReturn (status : Nat) : LLVMInput macLLVM :=
-  ⟨macLLVM.llvmTriple, macLLVM.llvmDataLayout,
-    [.define false (.integer .u32) .body [], .label .entry,
-      .terminator (.ret (.integer .u32, .immediate ⟨status⟩)), .endFunction], #[]⟩
+  ⟨⟨[.define false (.integer .u32) .body [], .label .entry,
+      .terminator (.ret (.integer .u32, .immediate ⟨status⟩)), .endFunction]⟩,
+   ⟨Backend.Runtime.llvmDiagnostics []⟩, #[]⟩
 
 -- Both registered emitters produce structurally valid LLVM for the selected
 -- profile. The fixed behavior interpretation distinguishes their bytes.
 set_option maxRecDepth 4096 in
-example (parser : Parser grammar) (project : Project) :
+example (parser : Parser grammar) (hsteps : 2 ≤ parser.stepsPerToken) (project : Project) :
     let stages (status : Nat) := fixtureEntries parser
-      {testPasses [] with emitLLVM := fun _ => .ok (llvmReturn status)}
+      {testPasses (profile := macLLVM) [] with emit := fun _ => .ok (llvmReturn status)} hsteps
     let original := birReturn project false
     let input : BIR testLowering macLLVM :=
       ⟨project, original.entry, [(Exec.Demo.mainF, ⟨[], some ()⟩)],
         original.functions, original.layouts, original.sites, [], []⟩
     let expected : Behavior Nat := .terminates (.returned 0 ByteArray.empty) []
-    (stages 0).emitLLVM.run input = .ok (llvmReturn 0) ∧
-      (stages 42).emitLLVM.run input = .ok (llvmReturn 42) ∧
-      (stages 42).emitLLVM.success input (llvmReturn 42) ∧
-      ((∀ behavior, llvmBehaviors (llvmReturn 0).moduleBytes behavior → behavior = expected) →
-        (stages 0).emitLLVM.trust input (llvmReturn 0)) ∧
-      (llvmBehaviors (llvmReturn 42).moduleBytes
+    (stages 0).emit.run input = .ok (llvmReturn 0) ∧
+      (stages 42).emit.run input = .ok (llvmReturn 42) ∧
+      (stages 42).emit.success input (llvmReturn 42) ∧
+      ((∀ behavior, llvmBehaviors (llvmReturn 0).packageBytes behavior → behavior = expected) →
+        (stages 0).emit.trust input (llvmReturn 0)) ∧
+      (llvmBehaviors (llvmReturn 42).packageBytes
         (.terminates (.returned 42 ByteArray.empty) ([] : List (Concrete.Contracts.ProcessEvent Nat))) →
-        ¬ (stages 42).emitLLVM.Checks) := by
+        ¬ (stages 42).emit.Checks) := by
   intro stages original input expected
   let start := BIR.entryState (language := testLanguage) input
-  refine ⟨rfl, rfl, ⟨rfl, rfl, rfl, rfl⟩, ?_, ?_⟩
+  refine ⟨rfl, rfl, ⟨rfl, rfl, rfl, [], rfl, rfl⟩, ?_, ?_⟩
   · intro exactLLVM _ behavior emitted
     obtain rfl := exactLLVM behavior emitted
     with_unfolding_all exact ⟨start, ⟨start, rfl, .nil _⟩, rfl, rfl⟩
   intro observed sound
-  have eligible : (stages 42).emitLLVM.inputInvariant input := by
-    refine ⟨?_, (by decide : 0 ≤ 2), by simp [input, original, birReturn, testBIR],
-      by simp [input, original, birReturn, testBIR], nofun, birReturnTables project macLLVM, nofun⟩
-    intro fn member block included slot trap
-    cases List.mem_singleton.mp member
-    cases List.mem_singleton.mp included
-    cases trap
+  have eligible : (stages 42).emit.inputInvariant input := by
+    refine ⟨?_, ?_, (by decide : 0 ≤ 2), by with_unfolding_all exact nofun, nofun,
+      ⟨birReturnTables project macLLVM, List.mem_singleton_self _,
+        by with_unfolding_all exact nofun, nofun,
+        ⟨.nil, ⟨.nil, nofun⟩, nofun⟩, ⟨.nil, nofun⟩⟩⟩
+    · exact (BIR.checkRegisterFormation_eq_true_iff (language := testLanguage) input).mp
+        (by with_unfolding_all rfl)
+    · intro fn member block included slot trap
+      cases List.mem_singleton.mp member
+      cases List.mem_singleton.mp included
+      cases trap
   have trusted := sound.2 input (llvmReturn 42) eligible rfl
   let exec := BIR.Execution (language := testLanguage) (lang := testLowering) (profile := macLLVM)
   let zero : Concrete.Contracts.Observation := .returned 0 ByteArray.empty
@@ -306,7 +315,11 @@ private abbrev choiceLanguage : CoreLanguage :=
   {testLanguage with
     operation := fun _ _ _ _ _ _ _ before result effects after =>
       (result = .scalar (.int .u8 0) ∨ result = .scalar (.int .u8 1)) ∧
-      effects = [] ∧ after = before}
+      effects = [] ∧ after = before
+    preservesResidentHandles := by
+      intro _ _ _ _ _ _ _ before _ _ after h hwf
+      obtain ⟨_, _, rfl⟩ := h
+      exact ⟨hwf, Nat.le_refl _, fun _ _ hb hl => ⟨_, hb, hl, rfl, rfl, rfl, rfl⟩⟩}
 
 private def choiceBIR (project : Project) : BIR testLowering testProfile :=
   let block := {birReturnBlock false with

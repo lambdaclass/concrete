@@ -24,8 +24,8 @@ private def helperFn : FnId := ⟨mainFn.module, ⟨"helper"⟩⟩
 private def emptyDeclId : DeclId := ⟨mainFn.module, ⟨"Empty"⟩⟩
 private def emptyDecls : Declarations := [(emptyDeclId, ⟨emptyDeclId.name, false, []⟩)]
 
-private abbrev u8Ty : Language.operands.Ty := .inl (.scalar (.int .u8))
-private abbrev emptyTy : Language.operands.Ty := .inl (.nominal emptyDeclId)
+private abbrev u8Ty : Language.operands.Ty := .scalar (.int .u8)
+private abbrev emptyTy : Language.operands.Ty := .nominal emptyDeclId
 
 private def orig : Origin := base.functions[0].2.2.blocks[0].body[0].origin
 private def p0 : Place _ u8Ty := ⟨⟨0⟩, []⟩
@@ -455,7 +455,7 @@ theorem unplaced_mutant_not_lowersMemory :
     ¬ LowersMemory (language := Language) base unplacedMutant := by
   intro contract
   obtain ⟨_, _, hsafe, _, _, _⟩ := Concrete.Memory.BindReturn.refines_42
-  exact (contract.2.2.2.2.2.2.2.2.1 hsafe).2.2 startState Concrete.Memory.BindReturn.unplaced_stuck
+  exact (contract.2.2.2.2.2.2.2.2.2.2.1 hsafe).2.2 startState Concrete.Memory.BindReturn.unplaced_stuck
 
 private def wrongReturnMemory : M :=
   let vRoot : MemoryPlace _ u8Ty := ⟨p0, .virtual⟩

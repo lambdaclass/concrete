@@ -8,9 +8,11 @@ open Concrete.LL1
 namespace StageInterfaceControls
 
 -- A fixed parser entry also fixes the entire refusal, including its rule and span.
-example {count : Nat} {g : SharedGrammar count} (engine : ParserEngine g) (stream : TokenStream)
-    (first second : ParseRefusal) (h₁ : (parserEntry engine).refusal stream first)
-    (h₂ : (parserEntry engine).refusal stream second) : first = second :=
+example {count : Nat} {g : SharedGrammar count} (engine : ParserEngine g)
+    (nonExhausted : ∀ input : ParserView, (engine.run input).2.isSome = true)
+    (stream : TokenStream) (first second : ParseRefusal)
+    (h₁ : (parserEntry engine nonExhausted).refusal stream first)
+    (h₂ : (parserEntry engine nonExhausted).refusal stream second) : first = second :=
   Except.error.inj (Option.some.inj (h₁.1.symm.trans h₂.1))
 
 section
@@ -86,7 +88,7 @@ example (m : LoweringModels testLanguage testLowering testProfile) :
     (r m parser).parser.run (tokenStream .decimal) =
       .ok ⟨(tokenStream .decimal).source, .inr true⟩ ∧
     (r m parser).parser.run (tokenStream .hexadecimal) =
-      .error (.unsupported rule span later) ∧
+      .error (.unsupported earlyUnsupportedLiteralRule (.nonDecimal .hexadecimal) span later) ∧
     (r m parser).parser.run (tokenStream .hexadecimal later) =
       .ok ⟨(tokenStream .hexadecimal later).source, .inr true⟩ :=
   ⟨rfl, rfl, rfl⟩
@@ -101,7 +103,8 @@ example (m : LoweringModels testLanguage testLowering testProfile) :
       rfl rfl (Nat.le_refl _) (.token rfl (by change 0 ≤ 0; decide) (.nil []))
 
 example (m : LoweringModels testLanguage testLowering testProfile) :
-    (r m parser).parser.refusal (tokenStream .hexadecimal) (.unsupported rule span later) := by
+    (r m parser).parser.refusal (tokenStream .hexadecimal)
+      (.unsupported earlyUnsupportedLiteralRule (.nonDecimal .hexadecimal) span later) := by
   refine ⟨rfl, ⟨by change 0 < 2; decide, ⟨.inr true, 3, Derives.apply (g := grammar) production _ _
     (List.mem_cons_self ..) (by decide) (.token rfl (by change 2 ≤ 2; decide) .nil)⟩, ?_⟩, by change 5 ≤ 8; decide⟩
   intro earlier tooEarly
@@ -115,7 +118,8 @@ example (m : LoweringModels testLanguage testLowering testProfile) :
     ¬ (r m (testParser verifier size accept 2)).parser.Checks := by
   intro sound
   have h := sound.1.1 (tokenStream .decimal)
-    ⟨(tokenStream .decimal).source, .inr true⟩ rfl rfl
+    ⟨(tokenStream .decimal).source, .inr true⟩
+    ⟨rfl, by simp [Concrete.Interfaces.TokensOrdered, TokenStream.parserView, tokenStream]⟩ rfl
   exact (show ¬ 5 ≤ 4 from by decide) h.2.2.2
 
 private def corruptTokenStream (location : FileSpan) : TokenStream :=
@@ -129,15 +133,15 @@ example (m : LoweringModels testLanguage testLowering testProfile) :
     let wrongEnd := {span with endOffset := 4}
     let wrongLine := {span with line := 2}
     edge.inputInvariant (tokenStream .decimal) ∧
-    (∀ location ∈ [wrongFile, wrongEnd, wrongLine],
-      ¬ edge.inputInvariant (corruptTokenStream location) ∧
-      edge.run (corruptTokenStream location) = .error (.invalidStream location) ∧
-      edge.refusal (corruptTokenStream location) (.invalidStream location)) := by
-  refine ⟨rfl, ?_⟩
-  intro location member
+    (∀ entry ∈ [(wrongFile, LocationRefusal.unknownFile), (wrongEnd, .pastEnd 3), (wrongLine, .wrongLine 1)],
+      ¬ edge.inputInvariant (corruptTokenStream entry.1) ∧
+      edge.run (corruptTokenStream entry.1) = .error (.invalidStream entry.1 entry.2) ∧
+      edge.refusal (corruptTokenStream entry.1) (.invalidStream entry.1 entry.2)) := by
+  refine ⟨⟨rfl, by simp [Concrete.Interfaces.TokensOrdered, TokenStream.parserView, tokenStream]⟩, ?_⟩
+  intro entry member
   simp only [List.mem_cons, List.not_mem_nil, or_false] at member
   rcases member with rfl | rfl | rfl <;>
-    exact ⟨fun h => by contradiction, rfl, rfl, rfl, by change 1 ≤ 8; decide⟩
+    exact ⟨(fun h => nomatch h.1), rfl, ⟨rfl, rfl, by change 1 ≤ 8; decide⟩⟩
 
 -- The checked lexer/parser link has no model-selected token invariant.
 example (m : LoweringModels testLanguage testLowering testProfile) :

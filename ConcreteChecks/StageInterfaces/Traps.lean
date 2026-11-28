@@ -78,7 +78,18 @@ example :
   have atTarget : ∀ q, memoryExecution.initial (abortMemory .abort) q → q = storeInitial :=
     fun _ h => by with_unfolding_all exact h
   constructor
-  · refine ⟨rfl, rfl, ?_, ?_, ⟨rfl, rfl⟩, ?_, abortTables _, abortTables _, ?_, ?_⟩
+  · let block : MemoryBlock testLowering := ⟨⟨0⟩, [], [], .trap .abort testOrigin, []⟩
+    have hMemFns : (abortMemory .abort).functions = [(Exec.Demo.mainF, [], ⟨⟨0⟩, #[block]⟩)] := by
+      with_unfolding_all rfl
+    have hretains : RetainsTypedRoots (abortMIR .abort) (abortMemory .abort) := by
+      refine ⟨by simp [abortMIR], by rw [hMemFns]; exact .cons nofun .nil, ?_, ?_, ?_, ?_⟩
+      · intro _ _ _ h; cases List.mem_singleton.mp h; exact .nil
+      · intro _ _ _ h; rw [hMemFns] at h; cases List.mem_singleton.mp h; exact .nil
+      · intro _ _ _ h; cases List.mem_singleton.mp h
+        exact ⟨_, _, by rw [hMemFns]; exact List.mem_singleton_self _, fun _ _ => Iff.rfl⟩
+      · intro _ _ _ h; rw [hMemFns] at h; cases List.mem_singleton.mp h
+        exact ⟨_, _, List.mem_singleton_self _, fun _ _ => Iff.rfl⟩
+    refine ⟨rfl, rfl, ?_, ?_, ⟨rfl, rfl⟩, ?_, hretains, nofun, abortTables _, abortTables _, ?_, ?_⟩
     · with_unfolding_all exact ⟨fun _ x => x, fun _ x => x⟩
     · refine ⟨?_, nofun⟩
       intro fn ls graph included place ty member
@@ -122,7 +133,7 @@ example :
       (Memory.MatchingResult (language := testLanguage)) storeInitial storeInitial
       (helperTrap .abort) (helperTrap .divisionByZero) atSource source
       (by with_unfolding_all rfl) (by with_unfolding_all rfl) ?_
-      lowered.2.2.2.2.2.2.2.2.1
+      lowered.2.2.2.2.2.2.2.2.2.2.1
     intro observes
     have wrong : some (helperTrap .abort) = some (helperTrap .divisionByZero) := by
       with_unfolding_all exact observes
@@ -136,7 +147,21 @@ example :
     BuildsSSA (language := testLanguage) (abortMemory .abort) (abortSSA .abort) ∧
     ¬ BuildsSSA (language := testLanguage) (abortMemory .abort) (abortSSA .divisionByZero) := by
   constructor
-  · refine ⟨rfl, rfl, rfl, ⟨rfl, rfl⟩, by with_unfolding_all exact ⟨fun _ h => h, fun _ h => h⟩, ?_⟩
+  · let block : MemoryBlock testLowering := ⟨⟨0⟩, [], [], .trap .abort testOrigin, []⟩
+    have hMemFns : (abortMemory .abort).functions = [(Exec.Demo.mainF, [], ⟨⟨0⟩, #[block]⟩)] := by
+      with_unfolding_all rfl
+    have hres : ResidualAddsMatch (abortMemory .abort) (abortSSA .abort) := by
+      constructor
+      · intro _ _ _ hFn ⟨mBlock, hMB, _, hMO, _⟩
+        rw [hMemFns] at hFn
+        cases List.mem_singleton.mp hFn
+        cases List.mem_singleton.mp hMB
+        cases hMO
+      · intro _ _ _ hFn sBlock hSB _ hSO
+        cases List.mem_singleton.mp hFn
+        cases List.mem_singleton.mp hSB
+        cases hSO
+    refine ⟨rfl, rfl, rfl, ⟨rfl, rfl⟩, by with_unfolding_all exact ⟨fun _ h => h, fun _ h => h⟩, hres, ?_⟩
     refine stationaryRefines _ _ _ _ storeInitial storeInitial
       (helperTrap .abort) (helperTrap .abort)
       (fun _ => by with_unfolding_all rfl) (fun _ => by with_unfolding_all rfl) ?_ ?_ ?_ ?_ ?_
@@ -147,7 +172,7 @@ example :
     apply stationaryRejects memoryExecution ssaExecution ssaExecution.result storeInitial storeInitial
       (helperTrap .abort) (helperTrap .divisionByZero) (fun _ h => by with_unfolding_all exact h)
       (by with_unfolding_all rfl) (by with_unfolding_all rfl) (by with_unfolding_all rfl) ?_
-      formed.2.2.2.2.2
+      formed.2.2.2.2.2.2
     intro observes
     have wrong : some (helperTrap .abort) = some (helperTrap .divisionByZero) := by
       with_unfolding_all exact observes
