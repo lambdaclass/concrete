@@ -1,5 +1,6 @@
 import Concrete.Interfaces.Pipeline
 import Concrete.IntegratedCore.Agreement
+import Concrete.Core.LowerMIR
 
 /-! The elaboration implementation for the frozen slice-indexed Core handoff. -/
 
@@ -83,6 +84,106 @@ theorem typingEntry_validated (language : CoreLanguage) (slice : Slice) :
     (typingEntry language slice).Validated :=
   Concrete.Interfaces.typingEntry_validated_of_render language slice
     (fun v _ herr => Concrete.IntegratedCore.DischargeTransfer.render_of_checkProgramWith_error .runtime v herr)
+
+/-- Constructive stage validation for `passes.admissionEntry slice` when wired to
+`ConcreteSpec.Admission.checkInput` (independent of `registry`, zero `Classical.choice`). -/
+theorem admissionEntry_validated {slice : Slice} {profile : Profile} (passes : Passes slice profile)
+    (implementation : passes.checkCore = ConcreteSpec.Admission.checkInput) :
+    (passes.admissionEntry slice).Validated := by
+  have hsound := Agreement.admissionSound (language := sliceLanguage slice)
+  constructor
+  · intro input output ready ran
+    change (if input.slice = slice then _ else _) = Except.ok output at ran
+    rw [ite_eq_left ready.1] at ran
+    cases hprep : input.prepare with
+    | error cause => simp [hprep, Except.mapError, Bind.bind, Except.bind] at ran
+    | ok prepared =>
+      simp only [hprep, Except.mapError, Bind.bind, Except.bind] at ran
+      rw [implementation] at ran
+      cases hchk : ConcreteSpec.Admission.checkInput prepared with
+      | error _ => simp [hchk, Except.map] at ran
+      | ok discharges =>
+        simp only [hchk, Except.map, Except.ok.injEq] at ran
+        subst output
+        obtain ⟨hwf, hfrag⟩ := ready.prepared hprep
+        obtain ⟨hiff, hok, _⟩ := hsound prepared hwf hfrag
+        have hvalid : Admitted.Valid ⟨prepared, discharges⟩ :=
+          ⟨hiff.mpr ⟨discharges, hchk⟩, (hok discharges hchk).2⟩
+        exact ⟨hvalid, ready.1, prepared, hprep, rfl, hvalid⟩
+  · intro input failure ready ran
+    change (if input.slice = slice then _ else _) = Except.error failure at ran
+    rw [ite_eq_left ready.1] at ran
+    cases hprep : input.prepare with
+    | error cause =>
+      simp only [hprep, Except.mapError, Bind.bind, Except.bind, Except.error.injEq] at ran
+      subst failure
+      exact ⟨ready.1, by simp [AdmissionInput.CheckerRefuses, hprep]⟩
+    | ok prepared =>
+      simp only [hprep, Except.mapError, Bind.bind, Except.bind] at ran
+      rw [implementation] at ran
+      cases hchk : ConcreteSpec.Admission.checkInput prepared with
+      | ok _ => simp [hchk, Except.map] at ran
+      | error err =>
+        simp only [hchk, Except.map, Except.error.injEq] at ran
+        subst failure
+        obtain ⟨hwf, hfrag⟩ := ready.prepared hprep
+        obtain ⟨_, _, herr⟩ := hsound prepared hwf hfrag
+        obtain ⟨diagnostic, rfl, href⟩ := herr err hchk
+        exact ⟨ready.1, by simp [AdmissionInput.CheckerRefuses, hprep, href]⟩
+
+/-- Universal stage validation for the registered `admission` edge when wired to
+`ConcreteSpec.Admission.checkInput`. -/
+theorem admission_validated {slice : Slice} {profile : Profile} (passes : Passes slice profile)
+    (implementation : passes.checkCore = ConcreteSpec.Admission.checkInput) :
+    (registry passes).admission.Validated :=
+  admissionEntry_validated passes implementation
+
+/-- Full stage soundness (`Stage.Sound`) for the registered `admission` edge. -/
+theorem admission_sound {slice : Slice} {profile : Profile} (passes : Passes slice profile)
+    (implementation : passes.checkCore = ConcreteSpec.Admission.checkInput) :
+    Stage.Sound passes .admission :=
+  ⟨admission_validated passes implementation, fun _ _ _ _ => trivial⟩
+
+/-- Production checked-route Core-to-MIR lowering (`Admitted` → `MIR`). -/
+abbrev lowerCore {slice : Slice} {profile : Profile} :
+    Admitted (sliceLanguage slice) → Except StageFailure (MIR (sliceLoweringLanguage slice) profile) :=
+  Concrete.Core.LowerMIR.lowerCore
+
+/-- Production unchecked-route Core-to-MIR lowering (`CoreInput` → `MIR`). -/
+abbrev lowerUnchecked {slice : Slice} {profile : Profile} :
+    CoreInput (sliceLanguage slice) → Except StageFailure (MIR (sliceLoweringLanguage slice) profile) :=
+  Concrete.Core.LowerMIR.lowerUnchecked
+
+/-- Universal stage validation for the checked `lowerCore` edge in `Registry`. -/
+theorem lowerCore_validated {slice : Slice} {profile : Profile} (passes : Passes slice profile)
+    (implementation : passes.lowerCore = lowerCore) :
+    (registry passes).lowerCore.Validated :=
+  Concrete.Core.LowerMIR.lowerCore_validated passes implementation
+
+/-- Constructive stage validation for `passes.lowerUncheckedEntry` (independent of
+`registry`, zero `Classical.choice`). -/
+theorem lowerUncheckedEntry_validated {slice : Slice} {profile : Profile} (passes : Passes slice profile)
+    (implementation : passes.lowerUnchecked = lowerUnchecked) :
+    passes.lowerUncheckedEntry.Validated :=
+  Concrete.Core.LowerMIR.lowerUncheckedEntry_validated passes implementation
+
+/-- Universal stage validation for the unchecked `lowerUnchecked` edge in `Registry`. -/
+theorem lowerUnchecked_validated {slice : Slice} {profile : Profile} (passes : Passes slice profile)
+    (implementation : passes.lowerUnchecked = lowerUnchecked) :
+    (registry passes).lowerUnchecked.Validated :=
+  Concrete.Core.LowerMIR.lowerUnchecked_validated passes implementation
+
+/-- Full stage soundness (`Stage.Sound`) for the checked `lowerCore` edge. -/
+theorem lowerCore_sound {slice : Slice} {profile : Profile} (passes : Passes slice profile)
+    (implementation : passes.lowerCore = lowerCore) :
+    Stage.Sound passes .lowerCore :=
+  Concrete.Core.LowerMIR.lowerCore_sound passes implementation
+
+/-- Full stage soundness (`Stage.Sound`) for the unchecked `lowerUnchecked` edge. -/
+theorem lowerUnchecked_sound {slice : Slice} {profile : Profile} (passes : Passes slice profile)
+    (implementation : passes.lowerUnchecked = lowerUnchecked) :
+    Stage.Sound passes .lowerUnchecked :=
+  Concrete.Core.LowerMIR.lowerUnchecked_sound passes implementation
 
 -- `RoutePipeline.mk` is private to `Concrete.Interfaces.Pipeline` and cannot be forged outside it.
 example (_p : Pipeline Source (BackendOutput ⟨.lcb, .x86_64Linux, 8, 4096⟩)) : True := by

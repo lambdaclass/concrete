@@ -789,7 +789,7 @@ private theorem located_agreement (v : AdmissionView) (project : Project)
       rename_i n
       have bounds : 0 ≤ n ∧ n < 256 := by
         have h : 0 ≤ n ∧ n ≤ 255 := of_decide_eq_true range
-        omega
+        exact ⟨h.1, Int.lt_add_one_of_le h.2⟩
       have hosted : (sliceLanguage v.slice).hostedResult (.returned (.scalar (.int .u8 n))) =
           some (.returned (UInt8.ofNat n.toNat)) := by
         simp [CoreLanguage.hostedResult, bounds, Observe.Observation.status]
