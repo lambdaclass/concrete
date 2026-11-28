@@ -1993,7 +1993,9 @@ private def lcbWordFn (n : Nat) : Source.Function :=
   ⟨.word, #[], #[], #[⟨#[], #[], .ret (.literal (.word (BitVec.ofNat 32 n)))⟩]⟩
 
 private def dummyLLVMOut (p : Profile) : LLVMInput p :=
-  ⟨⟨[]⟩, ⟨Runtime.llvmDiagnostics []⟩, #[]⟩
+  ⟨⟨[llvmBodyDefinition, .label .entry,
+     .terminator (.ret (.integer .u32, .immediate (.natural 42))), .endFunction]⟩,
+   ⟨launcherItems []⟩, #[]⟩
 
 private def dummyLCBOut (p : Profile) (extra : AList FnId FunctionJob := []) : LCBInput p :=
   ⟨lcbWordFn 42, extra, #[], (Runtime.qbeDiagnostics []).toUTF8⟩

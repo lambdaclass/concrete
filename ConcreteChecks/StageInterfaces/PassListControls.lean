@@ -684,12 +684,14 @@ private def entryBlockId {L P I T : Type} (entry : FnId) (fns : AList FnId (L ×
   | none => 99999
 
 private def llvmTagOut (tag : Nat) : LLVMInput llvmProfile :=
-  ⟨⟨[.label (.block tag)]⟩, ⟨Runtime.llvmDiagnostics []⟩, #[]⟩
+  ⟨⟨[llvmBodyDefinition, .label (.block tag),
+     .terminator (.ret (.integer .u32, .immediate (.natural 0))), .endFunction]⟩,
+   ⟨launcherItems []⟩, #[]⟩
 
 private theorem llvmTagOut_ne {a b : Nat} (h : a ≠ b) : llvmTagOut a ≠ llvmTagOut b := by
   intro heq
   have hi := congrArg (fun (out : LLVMInput llvmProfile) => out.component.items) heq
-  cases List.cons.inj hi |>.1
+  cases (List.cons.inj (List.cons.inj hi).2).1
   exact h rfl
 
 private def stream42 : TokenStream :=

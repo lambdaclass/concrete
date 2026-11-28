@@ -555,29 +555,48 @@ private theorem list_mapM_except_ok_mem {α β ε : Type} {f : α → Except ε 
           obtain ⟨x, hx, hfx⟩ := ih hrest y htl
           exact ⟨x, List.mem_cons_of_mem _ hx, hfx⟩
 
-private theorem intrinsicDeclarations_not_bodyHeader {Ty : Type} {lang : LoweringLanguage Ty}
+private theorem filterMap_eq_nil_of_all_none {α β : Type} {f : α → Option β} {xs : List α}
+    (h : ∀ x ∈ xs, f x = none) : xs.filterMap f = [] := by
+  induction xs with
+  | nil => rfl
+  | cons a rest ih =>
+    rw [List.filterMap_cons, h a List.mem_cons_self]
+    exact ih fun x hx => h x (List.mem_cons_of_mem _ hx)
+
+private theorem llvmItemDefines_none_of_global_none {item : Item}
+    (h : llvmItemGlobal item = none) : llvmItemDefines item = none := by
+  cases item <;> simp only [llvmItemGlobal, llvmItemDefines] at h ⊢ <;> cases h
+
+private theorem isLLVMBodyHeader_false_of_global_none {item : Item}
+    (h : llvmItemGlobal item = none) : isLLVMBodyHeader item = false := by
+  simp [isLLVMBodyHeader, h]
+
+private theorem intrinsicDeclarations_globals {Ty : Type} {lang : LoweringLanguage Ty}
     (blocks : List (BIRBlock lang)) :
-    ∀ item ∈ intrinsicDeclarations blocks, isLLVMBodyHeader item = false := by
+    ∀ item ∈ intrinsicDeclarations blocks,
+      (∃ op ty, llvmItemGlobal item = some (.overflow op ty)) ∧
+      llvmItemDefines item = none ∧
+      isLLVMBodyHeader item = false := by
   intro item hMem
   unfold intrinsicDeclarations at hMem
-  obtain ⟨_, _, rfl⟩ := List.mem_map.mp hMem
-  rfl
+  obtain ⟨t, _, rfl⟩ := List.mem_map.mp hMem
+  exact ⟨⟨.add, t, rfl⟩, rfl, rfl⟩
 
-private theorem emitEntryParamDefaults_not_bodyHeader (language : CoreLanguage)
+private theorem emitEntryParamDefaults_no_global (language : CoreLanguage)
     (params : List (Sigma (SSAValue language.operands.Ty))) :
-    ∀ item ∈ emitEntryParamDefaults language params, isLLVMBodyHeader item = false := by
+    ∀ item ∈ emitEntryParamDefaults language params, llvmItemGlobal item = none := by
   intro item hMem
   unfold emitEntryParamDefaults at hMem
   obtain ⟨⟨pty, reg⟩, _, rfl⟩ := List.mem_map.mp hMem
   dsimp only
   cases llvmType language pty <;> rfl
 
-private theorem emitPhis_not_bodyHeader {language : CoreLanguage}
+private theorem emitPhis_no_global {language : CoreLanguage}
     {lang : LoweringLanguage language.operands.Ty}
     {edges : List (BlockId × Label × List (Sigma (SSARead language.operands.Ty lang.literal)))}
     {isEntry entryHasPreds : Bool} {blk : BIRBlock lang} {phis : List Item}
     (h : emitPhis language edges isEntry entryHasPreds blk = .ok phis) :
-    ∀ item ∈ phis, isLLVMBodyHeader item = false := by
+    ∀ item ∈ phis, llvmItemGlobal item = none := by
   unfold emitPhis at h
   split at h
   · simp only [pure, Except.pure, Except.ok.injEq] at h
@@ -586,7 +605,7 @@ private theorem emitPhis_not_bodyHeader {language : CoreLanguage}
   · split at h
     · simp only [pure, Except.pure, Except.ok.injEq] at h
       subst h
-      exact emitEntryParamDefaults_not_bodyHeader language blk.params
+      exact emitEntryParamDefaults_no_global language blk.params
     · intro item hMem
       obtain ⟨⟨k, ⟨pty, reg⟩⟩, _, hMap⟩ := list_mapM_except_ok_mem h item hMem
       simp only [bind, Except.bind, pure, Except.pure] at hMap
@@ -595,10 +614,10 @@ private theorem emitPhis_not_bodyHeader {language : CoreLanguage}
       · cases Except.ok.inj hMap
         rfl
 
-private theorem emitInst_not_bodyHeader {language : CoreLanguage}
+private theorem emitInst_no_global {language : CoreLanguage}
     {lang : LoweringLanguage language.operands.Ty} {inst : SSAInst lang} {items : List Item}
     (h : emitInst language inst = .ok items) :
-    ∀ item ∈ items, isLLVMBodyHeader item = false := by
+    ∀ item ∈ items, llvmItemGlobal item = none := by
   unfold emitInst at h
   cases inst with
   | op dst fop args addresses =>
@@ -674,14 +693,14 @@ private theorem emitInst_not_bodyHeader {language : CoreLanguage}
   | load _ _ | store _ _ | beginLifetime _ | endLifetime _ | destructure _ _ | call _ _ _ =>
     cases h
 
-private theorem emitTerm_not_bodyHeader {language : CoreLanguage}
+private theorem emitTerm_no_global {language : CoreLanguage}
     {lang : LoweringLanguage language.operands.Ty}
     {indices : AList BlockId Nat} {splits : List (SplitEdge lang)} {j : Nat}
     {ending : BIRTerm (Sigma (SSARead language.operands.Ty lang.literal))
       (SSARead language.operands.Ty lang.literal lang.bool)}
     {items : List Item}
     (h : emitTerm language indices splits j ending = .ok items) :
-    ∀ item ∈ items, isLLVMBodyHeader item = false := by
+    ∀ item ∈ items, llvmItemGlobal item = none := by
   unfold emitTerm at h
   cases ending with
   | ret ov =>
@@ -739,12 +758,13 @@ private theorem emitTerm_not_bodyHeader {language : CoreLanguage}
             intro item hm; simp only [List.mem_cons, List.not_mem_nil, or_false] at hm
             rcases hm with rfl | rfl <;> rfl
 
-/-- Every component module produced by `emitComponentGraph` has `llvmBodyDefinition`
-as its unique `@concrete_body` header. -/
-theorem emitComponentGraph_bodyHeader {language : CoreLanguage}
+private theorem emitComponentGraph_symbolStructure {language : CoreLanguage}
     {lang : LoweringLanguage language.operands.Ty} {graph : BIRGraph lang} {component : LLVMModule}
     (h : emitComponentGraph language graph = .ok component) :
-    component.items.filter isLLVMBodyHeader = [llvmBodyDefinition] := by
+    component.items.filter isLLVMBodyHeader = [llvmBodyDefinition] ∧
+    (∀ g ∈ llvmModuleDefines component.items, g = llvmBodyGlobal) ∧
+    (∀ g ∈ llvmModuleGlobals component.items,
+      g = llvmBodyGlobal ∨ ∃ op ty, g = .overflow op ty) := by
   unfold emitComponentGraph at h
   cases hOrd : orderedReachableBlocks graph with
   | none =>
@@ -756,13 +776,16 @@ theorem emitComponentGraph_bodyHeader {language : CoreLanguage}
     · cases h
     · rename_i blockItems hBlks
       cases Except.ok.inj h
-      have hDecls : (intrinsicDeclarations blocks).filter isLLVMBodyHeader = [] :=
-        filter_eq_nil_of_all_false (intrinsicDeclarations_not_bodyHeader blocks)
-      have hTramp : (if hasIncomingEdge blocks graph.entry then
-          [Item.label .entry, .terminator (.branch (.block 0))] else []).filter isLLVMBodyHeader = [] := by
-        cases hasIncomingEdge blocks graph.entry <;> rfl
-      have hBlocksNil : blockItems.flatten.filter isLLVMBodyHeader = [] := by
-        apply filter_eq_nil_of_all_false
+      have hTrampNoGlob : ∀ item ∈ (if hasIncomingEdge blocks graph.entry then
+          [Item.label .entry, .terminator (.branch (.block 0))] else []),
+          llvmItemGlobal item = none := by
+        cases hasIncomingEdge blocks graph.entry
+        · intro _ hm
+          simp only [Bool.false_eq_true, ↓reduceIte, List.not_mem_nil] at hm
+        · intro item hm
+          simp only [↓reduceIte, List.mem_cons, List.not_mem_nil, or_false] at hm
+          rcases hm with rfl | rfl <;> rfl
+      have hBlocksNoGlob : ∀ item ∈ blockItems.flatten, llvmItemGlobal item = none := by
         intro item hItem
         obtain ⟨blkList, hBlkList, hInBlk⟩ := List.mem_flatten.mp hItem
         obtain ⟨⟨j, blk⟩, _, hOne⟩ := list_mapM_except_ok_mem hBlks blkList hBlkList
@@ -781,21 +804,85 @@ theorem emitComponentGraph_bodyHeader {language : CoreLanguage}
               · rcases List.mem_append.mp hPre with hPre2 | hInInsts
                 · rcases List.mem_append.mp hPre2 with hLab | hInPhis
                   · cases List.mem_singleton.mp hLab; rfl
-                  · exact emitPhis_not_bodyHeader hPhis item hInPhis
+                  · exact emitPhis_no_global hPhis item hInPhis
                 · obtain ⟨instItems, hInstItems, hInInst⟩ := List.mem_flatten.mp hInInsts
                   obtain ⟨op, _, hOp⟩ := list_mapM_except_ok_mem hInsts instItems hInstItems
-                  exact emitInst_not_bodyHeader hOp item hInInst
-              · exact emitTerm_not_bodyHeader hTerm item hInTerm
-      have hSplitsNil : ((collectSplitEdges blocks (blockIndexTable blocks)).flatMap fun sp =>
-          [Item.label (.block sp.splitIndex), .terminator (.branch (.block sp.targetIndex))]).filter
-            isLLVMBodyHeader = [] := by
-        apply filter_eq_nil_of_all_false
+                  exact emitInst_no_global hOp item hInInst
+              · exact emitTerm_no_global hTerm item hInTerm
+      have hSplitsNoGlob : ∀ item ∈ ((collectSplitEdges blocks (blockIndexTable blocks)).flatMap fun sp =>
+          [Item.label (.block sp.splitIndex), .terminator (.branch (.block sp.targetIndex))]),
+          llvmItemGlobal item = none := by
         intro item hItem
         obtain ⟨sp, _, hInSp⟩ := List.mem_flatMap.mp hItem
         simp only [List.mem_cons, List.not_mem_nil, or_false] at hInSp
         rcases hInSp with rfl | rfl <;> rfl
-      simp only [List.filter_append, hDecls, hTramp, hBlocksNil, hSplitsNil]
-      rfl
+      refine ⟨?_, ?_, ?_⟩
+      · have hDecls : (intrinsicDeclarations blocks).filter isLLVMBodyHeader = [] :=
+          filter_eq_nil_of_all_false fun item hm => (intrinsicDeclarations_globals blocks item hm).2.2
+        have hTramp : (if hasIncomingEdge blocks graph.entry then
+            [Item.label .entry, .terminator (.branch (.block 0))] else []).filter isLLVMBodyHeader = [] :=
+          filter_eq_nil_of_all_false fun item hm =>
+            isLLVMBodyHeader_false_of_global_none (hTrampNoGlob item hm)
+        have hBlocksNil : blockItems.flatten.filter isLLVMBodyHeader = [] :=
+          filter_eq_nil_of_all_false fun item hm =>
+            isLLVMBodyHeader_false_of_global_none (hBlocksNoGlob item hm)
+        have hSplitsNil : ((collectSplitEdges blocks (blockIndexTable blocks)).flatMap fun sp =>
+            [Item.label (.block sp.splitIndex), .terminator (.branch (.block sp.targetIndex))]).filter
+              isLLVMBodyHeader = [] :=
+          filter_eq_nil_of_all_false fun item hm =>
+            isLLVMBodyHeader_false_of_global_none (hSplitsNoGlob item hm)
+        simp only [List.filter_append, hDecls, hTramp, hBlocksNil, hSplitsNil]
+        rfl
+      · have hDeclsDef : (intrinsicDeclarations blocks).filterMap llvmItemDefines = [] :=
+          filterMap_eq_nil_of_all_none fun item hm => (intrinsicDeclarations_globals blocks item hm).2.1
+        have hTrampDef : (if hasIncomingEdge blocks graph.entry then
+            [Item.label .entry, .terminator (.branch (.block 0))] else []).filterMap llvmItemDefines = [] :=
+          filterMap_eq_nil_of_all_none fun item hm =>
+            llvmItemDefines_none_of_global_none (hTrampNoGlob item hm)
+        have hBlocksDef : blockItems.flatten.filterMap llvmItemDefines = [] :=
+          filterMap_eq_nil_of_all_none fun item hm =>
+            llvmItemDefines_none_of_global_none (hBlocksNoGlob item hm)
+        have hSplitsDef : ((collectSplitEdges blocks (blockIndexTable blocks)).flatMap fun sp =>
+            [Item.label (.block sp.splitIndex), .terminator (.branch (.block sp.targetIndex))]).filterMap
+              llvmItemDefines = [] :=
+          filterMap_eq_nil_of_all_none fun item hm =>
+            llvmItemDefines_none_of_global_none (hSplitsNoGlob item hm)
+        intro g hg
+        unfold llvmModuleDefines at hg
+        simp only [List.filterMap_append, hDeclsDef, hTrampDef, hBlocksDef, hSplitsDef,
+          List.nil_append, List.append_nil] at hg
+        exact List.mem_singleton.mp hg
+      · intro g hg
+        obtain ⟨item, hMem, hGlob⟩ := List.mem_filterMap.mp hg
+        simp only [List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hMem
+        rcases hMem with ((((hInDecl | (rfl | rfl)) | hInTramp) | hInBlk) | hInSplit) | rfl
+        · obtain ⟨op, ty, hOv⟩ := (intrinsicDeclarations_globals blocks item hInDecl).1
+          rw [hOv] at hGlob
+          exact Or.inr ⟨op, ty, (Option.some.inj hGlob).symm⟩
+        · cases hGlob
+        · exact Or.inl (Option.some.inj hGlob).symm
+        · rw [hTrampNoGlob item hInTramp] at hGlob; cases hGlob
+        · rw [hBlocksNoGlob item hInBlk] at hGlob; cases hGlob
+        · rw [hSplitsNoGlob item hInSplit] at hGlob; cases hGlob
+        · cases hGlob
+
+/-- Every component module produced by `emitComponentGraph` has `llvmBodyDefinition`
+as its unique `@concrete_body` top-level item. -/
+theorem emitComponentGraph_bodyHeader {language : CoreLanguage}
+    {lang : LoweringLanguage language.operands.Ty} {graph : BIRGraph lang} {component : LLVMModule}
+    (h : emitComponentGraph language graph = .ok component) :
+    component.items.filter isLLVMBodyHeader = [llvmBodyDefinition] :=
+  (emitComponentGraph_symbolStructure h).1
+
+/-- Every component module produced by `emitComponentGraph` satisfies `ComponentOwnsSymbols`
+against any `launcherItems diagnostics`. -/
+theorem emitComponentGraph_ownsSymbols {language : CoreLanguage}
+    {lang : LoweringLanguage language.operands.Ty} {graph : BIRGraph lang} {component : LLVMModule}
+    (h : emitComponentGraph language graph = .ok component) (diagnostics : List String) :
+    ComponentOwnsSymbols component.items (launcherItems diagnostics) :=
+  ComponentOwnsSymbols.of_component_globals diagnostics
+    (emitComponentGraph_symbolStructure h).2.1
+    (emitComponentGraph_symbolStructure h).2.2
 
 /-- Every successful `EmitLLVM.emit` satisfies `LauncherMatches`. -/
 theorem emit_launcherMatches {language : CoreLanguage}
@@ -832,7 +919,8 @@ theorem emit_launcherMatches {language : CoreLanguage}
           | ok component =>
             simp only [hComp, bind, Except.bind, pure, Except.pure, Except.ok.injEq] at h
             subst h
-            exact ⟨diagnostics, hDiag, emitComponentGraph_bodyHeader hComp, rfl⟩
+            exact ⟨diagnostics, hDiag, emitComponentGraph_bodyHeader hComp, rfl,
+              emitComponentGraph_ownsSymbols hComp diagnostics⟩
   · simp only [hBack, ↓reduceIte, throw, throwThe, MonadExceptOf.throw] at h
     cases h
 
@@ -1618,8 +1706,9 @@ example :
   cases hEq
 
 -- Negative controls: even with exact `launcherItems`, a component that omits
--- `@concrete_body`, marks it `internal`, or uses a mismatched return type/parameter list
--- violates `LauncherMatches`.
+-- `@concrete_body`, marks it `internal`, uses a mismatched return type/parameter list,
+-- or binds `.body` as a `.constant` (alone or alongside `llvmBodyDefinition`) violates
+-- `LauncherMatches`.
 example :
     let bir := addOvfBIR ctrlProfile 20 22
     let diag := ["concrete: trap: overflow at src/main.con:1:30 (site 0)\n"]
@@ -1630,8 +1719,59 @@ example :
       ⟨⟨[.define false (.integer .u8) .body [], .endFunction]⟩, ⟨launcherItems diag⟩, bir.sites⟩ ∧
     ¬ LauncherMatches bir
       ⟨⟨[.define false (.integer .u32) .body [(.integer .u32, .p)], .endFunction]⟩,
+        ⟨launcherItems diag⟩, bir.sites⟩ ∧
+    ¬ LauncherMatches bir
+      ⟨⟨[.constant .body ⟨#[0]⟩]⟩, ⟨launcherItems diag⟩, bir.sites⟩ ∧
+    ¬ LauncherMatches bir
+      ⟨⟨[llvmBodyDefinition, .endFunction, .constant .body ⟨#[0]⟩]⟩,
         ⟨launcherItems diag⟩, bir.sites⟩ := by
-  refine ⟨?_, ?_, ?_, ?_⟩ <;> (intro hMatch; have hComp := hMatch.component_body_header_eq; cases hComp)
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
+    (intro hMatch; have hComp := hMatch.component_body_header_eq; cases hComp)
+
+-- Negative controls: one per launcher-owned symbol class (`.main`, `.writeAll`, `.bad`,
+-- `.site 0`, `.write`, `.exit`, `.abort`). Even with a valid `llvmBodyDefinition` and exact
+-- `launcherItems`, defining any launcher-owned symbol in the component violates `LauncherMatches`.
+example :
+    let bir := addOvfBIR ctrlProfile 20 22
+    let diag := ["concrete: trap: overflow at src/main.con:1:30 (site 0)\n"]
+    let withExtra (extra : List Item) : LLVMInput ctrlProfile :=
+      ⟨⟨[llvmBodyDefinition, .endFunction] ++ extra⟩, ⟨launcherItems diag⟩, bir.sites⟩
+    ¬ LauncherMatches bir (withExtra [.define false (.integer .u32) .main [], .endFunction]) ∧
+    ¬ LauncherMatches bir (withExtra [.define true .void .writeAll [(.ptr, .p), (.integer .u64, .n)], .endFunction]) ∧
+    ¬ LauncherMatches bir (withExtra [.constant .bad ⟨#[0]⟩]) ∧
+    ¬ LauncherMatches bir (withExtra [.constant (.site 0) ⟨#[0]⟩]) ∧
+    ¬ LauncherMatches bir (withExtra [.define false (.integer .u64) .write
+      [(.integer .u32, .p), (.ptr, .pp), (.integer .u64, .n)], .endFunction]) ∧
+    ¬ LauncherMatches bir (withExtra [.define false .void .exit [(.integer .u32, .p)], .endFunction]) ∧
+    ¬ LauncherMatches bir (withExtra [.define false .void .abort [], .endFunction]) := by
+  intro bir diag withExtra
+  have reject : ∀ (extra : List Item) (item : Item) (g : Global),
+      item ∈ extra →
+      llvmItemGlobal item = some g →
+      g ∈ llvmModuleGlobals (launcherItems diag) →
+      g ≠ llvmBodyGlobal →
+      ¬ LauncherMatches bir (withExtra extra) := by
+    intro extra item g hIn hGlob hInLaunch hNe hMatch
+    have hCompGlob : g ∈ llvmModuleGlobals (withExtra extra).component.items :=
+      List.mem_filterMap.mpr ⟨item, List.mem_append_right _ hIn, hGlob⟩
+    exact hNe (hMatch.shared_global_eq_body g hCompGlob hInLaunch)
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · exact reject _ (.define false (.integer .u32) .main []) .main List.mem_cons_self rfl
+      (by rw [llvmModuleGlobals_launcherItems]; simp) (by intro h; cases h)
+  · exact reject _ (.define true .void .writeAll [(.ptr, .p), (.integer .u64, .n)]) .writeAll
+      List.mem_cons_self rfl (by rw [llvmModuleGlobals_launcherItems]; simp) (by intro h; cases h)
+  · exact reject _ (.constant .bad ⟨#[0]⟩) .bad List.mem_cons_self rfl
+      (by rw [llvmModuleGlobals_launcherItems]; simp) (by intro h; cases h)
+  · exact reject _ (.constant (.site 0) ⟨#[0]⟩) (.site 0) List.mem_cons_self rfl
+      (by rw [llvmModuleGlobals_launcherItems]; simp [diag, Backend.Runtime.indexed, Backend.Runtime.indexedFrom])
+      (by intro h; cases h)
+  · exact reject _ (.define false (.integer .u64) .write
+      [(.integer .u32, .p), (.ptr, .pp), (.integer .u64, .n)]) .write
+      List.mem_cons_self rfl (by rw [llvmModuleGlobals_launcherItems]; simp) (by intro h; cases h)
+  · exact reject _ (.define false .void .exit [(.integer .u32, .p)]) .exit
+      List.mem_cons_self rfl (by rw [llvmModuleGlobals_launcherItems]; simp) (by intro h; cases h)
+  · exact reject _ (.define false .void .abort []) .abort
+      List.mem_cons_self rfl (by rw [llvmModuleGlobals_launcherItems]; simp) (by intro h; cases h)
 
 -- Positive control: LLVM supports 32-bit `addWithOverflow` (`@llvm.uadd.with.overflow.i32`)
 -- and emits distinct target headers across `x86_64Linux` vs `aarch64Macos`.

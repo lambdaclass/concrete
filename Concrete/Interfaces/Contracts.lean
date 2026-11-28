@@ -2842,11 +2842,47 @@ launcher module, using the exact same return type, global symbol, and parameter 
 def llvmBodyDeclaration : Backend.LLVM.Item :=
   .declare llvmBodyReturnType llvmBodyGlobal (llvmBodyParams.map Prod.fst)
 
-/-- Whether an LLVM item declares or defines the hosted entry body symbol `@concrete_body`. -/
-def isLLVMBodyHeader : Backend.LLVM.Item → Bool
-  | .define _ _ .body _ => true
-  | .declare _ .body _ => true
-  | _ => false
+/-- The top-level global symbol declared, defined, or bound as a constant by an LLVM item, if any. -/
+def llvmItemGlobal : Backend.LLVM.Item → Option Backend.LLVM.Global
+  | .declare _ fn _ => some fn
+  | .define _ _ fn _ => some fn
+  | .constant name _ => some name
+  | .label _ | .instruction _ | .terminator _ | .endFunction | .blank => none
+
+/-- The global symbol defined (as a function or constant) by an LLVM item, if any. -/
+def llvmItemDefines : Backend.LLVM.Item → Option Backend.LLVM.Global
+  | .define _ _ fn _ => some fn
+  | .constant name _ => some name
+  | .declare _ _ _ | .label _ | .instruction _ | .terminator _ | .endFunction | .blank => none
+
+/-- All top-level global symbols declared or defined by an LLVM item list. -/
+def llvmModuleGlobals (items : List Backend.LLVM.Item) : List Backend.LLVM.Global :=
+  items.filterMap llvmItemGlobal
+
+/-- All global symbols defined (by `define` or `constant`) by an LLVM item list. -/
+def llvmModuleDefines (items : List Backend.LLVM.Item) : List Backend.LLVM.Global :=
+  items.filterMap llvmItemDefines
+
+/-- Whether an LLVM item introduces (declares, defines, or binds as a constant) the hosted entry
+body symbol `@concrete_body`. -/
+def isLLVMBodyHeader (item : Backend.LLVM.Item) : Bool :=
+  llvmItemGlobal item == some llvmBodyGlobal
+
+theorem isLLVMBodyHeader_eq_true_iff (item : Backend.LLVM.Item) :
+    isLLVMBodyHeader item = true ↔ llvmItemGlobal item = some llvmBodyGlobal := by
+  unfold isLLVMBodyHeader
+  cases h : llvmItemGlobal item with
+  | none => simp
+  | some g => cases g <;> simp [llvmBodyGlobal] <;> rfl
+
+theorem llvmItemGlobal_of_defines {item : Backend.LLVM.Item} {g : Backend.LLVM.Global}
+    (h : llvmItemDefines item = some g) : llvmItemGlobal item = some g := by
+  cases item <;> first | exact h | cases h
+
+theorem mem_llvmModuleGlobals_of_defines {items : List Backend.LLVM.Item} {g : Backend.LLVM.Global}
+    (h : g ∈ llvmModuleDefines items) : g ∈ llvmModuleGlobals items := by
+  obtain ⟨item, hMem, hDef⟩ := List.mem_filterMap.mp h
+  exact List.mem_filterMap.mpr ⟨item, hMem, llvmItemGlobal_of_defines hDef⟩
 
 /-- Exact LLVM assembly items of a standalone two-module launcher: the matching external
 body declaration (`llvmBodyDeclaration`) followed by
@@ -2855,26 +2891,108 @@ body declaration (`llvmBodyDeclaration`) followed by
 def launcherItems (diagnostics : List String) : List Backend.LLVM.Item :=
   llvmBodyDeclaration :: Backend.Runtime.llvmDiagnostics diagnostics
 
+private theorem filterMap_map_some {α β γ : Type} {g : α → β} {f : β → Option γ} (h : α → γ)
+    (hfg : ∀ x, f (g x) = some (h x)) (xs : List α) :
+    (xs.map g).filterMap f = xs.map h := by
+  induction xs with
+  | nil => rfl
+  | cons a rest ih => simp only [List.map_cons, List.filterMap_cons, hfg, ih]
+
+private theorem filterMap_flatMap_nil {α β γ : Type} {g : α → List β} {f : β → Option γ}
+    (hNil : ∀ x, (g x).filterMap f = []) (xs : List α) :
+    (xs.flatMap g).filterMap f = [] := by
+  induction xs with
+  | nil => rfl
+  | cons a rest ih => simp only [List.flatMap_cons, List.filterMap_append, hNil, List.nil_append, ih]
+
+/-- Exact top-level global symbols declared or defined by `launcherItems diagnostics`. -/
+theorem llvmModuleGlobals_launcherItems (diagnostics : List String) :
+    llvmModuleGlobals (launcherItems diagnostics) =
+      llvmBodyGlobal :: ((Backend.Runtime.indexed diagnostics).map (fun p => Backend.LLVM.Global.site p.1) ++
+        [.bad, .write, .exit, .abort, .writeAll, .main]) := by
+  unfold llvmModuleGlobals launcherItems Backend.Runtime.llvmDiagnostics
+  simp only [List.filterMap_cons, llvmBodyDeclaration, llvmItemGlobal, List.filterMap_append]
+  rw [filterMap_map_some (f := llvmItemGlobal) (fun p => Backend.LLVM.Global.site p.1) (fun _ => rfl)]
+  rw [filterMap_flatMap_nil (f := llvmItemGlobal) (fun _ => rfl)]
+  simp only [List.filterMap, List.append_nil]
+
+/-- Exact global symbols defined (by `define` or `constant`) by `launcherItems diagnostics`. -/
+theorem llvmModuleDefines_launcherItems (diagnostics : List String) :
+    llvmModuleDefines (launcherItems diagnostics) =
+      (Backend.Runtime.indexed diagnostics).map (fun p => Backend.LLVM.Global.site p.1) ++
+        [.bad, .writeAll, .main] := by
+  unfold llvmModuleDefines launcherItems Backend.Runtime.llvmDiagnostics
+  simp only [List.filterMap_cons, llvmBodyDeclaration, llvmItemDefines, List.filterMap_append]
+  rw [filterMap_map_some (f := llvmItemDefines) (fun p => Backend.LLVM.Global.site p.1) (fun _ => rfl)]
+  rw [filterMap_flatMap_nil (f := llvmItemDefines) (fun _ => rfl)]
+  simp only [List.filterMap, List.append_nil]
+
+/-- Symbol-ownership split between the component and launcher modules:
+1. Every global the component defines is disjoint from every global the launcher defines.
+2. Any top-level global introduced (declared, defined, or bound as a constant) by both modules
+   is `llvmBodyGlobal` (`@concrete_body`), which the component defines uniquely as
+   `llvmBodyDefinition` and the launcher declares as `llvmBodyDeclaration`. -/
+def ComponentOwnsSymbols (component launcher : List Backend.LLVM.Item) : Prop :=
+  (∀ g, g ∈ llvmModuleDefines component → g ∉ llvmModuleDefines launcher) ∧
+  (∀ g, g ∈ llvmModuleGlobals component → g ∈ llvmModuleGlobals launcher → g = llvmBodyGlobal)
+
+/-- Sufficient condition for `ComponentOwnsSymbols` against `launcherItems diagnostics`:
+the component defines only `llvmBodyGlobal` and its only other top-level globals are LLVM
+overflow intrinsics. -/
+theorem ComponentOwnsSymbols.of_component_globals
+    {component : List Backend.LLVM.Item} (diagnostics : List String)
+    (hDefines : ∀ g ∈ llvmModuleDefines component, g = llvmBodyGlobal)
+    (hGlobals : ∀ g ∈ llvmModuleGlobals component,
+      g = llvmBodyGlobal ∨ ∃ op ty, g = .overflow op ty) :
+    ComponentOwnsSymbols component (launcherItems diagnostics) := by
+  constructor
+  · intro g hCompDef hLaunchDef
+    have hBody := hDefines g hCompDef
+    subst hBody
+    rw [llvmModuleDefines_launcherItems] at hLaunchDef
+    rcases List.mem_append.mp hLaunchDef with hSite | hFixed
+    · obtain ⟨_, _, hEq⟩ := List.mem_map.mp hSite
+      cases hEq
+    · simp only [List.mem_cons, List.not_mem_nil, or_false] at hFixed
+      rcases hFixed with h | h | h <;> cases h
+  · intro g hCompGlob hLaunchGlob
+    rcases hGlobals g hCompGlob with rfl | ⟨op, ty, rfl⟩
+    · rfl
+    · rw [llvmModuleGlobals_launcherItems] at hLaunchGlob
+      rcases List.mem_cons.mp hLaunchGlob with hBody | hTail
+      · cases hBody
+      · rcases List.mem_append.mp hTail with hSite | hFixed
+        · obtain ⟨_, _, hEq⟩ := List.mem_map.mp hSite
+          cases hEq
+        · simp only [List.mem_cons, List.not_mem_nil, or_false] at hFixed
+          rcases hFixed with h | h | h | h | h | h <;> cases h
+
 /-- The two-module LLVM launcher contract:
 1. `bir.sites` resolves in `bir.project` via `TrapEntry.diagnosticLine` to `diagnostics`;
 2. `output.component.items` has `llvmBodyDefinition` (`define i32 @concrete_body()`) as its
-   unique `@concrete_body` header (non-internal, matching symbol, return type, and parameters);
+   unique `@concrete_body` top-level item (non-internal, matching symbol, return type, and
+   parameters; no `.declare` or `.constant` for `.body`);
 3. `output.launcher.items` equals `launcherItems diagnostics` — the matching declaration
    `llvmBodyDeclaration` (`declare i32 @concrete_body()`) followed by
-   `Backend.Runtime.llvmDiagnostics diagnostics`. -/
+   `Backend.Runtime.llvmDiagnostics diagnostics`;
+4. `ComponentOwnsSymbols output.component.items output.launcher.items` — the component's defined
+   globals are disjoint from the launcher's defined globals, and no top-level global other than
+   `llvmBodyGlobal` appears in both modules (forbidding the component from defining or colliding
+   with `.main`, `.writeAll`, `.bad`, `.site _`, `.write`, `.exit`, or `.abort`). -/
 def LauncherMatches {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
     (bir : BIR lang profile) (output : LLVMInput profile) : Prop :=
   ∃ diagnostics,
     bir.sites.toList.mapM (fun entry => entry.diagnosticLine bir.project) = some diagnostics ∧
     output.component.items.filter isLLVMBodyHeader = [llvmBodyDefinition] ∧
-    output.launcher.items = launcherItems diagnostics
+    output.launcher.items = launcherItems diagnostics ∧
+    ComponentOwnsSymbols output.component.items output.launcher.items
 
 theorem LauncherMatches.launcher_unique {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
     {bir : BIR lang profile} {left right : LLVMInput profile}
     (hLeft : LauncherMatches bir left) (hRight : LauncherMatches bir right) :
     left.launcher = right.launcher := by
-  obtain ⟨d₁, hMap₁, _, hItems₁⟩ := hLeft
-  obtain ⟨d₂, hMap₂, _, hItems₂⟩ := hRight
+  obtain ⟨d₁, hMap₁, _, hItems₁, _⟩ := hLeft
+  obtain ⟨d₂, hMap₂, _, hItems₂, _⟩ := hRight
   have hDiag : d₁ = d₂ := Option.some.inj (hMap₁.symm.trans hMap₂)
   subst hDiag
   cases left; cases right
@@ -2886,18 +3004,18 @@ theorem LauncherMatches.launcher_items_eq {Ty : Type} {lang : LoweringLanguage T
     (hMatch : LauncherMatches bir output)
     (hDiag : bir.sites.toList.mapM (fun entry => entry.diagnosticLine bir.project) = some diagnostics) :
     output.launcher.items = launcherItems diagnostics := by
-  obtain ⟨d, hMap, _, hItems⟩ := hMatch
+  obtain ⟨d, hMap, _, hItems, _⟩ := hMatch
   have hEq : d = diagnostics := Option.some.inj (hMap.symm.trans hDiag)
   subst hEq
   exact hItems
 
 /-- Every `LauncherMatches` handoff has `llvmBodyDefinition` as the unique `@concrete_body`
-header in `output.component.items`. -/
+top-level item in `output.component.items`. -/
 theorem LauncherMatches.component_body_header_eq {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
     {bir : BIR lang profile} {output : LLVMInput profile}
     (hMatch : LauncherMatches bir output) :
     output.component.items.filter isLLVMBodyHeader = [llvmBodyDefinition] :=
-  let ⟨_, _, hComp, _⟩ := hMatch
+  let ⟨_, _, hComp, _, _⟩ := hMatch
   hComp
 
 /-- Every `LauncherMatches` handoff externally defines `@concrete_body` in `output.component`. -/
@@ -2905,10 +3023,46 @@ theorem LauncherMatches.component_defines_body {Ty : Type} {lang : LoweringLangu
     {bir : BIR lang profile} {output : LLVMInput profile}
     (hMatch : LauncherMatches bir output) :
     llvmBodyDefinition ∈ output.component.items := by
-  obtain ⟨_, _, hComp, _⟩ := hMatch
+  obtain ⟨_, _, hComp, _, _⟩ := hMatch
   have hMem : llvmBodyDefinition ∈ output.component.items.filter isLLVMBodyHeader := by
     rw [hComp]; exact List.mem_cons_self
   exact (List.mem_filter.mp hMem).1
+
+/-- Every `LauncherMatches` handoff enforces the component/launcher symbol-ownership split. -/
+theorem LauncherMatches.component_owns_symbols {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {bir : BIR lang profile} {output : LLVMInput profile}
+    (hMatch : LauncherMatches bir output) :
+    ComponentOwnsSymbols output.component.items output.launcher.items :=
+  let ⟨_, _, _, _, hOwn⟩ := hMatch
+  hOwn
+
+/-- Every global defined by the component is disjoint from every global defined by the launcher. -/
+theorem LauncherMatches.defines_disjoint {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {bir : BIR lang profile} {output : LLVMInput profile}
+    (hMatch : LauncherMatches bir output) :
+    ∀ g, g ∈ llvmModuleDefines output.component.items →
+      g ∉ llvmModuleDefines output.launcher.items :=
+  hMatch.component_owns_symbols.1
+
+/-- Any top-level global present in both component and launcher is `llvmBodyGlobal`. -/
+theorem LauncherMatches.shared_global_eq_body {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {bir : BIR lang profile} {output : LLVMInput profile}
+    (hMatch : LauncherMatches bir output) :
+    ∀ g, g ∈ llvmModuleGlobals output.component.items →
+      g ∈ llvmModuleGlobals output.launcher.items → g = llvmBodyGlobal :=
+  hMatch.component_owns_symbols.2
+
+/-- The component cannot bind `@concrete_body` as a constant global. -/
+theorem LauncherMatches.no_component_constant_body {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {bir : BIR lang profile} {output : LLVMInput profile}
+    (hMatch : LauncherMatches bir output) (bytes : ByteArray) :
+    Backend.LLVM.Item.constant llvmBodyGlobal bytes ∉ output.component.items := by
+  intro hMem
+  have hIn : Backend.LLVM.Item.constant llvmBodyGlobal bytes ∈
+      output.component.items.filter isLLVMBodyHeader :=
+    List.mem_filter.mpr ⟨hMem, rfl⟩
+  rw [hMatch.component_body_header_eq] at hIn
+  cases List.mem_singleton.mp hIn
 
 /-- The declaration at the head of `output.launcher.items` matches `output.component`'s
 unique external body definition in return type, global symbol, and parameter types. -/
@@ -2918,7 +3072,7 @@ theorem LauncherMatches.body_decl_matches_define {Ty : Type} {lang : LoweringLan
     ∃ result fn params rest,
       output.component.items.filter isLLVMBodyHeader = [.define false result fn params] ∧
       output.launcher.items = .declare result fn (params.map Prod.fst) :: rest := by
-  obtain ⟨diagnostics, _, hComp, hLaunch⟩ := hMatch
+  obtain ⟨diagnostics, _, hComp, hLaunch, _⟩ := hMatch
   exact ⟨llvmBodyReturnType, llvmBodyGlobal, llvmBodyParams,
     Backend.Runtime.llvmDiagnostics diagnostics, hComp, hLaunch⟩
 
