@@ -9,12 +9,17 @@ Pinned interface module providing:
   (opcode/signature validity, literal decoding, place/layout validity, function/block inventory,
   call/return signatures, edge arguments, unique typed register definitions including distinct
   `dst`/`flag` on `addWithOverflow`, dominance of every use including terminators, and local
-  structure in unreachable blocks);
+  structure in unreachable blocks). Its `{language : CoreLanguage}` implicit follows the
+  `Contracts.lean`/`Pipeline.lean` convention (`SSA.WF`, `BIR.WF`) and is instantiated by F7 as
+  `sliceLanguage s` when `lang = sliceLoweringLanguage s`;
 - `firstUnsupported`: deterministic stored-order backend feature scanner over `BIR` tied
   directly to `ConcreteSpec.Core.BackendPolicy.supportsFeature` and projecting to
-  `RegisteredRule`;
+  `RegisteredRule` (likewise instantiated by F7 with `language := sliceLanguage s`);
 - `AccountsFor`: intra-IR occurrence-accounting contract across all four `IRPoint`s with
-  full per-image elimination justification, identity law, and unconditional composition law.
+  full observable trap identity preservation (kind, operation ID, stable key, span, and
+  rendered diagnostic bytes), unused/pure/non-trapping `.deadValue` justification, identity
+  law, unconditional intermediate-occurrence composition soundness, and direct composition
+  under `ComposedEliminationsJustified`.
 -/
 
 namespace Concrete.Interfaces
@@ -1162,7 +1167,13 @@ private theorem NormalizedRegProgram.checkFormed_eq_true_iff (language : CoreLan
 5. Opcode/signature validity, place validity, and literal decoding;
 6. Function-wide unique typed register definitions (including distinct `dst`/`flag` on `addWithOverflow`);
 7. Dominance of every register use in body instructions and terminators (with strict intra-block
-   order enforced even in unreachable blocks). -/
+   order enforced even in unreachable blocks).
+
+Note: `{language : CoreLanguage}` follows the repository's `{language : CoreLanguage}
+{lang : LoweringLanguage language.operands.Ty}` parameterization (`SSA.WF`, `BIR.WF`, `BuildsSSA`,
+`BuildsBIR` in `Contracts.lean`/`Pipeline.lean`, because `LoweringLanguage` in `Carriers.lean` is
+indexed only by `Ty`). Freeze unit F7 instantiates `language := sliceLanguage s` whenever
+`lang = sliceLoweringLanguage s` (on `At s profile .ssa` / `At s profile .bir`). -/
 def RegisterFormation {language : CoreLanguage} {lang : LoweringLanguage language.operands.Ty}
     {profile : Profile} (ir : RegisterIR lang profile) : Prop :=
   ir.normalize.Formed language
@@ -1508,7 +1519,11 @@ def BIR.featureCandidates {language : CoreLanguage}
 
 /-- Return the first unsupported backend feature in `bir` under `profile.policyProfile`,
 scanning functions and blocks in stored order with fixed per-occurrence precedence.
-Every returned cause is guaranteed to fail `BackendPolicy.supportsFeature profile.policyProfile`. -/
+Every returned cause is guaranteed to fail `BackendPolicy.supportsFeature profile.policyProfile`.
+
+Note: `{language : CoreLanguage}` matches `RegisterFormation`, `SSA.WF`, and `BIR.WF`; freeze
+unit F7 instantiates `language := sliceLanguage s` whenever `lang = sliceLoweringLanguage s`
+(on `At s profile .bir`). -/
 def firstUnsupported {language : CoreLanguage} {lang : LoweringLanguage language.operands.Ty}
     {profile : Profile} (bir : BIR lang profile) : Option (FeatureCause profile) :=
   (bir.featureCandidates (language := language)).find? fun cause =>
@@ -1743,7 +1758,7 @@ private def cfgOccurrencePure {Ty P I T : Type} (instPure : I → Bool)
       | .trap => false
 
 /-- Whether `occ` in `ir` is an unconditionally pure, non-trapping value/boundary occurrence
-eligible for `.deadValue` elimination (never a `.trap`, `.call`, memory mutation, or lifetime op). -/
+(never a `.trap`, `.call`, memory mutation, or lifetime op). -/
 def AtLang.occurrencePure {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile} :
     {point : IRPoint} → AtLang lang profile point → Occurrence → Bool
   | .mir, mir, occ => cfgOccurrencePure mirInstPure mir.functions occ
@@ -1751,10 +1766,361 @@ def AtLang.occurrencePure {Ty : Type} {lang : LoweringLanguage Ty} {profile : Pr
   | .ssa, ssa, occ => cfgOccurrencePure ssaInstPure ssa.functions occ
   | .bir, bir, occ => cfgOccurrencePure ssaInstPure bir.functions occ
 
+private def readUsedPlaces {Ty : Type} {Lit : Ty → Type} {ty : Ty} : Read Ty Lit ty → List PlaceId
+  | .literal _ => []
+  | .copy place | .move place => [place.root]
+
+private def argsUsedPlaces {Ty : Type} {Lit : Ty → Type} :
+    {types : List Ty} → Args (Read Ty Lit) types → List PlaceId
+  | _, .nil => []
+  | _, .cons arg rest => readUsedPlaces arg ++ argsUsedPlaces rest
+
+private def mirInstDefPlaces {Ty : Type} {lang : LoweringLanguage Ty} : MIRInst lang → List PlaceId
+  | .bind dst _ | .op dst .. => [dst.root]
+  | .assign .. | .endLifetime _ | .destructure .. | .call .. => []
+
+private def mirInstUsedPlaces {Ty : Type} {lang : LoweringLanguage Ty} : MIRInst lang → List PlaceId
+  | .bind _ src => readUsedPlaces src
+  | .assign dst src => dst.root :: readUsedPlaces src
+  | .op _ _ args _ addresses => argsUsedPlaces args ++ addresses.map (fun p => p.2.root)
+  | .endLifetime place => [place]
+  | .destructure src _ => [src.root]
+  | .call _ _ args _ => args.flatMap fun a => readUsedPlaces a.2
+
+private def mirTermUsedPlaces {Ty : Type} {lang : LoweringLanguage Ty} :
+    Terminator (Sigma (Read Ty lang.literal)) (Read Ty lang.literal lang.bool) → List PlaceId
+  | .jump edge => edge.arguments.flatMap fun a => readUsedPlaces a.2
+  | .branch test yes no =>
+    readUsedPlaces test ++ (yes.arguments ++ no.arguments).flatMap fun a => readUsedPlaces a.2
+  | .ret (some arg) => readUsedPlaces arg.2
+  | .ret none | .trap _ _ | .invalid => []
+
+private def memReadUsedPlaces {Ty : Type} {Lit : Ty → Type} {ty : Ty} :
+    MemoryRead Ty Lit ty → List PlaceId
+  | .literal _ => []
+  | .copy place | .move place => [place.logical.root]
+
+private def memArgsUsedPlaces {Ty : Type} {Lit : Ty → Type} :
+    {types : List Ty} → Args (MemoryRead Ty Lit) types → List PlaceId
+  | _, .nil => []
+  | _, .cons arg rest => memReadUsedPlaces arg ++ memArgsUsedPlaces rest
+
+private def memInstDefPlaces {Ty : Type} {lang : LoweringLanguage Ty} : MemoryInst lang → List PlaceId
+  | .bind dst _ | .op dst .. => [dst.logical.root]
+  | .addWithOverflow _ dst flag _ _ => [dst.logical.root, flag.logical.root]
+  | .assign .. | .beginLifetime _ | .endLifetime _ | .destructure .. | .call .. => []
+
+private def memInstUsedPlaces {Ty : Type} {lang : LoweringLanguage Ty} : MemoryInst lang → List PlaceId
+  | .bind _ src => memReadUsedPlaces src
+  | .assign dst src =>
+    (if dst.logical.path.isEmpty then [] else [dst.logical.root]) ++ memReadUsedPlaces src
+  | .op _ _ args _ addresses => memArgsUsedPlaces args ++ addresses.map (fun p => p.2.logical.root)
+  | .addWithOverflow _ _ _ lhs rhs => memReadUsedPlaces lhs ++ memReadUsedPlaces rhs
+  | .beginLifetime _ | .endLifetime _ => []
+  | .destructure src _ => [src.logical.root]
+  | .call _ _ args _ => args.flatMap fun a => memReadUsedPlaces a.2
+
+private def memTermUsedPlaces {Ty : Type} {lang : LoweringLanguage Ty} :
+    MemoryTerm lang → List PlaceId
+  | .jump edge => edge.arguments.flatMap fun a => memReadUsedPlaces a.2
+  | .branch test yes no =>
+    memReadUsedPlaces test ++ (yes.arguments ++ no.arguments).flatMap fun a => memReadUsedPlaces a.2
+  | .ret (some arg) => memReadUsedPlaces arg.2
+  | .ret none | .trap _ _ | .invalid => []
+
+private def ssaInstDefIds {Ty : Type} {lang : LoweringLanguage Ty} (inst : SSAInst lang) : List Nat :=
+  inst.defs.map Prod.fst
+
+private def ssaInstUseIds {Ty : Type} {lang : LoweringLanguage Ty} (inst : SSAInst lang) : List Nat :=
+  inst.regUses.map Prod.fst
+
+private def ssaTermUseIds {Ty : Type} {lang : LoweringLanguage Ty}
+    (term : Terminator (Sigma (SSARead Ty lang.literal)) (SSARead Ty lang.literal lang.bool)) :
+    List Nat :=
+  (Terminator.regReads term).filterMap fun
+    | ⟨_, .value v⟩ => some v.id
+    | ⟨_, .literal _⟩ => none
+
+private def birTermUseIds {Ty : Type} {lang : LoweringLanguage Ty}
+    (term : BIRTerm (Sigma (SSARead Ty lang.literal)) (SSARead Ty lang.literal lang.bool)) :
+    List Nat :=
+  (BIRTerm.regReads term).filterMap fun
+    | ⟨_, .value v⟩ => some v.id
+    | ⟨_, .literal _⟩ => none
+
+private def cfgOccurrenceUnused {Ty P I T Id : Type} [DecidableEq Id]
+    (instDefs : I → List Id) (instUses : I → List Id) (termUses : T → List Id)
+    (functions : AList FnId (LocalTypes Ty × CFG P (LocatedOp I) T)) (occ : Occurrence) : Bool :=
+  match AList.lookup functions occ.fn with
+  | none => false
+  | some (_, graph) =>
+    match graph.blocks.find? (·.id == occ.block) with
+    | none => false
+    | some blk =>
+      match occ.slot with
+      | .instruction idx =>
+        match blk.body[idx]? with
+        | none => false
+        | some op =>
+          let defs := instDefs op.instruction
+          let uses := graph.blocks.toList.flatMap fun b =>
+            (b.body.flatMap fun instr => instUses instr.instruction) ++ termUses b.ending
+          defs.all fun id => !uses.contains id
+      | .boundary idx => decide (idx < blk.boundaryOrigins.length)
+      | .trap => false
+
+/-- Whether `occ` in `ir` defines no value/place used anywhere in its enclosing function CFG
+(across all blocks, preserving `RegisterFormation` on unreachable blocks as well).
+Boundary origins define no values and are unused metadata; `.trap` occurrences are never unused. -/
+def AtLang.occurrenceUnused {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile} :
+    {point : IRPoint} → AtLang lang profile point → Occurrence → Bool
+  | .mir, mir, occ => cfgOccurrenceUnused mirInstDefPlaces mirInstUsedPlaces mirTermUsedPlaces mir.functions occ
+  | .memory, mem, occ => cfgOccurrenceUnused memInstDefPlaces memInstUsedPlaces memTermUsedPlaces mem.functions occ
+  | .ssa, ssa, occ => cfgOccurrenceUnused ssaInstDefIds ssaInstUseIds ssaTermUseIds ssa.functions occ
+  | .bir, bir, occ => cfgOccurrenceUnused ssaInstDefIds ssaInstUseIds birTermUseIds bir.functions occ
+
 /-- Look up the `Origin` attached to occurrence `occ` in `ir`. -/
 def AtLang.originOf {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile} {point : IRPoint}
     (ir : AtLang lang profile point) (occ : Occurrence) : Option Origin :=
   AList.lookup (AtLang.occurrences ir) occ
+
+/-- Project carrying source files and paths for `ir` at any IR insertion point. -/
+def AtLang.project {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile} :
+    {point : IRPoint} → AtLang lang profile point → Project
+  | .mir, mir => MIR.project mir
+  | .memory, mem => Memory.project mem
+  | .ssa, ssa => SSA.project ssa
+  | .bir, bir => BIR.project bir
+
+/-- Extract the `TrapEntry` (`kind` and `origin`) of a `Terminator` when it is `.trap`. -/
+def Terminator.trapEntry {A C : Type} : Terminator A C → Option TrapEntry
+  | .trap kind origin => some ⟨kind, origin⟩
+  | _ => none
+
+private def cfgTrapEntries {Ty P I T : Type} (trapEntry : T → Option TrapEntry)
+    (functions : AList FnId (LocalTypes Ty × CFG P (LocatedOp I) T)) :
+    AList Occurrence TrapEntry :=
+  functions.flatMap fun (fn, _, graph) =>
+    graph.blocks.toList.flatMap fun blk =>
+      match trapEntry blk.ending with
+      | some entry => [(⟨fn, blk.id, .trap⟩, entry)]
+      | none => []
+
+/-- Enumerate every `.trap` terminator occurrence together with its `TrapEntry` (`kind` and `origin`)
+in stored order, mirroring `AtLang.occurrences`. -/
+def AtLang.trapEntries {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile} :
+    {point : IRPoint} → AtLang lang profile point → AList Occurrence TrapEntry
+  | .mir, mir => cfgTrapEntries Terminator.trapEntry mir.functions
+  | .memory, mem => cfgTrapEntries Terminator.trapEntry mem.functions
+  | .ssa, ssa => cfgTrapEntries Terminator.trapEntry ssa.functions
+  | .bir, bir => cfgTrapEntries (fun
+      | .trap slot => bir.sites[slot.index]?
+      | _ => none) bir.functions
+
+/-- Look up the `TrapEntry` (`kind` and `origin`) attached to occurrence `occ` in `ir`. -/
+def AtLang.trapEntryOf {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {point : IRPoint} (ir : AtLang lang profile point) (occ : Occurrence) : Option TrapEntry :=
+  AList.lookup (AtLang.trapEntries ir) occ
+
+/-- Canonical UTF-8 diagnostic bytes rendered for `entry` in `project`, derived from
+`TrapEntry.diagnosticLine` (matching `Contracts.trapDiagnostic` byte-for-byte). -/
+def TrapEntry.renderedBytes (entry : TrapEntry) (project : Project) : Option (List UInt8) :=
+  (entry.diagnosticLine project).map fun line => line.toUTF8.data.toList
+
+/-- Full observable identity of a `.trap` occurrence:
+- `kind`: trap kind (`TrapKind`);
+- `origin`: operation ID (`origin.operation`), lexical span (`origin.lexical`), and
+  persistent evidence key (`origin.evidenceKey`);
+- `renderedBytes`: canonical UTF-8 diagnostic bytes rendered in the program's issuing `Project`. -/
+structure TrapIdentity where
+  kind : TrapKind
+  origin : Origin
+  renderedBytes : Option (List UInt8)
+  deriving DecidableEq, Repr
+
+def TrapIdentity.ofEntry (project : Project) (entry : TrapEntry) : TrapIdentity :=
+  ⟨entry.kind, entry.origin, entry.renderedBytes project⟩
+
+/-- Look up the full observable `TrapIdentity` (kind, operation ID, stable key, span, and
+rendered diagnostic bytes) attached to `.trap` occurrence `occ` in `ir`. -/
+def AtLang.trapIdentityOf {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {point : IRPoint} (ir : AtLang lang profile point) (occ : Occurrence) : Option TrapIdentity :=
+  (AtLang.trapEntryOf ir occ).map (TrapIdentity.ofEntry (AtLang.project ir))
+
+private theorem alist_lookup_flatMap {κ α β : Type} [DecidableEq κ] (xs : List β)
+    (f : β → AList κ α) (k : κ) :
+    AList.lookup (xs.flatMap f) k =
+      xs.findSome? fun x => AList.lookup (f x) k := by
+  induction xs with
+  | nil => rfl
+  | cons a rest ih =>
+    rw [List.flatMap_cons, alist_lookup_append, List.findSome?_cons, ih]
+    cases AList.lookup (f a) k <;> rfl
+
+private theorem findSome?_map_option {α β γ : Type} (xs : List α) (f : α → Option β) (g : β → γ) :
+    xs.findSome? (fun x => (f x).map g) = (xs.findSome? f).map g := by
+  induction xs with
+  | nil => rfl
+  | cons a rest ih =>
+    simp only [List.findSome?_cons]
+    cases f a with
+    | none => exact ih
+    | some b => rfl
+
+private theorem alist_lookup_isSome_of_mem_map_fst {κ α : Type} [DecidableEq κ] {l : AList κ α}
+    {k : κ} (h : k ∈ List.map Prod.fst l) : ∃ v, AList.lookup l k = some v := by
+  induction l with
+  | nil => cases h
+  | cons hd tl ih =>
+    rcases hd with ⟨k', v'⟩
+    simp only [List.map_cons, List.mem_cons] at h
+    simp only [AList.lookup]
+    split
+    · exact ⟨v', rfl⟩
+    · rename_i hne
+      rcases h with rfl | htl
+      · exact absurd rfl hne
+      · exact ih htl
+
+private theorem alist_lookup_zipIdx_slot_ne {α : Type} (fn : FnId) (block : BlockId)
+    (mkSlot : Nat → OccurrenceSlot) (hne : ∀ n, mkSlot n ≠ .trap)
+    (f : α → Origin) (xs : List α) (k : Nat) {occ : Occurrence} (htrap : occ.slot = .trap) :
+    AList.lookup ((xs.zipIdx k).map fun p => (Occurrence.mk fn block (mkSlot p.2), f p.1)) occ = none := by
+  induction xs generalizing k with
+  | nil => rfl
+  | cons a rest ih =>
+    simp only [List.zipIdx_cons, List.map_cons, AList.lookup]
+    split
+    · rename_i heq
+      have hslot := congrArg Occurrence.slot heq
+      dsimp only at hslot
+      rw [htrap] at hslot
+      exact absurd hslot (hne k)
+    · exact ih (k + 1)
+
+private theorem alist_lookup_block_occurrences_trap {P I T : Type} (fn : FnId)
+    (blk : Block P (LocatedOp I) T) (trapEntry : T → Option TrapEntry)
+    {occ : Occurrence} (htrap : occ.slot = .trap) :
+    AList.lookup (blk.occurrences fn fun t => (trapEntry t).map TrapEntry.origin) occ =
+      (AList.lookup (match trapEntry blk.ending with
+        | some entry => [(⟨fn, blk.id, .trap⟩, entry)]
+        | none => []) occ).map TrapEntry.origin := by
+  unfold Block.occurrences
+  rw [alist_lookup_append, alist_lookup_append]
+  have h1 : AList.lookup (blk.body.zipIdx.map fun p => (Occurrence.mk fn blk.id (.instruction p.2), p.1.origin)) occ = none :=
+    alist_lookup_zipIdx_slot_ne fn blk.id OccurrenceSlot.instruction (fun _ h => by cases h) LocatedOp.origin blk.body 0 htrap
+  have h2 : AList.lookup (blk.boundaryOrigins.zipIdx.map fun p => (Occurrence.mk fn blk.id (.boundary p.2), p.1)) occ = none :=
+    alist_lookup_zipIdx_slot_ne fn blk.id OccurrenceSlot.boundary (fun _ h => by cases h) id blk.boundaryOrigins 0 htrap
+  rw [h1, h2]
+  dsimp only
+  cases trapEntry blk.ending with
+  | none => rfl
+  | some entry =>
+    simp only [Option.map_some, AList.lookup]
+    split <;> rfl
+
+private theorem alist_lookup_cfg_occurrences_trap {Ty P I T : Type} (trapEntry : T → Option TrapEntry)
+    (functions : AList FnId (LocalTypes Ty × CFG P (LocatedOp I) T))
+    {occ : Occurrence} (htrap : occ.slot = .trap) :
+    AList.lookup (functions.flatMap fun (fn, _, graph) =>
+        graph.occurrences fn fun t => (trapEntry t).map TrapEntry.origin) occ =
+      (AList.lookup (cfgTrapEntries trapEntry functions) occ).map TrapEntry.origin := by
+  unfold cfgTrapEntries CFG.occurrences
+  rw [alist_lookup_flatMap, alist_lookup_flatMap, ← findSome?_map_option]
+  congr 1
+  funext entry
+  rcases entry with ⟨fn, locals, graph⟩
+  rw [alist_lookup_flatMap, alist_lookup_flatMap, ← findSome?_map_option]
+  congr 1
+  funext blk
+  exact alist_lookup_block_occurrences_trap fn blk trapEntry htrap
+
+private theorem terminator_trapOrigin_eq {A C : Type} :
+    (Terminator.trapOrigin : Terminator A C → Option Origin) =
+      fun t => (Terminator.trapEntry t).map TrapEntry.origin := by
+  funext t
+  cases t <;> rfl
+
+private theorem bir_trapEntryOf_map_origin {Ty : Type} {lang : LoweringLanguage Ty}
+    {profile : Profile} (bir : BIR lang profile) {occ : Occurrence} (htrap : occ.slot = .trap) :
+    (AList.lookup (cfgTrapEntries (fun
+        | .trap slot => bir.sites[slot.index]?
+        | _ => none) bir.functions) occ).map TrapEntry.origin =
+      AList.lookup (BIR.occurrences bir) occ := by
+  have hEq := (alist_lookup_cfg_occurrences_trap
+    (fun (t : BIRTerm (Sigma (SSARead Ty lang.literal)) (SSARead Ty lang.literal lang.bool)) =>
+      match t with
+      | .trap slot => bir.sites[slot.index]?
+      | _ => none)
+    bir.functions htrap).symm
+  refine hEq.trans ?_
+  unfold BIR.occurrences
+  congr 1
+  refine congrArg (List.flatMap · bir.functions) ?_
+  funext entry
+  rcases entry with ⟨fn, locals, graph⟩
+  dsimp only
+  congr 1
+  funext t
+  cases t <;> rfl
+
+/-- On every `.trap` occurrence, `AtLang.trapEntryOf` projects to the exact same `Origin` as
+`AtLang.originOf` (unconditionally, without requiring duplicate-free function/block tables). -/
+theorem AtLang.trapEntryOf_map_origin {Ty : Type} {lang : LoweringLanguage Ty}
+    {profile : Profile} :
+    {point : IRPoint} → (ir : AtLang lang profile point) →
+    {occ : Occurrence} → occ.slot = .trap →
+    (AtLang.trapEntryOf ir occ).map TrapEntry.origin = AtLang.originOf ir occ
+  | .mir, mir, occ, htrap => by
+    change (AList.lookup (cfgTrapEntries Terminator.trapEntry mir.functions) occ).map TrapEntry.origin =
+      AList.lookup (MIR.occurrences mir) occ
+    unfold MIR.occurrences
+    rw [terminator_trapOrigin_eq]
+    exact (alist_lookup_cfg_occurrences_trap Terminator.trapEntry mir.functions htrap).symm
+  | .memory, mem, occ, htrap => by
+    change (AList.lookup (cfgTrapEntries Terminator.trapEntry mem.functions) occ).map TrapEntry.origin =
+      AList.lookup (Memory.occurrences mem) occ
+    unfold Memory.occurrences
+    rw [terminator_trapOrigin_eq]
+    exact (alist_lookup_cfg_occurrences_trap Terminator.trapEntry mem.functions htrap).symm
+  | .ssa, ssa, occ, htrap => by
+    change (AList.lookup (cfgTrapEntries Terminator.trapEntry ssa.functions) occ).map TrapEntry.origin =
+      AList.lookup (SSA.occurrences ssa) occ
+    unfold SSA.occurrences
+    rw [terminator_trapOrigin_eq]
+    exact (alist_lookup_cfg_occurrences_trap Terminator.trapEntry ssa.functions htrap).symm
+  | .bir, bir, _, htrap => bir_trapEntryOf_map_origin bir htrap
+
+/-- Every `.trap` occurrence listed in `AtLang.occurrences ir` has a defined `TrapEntry` and
+`TrapIdentity`. -/
+theorem AtLang.trapIdentityOf_some_of_mem {Ty : Type} {lang : LoweringLanguage Ty}
+    {profile : Profile} {point : IRPoint} (ir : AtLang lang profile point)
+    {occ : Occurrence} (hmem : occ ∈ (AtLang.occurrences ir).map Prod.fst)
+    (htrap : occ.slot = .trap) :
+    ∃ entry, AtLang.trapEntryOf ir occ = some entry ∧
+      AtLang.trapIdentityOf ir occ = some (TrapIdentity.ofEntry (AtLang.project ir) entry) := by
+  obtain ⟨orig, horig⟩ := alist_lookup_isSome_of_mem_map_fst hmem
+  have hmap := AtLang.trapEntryOf_map_origin ir htrap
+  change (AtLang.trapEntryOf ir occ).map TrapEntry.origin = AList.lookup (AtLang.occurrences ir) occ at hmap
+  rw [horig] at hmap
+  cases hentry : AtLang.trapEntryOf ir occ with
+  | none => rw [hentry] at hmap; cases hmap
+  | some entry =>
+    exact ⟨entry, rfl, by simp [AtLang.trapIdentityOf, hentry]⟩
+
+/-- Equality of `TrapIdentity` implies exact equality of all five preserved observable trap fields:
+trap kind, operation ID, persistent evidence key, lexical span, and rendered UTF-8 diagnostic bytes. -/
+theorem TrapIdentity.eq_fields {p₁ p₂ : Project} {e₁ e₂ : TrapEntry}
+    (h : TrapIdentity.ofEntry p₁ e₁ = TrapIdentity.ofEntry p₂ e₂) :
+    e₁.kind = e₂.kind ∧
+    e₁.origin.operation = e₂.origin.operation ∧
+    e₁.origin.evidenceKey = e₂.origin.evidenceKey ∧
+    e₁.origin.lexical = e₂.origin.lexical ∧
+    e₁.renderedBytes p₁ = e₂.renderedBytes p₂ := by
+  unfold TrapIdentity.ofEntry at h
+  obtain ⟨hk, ho, hb⟩ := TrapIdentity.mk.inj h
+  exact ⟨hk, congrArg Origin.operation ho, congrArg Origin.evidenceKey ho,
+    congrArg Origin.lexical ho, hb⟩
 
 /-- Decidable check justifying an `EliminationReason` for occurrence `occ` in `ir`. -/
 def checkEliminationJustified {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
@@ -1764,16 +2130,19 @@ def checkEliminationJustified {Ty : Type} {lang : LoweringLanguage Ty} {profile 
   | .unreachableBlock =>
     !(AtLang.reachableFunctions ir).contains occ.fn ||
       AtLang.blockUnreachable ir occ.fn occ.block
-  | .deadValue => AtLang.occurrencePure ir occ
+  | .deadValue => AtLang.occurrencePure ir occ && AtLang.occurrenceUnused ir occ
 
-/-- Declarative justification of `reason` for eliminating occurrence `occ` from `ir`. -/
+/-- Declarative justification of `reason` for eliminating occurrence `occ` from `ir`.
+- `.unreachableFunction`: enclosing function is unreachable from `ir.entry`;
+- `.unreachableBlock`: enclosing function or block is unreachable;
+- `.deadValue`: occurrence is pure, non-trapping, and unused anywhere in its function CFG. -/
 def EliminationJustified {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
     {point : IRPoint} (ir : AtLang lang profile point) (occ : Occurrence) :
     EliminationReason → Prop
   | .unreachableFunction => occ.fn ∉ AtLang.reachableFunctions ir
   | .unreachableBlock =>
     occ.fn ∉ AtLang.reachableFunctions ir ∨ AtLang.blockUnreachable ir occ.fn occ.block = true
-  | .deadValue => AtLang.occurrencePure ir occ = true
+  | .deadValue => AtLang.occurrencePure ir occ = true ∧ AtLang.occurrenceUnused ir occ = true
 
 theorem checkEliminationJustified_eq_true_iff {Ty : Type} {lang : LoweringLanguage Ty}
     {profile : Profile} {point : IRPoint} (ir : AtLang lang profile point)
@@ -1785,33 +2154,69 @@ theorem checkEliminationJustified_eq_true_iff {Ty : Type} {lang : LoweringLangua
   | unreachableBlock =>
     simp [checkEliminationJustified, EliminationJustified, List.contains_eq_mem]
   | deadValue =>
-    rfl
+    simp [checkEliminationJustified, EliminationJustified]
 
-private def allEliminationReasons : List EliminationReason :=
-  [.unreachableFunction, .unreachableBlock, .deadValue]
+instance instDecidableEliminationJustified {Ty : Type} {lang : LoweringLanguage Ty}
+    {profile : Profile} {point : IRPoint} (ir : AtLang lang profile point)
+    (occ : Occurrence) (reason : EliminationReason) :
+    Decidable (EliminationJustified ir occ reason) :=
+  decidable_of_bool_iff (checkEliminationJustified ir occ reason)
+    (checkEliminationJustified_eq_true_iff ir occ reason)
+
+instance instDecidableEliminationJustifiedAt {slice : Slice} {profile : Profile}
+    {point : IRPoint} (ir : At slice profile point)
+    (occ : Occurrence) (reason : EliminationReason) :
+    Decidable (EliminationJustified ir occ reason) :=
+  decidable_of_bool_iff (checkEliminationJustified ir occ reason)
+    (checkEliminationJustified_eq_true_iff ir occ reason)
+
+instance instDecidableEliminationJustifiedMIR {Ty : Type} {lang : LoweringLanguage Ty}
+    {profile : Profile} (ir : MIR lang profile) (occ : Occurrence) (reason : EliminationReason) :
+    Decidable (EliminationJustified (point := .mir) ir occ reason) :=
+  decidable_of_bool_iff (checkEliminationJustified (point := .mir) ir occ reason)
+    (checkEliminationJustified_eq_true_iff (point := .mir) ir occ reason)
+
+instance instDecidableEliminationJustifiedMemory {Ty : Type} {lang : LoweringLanguage Ty}
+    {profile : Profile} (ir : Memory lang profile) (occ : Occurrence) (reason : EliminationReason) :
+    Decidable (EliminationJustified (point := .memory) ir occ reason) :=
+  decidable_of_bool_iff (checkEliminationJustified (point := .memory) ir occ reason)
+    (checkEliminationJustified_eq_true_iff (point := .memory) ir occ reason)
+
+instance instDecidableEliminationJustifiedSSA {Ty : Type} {lang : LoweringLanguage Ty}
+    {profile : Profile} (ir : SSA lang profile) (occ : Occurrence) (reason : EliminationReason) :
+    Decidable (EliminationJustified (point := .ssa) ir occ reason) :=
+  decidable_of_bool_iff (checkEliminationJustified (point := .ssa) ir occ reason)
+    (checkEliminationJustified_eq_true_iff (point := .ssa) ir occ reason)
+
+instance instDecidableEliminationJustifiedBIR {Ty : Type} {lang : LoweringLanguage Ty}
+    {profile : Profile} (ir : BIR lang profile) (occ : Occurrence) (reason : EliminationReason) :
+    Decidable (EliminationJustified (point := .bir) ir occ reason) :=
+  decidable_of_bool_iff (checkEliminationJustified (point := .bir) ir occ reason)
+    (checkEliminationJustified_eq_true_iff (point := .bir) ir occ reason)
 
 /-- Generic intra-IR occurrence-accounting contract `AccountsForLang a b account`:
 1. `account` is `Valid` between the occurrence address sets of `a` and `b`;
 2. Every output occurrence in `b` retains the `Origin` of at least one of its mapped contributors
    (supporting copying and fusion without forging or swapping origins);
-3. Every `.trap` terminator occurrence in `b` maps solely from `.trap` occurrences in `a` carrying
-   the exact same `Origin`;
-4. Monotonicity on mapped pairs: every elimination justification holding of an output image `out`
-   in `b` also holds of each contributing source `src` in `a` (preventing a pass from hiding a
-   reachable or impure occurrence inside an unreachable/pure image before a subsequent elimination);
-5. Every eliminated source `(src, reason)` in `account.eliminated` satisfies
-   `EliminationJustified a src reason`. -/
+3. Trap preservation: a mapped pair `(out, src)` has `out.slot = .trap ↔ src.slot = .trap`
+   (traps neither appear from non-traps nor hide inside non-trap occurrences), and every mapped
+   `.trap` occurrence preserves its full observable `TrapIdentity` (trap kind, operation ID,
+   stable evidence key, lexical span, and rendered diagnostic bytes in its issuing `Project`);
+4. Every eliminated source `(src, reason)` in `account.eliminated` satisfies
+   `EliminationJustified a src reason`.
+
+Ordinary value/control optimizations that make previously impure or reachable occurrences pure or
+unreachable in `b` (such as constant folding, branch folding keeping the dead block, or inlining
+keeping the callee for a later dead-code pass) are accepted without a monotonicity restriction. -/
 def AccountsForLang {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
     {point : IRPoint} (a b : AtLang lang profile point) (account : Account) : Prop :=
   let occsA := (AtLang.occurrences a).map Prod.fst
   let occsB := (AtLang.occurrences b).map Prod.fst
   account.Valid occsA occsB ∧
   (∀ out ∈ occsB, ∃ src, account.MapsTo out src ∧ AtLang.originOf b out = AtLang.originOf a src) ∧
-  (∀ out ∈ occsB, out.slot = .trap →
-    ∀ src, account.MapsTo out src → src.slot = .trap ∧ AtLang.originOf b out = AtLang.originOf a src) ∧
   (∀ out src, account.MapsTo out src →
-    ∀ reason : EliminationReason,
-      EliminationJustified b out reason → EliminationJustified a src reason) ∧
+    (out.slot = .trap ↔ src.slot = .trap) ∧
+    (out.slot = .trap → AtLang.trapIdentityOf b out = AtLang.trapIdentityOf a src)) ∧
   (∀ src reason, AList.lookup account.eliminated src = some reason →
     EliminationJustified a src reason)
 
@@ -1834,20 +2239,20 @@ def checkAccountsForLang {Ty : Type} {lang : LoweringLanguage Ty} {profile : Pro
     (AList.lookup account.eliminated src).isSome) &&
   (occsB.all fun out =>
     (account.sourcesOf out).any fun src => AtLang.originOf b out == AtLang.originOf a src) &&
-  (occsB.all fun out =>
-    if out.slot == .trap then
-      (account.sourcesOf out).all fun src =>
-        src.slot == .trap && (AtLang.originOf b out == AtLang.originOf a src)
-    else true) &&
   (account.mapped.all fun entry =>
     entry.2.all fun src =>
-      allEliminationReasons.all fun reason =>
-        !checkEliminationJustified b entry.1 reason || checkEliminationJustified a src reason) &&
+      ((entry.1.slot == .trap) == (src.slot == .trap)) &&
+      (if entry.1.slot == .trap then
+        AtLang.trapIdentityOf b entry.1 == AtLang.trapIdentityOf a src
+      else true)) &&
   (account.eliminated.all fun entry => checkEliminationJustified a entry.1 entry.2)
 
 def checkAccountsFor {slice : Slice} {profile : Profile} {point : IRPoint}
     (a b : At slice profile point) (account : Account) : Bool :=
   checkAccountsForLang a b account
+
+private theorem bool_beq_iff (x y : Bool) : (x == y) = true ↔ (x = true ↔ y = true) := by
+  cases x <;> cases y <;> decide
 
 theorem checkAccountsForLang_eq_true_iff {Ty : Type} {lang : LoweringLanguage Ty}
     {profile : Profile} {point : IRPoint} (a b : AtLang lang profile point) (account : Account) :
@@ -1857,8 +2262,8 @@ theorem checkAccountsForLang_eq_true_iff {Ty : Type} {lang : LoweringLanguage Ty
   simp only [Bool.and_eq_true, List.all_eq_true, List.any_eq_true, List.contains_eq_mem,
     decide_eq_true_eq]
   constructor
-  · rintro ⟨⟨⟨⟨⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, h5⟩, h6⟩, h7⟩, h8⟩, h9⟩
-    refine ⟨⟨?_, ?_, ?_, ?_, ?_⟩, ?_, ?_, ?_, ?_⟩
+  · rintro ⟨⟨⟨⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, h5⟩, h6⟩, h7⟩, h8⟩
+    refine ⟨⟨?_, ?_, ?_, ?_, ?_⟩, ?_, ?_, ?_⟩
     · intro out hout
       obtain ⟨entry, hentry, rfl⟩ := List.mem_map.mp hout
       exact h1 entry hentry
@@ -1881,23 +2286,19 @@ theorem checkAccountsForLang_eq_true_iff {Ty : Type} {lang : LoweringLanguage Ty
     · intro out hout
       obtain ⟨src, hsrc, heq⟩ := h6 out hout
       exact ⟨src, hsrc, eq_of_beq heq⟩
-    · intro out hout htrap src hsrc
-      have h := h7 out hout
-      simp only [htrap, beq_self_eq_true, ↓reduceIte, List.all_eq_true] at h
-      have hs := Bool.and_eq_true_iff.mp (h src hsrc)
-      exact ⟨eq_of_beq hs.1, eq_of_beq hs.2⟩
-    · intro out src hmaps reason hjb
+    · intro out src hmaps
       obtain ⟨srcs, hmem, hsrc⟩ := (account.mapsTo_iff_mem_mapped out src).mp hmaps
-      have hmemR : reason ∈ allEliminationReasons := by cases reason <;> decide
-      have hr := h8 (out, srcs) hmem src hsrc reason hmemR
-      rcases Bool.or_eq_true_iff.mp hr with hneg | hpos
-      · have htrue := (checkEliminationJustified_eq_true_iff b out reason).mpr hjb
-        rw [htrue] at hneg; cases hneg
-      · exact (checkEliminationJustified_eq_true_iff a src reason).mp hpos
+      obtain ⟨hslotEq, hid⟩ := h7 (out, srcs) hmem src hsrc
+      refine ⟨?_, ?_⟩
+      · have hiff := (bool_beq_iff (out.slot == .trap) (src.slot == .trap)).mp hslotEq
+        simpa [beq_iff_eq] using hiff
+      · intro htrap
+        simp only [htrap, beq_self_eq_true, ↓reduceIte] at hid
+        exact eq_of_beq hid
     · intro src reason hlook
-      exact (checkEliminationJustified_eq_true_iff a src reason).mp (h9 (src, reason) (alist_lookup_mem hlook))
-  · rintro ⟨⟨hv1, hv2, hv3, hv4, hv5⟩, horig, htrap, hmono, helim⟩
-    refine ⟨⟨⟨⟨⟨⟨⟨⟨?_, ?_⟩, ?_⟩, ?_⟩, ?_⟩, ?_⟩, ?_⟩, ?_⟩, ?_⟩
+      exact (checkEliminationJustified_eq_true_iff a src reason).mp (h8 (src, reason) (alist_lookup_mem hlook))
+  · rintro ⟨⟨hv1, hv2, hv3, hv4, hv5⟩, horig, htrap, helim⟩
+    refine ⟨⟨⟨⟨⟨⟨⟨?_, ?_⟩, ?_⟩, ?_⟩, ?_⟩, ?_⟩, ?_⟩, ?_⟩
     · intro entry hentry
       exact hv1 entry.1 (List.mem_map.mpr ⟨entry, hentry, rfl⟩)
     · intro out hout
@@ -1917,21 +2318,16 @@ theorem checkAccountsForLang_eq_true_iff {Ty : Type} {lang : LoweringLanguage Ty
     · intro out hout
       obtain ⟨src, hsrc, heq⟩ := horig out hout
       exact ⟨src, hsrc, beq_iff_eq.mpr heq⟩
-    · intro out hout
-      cases hslot : (out.slot == .trap)
-      · simp
-      · simp only [↓reduceIte, List.all_eq_true]
-        intro src hsrc
-        have h := htrap out hout (eq_of_beq hslot) src hsrc
-        exact Bool.and_eq_true_iff.mpr ⟨beq_iff_eq.mpr h.1, beq_iff_eq.mpr h.2⟩
-    · intro entry hentry src hsrc reason _
-      cases hjb : checkEliminationJustified b entry.1 reason
-      · simp
-      · apply Bool.or_eq_true_iff.mpr
-        right
-        have hmaps := (account.mapsTo_iff_mem_mapped entry.1 src).mpr ⟨entry.2, hentry, hsrc⟩
-        exact (checkEliminationJustified_eq_true_iff a src reason).mpr
-          (hmono entry.1 src hmaps reason ((checkEliminationJustified_eq_true_iff b entry.1 reason).mp hjb))
+    · intro entry hentry src hsrc
+      have hmaps := (account.mapsTo_iff_mem_mapped entry.1 src).mpr ⟨entry.2, hentry, hsrc⟩
+      obtain ⟨hslotIff, hid⟩ := htrap entry.1 src hmaps
+      refine ⟨?_, ?_⟩
+      · apply (bool_beq_iff (entry.1.slot == .trap) (src.slot == .trap)).mpr
+        simpa [beq_iff_eq] using hslotIff
+      · cases hs : (entry.1.slot == .trap)
+        · simp
+        · simp only [↓reduceIte]
+          exact beq_iff_eq.mpr (hid (eq_of_beq hs))
     · intro entry hentry
       have hlook := alist_lookup_of_mem account.eliminatedKeysNodup hentry
       exact (checkEliminationJustified_eq_true_iff a entry.1 entry.2).mpr (helim entry.1 entry.2 hlook)
@@ -2001,6 +2397,35 @@ instance instDecidableAccountsForBIR {slice : Slice} {profile : Profile}
   decidable_of_bool_iff (checkAccountsFor (point := .bir) a b account)
     (checkAccountsFor_eq_true_iff (point := .bir) a b account)
 
+/-- Projection lemma: under `AccountsForLang a b account`, every output `.trap` occurrence `out`
+in `b` maps solely from `.trap` occurrences `src` in `a` preserving all five observable trap
+fields: trap kind, operation ID, persistent evidence key, lexical span, and rendered diagnostic
+bytes. -/
+theorem AccountsForLang.trap_preserves_fields {Ty : Type} {lang : LoweringLanguage Ty}
+    {profile : Profile} {point : IRPoint} {a b : AtLang lang profile point} {account : Account}
+    (h : AccountsForLang a b account) {out src : Occurrence}
+    (hout : out ∈ (AtLang.occurrences b).map Prod.fst) (htrap : out.slot = .trap)
+    (hmaps : account.MapsTo out src) :
+    src.slot = .trap ∧
+    ∃ entryA entryB,
+      AtLang.trapEntryOf a src = some entryA ∧
+      AtLang.trapEntryOf b out = some entryB ∧
+      entryB.kind = entryA.kind ∧
+      entryB.origin.operation = entryA.origin.operation ∧
+      entryB.origin.evidenceKey = entryA.origin.evidenceKey ∧
+      entryB.origin.lexical = entryA.origin.lexical ∧
+      entryB.renderedBytes (AtLang.project b) = entryA.renderedBytes (AtLang.project a) := by
+  obtain ⟨hval, _, htrapClause, _⟩ := h
+  obtain ⟨hslotIff, hidEq⟩ := htrapClause out src hmaps
+  have hsrcTrap : src.slot = .trap := hslotIff.mp htrap
+  have hsrcMem : src ∈ (AtLang.occurrences a).map Prod.fst := hval.2.2.1 out src hmaps
+  obtain ⟨entryA, heA, hidA⟩ := AtLang.trapIdentityOf_some_of_mem a hsrcMem hsrcTrap
+  obtain ⟨entryB, heB, hidB⟩ := AtLang.trapIdentityOf_some_of_mem b hout htrap
+  have heq := hidEq htrap
+  rw [hidB, hidA] at heq
+  have hfields := TrapIdentity.eq_fields (Option.some.inj heq)
+  exact ⟨hsrcTrap, entryA, entryB, heA, heB, hfields⟩
+
 /-! ### Identity, composition, and per-image justification laws for `AccountsFor` -/
 
 /-- Identity law: `Account.identityFor a` unconditionally accounts for `a → a`. -/
@@ -2008,15 +2433,12 @@ theorem AccountsForLang.identity {Ty : Type} {lang : LoweringLanguage Ty} {profi
     {point : IRPoint} (a : AtLang lang profile point) :
     AccountsForLang a a (Account.identityFor a) := by
   unfold AccountsForLang Account.identityFor
-  refine ⟨Account.identity_valid _, ?_, ?_, ?_, ?_⟩
+  refine ⟨Account.identity_valid _, ?_, ?_, ?_⟩
   · intro out hout
     exact ⟨out, (Account.mapsTo_identity_iff _ out out).mpr ⟨hout, rfl⟩, rfl⟩
-  · intro out _ htrap src hmaps
+  · intro out src hmaps
     obtain ⟨_, rfl⟩ := (Account.mapsTo_identity_iff _ out src).mp hmaps
-    exact ⟨htrap, rfl⟩
-  · intro out src hmaps reason hjust
-    obtain ⟨_, rfl⟩ := (Account.mapsTo_identity_iff _ out src).mp hmaps
-    exact hjust
+    exact ⟨Iff.rfl, fun _ => rfl⟩
   · intro _ _ hlook
     cases hlook
 
@@ -2029,19 +2451,34 @@ private theorem compose_eliminated_lookup_cases (first second : Account)
     {src : Occurrence} {reason : EliminationReason}
     (hlook : AList.lookup (Account.compose first second).eliminated src = some reason) :
     AList.lookup first.eliminated src = some reason ∨
-      ∃ occB, first.MapsTo occB src ∧ AList.lookup second.eliminated occB = some reason := by
+      (¬ (Account.compose first second).Mapped src ∧
+        AList.lookup first.eliminated src = none ∧
+        first.Mapped src ∧
+        (∃ occB, first.MapsTo occB src ∧ AList.lookup second.eliminated occB = some reason) ∧
+        (∀ occB, first.MapsTo occB src → second.Eliminated occB)) := by
+  have hElimComp : (Account.compose first second).Eliminated src := ⟨reason, hlook⟩
+  obtain ⟨hNotMapped, hFirstOrSecond⟩ := (Account.eliminated_compose_iff first second src).mp hElimComp
   have hmem := alist_lookup_mem hlook
   unfold Account.compose at hmem
   dsimp only at hmem
-  -- Inspect `Account.composeEliminated` directly via membership in its append components.
   rcases List.mem_append.mp hmem with hfirst | hsecond
   · left
     exact alist_lookup_of_mem first.eliminatedKeysNodup (List.mem_filter.mp hfirst).1
   · right
     obtain ⟨x, _, hmap⟩ := List.mem_filterMap.mp hsecond
-    split at hmap
-    · cases hmap
-    · cases hm : (first.imagesOf x).mapM (AList.lookup second.eliminated) with
+    cases hcond : ((Account.compose first second).mapped.any fun e => e.2.contains x) ||
+        (AList.lookup (first.eliminated.filter fun entry =>
+          !((Account.compose first second).mapped.any fun e => e.2.contains entry.1)) x).isSome
+    · change (if ((Account.compose first second).mapped.any fun e => e.2.contains x) ||
+          (AList.lookup (first.eliminated.filter fun entry =>
+            !((Account.compose first second).mapped.any fun e => e.2.contains entry.1)) x).isSome
+        then none
+        else match (first.imagesOf x).mapM (AList.lookup second.eliminated) with
+          | some (reason :: _) => some (x, reason)
+          | _ => none) = some (src, reason) at hmap
+      rw [hcond] at hmap
+      simp only [Bool.false_eq_true, ↓reduceIte] at hmap
+      cases hm : (first.imagesOf x).mapM (AList.lookup second.eliminated) with
       | none => simp [hm] at hmap
       | some rs =>
         cases rs with
@@ -2049,6 +2486,26 @@ private theorem compose_eliminated_lookup_cases (first second : Account)
         | cons r0 rs' =>
           simp only [hm, Option.some.injEq, Prod.mk.injEq] at hmap
           obtain ⟨rfl, rfl⟩ := hmap
+          have hcondBoth := Bool.or_eq_false_iff.mp hcond
+          have hLookFilt : AList.lookup (first.eliminated.filter fun entry =>
+              !((Account.compose first second).mapped.any fun e => e.2.contains entry.1)) x =
+              if !((Account.compose first second).mapped.any fun e => e.2.contains x) then
+                AList.lookup first.eliminated x
+              else none :=
+            alist_lookup_filter_key
+              (fun k => !((Account.compose first second).mapped.any fun e => e.2.contains k))
+              first.eliminated x
+          have hFirstNone : AList.lookup first.eliminated x = none := by
+            have hIsSomeFalse := hcondBoth.2
+            rw [hLookFilt, hcondBoth.1] at hIsSomeFalse
+            simp only [Bool.not_false, ↓reduceIte] at hIsSomeFalse
+            cases hl : AList.lookup first.eliminated x with
+            | none => rfl
+            | some r => rw [hl] at hIsSomeFalse; cases hIsSomeFalse
+          have hSecondAll : first.Mapped x ∧ ∀ occB, first.MapsTo occB x → second.Eliminated occB := by
+            rcases hFirstOrSecond with ⟨r1, hr1⟩ | hS
+            · rw [hFirstNone] at hr1; cases hr1
+            · exact hS
           cases himgs : first.imagesOf x with
           | nil =>
             rw [himgs] at hm
@@ -2065,47 +2522,240 @@ private theorem compose_eliminated_lookup_cases (first second : Account)
                 simp only [hrest, pure, Option.some.injEq, List.cons.injEq] at hm
                 obtain ⟨rfl, _⟩ := hm
                 have hmemImg : occB ∈ first.imagesOf x := by rw [himgs]; exact List.mem_cons_self
-                exact ⟨occB, (first.mem_imagesOf_iff x occB).mp hmemImg, hl2⟩
+                exact ⟨hNotMapped, hFirstNone, hSecondAll.1,
+                  ⟨occB, (first.mem_imagesOf_iff x occB).mp hmemImg, hl2⟩, hSecondAll.2⟩
+    · change (if ((Account.compose first second).mapped.any fun e => e.2.contains x) ||
+          (AList.lookup (first.eliminated.filter fun entry =>
+            !((Account.compose first second).mapped.any fun e => e.2.contains entry.1)) x).isSome
+        then none
+        else match (first.imagesOf x).mapM (AList.lookup second.eliminated) with
+          | some (reason :: _) => some (x, reason)
+          | _ => none) = some (src, reason) at hmap
+      rw [hcond] at hmap
+      simp at hmap
 
-/-- Composition law: if `first` accounts for `a → b` and `second` accounts for `b → c`,
-then `Account.compose first second` unconditionally accounts for `a → c`. -/
-theorem AccountsForLang.compose {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+/-- Explicit premise for collapsing two sequential occurrence accounts `first` (`a → b`) and
+`second` (`b → c`) into a direct `AccountsForLang a c (Account.compose first second)`:
+every elimination `(srcA, reason)` recorded in `(Account.compose first second).eliminated`
+is justified in the source `a`.
+
+Eliminations inherited from `first.eliminated` are automatically justified in `a` by
+`AccountsForLang a b first`. This premise is therefore needed only for sources that survived
+`first` into intermediate occurrences in `b` and were eliminated by `second` (when `first` did
+not enable a new syntactic elimination in `b`). When `first` enables a new elimination in `b`
+(such as branch folding making a trap block unreachable before dead-block elimination removes it),
+sequential composition remains sound through the intermediate IR `b` via
+`AccountsForLang.compose_through_intermediate`. -/
+def ComposedEliminationsJustified {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {point : IRPoint} (a : AtLang lang profile point) (first second : Account) : Prop :=
+  ∀ srcA reason,
+    AList.lookup (Account.compose first second).eliminated srcA = some reason →
+    EliminationJustified a srcA reason
+
+/-- Executable decision procedure for `ComposedEliminationsJustified`. -/
+def checkComposedEliminationsJustified {Ty : Type} {lang : LoweringLanguage Ty}
+    {profile : Profile} {point : IRPoint} (a : AtLang lang profile point)
+    (first second : Account) : Bool :=
+  (Account.compose first second).eliminated.all fun entry =>
+    checkEliminationJustified a entry.1 entry.2
+
+theorem checkComposedEliminationsJustified_eq_true_iff {Ty : Type} {lang : LoweringLanguage Ty}
+    {profile : Profile} {point : IRPoint} (a : AtLang lang profile point)
+    (first second : Account) :
+    checkComposedEliminationsJustified a first second = true ↔
+      ComposedEliminationsJustified a first second := by
+  unfold checkComposedEliminationsJustified ComposedEliminationsJustified
+  rw [List.all_eq_true]
+  constructor
+  · intro hall srcA reason hlook
+    exact (checkEliminationJustified_eq_true_iff a srcA reason).mp
+      (hall (srcA, reason) (alist_lookup_mem hlook))
+  · intro h entry hentry
+    have hlook := alist_lookup_of_mem (Account.compose first second).eliminatedKeysNodup hentry
+    exact (checkEliminationJustified_eq_true_iff a entry.1 entry.2).mpr (h entry.1 entry.2 hlook)
+
+instance instDecidableComposedEliminationsJustified {Ty : Type} {lang : LoweringLanguage Ty}
+    {profile : Profile} {point : IRPoint} (a : AtLang lang profile point)
+    (first second : Account) : Decidable (ComposedEliminationsJustified a first second) :=
+  decidable_of_bool_iff (checkComposedEliminationsJustified a first second)
+    (checkComposedEliminationsJustified_eq_true_iff a first second)
+
+instance instDecidableComposedEliminationsJustifiedAt {slice : Slice} {profile : Profile}
+    {point : IRPoint} (a : At slice profile point)
+    (first second : Account) : Decidable (ComposedEliminationsJustified a first second) :=
+  decidable_of_bool_iff (checkComposedEliminationsJustified a first second)
+    (checkComposedEliminationsJustified_eq_true_iff a first second)
+
+instance instDecidableComposedEliminationsJustifiedMIR {Ty : Type} {lang : LoweringLanguage Ty}
+    {profile : Profile} (a : MIR lang profile) (first second : Account) :
+    Decidable (ComposedEliminationsJustified (point := .mir) a first second) :=
+  decidable_of_bool_iff (checkComposedEliminationsJustified (point := .mir) a first second)
+    (checkComposedEliminationsJustified_eq_true_iff (point := .mir) a first second)
+
+instance instDecidableComposedEliminationsJustifiedMemory {Ty : Type} {lang : LoweringLanguage Ty}
+    {profile : Profile} (a : Memory lang profile) (first second : Account) :
+    Decidable (ComposedEliminationsJustified (point := .memory) a first second) :=
+  decidable_of_bool_iff (checkComposedEliminationsJustified (point := .memory) a first second)
+    (checkComposedEliminationsJustified_eq_true_iff (point := .memory) a first second)
+
+instance instDecidableComposedEliminationsJustifiedSSA {Ty : Type} {lang : LoweringLanguage Ty}
+    {profile : Profile} (a : SSA lang profile) (first second : Account) :
+    Decidable (ComposedEliminationsJustified (point := .ssa) a first second) :=
+  decidable_of_bool_iff (checkComposedEliminationsJustified (point := .ssa) a first second)
+    (checkComposedEliminationsJustified_eq_true_iff (point := .ssa) a first second)
+
+instance instDecidableComposedEliminationsJustifiedBIR {Ty : Type} {lang : LoweringLanguage Ty}
+    {profile : Profile} (a : BIR lang profile) (first second : Account) :
+    Decidable (ComposedEliminationsJustified (point := .bir) a first second) :=
+  decidable_of_bool_iff (checkComposedEliminationsJustified (point := .bir) a first second)
+    (checkComposedEliminationsJustified_eq_true_iff (point := .bir) a first second)
+
+/-- Unconditional intermediate-occurrence composition soundness: given `AccountsForLang a b first`
+and `AccountsForLang b c second`, `Account.compose first second` is always valid between `a` and
+`c`, every output occurrence in `c` traces through an intermediate occurrence `midB` in `b`
+preserving `Origin`, every mapped pair preserves `.trap` status and full `TrapIdentity` through
+`midB`, and every eliminated source `srcA` in the composed ledger is either justified directly in
+`a` (eliminated by `first`) or mapped by `first` with EVERY intermediate image `occB` in `b`
+eliminated by `second` and justified in `b`. -/
+theorem AccountsForLang.compose_through_intermediate
+    {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
     {point : IRPoint} {a b c : AtLang lang profile point} {first second : Account}
     (h1 : AccountsForLang a b first) (h2 : AccountsForLang b c second) :
-    AccountsForLang a c (Account.compose first second) := by
-  obtain ⟨hv1, horig1, htrap1, hmono1, helim1⟩ := h1
-  obtain ⟨hv2, horig2, htrap2, hmono2, helim2⟩ := h2
-  refine ⟨Account.compose_valid hv1 hv2, ?_, ?_, ?_, ?_⟩
+    let occsA := (AtLang.occurrences a).map Prod.fst
+    let occsB := (AtLang.occurrences b).map Prod.fst
+    let occsC := (AtLang.occurrences c).map Prod.fst
+    let comp := Account.compose first second
+    comp.Valid occsA occsC ∧
+    (∀ outC ∈ occsC, ∃ midB ∈ occsB, ∃ srcA ∈ occsA,
+      second.MapsTo outC midB ∧ first.MapsTo midB srcA ∧ comp.MapsTo outC srcA ∧
+      AtLang.originOf c outC = AtLang.originOf b midB ∧
+      AtLang.originOf b midB = AtLang.originOf a srcA) ∧
+    (∀ outC srcA, comp.MapsTo outC srcA →
+      ∃ midB ∈ occsB, second.MapsTo outC midB ∧ first.MapsTo midB srcA ∧
+        (outC.slot = .trap ↔ midB.slot = .trap) ∧
+        (midB.slot = .trap ↔ srcA.slot = .trap) ∧
+        (outC.slot = .trap →
+          AtLang.trapIdentityOf c outC = AtLang.trapIdentityOf b midB ∧
+          AtLang.trapIdentityOf b midB = AtLang.trapIdentityOf a srcA)) ∧
+    (∀ srcA reason, AList.lookup comp.eliminated srcA = some reason →
+      (AList.lookup first.eliminated srcA = some reason ∧ EliminationJustified a srcA reason) ∨
+      (¬ comp.Mapped srcA ∧ first.Mapped srcA ∧
+        (∃ occB ∈ occsB, first.MapsTo occB srcA ∧
+          AList.lookup second.eliminated occB = some reason ∧
+          EliminationJustified b occB reason) ∧
+        (∀ occB, first.MapsTo occB srcA →
+          ∃ reasonB, AList.lookup second.eliminated occB = some reasonB ∧
+            EliminationJustified b occB reasonB))) := by
+  obtain ⟨hv1, horig1, htrap1, helim1⟩ := h1
+  obtain ⟨hv2, horig2, htrap2, helim2⟩ := h2
+  refine ⟨Account.compose_valid hv1 hv2, ?_, ?_, ?_⟩
   · intro outC houtC
     obtain ⟨midB, hmaps2, heq2⟩ := horig2 outC houtC
     have hmidInB := hv2.2.2.1 outC midB hmaps2
     obtain ⟨srcA, hmaps1, heq1⟩ := horig1 midB hmidInB
-    exact ⟨srcA, (Account.mapsTo_compose_iff first second outC srcA).mpr ⟨midB, hmaps2, hmaps1⟩,
-      heq2.trans heq1⟩
-  · intro outC houtC hslotC srcA hmapsC
+    have hsrcInA := hv1.2.2.1 midB srcA hmaps1
+    exact ⟨midB, hmidInB, srcA, hsrcInA, hmaps2, hmaps1,
+      (Account.mapsTo_compose_iff first second outC srcA).mpr ⟨midB, hmaps2, hmaps1⟩,
+      heq2, heq1⟩
+  · intro outC srcA hmapsC
     obtain ⟨midB, hmaps2, hmaps1⟩ := (Account.mapsTo_compose_iff first second outC srcA).mp hmapsC
-    obtain ⟨hslotB, heq2⟩ := htrap2 outC houtC hslotC midB hmaps2
     have hmidInB := hv2.2.2.1 outC midB hmaps2
-    obtain ⟨hslotA, heq1⟩ := htrap1 midB hmidInB hslotB srcA hmaps1
-    exact ⟨hslotA, heq2.trans heq1⟩
-  · intro outC srcA hmapsC reason hjustC
-    obtain ⟨midB, hmaps2, hmaps1⟩ := (Account.mapsTo_compose_iff first second outC srcA).mp hmapsC
-    exact hmono1 midB srcA hmaps1 reason (hmono2 outC midB hmaps2 reason hjustC)
+    obtain ⟨hslot2, hid2⟩ := htrap2 outC midB hmaps2
+    obtain ⟨hslot1, hid1⟩ := htrap1 midB srcA hmaps1
+    refine ⟨midB, hmidInB, hmaps2, hmaps1, hslot2, hslot1, fun htrapC => ?_⟩
+    exact ⟨hid2 htrapC, hid1 (hslot2.mp htrapC)⟩
   · intro srcA reason hlook
-    rcases compose_eliminated_lookup_cases first second hlook with hfirst | ⟨occB, hmaps1, hlook2⟩
-    · exact helim1 srcA reason hfirst
-    · exact hmono1 occB srcA hmaps1 reason (helim2 occB reason hlook2)
+    rcases compose_eliminated_lookup_cases first second hlook with
+      hfirst | ⟨hNotMapped, _, hMapped1, ⟨occB, hmaps1, hlook2⟩, hAllElim⟩
+    · exact Or.inl ⟨hfirst, helim1 srcA reason hfirst⟩
+    · refine Or.inr ⟨hNotMapped, hMapped1, ?_, ?_⟩
+      · obtain ⟨srcs, hmemM, _⟩ := (first.mapsTo_iff_mem_mapped occB srcA).mp hmaps1
+        have hoccBInB := hv1.1 occB (List.mem_map.mpr ⟨(occB, srcs), hmemM, rfl⟩)
+        exact ⟨occB, hoccBInB, hmaps1, hlook2, helim2 occB reason hlook2⟩
+      · intro occB' hmaps1'
+        obtain ⟨reasonB, hlook2'⟩ := hAllElim occB' hmaps1'
+        exact ⟨reasonB, hlook2', helim2 occB' reasonB hlook2'⟩
+
+/-- Exact characterization of direct composition: given `AccountsForLang a b first` and
+`AccountsForLang b c second`, `AccountsForLang a c (Account.compose first second)` holds
+if and only if every composed elimination is justified in the source `a`. -/
+theorem AccountsForLang.compose_iff {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {point : IRPoint} {a b c : AtLang lang profile point} {first second : Account}
+    (h1 : AccountsForLang a b first) (h2 : AccountsForLang b c second) :
+    AccountsForLang a c (Account.compose first second) ↔
+      ComposedEliminationsJustified a first second := by
+  constructor
+  · intro hcomp
+    exact hcomp.2.2.2
+  · intro hElim
+    obtain ⟨hv, horig, htrap, _⟩ := AccountsForLang.compose_through_intermediate h1 h2
+    refine ⟨hv, ?_, ?_, hElim⟩
+    · intro outC houtC
+      obtain ⟨_, _, srcA, _, _, _, hmapsC, heq2, heq1⟩ := horig outC houtC
+      exact ⟨srcA, hmapsC, heq2.trans heq1⟩
+    · intro outC srcA hmapsC
+      obtain ⟨_, _, _, _, hslot2, hslot1, hid⟩ := htrap outC srcA hmapsC
+      refine ⟨hslot2.trans hslot1, fun htrapC => ?_⟩
+      obtain ⟨h2eq, h1eq⟩ := hid htrapC
+      exact h2eq.trans h1eq
+
+/-- Composition law: if `first` accounts for `a → b`, `second` accounts for `b → c`, and
+each composed elimination is justified in `a` (`ComposedEliminationsJustified a first second`),
+then `Account.compose first second` accounts for `a → c`. -/
+theorem AccountsForLang.compose {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {point : IRPoint} {a b c : AtLang lang profile point} {first second : Account}
+    (h1 : AccountsForLang a b first) (h2 : AccountsForLang b c second)
+    (hElim : ComposedEliminationsJustified a first second) :
+    AccountsForLang a c (Account.compose first second) :=
+  (AccountsForLang.compose_iff h1 h2).mpr hElim
 
 theorem AccountsFor.compose {slice : Slice} {profile : Profile} {point : IRPoint}
     {a b c : At slice profile point} {first second : Account}
-    (h1 : AccountsFor a b first) (h2 : AccountsFor b c second) :
+    (h1 : AccountsFor a b first) (h2 : AccountsFor b c second)
+    (hElim : ComposedEliminationsJustified a first second) :
     AccountsFor a c (Account.compose first second) :=
-  AccountsForLang.compose h1 h2
+  AccountsForLang.compose h1 h2 hElim
+
+/-- Intermediate-pullback composition corollary: if every source occurrence `srcA` eliminated only
+at the second stage (not surviving into `c`, not eliminated by `first`, and mapped by `first` to
+an intermediate occurrence `occB` eliminated by `second` with `reason`) pulls its elimination
+justification back from `b` to `a`, then `Account.compose first second` accounts for `a → c`. -/
+theorem AccountsForLang.compose_of_second_pullback
+    {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {point : IRPoint} {a b c : AtLang lang profile point} {first second : Account}
+    (h1 : AccountsForLang a b first) (h2 : AccountsForLang b c second)
+    (hPullback : ∀ srcA occB reason,
+      ¬ (Account.compose first second).Mapped srcA →
+      AList.lookup first.eliminated srcA = none →
+      first.MapsTo occB srcA →
+      AList.lookup second.eliminated occB = some reason →
+      EliminationJustified b occB reason →
+      EliminationJustified a srcA reason) :
+    AccountsForLang a c (Account.compose first second) := by
+  refine AccountsForLang.compose h1 h2 fun srcA reason hlook => ?_
+  rcases compose_eliminated_lookup_cases first second hlook with
+    hfirst | ⟨hNotMapped, hFirstNone, _, ⟨occB, hmaps1, hlook2⟩, _⟩
+  · exact h1.2.2.2 srcA reason hfirst
+  · exact hPullback srcA occB reason hNotMapped hFirstNone hmaps1 hlook2
+      (h2.2.2.2 occB reason hlook2)
+
+theorem AccountsFor.compose_of_second_pullback {slice : Slice} {profile : Profile} {point : IRPoint}
+    {a b c : At slice profile point} {first second : Account}
+    (h1 : AccountsFor a b first) (h2 : AccountsFor b c second)
+    (hPullback : ∀ srcA occB reason,
+      ¬ (Account.compose first second).Mapped srcA →
+      AList.lookup first.eliminated srcA = none →
+      first.MapsTo occB srcA →
+      AList.lookup second.eliminated occB = some reason →
+      EliminationJustified b occB reason →
+      EliminationJustified a srcA reason) :
+    AccountsFor a c (Account.compose first second) :=
+  AccountsForLang.compose_of_second_pullback h1 h2 hPullback
 
 /-- Per-image elimination soundness (F4 carry-over): although `Account.compose` retains only
 the first image's `EliminationReason` in its composed `eliminated` ledger, `AccountsFor`
-verifies the elimination justification for EVERY image `occB` of `srcA` (both in `b` and
-pulled back to `a`). -/
+verifies the elimination justification in the intermediate IR `b` for EVERY image `occB` of
+`srcA`. -/
 theorem AccountsForLang.compose_all_images_justified {Ty : Type} {lang : LoweringLanguage Ty}
     {profile : Profile} {point : IRPoint} {a b c : AtLang lang profile point}
     {first second : Account}
@@ -2113,9 +2763,9 @@ theorem AccountsForLang.compose_all_images_justified {Ty : Type} {lang : Lowerin
     {srcA occB : Occurrence} {reasonB : EliminationReason}
     (himg : first.MapsTo occB srcA)
     (helim : AList.lookup second.eliminated occB = some reasonB) :
-    EliminationJustified b occB reasonB ∧ EliminationJustified a srcA reasonB :=
-  let hjb := h2.2.2.2.2 occB reasonB helim
-  ⟨hjb, h1.2.2.2.1 occB srcA himg reasonB hjb⟩
+    occB ∈ (AtLang.occurrences b).map Prod.fst ∧ EliminationJustified b occB reasonB := by
+  obtain ⟨srcs, hmem, _⟩ := (first.mapsTo_iff_mem_mapped occB srcA).mp himg
+  exact ⟨h1.1.1 occB (List.mem_map.mpr ⟨(occB, srcs), hmem, rfl⟩), h2.2.2.2 occB reasonB helim⟩
 
 /-- Congruence under exact `MapsTo` and `eliminated`-lookup equality. -/
 theorem AccountsForLang.congr {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
@@ -2142,25 +2792,23 @@ theorem AccountsForLang.congr {Ty : Type} {lang : LoweringLanguage Ty} {profile 
   have helimP : ∀ src, w₁.Eliminated src ↔ w₂.Eliminated src := fun src => by
     unfold Account.Eliminated; rw [helim]
   constructor
-  · rintro ⟨⟨v1, v2, v3, v4, v5⟩, ho, ht, hm, he⟩
+  · rintro ⟨⟨v1, v2, v3, v4, v5⟩, ho, ht, he⟩
     exact ⟨⟨fun o h => v1 o ((hkeysM o).mpr h),
       fun o h => let ⟨s, hs⟩ := v2 o h; ⟨s, (hmaps o s).mp hs⟩,
       fun o s h => v3 o s ((hmaps o s).mpr h),
       fun s h => v4 s ((hkeysE s).mpr h),
       fun s h => (v5 s h).imp (hmapped s).mp (helimP s).mp⟩,
       fun o h => let ⟨s, hs, eq⟩ := ho o h; ⟨s, (hmaps o s).mp hs, eq⟩,
-      fun o h htr s hs => ht o h htr s ((hmaps o s).mpr hs),
-      fun o s hs r hj => hm o s ((hmaps o s).mpr hs) r hj,
+      fun o s hs => ht o s ((hmaps o s).mpr hs),
       fun s r hl => he s r ((helim s).trans hl)⟩
-  · rintro ⟨⟨v1, v2, v3, v4, v5⟩, ho, ht, hm, he⟩
+  · rintro ⟨⟨v1, v2, v3, v4, v5⟩, ho, ht, he⟩
     exact ⟨⟨fun o h => v1 o ((hkeysM o).mp h),
       fun o h => let ⟨s, hs⟩ := v2 o h; ⟨s, (hmaps o s).mpr hs⟩,
       fun o s h => v3 o s ((hmaps o s).mp h),
       fun s h => v4 s ((hkeysE s).mp h),
       fun s h => (v5 s h).imp (hmapped s).mpr (helimP s).mpr⟩,
       fun o h => let ⟨s, hs, eq⟩ := ho o h; ⟨s, (hmaps o s).mpr hs, eq⟩,
-      fun o h htr s hs => ht o h htr s ((hmaps o s).mp hs),
-      fun o s hs r hj => hm o s ((hmaps o s).mp hs) r hj,
+      fun o s hs => ht o s ((hmaps o s).mp hs),
       fun s r hl => he s r ((helim s).symm.trans hl)⟩
 
 /-! ## Controls for `Account.mkChecked`, `RegisterFormation`, `firstUnsupported`, and `AccountsFor` -/
@@ -2501,6 +3149,130 @@ example :
     AccountsFor birBlock0 birBlock10 renameAcc ∧
     AccountsFor withUncalled mainOnly dropUncalledAcc ∧
     ¬ AccountsFor withCalled mainOnly dropCalledAcc := by
+  decide
+
+-- Control 6 (F6b round 2):
+-- - Trap preservation rejects kind changes (BIR and SSA), rendered-byte changes (altered project
+--   file path with identical `TrapKind` and `Origin`), and disguising a `.trap` as a `.boundary`;
+-- - Non-monotone optimizer passes are accepted: constant folding (`plain add 1 2 → read 3`),
+--   branch folding keeping the now-dead trap block (`brA → brFolded`), dead-block elimination
+--   (`brFolded → brDeleted`), and inlining keeping the callee for a later dead-code pass;
+-- - Direct collapse of `brA → brFolded → brDeleted` fails `ComposedEliminationsJustified` while
+--   sequential composition through `brFolded` is sound via `compose_through_intermediate`;
+-- - `.deadValue` rejects eliminating a used pure instruction and accepts an unused pure one.
+private def ctrlOtherPath : SourcePath :=
+  ⟨SourceText.ofBytes [97, 46, 99, 111, 110], by decide⟩
+
+private def ctrlOtherProj : Project :=
+  Project.singleton ctrlOtherPath (SourceText.ofBytes [52, 50])
+
+example :
+    let orig1 := ctrlOrigin 1
+    let orig2 := ctrlOrigin 2
+    let mkBranch (proj : Project) (k : TrapKind)
+        (term0 : BIRTerm (Sigma (SSARead EarlyTy s0Lang.literal)) (SSARead EarlyTy s0Lang.literal s0Lang.bool)) :
+        At slice0 ctrlLCB .bir :=
+      let b0 : Block _ _ _ :=
+        ⟨⟨0⟩, [], [⟨orig1, .addWithOverflow .u8 ⟨0⟩ ⟨1⟩ (.literal ⟨[1]⟩) (.literal ⟨[2]⟩)⟩], term0, []⟩
+      let b1 : Block _ _ _ := ⟨⟨1⟩, [], [], .trap ⟨0⟩, []⟩
+      let b2 : Block _ _ _ := ⟨⟨2⟩, [], [], .ret (some ⟨u8Ty, .value ⟨0⟩⟩), []⟩
+      ⟨proj, ctrlMain, [(ctrlMain, ⟨[], some u8Ty⟩)], [(ctrlMain, [], ⟨⟨0⟩, #[b0, b1, b2]⟩)], [],
+        #[⟨k, orig1⟩], [], []⟩
+    let brA := mkBranch ctrlProj .overflow (.branch (.value ⟨1⟩) ⟨⟨1⟩, []⟩ ⟨⟨2⟩, []⟩)
+    let brKind := mkBranch ctrlProj .divisionByZero (.branch (.value ⟨1⟩) ⟨⟨1⟩, []⟩ ⟨⟨2⟩, []⟩)
+    let brOtherPath := mkBranch ctrlOtherProj .overflow (.branch (.value ⟨1⟩) ⟨⟨1⟩, []⟩ ⟨⟨2⟩, []⟩)
+    let brFolded := mkBranch ctrlProj .overflow (.jump ⟨⟨2⟩, []⟩)
+    let brDeleted : At slice0 ctrlLCB .bir :=
+      let b0 : Block _ _ _ :=
+        ⟨⟨0⟩, [], [⟨orig1, .addWithOverflow .u8 ⟨0⟩ ⟨1⟩ (.literal ⟨[1]⟩) (.literal ⟨[2]⟩)⟩],
+          .jump ⟨⟨2⟩, []⟩, []⟩
+      let b2 : Block _ _ _ := ⟨⟨2⟩, [], [], .ret (some ⟨u8Ty, .value ⟨0⟩⟩), []⟩
+      ⟨ctrlProj, ctrlMain, [(ctrlMain, ⟨[], some u8Ty⟩)], [(ctrlMain, [], ⟨⟨0⟩, #[b0, b2]⟩)], [],
+        #[⟨.overflow, orig1⟩], [], []⟩
+    let brDisguisedTrap : At slice0 ctrlLCB .bir :=
+      let b0 : Block _ _ _ :=
+        ⟨⟨0⟩, [], [⟨orig1, .addWithOverflow .u8 ⟨0⟩ ⟨1⟩ (.literal ⟨[1]⟩) (.literal ⟨[2]⟩)⟩],
+          .branch (.value ⟨1⟩) ⟨⟨1⟩, []⟩ ⟨⟨2⟩, []⟩, []⟩
+      let b1 : Block _ _ _ := ⟨⟨1⟩, [], [], .ret (some ⟨u8Ty, .literal ⟨[0]⟩⟩), [orig1]⟩
+      let b2 : Block _ _ _ := ⟨⟨2⟩, [], [], .ret (some ⟨u8Ty, .value ⟨0⟩⟩), []⟩
+      ⟨ctrlProj, ctrlMain, [(ctrlMain, ⟨[], some u8Ty⟩)], [(ctrlMain, [], ⟨⟨0⟩, #[b0, b1, b2]⟩)], [],
+        #[], [], []⟩
+    let mkSSATrap (k : TrapKind) : At slice0 ctrlLCB .ssa :=
+      let b0 : Block _ _ _ := ⟨⟨0⟩, [], [], .trap k orig1, []⟩
+      ⟨ctrlProj, ctrlMain, [(ctrlMain, ⟨[], some u8Ty⟩)], [(ctrlMain, [], ⟨⟨0⟩, #[b0]⟩)], [], [], []⟩
+    let ssaOverflow := mkSSATrap .overflow
+    let ssaDivZero := mkSSATrap .divisionByZero
+    let mkOp (useAdd : Bool) : At slice0 ctrlLCB .bir :=
+      let inst : SSAInst s0Lang :=
+        if useAdd then
+          .op (opcode := .arithmetic (.plain .add)) (types := [u8Ty, u8Ty]) (ty := u8Ty) ⟨0⟩ ()
+            (.cons (.literal ⟨[1]⟩) (.cons (.literal ⟨[2]⟩) .nil))
+        else
+          .op (opcode := .read) (types := [u8Ty]) (ty := u8Ty) ⟨0⟩ () (.cons (.literal ⟨[3]⟩) .nil)
+      let b0 : Block _ _ _ := ⟨⟨0⟩, [], [⟨orig1, inst⟩], .ret (some ⟨u8Ty, .value ⟨0⟩⟩), []⟩
+      ⟨ctrlProj, ctrlMain, [(ctrlMain, ⟨[], some u8Ty⟩)], [(ctrlMain, [], ⟨⟨0⟩, #[b0]⟩)], [], #[], [], []⟩
+    let unusedRead : At slice0 ctrlLCB .bir :=
+      let inst : SSAInst s0Lang :=
+        .op (opcode := .read) (types := [u8Ty]) (ty := u8Ty) ⟨0⟩ () (.cons (.literal ⟨[3]⟩) .nil)
+      let b0 : Block _ _ _ := ⟨⟨0⟩, [], [⟨orig1, inst⟩], .ret (some ⟨u8Ty, .literal ⟨[3]⟩⟩), []⟩
+      ⟨ctrlProj, ctrlMain, [(ctrlMain, ⟨[], some u8Ty⟩)], [(ctrlMain, [], ⟨⟨0⟩, #[b0]⟩)], [], #[], [], []⟩
+    let emptyRet3 : At slice0 ctrlLCB .bir :=
+      let b0 : Block _ _ _ := ⟨⟨0⟩, [], [], .ret (some ⟨u8Ty, .literal ⟨[3]⟩⟩), []⟩
+      ⟨ctrlProj, ctrlMain, [(ctrlMain, ⟨[], some u8Ty⟩)], [(ctrlMain, [], ⟨⟨0⟩, #[b0]⟩)], [], #[], [], []⟩
+    let calledProg : At slice0 ctrlLCB .bir :=
+      let m0 : Block _ _ _ :=
+        ⟨⟨0⟩, [], [⟨orig1, .call ctrlHelper (some ⟨u8Ty, ⟨0⟩⟩) []⟩],
+          .ret (some ⟨u8Ty, .value ⟨0⟩⟩), []⟩
+      let h0 : Block _ _ _ :=
+        ⟨⟨0⟩, [],
+          [⟨orig2, .op (opcode := .read) (types := [u8Ty]) (ty := u8Ty) ⟨0⟩ () (.cons (.literal ⟨[7]⟩) .nil)⟩],
+          .ret (some ⟨u8Ty, .value ⟨0⟩⟩), []⟩
+      ⟨ctrlProj, ctrlMain, [(ctrlMain, ⟨[], some u8Ty⟩), (ctrlHelper, ⟨[], some u8Ty⟩)],
+        [(ctrlMain, [], ⟨⟨0⟩, #[m0]⟩), (ctrlHelper, [], ⟨⟨0⟩, #[h0]⟩)], [], #[], [], []⟩
+    let inlinedKeepCallee : At slice0 ctrlLCB .bir :=
+      let m0 : Block _ _ _ :=
+        ⟨⟨0⟩, [],
+          [⟨orig2, .op (opcode := .read) (types := [u8Ty]) (ty := u8Ty) ⟨0⟩ () (.cons (.literal ⟨[7]⟩) .nil)⟩],
+          .ret (some ⟨u8Ty, .value ⟨0⟩⟩), []⟩
+      let h0 : Block _ _ _ :=
+        ⟨⟨0⟩, [],
+          [⟨orig2, .op (opcode := .read) (types := [u8Ty]) (ty := u8Ty) ⟨0⟩ () (.cons (.literal ⟨[7]⟩) .nil)⟩],
+          .ret (some ⟨u8Ty, .value ⟨0⟩⟩), []⟩
+      ⟨ctrlProj, ctrlMain, [(ctrlMain, ⟨[], some u8Ty⟩), (ctrlHelper, ⟨[], some u8Ty⟩)],
+        [(ctrlMain, [], ⟨⟨0⟩, #[m0]⟩), (ctrlHelper, [], ⟨⟨0⟩, #[h0]⟩)], [], #[], [], []⟩
+    let inlinedMainOnly : At slice0 ctrlLCB .bir :=
+      let m0 : Block _ _ _ :=
+        ⟨⟨0⟩, [],
+          [⟨orig2, .op (opcode := .read) (types := [u8Ty]) (ty := u8Ty) ⟨0⟩ () (.cons (.literal ⟨[7]⟩) .nil)⟩],
+          .ret (some ⟨u8Ty, .value ⟨0⟩⟩), []⟩
+      ⟨ctrlProj, ctrlMain, [(ctrlMain, ⟨[], some u8Ty⟩)],
+        [(ctrlMain, [], ⟨⟨0⟩, #[m0]⟩)], [], #[], [], []⟩
+    let i0 := ctrlOcc ctrlMain 0 (.instruction 0)
+    let t1 := ctrlOcc ctrlMain 1 .trap
+    let b1Bound := ctrlOcc ctrlMain 1 (.boundary 0)
+    let h0i0 := ctrlOcc ctrlHelper 0 (.instruction 0)
+    let disguiseAcc : Account := { mapped := [(i0, [i0]), (b1Bound, [t1])], eliminated := [] }
+    let dceTrapAcc : Account := { mapped := [(i0, [i0])], eliminated := [(t1, .unreachableBlock)] }
+    let dropI0Acc : Account := { mapped := [], eliminated := [(i0, .deadValue)] }
+    let inlineAcc : Account :=
+      { mapped := [(i0, [i0, h0i0]), (h0i0, [h0i0])], eliminated := [] }
+    let dceCalleeAcc : Account :=
+      { mapped := [(i0, [i0])], eliminated := [(h0i0, .unreachableFunction)] }
+    ¬ AccountsFor brA brKind (Account.identityFor brA) ∧
+    ¬ AccountsFor brA brOtherPath (Account.identityFor brA) ∧
+    ¬ AccountsFor ssaOverflow ssaDivZero (Account.identityFor ssaOverflow) ∧
+    ¬ AccountsFor brA brDisguisedTrap disguiseAcc ∧
+    AccountsFor (mkOp true) (mkOp false) (Account.identityFor (mkOp true)) ∧
+    AccountsFor brA brFolded (Account.identityFor brA) ∧
+    brFolded.RegisterFormation (language := s0Core) ∧
+    AccountsFor brFolded brDeleted dceTrapAcc ∧
+    ¬ ComposedEliminationsJustified brA (Account.identityFor brA) dceTrapAcc ∧
+    ¬ AccountsFor brA brDeleted (Account.compose (Account.identityFor brA) dceTrapAcc) ∧
+    AccountsFor calledProg inlinedKeepCallee inlineAcc ∧
+    AccountsFor inlinedKeepCallee inlinedMainOnly dceCalleeAcc ∧
+    ¬ AccountsFor (mkOp false) emptyRet3 dropI0Acc ∧
+    AccountsFor unusedRead emptyRet3 dropI0Acc ∧
+    ¬ EliminationJustified brFolded i0 .deadValue := by
   decide
 
 end Controls
