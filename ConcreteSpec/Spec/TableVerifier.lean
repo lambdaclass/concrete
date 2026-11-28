@@ -1,4 +1,5 @@
-import ConcreteSpec.StageGrammar
+import ConcreteSpec.Spec.LL1
+import ConcreteSpec.Spec.VerifyMachine
 
 /-! Certificate checker for an erased CFG. All input addresses are static. Each
 positive Horn fact carries a height. The checker tests every implication for
