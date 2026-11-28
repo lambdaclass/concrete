@@ -8,6 +8,7 @@ import ConcreteSpec.Spec.Statics
 import ConcreteSpec.Spec.Surface0
 import ConcreteSpec.Spec.Manifest
 import ConcreteSpec.Spec.ProjectPolicy
+import ConcreteSpec.Spec.BackendPolicy
 import ConcreteSpec.Spec.Basics
 import ConcreteSpec.Spec.Hybrid
 import ConcreteSpec.Spec.Scalar
@@ -857,6 +858,87 @@ theorem syntaxRefused : RuleRefused Project.Manifest.SyntaxAccepted "a = " := by
 
 end ProjectRegistry
 
+namespace BackendPolicyRegistry
+open ConcreteSpec.Core.BackendPolicy
+
+def llvmLinux : Profile := Profile.llvm .x86_64Linux
+def lcbLinux : Profile := Profile.lcb .x86_64Linux
+def lcbMacos : Profile := Profile.lcb .aarch64Macos
+
+theorem lcbU8WidthAccepted : RuleAccepted IntWidthSupported (lcbLinux, .u8) := by
+  unfold RuleAccepted
+  decide
+
+theorem lcbI16WidthAccepted : RuleAccepted IntWidthSupported (lcbMacos, .i16) := by
+  unfold RuleAccepted
+  decide
+
+theorem llvmU32WidthAccepted : RuleAccepted IntWidthSupported (llvmLinux, .u32) := by
+  unfold RuleAccepted
+  decide
+
+theorem lcbU32WidthRefused : RuleRefused IntWidthSupported (lcbLinux, .u32) := by
+  unfold RuleRefused
+  decide
+
+theorem lcbI64WidthRefused : RuleRefused IntWidthSupported (lcbMacos, .i64) := by
+  unfold RuleRefused
+  decide
+
+theorem addWithOverflowAccepted : RuleAccepted OperationSupported (lcbLinux, .addWithOverflow) := by
+  unfold RuleAccepted
+  decide
+
+theorem wrappingMulAccepted :
+    RuleAccepted OperationSupported (llvmLinux, .arithmetic (.wrapping .mul)) := by
+  unfold RuleAccepted
+  decide
+
+theorem divisionRefused :
+    RuleRefused OperationSupported (lcbLinux, .arithmetic (.plain .div)) := by
+  unfold RuleRefused
+  decide
+
+theorem saturatingAddRefused :
+    RuleRefused OperationSupported (llvmLinux, .arithmetic (.saturating .add)) := by
+  unfold RuleRefused
+  decide
+
+theorem registerOnlyAccepted : RuleAccepted StorageFormSupported (lcbLinux, .registerOnly) := by
+  unfold RuleAccepted
+  decide
+
+theorem materializedLoadRefused : RuleRefused StorageFormSupported (llvmLinux, .load) := by
+  unfold RuleRefused
+  decide
+
+theorem beginLifetimeRefused : RuleRefused StorageFormSupported (lcbLinux, .beginLifetime) := by
+  unfold RuleRefused
+  decide
+
+theorem destructureMaterializedRefused :
+    RuleRefused StorageFormSupported (lcbMacos, .destructureMaterialized) := by
+  unfold RuleRefused
+  decide
+
+theorem noCallAccepted : RuleAccepted CallSupported (lcbLinux, .noReachableCall) := by
+  unfold RuleAccepted
+  decide
+
+theorem unreachableCallAccepted : RuleAccepted CallSupported (lcbMacos, .unreachableCall) := by
+  unfold RuleAccepted
+  decide
+
+theorem reachableCallRefused : RuleRefused CallSupported (lcbLinux, .reachableInternalCall) := by
+  unfold RuleRefused
+  decide
+
+theorem foreignCallRefused : RuleRefused CallSupported (llvmLinux, .foreignCall) := by
+  unfold RuleRefused
+  decide
+
+end BackendPolicyRegistry
+
 /-- Complete conformance links, populated alongside the owning rules. -/
 def registeredRuleExamples : List RuleExample :=
   [⟨``ConstsPermitted, ``ConstRegistry.accepted⟩,
@@ -1013,6 +1095,23 @@ def registeredRuleExamples : List RuleExample :=
    ⟨``Slice0Rules.AdditionFits, ``Slice0Rules.additionRefused⟩,
    ⟨``Slice0Rules.WithinLimit, ``Slice0Rules.limitAccepted⟩,
    ⟨``Slice0Rules.WithinLimit, ``Slice0Rules.limitRefused⟩,
-   ⟨``Slice0Rules.AdditionFits, ``Slice0Rules.additionInvalidOperands⟩]
+   ⟨``Slice0Rules.AdditionFits, ``Slice0Rules.additionInvalidOperands⟩] ++
+  [⟨``BackendPolicy.IntWidthSupported, ``BackendPolicyRegistry.lcbU8WidthAccepted⟩,
+   ⟨``BackendPolicy.IntWidthSupported, ``BackendPolicyRegistry.lcbI16WidthAccepted⟩,
+   ⟨``BackendPolicy.IntWidthSupported, ``BackendPolicyRegistry.llvmU32WidthAccepted⟩,
+   ⟨``BackendPolicy.IntWidthSupported, ``BackendPolicyRegistry.lcbU32WidthRefused⟩,
+   ⟨``BackendPolicy.IntWidthSupported, ``BackendPolicyRegistry.lcbI64WidthRefused⟩,
+   ⟨``BackendPolicy.OperationSupported, ``BackendPolicyRegistry.addWithOverflowAccepted⟩,
+   ⟨``BackendPolicy.OperationSupported, ``BackendPolicyRegistry.wrappingMulAccepted⟩,
+   ⟨``BackendPolicy.OperationSupported, ``BackendPolicyRegistry.divisionRefused⟩,
+   ⟨``BackendPolicy.OperationSupported, ``BackendPolicyRegistry.saturatingAddRefused⟩,
+   ⟨``BackendPolicy.StorageFormSupported, ``BackendPolicyRegistry.registerOnlyAccepted⟩,
+   ⟨``BackendPolicy.StorageFormSupported, ``BackendPolicyRegistry.materializedLoadRefused⟩,
+   ⟨``BackendPolicy.StorageFormSupported, ``BackendPolicyRegistry.beginLifetimeRefused⟩,
+   ⟨``BackendPolicy.StorageFormSupported, ``BackendPolicyRegistry.destructureMaterializedRefused⟩,
+   ⟨``BackendPolicy.CallSupported, ``BackendPolicyRegistry.noCallAccepted⟩,
+   ⟨``BackendPolicy.CallSupported, ``BackendPolicyRegistry.unreachableCallAccepted⟩,
+   ⟨``BackendPolicy.CallSupported, ``BackendPolicyRegistry.reachableCallRefused⟩,
+   ⟨``BackendPolicy.CallSupported, ``BackendPolicyRegistry.foreignCallRefused⟩]
 
 end ConcreteSpec.Core

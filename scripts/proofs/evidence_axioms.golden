@@ -12,6 +12,23 @@ Char.isAlphanum.eq_1
 Char.isLower.eq_1	
 Char.isWhitespace.eq_1	
 Char.val.eq_1	
+ConcreteSpec.Core.BackendPolicyRegistry.addWithOverflowAccepted	propext
+ConcreteSpec.Core.BackendPolicyRegistry.beginLifetimeRefused	propext
+ConcreteSpec.Core.BackendPolicyRegistry.destructureMaterializedRefused	propext
+ConcreteSpec.Core.BackendPolicyRegistry.divisionRefused	propext
+ConcreteSpec.Core.BackendPolicyRegistry.foreignCallRefused	
+ConcreteSpec.Core.BackendPolicyRegistry.lcbI16WidthAccepted	
+ConcreteSpec.Core.BackendPolicyRegistry.lcbI64WidthRefused	
+ConcreteSpec.Core.BackendPolicyRegistry.lcbU32WidthRefused	
+ConcreteSpec.Core.BackendPolicyRegistry.lcbU8WidthAccepted	
+ConcreteSpec.Core.BackendPolicyRegistry.llvmU32WidthAccepted	
+ConcreteSpec.Core.BackendPolicyRegistry.materializedLoadRefused	propext
+ConcreteSpec.Core.BackendPolicyRegistry.noCallAccepted	
+ConcreteSpec.Core.BackendPolicyRegistry.reachableCallRefused	
+ConcreteSpec.Core.BackendPolicyRegistry.registerOnlyAccepted	propext
+ConcreteSpec.Core.BackendPolicyRegistry.saturatingAddRefused	propext
+ConcreteSpec.Core.BackendPolicyRegistry.unreachableCallAccepted	
+ConcreteSpec.Core.BackendPolicyRegistry.wrappingMulAccepted	propext
 ConcreteSpec.Core.CExpr.refs.eq_1	
 ConcreteSpec.Core.CExpr.refs.eq_10	
 ConcreteSpec.Core.CExpr.refs.eq_11	

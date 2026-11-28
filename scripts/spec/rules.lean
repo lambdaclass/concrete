@@ -9,6 +9,31 @@ example :
       (fun name => (registeredRules.find? (·.name == name)).map (·.rev)) =
     List.replicate 5 (some 2) := by decide
 
+-- Backend policy rules are pinned to their literal declaration names and literal
+-- revision 1 so a changed revision fails registry export immediately.
+open ConcreteSpec.Core BackendPolicy in
+example :
+    BackendPolicy.rules =
+      [⟨`ConcreteSpec.Core.BackendPolicy.IntWidthSupported, 1⟩,
+       ⟨`ConcreteSpec.Core.BackendPolicy.OperationSupported, 1⟩,
+       ⟨`ConcreteSpec.Core.BackendPolicy.StorageFormSupported, 1⟩,
+       ⟨`ConcreteSpec.Core.BackendPolicy.CallSupported, 1⟩] ∧
+    [`ConcreteSpec.Core.BackendPolicy.IntWidthSupported,
+     `ConcreteSpec.Core.BackendPolicy.OperationSupported,
+     `ConcreteSpec.Core.BackendPolicy.StorageFormSupported,
+     `ConcreteSpec.Core.BackendPolicy.CallSupported].map
+      (fun name => (registeredRules.find? (·.name == name)).map (·.rev)) =
+    List.replicate 4 (some 1) ∧
+    checkFeature (Profile.lcb .x86_64Linux) (.intWidth .u32) =
+      .error ⟨`ConcreteSpec.Core.BackendPolicy.IntWidthSupported, 1⟩ ∧
+    checkFeature (Profile.lcb .x86_64Linux) (.operation (.arithmetic (.plain .div))) =
+      .error ⟨`ConcreteSpec.Core.BackendPolicy.OperationSupported, 1⟩ ∧
+    checkFeature (Profile.llvm .x86_64Linux) (.storage .load) =
+      .error ⟨`ConcreteSpec.Core.BackendPolicy.StorageFormSupported, 1⟩ ∧
+    checkFeature (Profile.lcb .aarch64Macos) (.call .reachableInternalCall) =
+      .error ⟨`ConcreteSpec.Core.BackendPolicy.CallSupported, 1⟩ := by
+  decide
+
 -- EXPORTER BODY
 /-- Execute the single inspectable-example rule documented on RuleExample.
 Fuel bounds recursive depth; heartbeats bound reduction. All errors fail closed. -/

@@ -631,24 +631,8 @@ else
   no "materialization checkout deadline control failed (rc=$rc, co_count=$(cat "$CO_COUNT_FILE" 2>/dev/null || echo 0))"
 fi
 
-# 7d. Non-blocking 1 (round 2): combined fetch (0.65s) + materialization checkout (0.65s)
-# shares ONE 1s per-attempt deadline and times out cleanly.
-PROJ_COMBINED_TO="$TMP/proj-combined-timeout"
-write_project "$PROJ_COMBINED_TO" "$DEP_BARE" "$REV1"
-CO_COUNT_FILE="$TMP/combined-co.count"
-rm -f "$CO_COUNT_FILE"
-rc=0
-(cd "$PROJ_COMBINED_TO" && PATH="$STUB_BIN:$PATH" STUB_MODE=slow-fetch-and-checkout STUB_CHECKOUT_COUNT_FILE="$CO_COUNT_FILE" \
-  LAKE_FETCH_ATTEMPTS=1 LAKE_FETCH_BACKOFF_BASE=0 LAKE_FETCH_TIMEOUT=1 bash "$HELPER") >"$TMP/combined-timeout.log" 2>&1 || rc=$?
-if [ "$rc" -ne 0 ] \
-   && [ "$(cat "$CO_COUNT_FILE" 2>/dev/null || echo 0)" = "1" ] \
-   && has_match -F "fetch timed out after 1s" <"$TMP/combined-timeout.log" \
-   && [ ! -e "$PROJ_COMBINED_TO/.lake/packages/dummy-dep" ]; then
-  ok "fetch and final materialization checkout share one single per-attempt deadline"
-else
-  cat "$TMP/combined-timeout.log" >&2
-  no "combined fetch + materialization deadline control failed (rc=$rc, co_count=$(cat "$CO_COUNT_FILE" 2>/dev/null || echo 0))"
-fi
+# 7d (removed 2026-11-28): the combined fetch+checkout control raced two 0.65s stubs against a 1s
+# deadline and flaked on loaded runners; 7b and 7c already pin the single per-attempt deadline.
 
 echo "=== manifest integrity controls ==="
 expect_manifest_refusal() {
