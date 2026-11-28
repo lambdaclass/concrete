@@ -17,9 +17,10 @@ Pinned interface module providing:
   `RegisteredRule` (likewise instantiated by F7 with `language := sliceLanguage s`);
 - `AccountsFor`: intra-IR occurrence-accounting contract across all four `IRPoint`s with
   full observable trap identity preservation (kind, operation ID, stable key, span, and
-  rendered diagnostic bytes), unused/pure/non-trapping `.deadValue` justification, identity
-  law, unconditional intermediate-occurrence composition soundness, and direct composition
-  under `ComposedEliminationsJustified`.
+  rendered diagnostic bytes), account-relative well-founded pure/non-trapping `.deadValue`
+  justification (handling dead-value chains and dead uses in removed unreachable blocks while
+  rejecting self-justifying cycles), identity law, unconditional intermediate-occurrence
+  composition soundness, and direct composition under `ComposedEliminationsJustified`.
 -/
 
 namespace Concrete.Interfaces
@@ -1879,6 +1880,73 @@ def AtLang.occurrenceUnused {Ty : Type} {lang : LoweringLanguage Ty} {profile : 
   | .ssa, ssa, occ => cfgOccurrenceUnused ssaInstDefIds ssaInstUseIds ssaTermUseIds ssa.functions occ
   | .bir, bir, occ => cfgOccurrenceUnused ssaInstDefIds ssaInstUseIds birTermUseIds bir.functions occ
 
+private def cfgOccurrenceUsers {Ty P I T Id : Type} [DecidableEq Id]
+    (instDefs : I → List Id) (instUses : I → List Id)
+    (functions : AList FnId (LocalTypes Ty × CFG P (LocatedOp I) T)) (occ : Occurrence) :
+    List Occurrence :=
+  match AList.lookup functions occ.fn with
+  | none => []
+  | some (_, graph) =>
+    match graph.blocks.find? (·.id == occ.block) with
+    | none => []
+    | some blk =>
+      match occ.slot with
+      | .instruction idx =>
+        match blk.body[idx]? with
+        | none => []
+        | some op =>
+          let defs := instDefs op.instruction
+          graph.blocks.toList.flatMap fun b =>
+            b.body.zipIdx.filterMap fun (instr, j) =>
+              let uses := instUses instr.instruction
+              if defs.any fun id => uses.contains id then
+                some ⟨occ.fn, b.id, .instruction j⟩
+              else none
+      | .boundary _ | .trap => []
+
+private def cfgOccurrenceTermUserBlocks {Ty P I T Id : Type} [DecidableEq Id]
+    (instDefs : I → List Id) (termUses : T → List Id)
+    (functions : AList FnId (LocalTypes Ty × CFG P (LocatedOp I) T)) (occ : Occurrence) :
+    List BlockId :=
+  match AList.lookup functions occ.fn with
+  | none => []
+  | some (_, graph) =>
+    match graph.blocks.find? (·.id == occ.block) with
+    | none => []
+    | some blk =>
+      match occ.slot with
+      | .instruction idx =>
+        match blk.body[idx]? with
+        | none => []
+        | some op =>
+          let defs := instDefs op.instruction
+          graph.blocks.toList.filterMap fun b =>
+            let uses := termUses b.ending
+            if defs.any fun id => uses.contains id then
+              some b.id
+            else none
+      | .boundary _ | .trap => []
+
+/-- Instruction occurrences in `occ`'s enclosing function CFG that use any value/place defined
+by `occ` (including self-uses, so cyclic value dependencies cannot justify themselves).
+Boundary origins define no values and have no users; `.trap` and absent occurrences are rejected
+by `AtLang.occurrencePure`. -/
+def AtLang.occurrenceUsers {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile} :
+    {point : IRPoint} → AtLang lang profile point → Occurrence → List Occurrence
+  | .mir, mir, occ => cfgOccurrenceUsers mirInstDefPlaces mirInstUsedPlaces mir.functions occ
+  | .memory, mem, occ => cfgOccurrenceUsers memInstDefPlaces memInstUsedPlaces mem.functions occ
+  | .ssa, ssa, occ => cfgOccurrenceUsers ssaInstDefIds ssaInstUseIds ssa.functions occ
+  | .bir, bir, occ => cfgOccurrenceUsers ssaInstDefIds ssaInstUseIds bir.functions occ
+
+/-- Blocks in `occ`'s enclosing function CFG whose terminator uses any value/place defined
+by `occ`. -/
+def AtLang.occurrenceTermUserBlocks {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile} :
+    {point : IRPoint} → AtLang lang profile point → Occurrence → List BlockId
+  | .mir, mir, occ => cfgOccurrenceTermUserBlocks mirInstDefPlaces mirTermUsedPlaces mir.functions occ
+  | .memory, mem, occ => cfgOccurrenceTermUserBlocks memInstDefPlaces memTermUsedPlaces mem.functions occ
+  | .ssa, ssa, occ => cfgOccurrenceTermUserBlocks ssaInstDefIds ssaTermUseIds ssa.functions occ
+  | .bir, bir, occ => cfgOccurrenceTermUserBlocks ssaInstDefIds birTermUseIds bir.functions occ
+
 /-- Look up the `Origin` attached to occurrence `occ` in `ir`. -/
 def AtLang.originOf {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile} {point : IRPoint}
     (ir : AtLang lang profile point) (occ : Occurrence) : Option Origin :=
@@ -2122,77 +2190,495 @@ theorem TrapIdentity.eq_fields {p₁ p₂ : Project} {e₁ e₂ : TrapEntry}
   exact ⟨hk, congrArg Origin.operation ho, congrArg Origin.evidenceKey ho,
     congrArg Origin.lexical ho, hb⟩
 
-/-- Decidable check justifying an `EliminationReason` for occurrence `occ` in `ir`. -/
-def checkEliminationJustified {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
-    {point : IRPoint} (ir : AtLang lang profile point) (occ : Occurrence) :
-    EliminationReason → Bool
+/-- Declarative well-founded justification of `reason` for eliminating occurrence `occ` from `ir`
+relative to `account`:
+- `.unreachableFunction`: enclosing function is unreachable from `ir.entry`;
+- `.unreachableBlock`: enclosing function or block is unreachable;
+- `.deadValue`: occurrence is pure and non-trapping, every instruction occurrence in its
+  enclosing function CFG that uses a defined value/place is also eliminated by `account` with a
+  strictly smaller well-founded justification, and every block whose terminator uses a defined
+  value/place is unreachable (or in an unreachable function) with all of its occurrences
+  eliminated and justified by `account`.
+
+Because `EliminationJustified` is inductive (least fixed point), chains of pure dead values and
+pure values used only inside removed unreachable blocks are accepted in one pass, while
+self-justifying value cycles (such as `x = read y; y = read x`) cannot derive `.deadValue`. -/
+inductive EliminationJustified {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {point : IRPoint} (ir : AtLang lang profile point) (account : Account) :
+    Occurrence → EliminationReason → Prop where
+  | unreachableFunction {occ : Occurrence} :
+      occ.fn ∉ AtLang.reachableFunctions ir →
+      EliminationJustified ir account occ .unreachableFunction
+  | unreachableBlock {occ : Occurrence} :
+      (occ.fn ∉ AtLang.reachableFunctions ir ∨
+        AtLang.blockUnreachable ir occ.fn occ.block = true) →
+      EliminationJustified ir account occ .unreachableBlock
+  | deadValue {occ : Occurrence} :
+      AtLang.occurrencePure ir occ = true →
+      (∀ u ∈ AtLang.occurrenceUsers ir occ, account.Eliminated u) →
+      (∀ u ∈ AtLang.occurrenceUsers ir occ, ∀ reasonU,
+        AList.lookup account.eliminated u = some reasonU →
+        EliminationJustified ir account u reasonU) →
+      (∀ blk ∈ AtLang.occurrenceTermUserBlocks ir occ,
+        occ.fn ∉ AtLang.reachableFunctions ir ∨
+          AtLang.blockUnreachable ir occ.fn blk = true) →
+      (∀ blk ∈ AtLang.occurrenceTermUserBlocks ir occ,
+        ∀ o ∈ (AtLang.occurrences ir).map Prod.fst,
+          o.fn = occ.fn → o.block = blk → account.Eliminated o) →
+      (∀ blk ∈ AtLang.occurrenceTermUserBlocks ir occ,
+        ∀ o ∈ (AtLang.occurrences ir).map Prod.fst,
+          o.fn = occ.fn → o.block = blk → ∀ reasonO,
+          AList.lookup account.eliminated o = some reasonO →
+          EliminationJustified ir account o reasonO) →
+      EliminationJustified ir account occ .deadValue
+
+/-- Monotonicity of `EliminationJustified` when extending `account.eliminated`. -/
+theorem EliminationJustified.mono {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {point : IRPoint} {ir : AtLang lang profile point} {acc₁ acc₂ : Account}
+    (hsub : ∀ occ r, AList.lookup acc₁.eliminated occ = some r →
+      AList.lookup acc₂.eliminated occ = some r)
+    {occ : Occurrence} {reason : EliminationReason}
+    (h : EliminationJustified ir acc₁ occ reason) :
+    EliminationJustified ir acc₂ occ reason := by
+  induction h with
+  | unreachableFunction hfn => exact .unreachableFunction hfn
+  | unreachableBlock hblk => exact .unreachableBlock hblk
+  | deadValue hpure husersElim _ htermUnreach htermElim _ ihUsers ihTerms =>
+    refine .deadValue hpure ?_ ?_ htermUnreach ?_ ?_
+    · intro u hu
+      obtain ⟨r, hr⟩ := husersElim u hu
+      exact ⟨r, hsub u r hr⟩
+    · intro u hu rU hlook2
+      obtain ⟨r, hr1⟩ := husersElim u hu
+      have hr2 := hsub u r hr1
+      rw [hr2] at hlook2
+      cases Option.some.inj hlook2
+      exact ihUsers u hu _ hr1
+    · intro blk hblk o ho hfn hbe
+      obtain ⟨r, hr⟩ := htermElim blk hblk o ho hfn hbe
+      exact ⟨r, hsub o r hr⟩
+    · intro blk hblk o ho hfn hbe rO hlook2
+      obtain ⟨r, hr1⟩ := htermElim blk hblk o ho hfn hbe
+      have hr2 := hsub o r hr1
+      rw [hr2] at hlook2
+      cases Option.some.inj hlook2
+      exact ihTerms blk hblk o ho hfn hbe _ hr1
+
+private def justifyStep {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {point : IRPoint} (ir : AtLang lang profile point) (known : List Occurrence)
+    (occ : Occurrence) : EliminationReason → Bool
   | .unreachableFunction => !(AtLang.reachableFunctions ir).contains occ.fn
   | .unreachableBlock =>
     !(AtLang.reachableFunctions ir).contains occ.fn ||
       AtLang.blockUnreachable ir occ.fn occ.block
-  | .deadValue => AtLang.occurrencePure ir occ && AtLang.occurrenceUnused ir occ
+  | .deadValue =>
+    AtLang.occurrencePure ir occ &&
+    ((AtLang.occurrenceUsers ir occ).all fun u => known.contains u) &&
+    ((AtLang.occurrenceTermUserBlocks ir occ).all fun blk =>
+      (!(AtLang.reachableFunctions ir).contains occ.fn ||
+        AtLang.blockUnreachable ir occ.fn blk) &&
+      (((AtLang.occurrences ir).map Prod.fst).all fun o =>
+        !(o.fn == occ.fn && o.block == blk) || known.contains o))
 
-/-- Declarative justification of `reason` for eliminating occurrence `occ` from `ir`.
-- `.unreachableFunction`: enclosing function is unreachable from `ir.entry`;
-- `.unreachableBlock`: enclosing function or block is unreachable;
-- `.deadValue`: occurrence is pure, non-trapping, and unused anywhere in its function CFG. -/
-def EliminationJustified {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
-    {point : IRPoint} (ir : AtLang lang profile point) (occ : Occurrence) :
-    EliminationReason → Prop
-  | .unreachableFunction => occ.fn ∉ AtLang.reachableFunctions ir
-  | .unreachableBlock =>
-    occ.fn ∉ AtLang.reachableFunctions ir ∨ AtLang.blockUnreachable ir occ.fn occ.block = true
-  | .deadValue => AtLang.occurrencePure ir occ = true ∧ AtLang.occurrenceUnused ir occ = true
+private theorem justifyStep_mono {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {point : IRPoint} (ir : AtLang lang profile point) {k₁ k₂ : List Occurrence}
+    (hsub : ∀ x ∈ k₁, x ∈ k₂) {occ : Occurrence} {reason : EliminationReason}
+    (h : justifyStep ir k₁ occ reason = true) :
+    justifyStep ir k₂ occ reason = true := by
+  cases reason with
+  | unreachableFunction => exact h
+  | unreachableBlock => exact h
+  | deadValue =>
+    simp only [justifyStep, Bool.and_eq_true, List.all_eq_true, List.contains_eq_mem,
+      decide_eq_true_eq] at h ⊢
+    obtain ⟨⟨hpure, husers⟩, hterms⟩ := h
+    refine ⟨⟨hpure, fun u hu => hsub u (husers u hu)⟩, fun blk hblk => ?_⟩
+    refine ⟨(hterms blk hblk).1, fun o ho => ?_⟩
+    have hob := (hterms blk hblk).2 o ho
+    rw [Bool.or_eq_true] at hob ⊢
+    rcases hob with hne | hmem
+    · exact Or.inl hne
+    · exact Or.inr (by simpa [decide_eq_true_eq] using hsub o (of_decide_eq_true hmem))
+
+private def expandJustified {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {point : IRPoint} (ir : AtLang lang profile point) (account : Account)
+    (known : List Occurrence) : List Occurrence :=
+  (account.eliminated.filter fun entry =>
+    justifyStep ir known entry.1 entry.2).map Prod.fst
+
+private theorem mem_expandJustified_iff {Ty : Type} {lang : LoweringLanguage Ty}
+    {profile : Profile} {point : IRPoint} (ir : AtLang lang profile point)
+    (account : Account) (known : List Occurrence) (u : Occurrence) :
+    u ∈ expandJustified ir account known ↔
+      ∃ r, AList.lookup account.eliminated u = some r ∧ justifyStep ir known u r = true := by
+  unfold expandJustified
+  rw [List.mem_map]
+  constructor
+  · rintro ⟨⟨k, r⟩, hmem, rfl⟩
+    have hf := List.mem_filter.mp hmem
+    exact ⟨r, alist_lookup_of_mem account.eliminatedKeysNodup hf.1, hf.2⟩
+  · rintro ⟨r, hlook, hstep⟩
+    exact ⟨(u, r), List.mem_filter.mpr ⟨alist_lookup_mem hlook, hstep⟩, rfl⟩
+
+private def justifiedLoop {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {point : IRPoint} (ir : AtLang lang profile point) (account : Account) :
+    Nat → List Occurrence → List Occurrence
+  | 0, acc => acc
+  | fuel + 1, acc =>
+    let next := expandJustified ir account acc
+    if next == acc then acc else justifiedLoop ir account fuel next
+
+/-- Executable least fixed point of justified eliminated occurrences in `account.eliminated`.
+Terminates early once an iteration stabilizes; bounded by `account.eliminated.length` steps. -/
+private def justifiedEliminated {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {point : IRPoint} (ir : AtLang lang profile point) (account : Account) :
+    List Occurrence :=
+  justifiedLoop ir account account.eliminated.length []
+
+private def justifiedIter {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {point : IRPoint} (ir : AtLang lang profile point) (account : Account) :
+    Nat → List Occurrence → List Occurrence
+  | 0, acc => acc
+  | n + 1, acc => justifiedIter ir account n (expandJustified ir account acc)
+
+private theorem justifiedIter_fixed {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {point : IRPoint} (ir : AtLang lang profile point) (account : Account)
+    {acc : List Occurrence} (hfix : expandJustified ir account acc = acc) :
+    ∀ n, justifiedIter ir account n acc = acc
+  | 0 => rfl
+  | n + 1 => by
+    simp only [justifiedIter, hfix]
+    exact justifiedIter_fixed ir account hfix n
+
+private theorem justifiedLoop_eq_iter {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {point : IRPoint} (ir : AtLang lang profile point) (account : Account) :
+    ∀ n acc, justifiedLoop ir account n acc = justifiedIter ir account n acc
+  | 0, _ => rfl
+  | n + 1, acc => by
+    simp only [justifiedLoop, justifiedIter]
+    cases h : (expandJustified ir account acc == acc)
+    · simp only [Bool.false_eq_true, ↓reduceIte]
+      exact justifiedLoop_eq_iter ir account n _
+    · simp only [↓reduceIte]
+      have hfix : expandJustified ir account acc = acc := eq_of_beq h
+      rw [hfix, justifiedIter_fixed ir account hfix n]
+
+private def justifiedSteps {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {point : IRPoint} (ir : AtLang lang profile point) (account : Account) :
+    Nat → List Occurrence
+  | 0 => []
+  | n + 1 => expandJustified ir account (justifiedSteps ir account n)
+
+private theorem justifiedIter_step {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {point : IRPoint} (ir : AtLang lang profile point) (account : Account) :
+    ∀ n acc, justifiedIter ir account (n + 1) acc =
+      expandJustified ir account (justifiedIter ir account n acc)
+  | 0, _ => rfl
+  | n + 1, acc => by
+    simp only [justifiedIter]
+    exact justifiedIter_step ir account n (expandJustified ir account acc)
+
+private theorem justifiedIter_eq_steps {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {point : IRPoint} (ir : AtLang lang profile point) (account : Account) :
+    ∀ n, justifiedIter ir account n [] = justifiedSteps ir account n
+  | 0 => rfl
+  | n + 1 => by
+    rw [justifiedIter_step, justifiedIter_eq_steps ir account n]
+    rfl
+
+private theorem justifiedEliminated_eq_steps {Ty : Type} {lang : LoweringLanguage Ty}
+    {profile : Profile} {point : IRPoint} (ir : AtLang lang profile point) (account : Account) :
+    justifiedEliminated ir account = justifiedSteps ir account account.eliminated.length := by
+  unfold justifiedEliminated
+  rw [justifiedLoop_eq_iter, justifiedIter_eq_steps]
+
+private theorem justifiedSteps_sub_succ {Ty : Type} {lang : LoweringLanguage Ty}
+    {profile : Profile} {point : IRPoint} (ir : AtLang lang profile point) (account : Account) :
+    ∀ k x, x ∈ justifiedSteps ir account k → x ∈ justifiedSteps ir account (k + 1)
+  | 0, _, hx => nomatch hx
+  | k + 1, x, hx => by
+    obtain ⟨r, hlook, hstep⟩ := (mem_expandJustified_iff ir account _ x).mp hx
+    exact (mem_expandJustified_iff ir account _ x).mpr
+      ⟨r, hlook, justifyStep_mono ir (justifiedSteps_sub_succ ir account k) hstep⟩
+
+private theorem filter_length_le_and_eq {α : Type} (l : List α) (p q : α → Bool)
+    (himp : ∀ x ∈ l, p x = true → q x = true) :
+    (l.filter p).length ≤ (l.filter q).length ∧
+    ((l.filter p).length = (l.filter q).length → l.filter p = l.filter q) := by
+  induction l with
+  | nil => exact ⟨Nat.le_refl 0, fun _ => rfl⟩
+  | cons a rest ih =>
+    obtain ⟨hle, heq⟩ := ih (fun x hx => himp x (List.mem_cons_of_mem a hx))
+    cases hpa : p a with
+    | false =>
+      cases hqa : q a with
+      | false =>
+        simp only [List.filter_cons, hpa, hqa, Bool.false_eq_true, ↓reduceIte]
+        exact ⟨hle, heq⟩
+      | true =>
+        simp only [List.filter_cons, hpa, hqa, Bool.false_eq_true, ↓reduceIte, List.length_cons]
+        exact ⟨Nat.le_succ_of_le hle, fun h => absurd h (Nat.ne_of_lt (Nat.lt_succ_of_le hle))⟩
+    | true =>
+      have hqa : q a = true := himp a List.mem_cons_self hpa
+      simp only [List.filter_cons, hpa, hqa, ↓reduceIte, List.length_cons]
+      refine ⟨Nat.succ_le_succ hle, fun h => ?_⟩
+      exact congrArg (a :: ·) (heq (Nat.succ.inj h))
+
+private theorem justifiedSteps_length_lt_of_ne {Ty : Type} {lang : LoweringLanguage Ty}
+    {profile : Profile} {point : IRPoint} (ir : AtLang lang profile point) (account : Account)
+    (k : Nat) (hne : justifiedSteps ir account k ≠ justifiedSteps ir account (k + 1)) :
+    (justifiedSteps ir account k).length < (justifiedSteps ir account (k + 1)).length := by
+  cases k with
+  | zero =>
+    change ([] : List Occurrence).length < (justifiedSteps ir account 1).length
+    cases hs : justifiedSteps ir account 1 with
+    | nil => exact absurd hs.symm hne
+    | cons _ _ => simp
+  | succ m =>
+    have hpair := filter_length_le_and_eq account.eliminated
+      (fun e => justifyStep ir (justifiedSteps ir account m) e.1 e.2)
+      (fun e => justifyStep ir (justifiedSteps ir account (m + 1)) e.1 e.2)
+      (fun e _ he => justifyStep_mono ir (justifiedSteps_sub_succ ir account m) he)
+    change ((account.eliminated.filter _).map Prod.fst).length <
+      ((account.eliminated.filter _).map Prod.fst).length
+    rw [List.length_map, List.length_map]
+    cases Nat.eq_or_lt_of_le hpair.1 with
+    | inl heq =>
+      exact absurd (congrArg (List.map Prod.fst) (hpair.2 heq)) hne
+    | inr hlt => exact hlt
+
+private theorem justifiedSteps_add_of_eq {Ty : Type} {lang : LoweringLanguage Ty}
+    {profile : Profile} {point : IRPoint} (ir : AtLang lang profile point) (account : Account)
+    {k : Nat} (heq : justifiedSteps ir account k = justifiedSteps ir account (k + 1)) :
+    ∀ d, justifiedSteps ir account (k + d) = justifiedSteps ir account k
+  | 0 => rfl
+  | d + 1 => by
+    change expandJustified ir account (justifiedSteps ir account (k + d)) = _
+    rw [justifiedSteps_add_of_eq ir account heq d]
+    exact heq.symm
+
+private theorem justifiedSteps_fixed {Ty : Type} {lang : LoweringLanguage Ty}
+    {profile : Profile} {point : IRPoint} (ir : AtLang lang profile point) (account : Account) :
+    expandJustified ir account (justifiedSteps ir account account.eliminated.length) =
+      justifiedSteps ir account account.eliminated.length := by
+  let N := account.eliminated.length
+  change justifiedSteps ir account (N + 1) = justifiedSteps ir account N
+  by_cases h : justifiedSteps ir account N = justifiedSteps ir account (N + 1)
+  · exact h.symm
+  · exfalso
+    have hneAll : ∀ j, j ≤ N →
+        justifiedSteps ir account j ≠ justifiedSteps ir account (j + 1) := by
+      intro j hj heq
+      have hN := justifiedSteps_add_of_eq ir account heq (N - j)
+      have hN1 := justifiedSteps_add_of_eq ir account heq (N + 1 - j)
+      have h1 : j + (N - j) = N := Nat.add_sub_of_le hj
+      have h2 : j + (N + 1 - j) = N + 1 := Nat.add_sub_of_le (Nat.le_succ_of_le hj)
+      rw [h1] at hN
+      rw [h2] at hN1
+      exact h (hN.trans hN1.symm)
+    have hgrow : ∀ j, j ≤ N + 1 → j ≤ (justifiedSteps ir account j).length := by
+      intro j
+      induction j with
+      | zero => intro _; exact Nat.zero_le _
+      | succ m ih =>
+        intro hm
+        have hprev := ih (Nat.le_of_succ_le hm)
+        have hlt := justifiedSteps_length_lt_of_ne ir account m
+          (hneAll m (Nat.le_of_succ_le_succ hm))
+        exact Nat.succ_le_of_lt (Nat.lt_of_le_of_lt hprev hlt)
+    have hbig := hgrow (N + 1) (Nat.le_refl _)
+    have hle : (justifiedSteps ir account (N + 1)).length ≤ N := by
+      change ((account.eliminated.filter _).map Prod.fst).length ≤ account.eliminated.length
+      rw [List.length_map]
+      exact List.length_filter_le _ _
+    exact absurd (Nat.le_trans hbig hle) (Nat.not_succ_le_self N)
+
+private theorem eliminationJustified_of_justifyStep {Ty : Type} {lang : LoweringLanguage Ty}
+    {profile : Profile} {point : IRPoint} (ir : AtLang lang profile point) (account : Account)
+    {known : List Occurrence}
+    (hknown : ∀ u ∈ known, ∃ r, AList.lookup account.eliminated u = some r ∧
+      EliminationJustified ir account u r)
+    {occ : Occurrence} {reason : EliminationReason}
+    (hstep : justifyStep ir known occ reason = true) :
+    EliminationJustified ir account occ reason := by
+  cases reason with
+  | unreachableFunction =>
+    simp only [justifyStep, Bool.not_eq_true', List.contains_eq_mem,
+      decide_eq_false_iff_not] at hstep
+    exact .unreachableFunction hstep
+  | unreachableBlock =>
+    simp only [justifyStep, Bool.or_eq_true, Bool.not_eq_true', List.contains_eq_mem,
+      decide_eq_false_iff_not] at hstep
+    exact .unreachableBlock hstep
+  | deadValue =>
+    simp only [justifyStep, Bool.and_eq_true, List.all_eq_true, List.contains_eq_mem,
+      decide_eq_true_eq] at hstep
+    obtain ⟨⟨hpure, husers⟩, hterms⟩ := hstep
+    refine .deadValue hpure ?_ ?_ ?_ ?_ ?_
+    · intro u hu
+      obtain ⟨r, hlook, _⟩ := hknown u (husers u hu)
+      exact ⟨r, hlook⟩
+    · intro u hu rU hlookU
+      obtain ⟨r, hlook, hEJ⟩ := hknown u (husers u hu)
+      rw [hlook] at hlookU
+      cases Option.some.inj hlookU
+      exact hEJ
+    · intro blk hblk
+      have hreach := (hterms blk hblk).1
+      simp only [Bool.or_eq_true, Bool.not_eq_true', decide_eq_false_iff_not] at hreach
+      exact hreach
+    · intro blk hblk o ho hfn hblkeq
+      have hob := (hterms blk hblk).2 o ho
+      simp only [hfn, hblkeq, beq_self_eq_true, Bool.and_self, Bool.not_true, Bool.false_or,
+        decide_eq_true_eq] at hob
+      obtain ⟨r, hlook, _⟩ := hknown o hob
+      exact ⟨r, hlook⟩
+    · intro blk hblk o ho hfn hblkeq rO hlookO
+      have hob := (hterms blk hblk).2 o ho
+      simp only [hfn, hblkeq, beq_self_eq_true, Bool.and_self, Bool.not_true, Bool.false_or,
+        decide_eq_true_eq] at hob
+      obtain ⟨r, hlook, hEJ⟩ := hknown o hob
+      rw [hlook] at hlookO
+      cases Option.some.inj hlookO
+      exact hEJ
+
+private theorem justifiedSteps_sound {Ty : Type} {lang : LoweringLanguage Ty}
+    {profile : Profile} {point : IRPoint} (ir : AtLang lang profile point) (account : Account) :
+    ∀ k u, u ∈ justifiedSteps ir account k →
+      ∃ r, AList.lookup account.eliminated u = some r ∧
+        EliminationJustified ir account u r
+  | 0, _, hu => nomatch hu
+  | k + 1, u, hu => by
+    obtain ⟨r, hlook, hstep⟩ := (mem_expandJustified_iff ir account _ u).mp hu
+    exact ⟨r, hlook, eliminationJustified_of_justifyStep ir account
+      (justifiedSteps_sound ir account k) hstep⟩
+
+private theorem justifyStep_complete {Ty : Type} {lang : LoweringLanguage Ty}
+    {profile : Profile} {point : IRPoint} (ir : AtLang lang profile point) (account : Account)
+    {occ : Occurrence} {reason : EliminationReason}
+    (h : EliminationJustified ir account occ reason) :
+    justifyStep ir (justifiedEliminated ir account) occ reason = true := by
+  have hfix : expandJustified ir account (justifiedEliminated ir account) =
+      justifiedEliminated ir account := by
+    rw [justifiedEliminated_eq_steps]
+    exact justifiedSteps_fixed ir account
+  induction h with
+  | unreachableFunction hfn =>
+    simp [justifyStep, List.contains_eq_mem, hfn]
+  | unreachableBlock hblk =>
+    simp only [justifyStep, Bool.or_eq_true, Bool.not_eq_true', List.contains_eq_mem,
+      decide_eq_false_iff_not]
+    exact hblk
+  | deadValue hpure husersElim _ htermUnreach htermElim _ ihUsers ihTerms =>
+    simp only [justifyStep, Bool.and_eq_true, List.all_eq_true, List.contains_eq_mem,
+      decide_eq_true_eq]
+    refine ⟨⟨hpure, ?_⟩, ?_⟩
+    · intro u hu
+      obtain ⟨rU, hlookU⟩ := husersElim u hu
+      have hstepU := ihUsers u hu rU hlookU
+      rw [← hfix]
+      exact (mem_expandJustified_iff ir account _ u).mpr ⟨rU, hlookU, hstepU⟩
+    · intro blk hblk
+      refine ⟨?_, ?_⟩
+      · simp only [Bool.or_eq_true, Bool.not_eq_true', decide_eq_false_iff_not]
+        exact htermUnreach blk hblk
+      · intro o ho
+        rw [Bool.or_eq_true]
+        cases hc : (o.fn == _ && o.block == blk)
+        · left; rfl
+        · right
+          have hpair := Bool.and_eq_true_iff.mp hc
+          have hfn := eq_of_beq hpair.1
+          have hbe := eq_of_beq hpair.2
+          obtain ⟨rO, hlookO⟩ := htermElim blk hblk o ho hfn hbe
+          have hstepO := ihTerms blk hblk o ho hfn hbe rO hlookO
+          have hmemO : o ∈ justifiedEliminated ir account := by
+            rw [← hfix]
+            exact (mem_expandJustified_iff ir account _ o).mpr ⟨rO, hlookO, hstepO⟩
+          exact decide_eq_true hmemO
+
+/-- Decidable check justifying an `EliminationReason` for occurrence `occ` in `ir`
+relative to `account`. -/
+def checkEliminationJustified {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {point : IRPoint} (ir : AtLang lang profile point) (account : Account)
+    (occ : Occurrence) (reason : EliminationReason) : Bool :=
+  justifyStep ir (justifiedEliminated ir account) occ reason
 
 theorem checkEliminationJustified_eq_true_iff {Ty : Type} {lang : LoweringLanguage Ty}
     {profile : Profile} {point : IRPoint} (ir : AtLang lang profile point)
-    (occ : Occurrence) (reason : EliminationReason) :
-    checkEliminationJustified ir occ reason = true ↔ EliminationJustified ir occ reason := by
-  cases reason with
-  | unreachableFunction =>
-    simp [checkEliminationJustified, EliminationJustified, List.contains_eq_mem]
-  | unreachableBlock =>
-    simp [checkEliminationJustified, EliminationJustified, List.contains_eq_mem]
-  | deadValue =>
-    simp [checkEliminationJustified, EliminationJustified]
+    (account : Account) (occ : Occurrence) (reason : EliminationReason) :
+    checkEliminationJustified ir account occ reason = true ↔
+      EliminationJustified ir account occ reason := by
+  unfold checkEliminationJustified
+  constructor
+  · intro h
+    refine eliminationJustified_of_justifyStep ir account ?_ h
+    rw [justifiedEliminated_eq_steps]
+    exact justifiedSteps_sound ir account account.eliminated.length
+  · exact justifyStep_complete ir account
+
+private theorem mem_justifiedEliminated_iff {Ty : Type} {lang : LoweringLanguage Ty}
+    {profile : Profile} {point : IRPoint} (ir : AtLang lang profile point)
+    (account : Account) {occ : Occurrence} {reason : EliminationReason}
+    (hlook : AList.lookup account.eliminated occ = some reason) :
+    occ ∈ justifiedEliminated ir account ↔ EliminationJustified ir account occ reason := by
+  constructor
+  · intro hmem
+    rw [justifiedEliminated_eq_steps] at hmem
+    obtain ⟨r, hr, hEJ⟩ := justifiedSteps_sound ir account account.eliminated.length occ hmem
+    rw [hlook] at hr
+    cases Option.some.inj hr
+    exact hEJ
+  · intro hEJ
+    have hstep := justifyStep_complete ir account hEJ
+    have hfix : expandJustified ir account (justifiedEliminated ir account) =
+        justifiedEliminated ir account := by
+      rw [justifiedEliminated_eq_steps]
+      exact justifiedSteps_fixed ir account
+    rw [← hfix]
+    exact (mem_expandJustified_iff ir account _ occ).mpr ⟨reason, hlook, hstep⟩
 
 instance instDecidableEliminationJustified {Ty : Type} {lang : LoweringLanguage Ty}
     {profile : Profile} {point : IRPoint} (ir : AtLang lang profile point)
-    (occ : Occurrence) (reason : EliminationReason) :
-    Decidable (EliminationJustified ir occ reason) :=
-  decidable_of_bool_iff (checkEliminationJustified ir occ reason)
-    (checkEliminationJustified_eq_true_iff ir occ reason)
+    (account : Account) (occ : Occurrence) (reason : EliminationReason) :
+    Decidable (EliminationJustified ir account occ reason) :=
+  decidable_of_bool_iff (checkEliminationJustified ir account occ reason)
+    (checkEliminationJustified_eq_true_iff ir account occ reason)
 
 instance instDecidableEliminationJustifiedAt {slice : Slice} {profile : Profile}
     {point : IRPoint} (ir : At slice profile point)
-    (occ : Occurrence) (reason : EliminationReason) :
-    Decidable (EliminationJustified ir occ reason) :=
-  decidable_of_bool_iff (checkEliminationJustified ir occ reason)
-    (checkEliminationJustified_eq_true_iff ir occ reason)
+    (account : Account) (occ : Occurrence) (reason : EliminationReason) :
+    Decidable (EliminationJustified ir account occ reason) :=
+  decidable_of_bool_iff (checkEliminationJustified ir account occ reason)
+    (checkEliminationJustified_eq_true_iff ir account occ reason)
 
 instance instDecidableEliminationJustifiedMIR {Ty : Type} {lang : LoweringLanguage Ty}
-    {profile : Profile} (ir : MIR lang profile) (occ : Occurrence) (reason : EliminationReason) :
-    Decidable (EliminationJustified (point := .mir) ir occ reason) :=
-  decidable_of_bool_iff (checkEliminationJustified (point := .mir) ir occ reason)
-    (checkEliminationJustified_eq_true_iff (point := .mir) ir occ reason)
+    {profile : Profile} (ir : MIR lang profile) (account : Account)
+    (occ : Occurrence) (reason : EliminationReason) :
+    Decidable (EliminationJustified (point := .mir) ir account occ reason) :=
+  decidable_of_bool_iff (checkEliminationJustified (point := .mir) ir account occ reason)
+    (checkEliminationJustified_eq_true_iff (point := .mir) ir account occ reason)
 
 instance instDecidableEliminationJustifiedMemory {Ty : Type} {lang : LoweringLanguage Ty}
-    {profile : Profile} (ir : Memory lang profile) (occ : Occurrence) (reason : EliminationReason) :
-    Decidable (EliminationJustified (point := .memory) ir occ reason) :=
-  decidable_of_bool_iff (checkEliminationJustified (point := .memory) ir occ reason)
-    (checkEliminationJustified_eq_true_iff (point := .memory) ir occ reason)
+    {profile : Profile} (ir : Memory lang profile) (account : Account)
+    (occ : Occurrence) (reason : EliminationReason) :
+    Decidable (EliminationJustified (point := .memory) ir account occ reason) :=
+  decidable_of_bool_iff (checkEliminationJustified (point := .memory) ir account occ reason)
+    (checkEliminationJustified_eq_true_iff (point := .memory) ir account occ reason)
 
 instance instDecidableEliminationJustifiedSSA {Ty : Type} {lang : LoweringLanguage Ty}
-    {profile : Profile} (ir : SSA lang profile) (occ : Occurrence) (reason : EliminationReason) :
-    Decidable (EliminationJustified (point := .ssa) ir occ reason) :=
-  decidable_of_bool_iff (checkEliminationJustified (point := .ssa) ir occ reason)
-    (checkEliminationJustified_eq_true_iff (point := .ssa) ir occ reason)
+    {profile : Profile} (ir : SSA lang profile) (account : Account)
+    (occ : Occurrence) (reason : EliminationReason) :
+    Decidable (EliminationJustified (point := .ssa) ir account occ reason) :=
+  decidable_of_bool_iff (checkEliminationJustified (point := .ssa) ir account occ reason)
+    (checkEliminationJustified_eq_true_iff (point := .ssa) ir account occ reason)
 
 instance instDecidableEliminationJustifiedBIR {Ty : Type} {lang : LoweringLanguage Ty}
-    {profile : Profile} (ir : BIR lang profile) (occ : Occurrence) (reason : EliminationReason) :
-    Decidable (EliminationJustified (point := .bir) ir occ reason) :=
-  decidable_of_bool_iff (checkEliminationJustified (point := .bir) ir occ reason)
-    (checkEliminationJustified_eq_true_iff (point := .bir) ir occ reason)
+    {profile : Profile} (ir : BIR lang profile) (account : Account)
+    (occ : Occurrence) (reason : EliminationReason) :
+    Decidable (EliminationJustified (point := .bir) ir account occ reason) :=
+  decidable_of_bool_iff (checkEliminationJustified (point := .bir) ir account occ reason)
+    (checkEliminationJustified_eq_true_iff (point := .bir) ir account occ reason)
 
 /-- Generic intra-IR occurrence-accounting contract `AccountsForLang a b account`:
 1. `account` is `Valid` between the occurrence address sets of `a` and `b`;
@@ -2203,7 +2689,7 @@ instance instDecidableEliminationJustifiedBIR {Ty : Type} {lang : LoweringLangua
    `.trap` occurrence preserves its full observable `TrapIdentity` (trap kind, operation ID,
    stable evidence key, lexical span, and rendered diagnostic bytes in its issuing `Project`);
 4. Every eliminated source `(src, reason)` in `account.eliminated` satisfies
-   `EliminationJustified a src reason`.
+   `EliminationJustified a account src reason` (well-founded relative to `account`).
 
 Ordinary value/control optimizations that make previously impure or reachable occurrences pure or
 unreachable in `b` (such as constant folding, branch folding keeping the dead block, or inlining
@@ -2218,7 +2704,7 @@ def AccountsForLang {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
     (out.slot = .trap ↔ src.slot = .trap) ∧
     (out.slot = .trap → AtLang.trapIdentityOf b out = AtLang.trapIdentityOf a src)) ∧
   (∀ src reason, AList.lookup account.eliminated src = some reason →
-    EliminationJustified a src reason)
+    EliminationJustified a account src reason)
 
 /-- Frozen occurrence-accounting contract at the repository-selected slice, profile, and IR point. -/
 def AccountsFor {slice : Slice} {profile : Profile} {point : IRPoint}
@@ -2230,6 +2716,7 @@ def checkAccountsForLang {Ty : Type} {lang : LoweringLanguage Ty} {profile : Pro
     {point : IRPoint} (a b : AtLang lang profile point) (account : Account) : Bool :=
   let occsA := (AtLang.occurrences a).map Prod.fst
   let occsB := (AtLang.occurrences b).map Prod.fst
+  let justified := justifiedEliminated a account
   (account.mapped.all fun entry => occsB.contains entry.1) &&
   (occsB.all fun out => !(account.sourcesOf out).isEmpty) &&
   (account.mapped.all fun entry => entry.2.all fun src => occsA.contains src) &&
@@ -2245,7 +2732,7 @@ def checkAccountsForLang {Ty : Type} {lang : LoweringLanguage Ty} {profile : Pro
       (if entry.1.slot == .trap then
         AtLang.trapIdentityOf b entry.1 == AtLang.trapIdentityOf a src
       else true)) &&
-  (account.eliminated.all fun entry => checkEliminationJustified a entry.1 entry.2)
+  (account.eliminated.all fun entry => justified.contains entry.1)
 
 def checkAccountsFor {slice : Slice} {profile : Profile} {point : IRPoint}
     (a b : At slice profile point) (account : Account) : Bool :=
@@ -2281,7 +2768,7 @@ theorem checkAccountsForLang_eq_true_iff {Ty : Type} {lang : LoweringLanguage Ty
       exact h4 entry hentry
     · intro src hsrc
       rcases Bool.or_eq_true_iff.mp (h5 src hsrc) with hmap | helim
-      · exact Or.inl ((account.mapped_iff_any src).mpr hmap)
+      · exact Or.inl ((account.mapped_iff_any src).mpr (by simpa only [List.contains_eq_mem] using hmap))
       · exact Or.inr ((account.eliminated_iff_isSome src).mpr helim)
     · intro out hout
       obtain ⟨src, hsrc, heq⟩ := h6 out hout
@@ -2296,7 +2783,7 @@ theorem checkAccountsForLang_eq_true_iff {Ty : Type} {lang : LoweringLanguage Ty
         simp only [htrap, beq_self_eq_true, ↓reduceIte] at hid
         exact eq_of_beq hid
     · intro src reason hlook
-      exact (checkEliminationJustified_eq_true_iff a src reason).mp (h8 (src, reason) (alist_lookup_mem hlook))
+      exact (mem_justifiedEliminated_iff a account hlook).mp (h8 (src, reason) (alist_lookup_mem hlook))
   · rintro ⟨⟨hv1, hv2, hv3, hv4, hv5⟩, horig, htrap, helim⟩
     refine ⟨⟨⟨⟨⟨⟨⟨?_, ?_⟩, ?_⟩, ?_⟩, ?_⟩, ?_⟩, ?_⟩, ?_⟩
     · intro entry hentry
@@ -2313,7 +2800,7 @@ theorem checkAccountsForLang_eq_true_iff {Ty : Type} {lang : LoweringLanguage Ty
     · intro src hsrc
       apply Bool.or_eq_true_iff.mpr
       rcases hv5 src hsrc with hmap | hel
-      · exact Or.inl ((account.mapped_iff_any src).mp hmap)
+      · exact Or.inl (by simpa only [List.contains_eq_mem] using (account.mapped_iff_any src).mp hmap)
       · exact Or.inr ((account.eliminated_iff_isSome src).mp hel)
     · intro out hout
       obtain ⟨src, hsrc, heq⟩ := horig out hout
@@ -2330,7 +2817,7 @@ theorem checkAccountsForLang_eq_true_iff {Ty : Type} {lang : LoweringLanguage Ty
           exact beq_iff_eq.mpr (hid (eq_of_beq hs))
     · intro entry hentry
       have hlook := alist_lookup_of_mem account.eliminatedKeysNodup hentry
-      exact (checkEliminationJustified_eq_true_iff a entry.1 entry.2).mpr (helim entry.1 entry.2 hlook)
+      exact (mem_justifiedEliminated_iff a account hlook).mpr (helim entry.1 entry.2 hlook)
 
 theorem checkAccountsFor_eq_true_iff {slice : Slice} {profile : Profile} {point : IRPoint}
     (a b : At slice profile point) (account : Account) :
@@ -2534,30 +3021,48 @@ private theorem compose_eliminated_lookup_cases (first second : Account)
       rw [hcond] at hmap
       simp at hmap
 
+private theorem lookup_compose_eliminated_of_first (first second : Account)
+    {src : Occurrence} {reason : EliminationReason}
+    (h : AList.lookup first.eliminated src = some reason) :
+    AList.lookup (Account.compose first second).eliminated src = some reason := by
+  have hNotMapped : ¬ (Account.compose first second).Mapped src := by
+    rintro ⟨occC, hmaps⟩
+    obtain ⟨occB, _, hmaps1⟩ := (Account.mapsTo_compose_iff first second occC src).mp hmaps
+    exact Account.not_eliminated_of_mapped first ⟨occB, hmaps1⟩ ⟨reason, h⟩
+  obtain ⟨r', hr'⟩ := (Account.eliminated_compose_iff first second src).mpr
+    ⟨hNotMapped, Or.inl ⟨reason, h⟩⟩
+  rcases compose_eliminated_lookup_cases first second hr' with hfirst | ⟨_, hNone, _, _, _⟩
+  · rw [h] at hfirst
+    cases Option.some.inj hfirst
+    exact hr'
+  · rw [h] at hNone
+    cases hNone
+
 /-- Explicit premise for collapsing two sequential occurrence accounts `first` (`a → b`) and
 `second` (`b → c`) into a direct `AccountsForLang a c (Account.compose first second)`:
 every elimination `(srcA, reason)` recorded in `(Account.compose first second).eliminated`
-is justified in the source `a`.
+is justified in the source `a` relative to `Account.compose first second`.
 
 Eliminations inherited from `first.eliminated` are automatically justified in `a` by
-`AccountsForLang a b first`. This premise is therefore needed only for sources that survived
-`first` into intermediate occurrences in `b` and were eliminated by `second` (when `first` did
-not enable a new syntactic elimination in `b`). When `first` enables a new elimination in `b`
-(such as branch folding making a trap block unreachable before dead-block elimination removes it),
-sequential composition remains sound through the intermediate IR `b` via
-`AccountsForLang.compose_through_intermediate`. -/
+`AccountsForLang a b first` (via monotonicity of `EliminationJustified`). This premise is
+therefore needed only for sources that survived `first` into intermediate occurrences in `b`
+and were eliminated by `second` (when `first` did not enable a new syntactic elimination in `b`).
+When `first` enables a new elimination in `b` (such as branch folding making a trap block
+unreachable before dead-block elimination removes it), sequential composition remains sound
+through the intermediate IR `b` via `AccountsForLang.compose_through_intermediate`. -/
 def ComposedEliminationsJustified {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
     {point : IRPoint} (a : AtLang lang profile point) (first second : Account) : Prop :=
   ∀ srcA reason,
     AList.lookup (Account.compose first second).eliminated srcA = some reason →
-    EliminationJustified a srcA reason
+    EliminationJustified a (Account.compose first second) srcA reason
 
 /-- Executable decision procedure for `ComposedEliminationsJustified`. -/
 def checkComposedEliminationsJustified {Ty : Type} {lang : LoweringLanguage Ty}
     {profile : Profile} {point : IRPoint} (a : AtLang lang profile point)
     (first second : Account) : Bool :=
-  (Account.compose first second).eliminated.all fun entry =>
-    checkEliminationJustified a entry.1 entry.2
+  let comp := Account.compose first second
+  let justified := justifiedEliminated a comp
+  comp.eliminated.all fun entry => justified.contains entry.1
 
 theorem checkComposedEliminationsJustified_eq_true_iff {Ty : Type} {lang : LoweringLanguage Ty}
     {profile : Profile} {point : IRPoint} (a : AtLang lang profile point)
@@ -2565,14 +3070,16 @@ theorem checkComposedEliminationsJustified_eq_true_iff {Ty : Type} {lang : Lower
     checkComposedEliminationsJustified a first second = true ↔
       ComposedEliminationsJustified a first second := by
   unfold checkComposedEliminationsJustified ComposedEliminationsJustified
-  rw [List.all_eq_true]
+  dsimp only
+  simp only [List.all_eq_true, List.contains_eq_mem, decide_eq_true_eq]
   constructor
   · intro hall srcA reason hlook
-    exact (checkEliminationJustified_eq_true_iff a srcA reason).mp
+    exact (mem_justifiedEliminated_iff a (Account.compose first second) hlook).mp
       (hall (srcA, reason) (alist_lookup_mem hlook))
   · intro h entry hentry
     have hlook := alist_lookup_of_mem (Account.compose first second).eliminatedKeysNodup hentry
-    exact (checkEliminationJustified_eq_true_iff a entry.1 entry.2).mpr (h entry.1 entry.2 hlook)
+    exact (mem_justifiedEliminated_iff a (Account.compose first second) hlook).mpr
+      (h entry.1 entry.2 hlook)
 
 instance instDecidableComposedEliminationsJustified {Ty : Type} {lang : LoweringLanguage Ty}
     {profile : Profile} {point : IRPoint} (a : AtLang lang profile point)
@@ -2638,14 +3145,14 @@ theorem AccountsForLang.compose_through_intermediate
           AtLang.trapIdentityOf c outC = AtLang.trapIdentityOf b midB ∧
           AtLang.trapIdentityOf b midB = AtLang.trapIdentityOf a srcA)) ∧
     (∀ srcA reason, AList.lookup comp.eliminated srcA = some reason →
-      (AList.lookup first.eliminated srcA = some reason ∧ EliminationJustified a srcA reason) ∨
+      (AList.lookup first.eliminated srcA = some reason ∧ EliminationJustified a first srcA reason) ∨
       (¬ comp.Mapped srcA ∧ first.Mapped srcA ∧
         (∃ occB ∈ occsB, first.MapsTo occB srcA ∧
           AList.lookup second.eliminated occB = some reason ∧
-          EliminationJustified b occB reason) ∧
+          EliminationJustified b second occB reason) ∧
         (∀ occB, first.MapsTo occB srcA →
           ∃ reasonB, AList.lookup second.eliminated occB = some reasonB ∧
-            EliminationJustified b occB reasonB))) := by
+            EliminationJustified b second occB reasonB))) := by
   obtain ⟨hv1, horig1, htrap1, helim1⟩ := h1
   obtain ⟨hv2, horig2, htrap2, helim2⟩ := h2
   refine ⟨Account.compose_valid hv1 hv2, ?_, ?_, ?_⟩
@@ -2729,13 +3236,15 @@ theorem AccountsForLang.compose_of_second_pullback
       AList.lookup first.eliminated srcA = none →
       first.MapsTo occB srcA →
       AList.lookup second.eliminated occB = some reason →
-      EliminationJustified b occB reason →
-      EliminationJustified a srcA reason) :
+      EliminationJustified b second occB reason →
+      EliminationJustified a (Account.compose first second) srcA reason) :
     AccountsForLang a c (Account.compose first second) := by
   refine AccountsForLang.compose h1 h2 fun srcA reason hlook => ?_
   rcases compose_eliminated_lookup_cases first second hlook with
     hfirst | ⟨hNotMapped, hFirstNone, _, ⟨occB, hmaps1, hlook2⟩, _⟩
-  · exact h1.2.2.2 srcA reason hfirst
+  · exact EliminationJustified.mono
+      (fun _ _ h => lookup_compose_eliminated_of_first first second h)
+      (h1.2.2.2 srcA reason hfirst)
   · exact hPullback srcA occB reason hNotMapped hFirstNone hmaps1 hlook2
       (h2.2.2.2 occB reason hlook2)
 
@@ -2747,8 +3256,8 @@ theorem AccountsFor.compose_of_second_pullback {slice : Slice} {profile : Profil
       AList.lookup first.eliminated srcA = none →
       first.MapsTo occB srcA →
       AList.lookup second.eliminated occB = some reason →
-      EliminationJustified b occB reason →
-      EliminationJustified a srcA reason) :
+      EliminationJustified b second occB reason →
+      EliminationJustified a (Account.compose first second) srcA reason) :
     AccountsFor a c (Account.compose first second) :=
   AccountsForLang.compose_of_second_pullback h1 h2 hPullback
 
@@ -2763,7 +3272,7 @@ theorem AccountsForLang.compose_all_images_justified {Ty : Type} {lang : Lowerin
     {srcA occB : Occurrence} {reasonB : EliminationReason}
     (himg : first.MapsTo occB srcA)
     (helim : AList.lookup second.eliminated occB = some reasonB) :
-    occB ∈ (AtLang.occurrences b).map Prod.fst ∧ EliminationJustified b occB reasonB := by
+    occB ∈ (AtLang.occurrences b).map Prod.fst ∧ EliminationJustified b second occB reasonB := by
   obtain ⟨srcs, hmem, _⟩ := (first.mapsTo_iff_mem_mapped occB srcA).mp himg
   exact ⟨h1.1.1 occB (List.mem_map.mpr ⟨(occB, srcs), hmem, rfl⟩), h2.2.2.2 occB reasonB helim⟩
 
@@ -2791,6 +3300,10 @@ theorem AccountsForLang.congr {Ty : Type} {lang : LoweringLanguage Ty} {profile 
     ⟨fun ⟨o, h⟩ => ⟨o, (hmaps o src).mp h⟩, fun ⟨o, h⟩ => ⟨o, (hmaps o src).mpr h⟩⟩
   have helimP : ∀ src, w₁.Eliminated src ↔ w₂.Eliminated src := fun src => by
     unfold Account.Eliminated; rw [helim]
+  have hsub12 : ∀ occ r, AList.lookup w₁.eliminated occ = some r →
+      AList.lookup w₂.eliminated occ = some r := fun occ _ h => (helim occ).symm.trans h
+  have hsub21 : ∀ occ r, AList.lookup w₂.eliminated occ = some r →
+      AList.lookup w₁.eliminated occ = some r := fun occ _ h => (helim occ).trans h
   constructor
   · rintro ⟨⟨v1, v2, v3, v4, v5⟩, ho, ht, he⟩
     exact ⟨⟨fun o h => v1 o ((hkeysM o).mpr h),
@@ -2800,7 +3313,7 @@ theorem AccountsForLang.congr {Ty : Type} {lang : LoweringLanguage Ty} {profile 
       fun s h => (v5 s h).imp (hmapped s).mp (helimP s).mp⟩,
       fun o h => let ⟨s, hs, eq⟩ := ho o h; ⟨s, (hmaps o s).mp hs, eq⟩,
       fun o s hs => ht o s ((hmaps o s).mpr hs),
-      fun s r hl => he s r ((helim s).trans hl)⟩
+      fun s r hl => EliminationJustified.mono hsub12 (he s r ((helim s).trans hl))⟩
   · rintro ⟨⟨v1, v2, v3, v4, v5⟩, ho, ht, he⟩
     exact ⟨⟨fun o h => v1 o ((hkeysM o).mp h),
       fun o h => let ⟨s, hs⟩ := v2 o h; ⟨s, (hmaps o s).mpr hs⟩,
@@ -2809,7 +3322,7 @@ theorem AccountsForLang.congr {Ty : Type} {lang : LoweringLanguage Ty} {profile 
       fun s h => (v5 s h).imp (hmapped s).mpr (helimP s).mpr⟩,
       fun o h => let ⟨s, hs, eq⟩ := ho o h; ⟨s, (hmaps o s).mpr hs, eq⟩,
       fun o s hs => ht o s ((hmaps o s).mp hs),
-      fun s r hl => he s r ((helim s).symm.trans hl)⟩
+      fun s r hl => EliminationJustified.mono hsub21 (he s r ((helim s).symm.trans hl))⟩
 
 /-! ## Controls for `Account.mkChecked`, `RegisterFormation`, `firstUnsupported`, and `AccountsFor` -/
 
@@ -3272,7 +3785,94 @@ example :
     AccountsFor inlinedKeepCallee inlinedMainOnly dceCalleeAcc ∧
     ¬ AccountsFor (mkOp false) emptyRet3 dropI0Acc ∧
     AccountsFor unusedRead emptyRet3 dropI0Acc ∧
-    ¬ EliminationJustified brFolded i0 .deadValue := by
+    ¬ EliminationJustified brFolded dceTrapAcc i0 .deadValue := by
+  decide
+
+-- Control 7 (F6b round 3): account-relative well-founded `.deadValue`:
+-- - Dead-value chain `x = read 1; y = read x; ret 0` → `ret 0` accepted in one pass and via
+--   two-pass composition (`ComposedEliminationsJustified`);
+-- - Pure definition used only in an unreachable block (instruction and/or terminator) removed
+--   together with that block in one pass is accepted;
+-- - Value used by a surviving occurrence (reachable or unreachable block) marked `.deadValue`
+--   is rejected, and a self-justifying cycle `x = read y; y = read x` marked `.deadValue` is
+--   rejected by well-foundedness.
+example :
+    let orig1 := ctrlOrigin 1
+    let orig2 := ctrlOrigin 2
+    let rdLit (r : Nat) (v : UInt8) : SSAInst s0Lang :=
+      .op (opcode := .read) (types := [u8Ty]) (ty := u8Ty) ⟨r⟩ () (.cons (.literal ⟨[v]⟩) .nil)
+    let rdVal (dst src : Nat) : SSAInst s0Lang :=
+      .op (opcode := .read) (types := [u8Ty]) (ty := u8Ty) ⟨dst⟩ () (.cons (.value ⟨src⟩) .nil)
+    let chainA : At slice0 ctrlLCB .bir :=
+      let b0 : Block _ _ _ :=
+        ⟨⟨0⟩, [], [⟨orig1, rdLit 0 1⟩, ⟨orig2, rdVal 1 0⟩],
+          .ret (some ⟨u8Ty, .literal ⟨[0]⟩⟩), []⟩
+      ⟨ctrlProj, ctrlMain, [(ctrlMain, ⟨[], some u8Ty⟩)],
+        [(ctrlMain, [], ⟨⟨0⟩, #[b0]⟩)], [], #[], [], []⟩
+    let chainMid : At slice0 ctrlLCB .bir :=
+      let b0 : Block _ _ _ :=
+        ⟨⟨0⟩, [], [⟨orig1, rdLit 0 1⟩], .ret (some ⟨u8Ty, .literal ⟨[0]⟩⟩), []⟩
+      ⟨ctrlProj, ctrlMain, [(ctrlMain, ⟨[], some u8Ty⟩)],
+        [(ctrlMain, [], ⟨⟨0⟩, #[b0]⟩)], [], #[], [], []⟩
+    let ret0 : At slice0 ctrlLCB .bir :=
+      let b0 : Block _ _ _ := ⟨⟨0⟩, [], [], .ret (some ⟨u8Ty, .literal ⟨[0]⟩⟩), []⟩
+      ⟨ctrlProj, ctrlMain, [(ctrlMain, ⟨[], some u8Ty⟩)],
+        [(ctrlMain, [], ⟨⟨0⟩, #[b0]⟩)], [], #[], [], []⟩
+    let unreachInstUse : At slice0 ctrlLCB .bir :=
+      let b0 : Block _ _ _ :=
+        ⟨⟨0⟩, [], [⟨orig1, rdLit 0 1⟩], .ret (some ⟨u8Ty, .literal ⟨[0]⟩⟩), []⟩
+      let b1 : Block _ _ _ :=
+        ⟨⟨1⟩, [], [⟨orig2, rdVal 1 0⟩], .ret (some ⟨u8Ty, .value ⟨1⟩⟩), []⟩
+      ⟨ctrlProj, ctrlMain, [(ctrlMain, ⟨[], some u8Ty⟩)],
+        [(ctrlMain, [], ⟨⟨0⟩, #[b0, b1]⟩)], [], #[], [], []⟩
+    let unreachTermUse : At slice0 ctrlLCB .bir :=
+      let b0 : Block _ _ _ :=
+        ⟨⟨0⟩, [], [⟨orig1, rdLit 0 1⟩], .ret (some ⟨u8Ty, .literal ⟨[0]⟩⟩), []⟩
+      let b1 : Block _ _ _ := ⟨⟨1⟩, [], [], .ret (some ⟨u8Ty, .value ⟨0⟩⟩), []⟩
+      ⟨ctrlProj, ctrlMain, [(ctrlMain, ⟨[], some u8Ty⟩)],
+        [(ctrlMain, [], ⟨⟨0⟩, #[b0, b1]⟩)], [], #[], [], []⟩
+    let unreachKeepB1 : At slice0 ctrlLCB .bir :=
+      let b0 : Block _ _ _ := ⟨⟨0⟩, [], [], .ret (some ⟨u8Ty, .literal ⟨[0]⟩⟩), []⟩
+      let b1 : Block _ _ _ :=
+        ⟨⟨1⟩, [], [⟨orig2, rdVal 1 0⟩], .ret (some ⟨u8Ty, .value ⟨1⟩⟩), []⟩
+      ⟨ctrlProj, ctrlMain, [(ctrlMain, ⟨[], some u8Ty⟩)],
+        [(ctrlMain, [], ⟨⟨0⟩, #[b0, b1]⟩)], [], #[], [], []⟩
+    let chainKeepY : At slice0 ctrlLCB .bir :=
+      let b0 : Block _ _ _ :=
+        ⟨⟨0⟩, [], [⟨orig2, rdVal 1 0⟩], .ret (some ⟨u8Ty, .literal ⟨[0]⟩⟩), []⟩
+      ⟨ctrlProj, ctrlMain, [(ctrlMain, ⟨[], some u8Ty⟩)],
+        [(ctrlMain, [], ⟨⟨0⟩, #[b0]⟩)], [], #[], [], []⟩
+    let cycleProg : At slice0 ctrlLCB .bir :=
+      let b0 : Block _ _ _ :=
+        ⟨⟨0⟩, [], [⟨orig1, rdVal 0 1⟩, ⟨orig2, rdVal 1 0⟩],
+          .ret (some ⟨u8Ty, .literal ⟨[0]⟩⟩), []⟩
+      ⟨ctrlProj, ctrlMain, [(ctrlMain, ⟨[], some u8Ty⟩)],
+        [(ctrlMain, [], ⟨⟨0⟩, #[b0]⟩)], [], #[], [], []⟩
+    let i0 := ctrlOcc ctrlMain 0 (.instruction 0)
+    let i1 := ctrlOcc ctrlMain 0 (.instruction 1)
+    let b1i0 := ctrlOcc ctrlMain 1 (.instruction 0)
+    let dropBothChain : Account :=
+      { mapped := [], eliminated := [(i0, .deadValue), (i1, .deadValue)] }
+    let dropYFirst : Account :=
+      { mapped := [(i0, [i0])], eliminated := [(i1, .deadValue)] }
+    let dropXSecond : Account :=
+      { mapped := [], eliminated := [(i0, .deadValue)] }
+    let dropUnreachInst : Account :=
+      { mapped := [], eliminated := [(i0, .deadValue), (b1i0, .unreachableBlock)] }
+    let dropXKeepB1 : Account :=
+      { mapped := [(b1i0, [b1i0])], eliminated := [(i0, .deadValue)] }
+    let dropXKeepY : Account :=
+      { mapped := [(i0, [i1])], eliminated := [(i0, .deadValue)] }
+    AccountsFor chainA ret0 dropBothChain ∧
+    AccountsFor chainA chainMid dropYFirst ∧
+    AccountsFor chainMid ret0 dropXSecond ∧
+    ComposedEliminationsJustified chainA dropYFirst dropXSecond ∧
+    AccountsFor chainA ret0 (Account.compose dropYFirst dropXSecond) ∧
+    AccountsFor unreachInstUse ret0 dropUnreachInst ∧
+    AccountsFor unreachTermUse ret0 dropXSecond ∧
+    ¬ AccountsFor chainA chainKeepY dropXKeepY ∧
+    ¬ AccountsFor unreachInstUse unreachKeepB1 dropXKeepB1 ∧
+    ¬ AccountsFor cycleProg ret0 dropBothChain := by
   decide
 
 end Controls
