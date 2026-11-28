@@ -1,47 +1,27 @@
-import Concrete.BIR
 import Concrete.Backend.LLVMIR
 
 /-!
 # The runtime entry (both backends)
 
-PROVISIONAL (slice 0). Every backend emits `main`'s body as `concrete_body`, returning the result
-word (`Concrete.BIR.encode`). The runtime entry is fixed: it calls the body and then
+Every backend emits `main`'s body as `concrete_body`, returning the encoded result word.
+The runtime entry is fixed: it calls the body and then
 
 * exits with the word if it is below 256;
-* otherwise writes the trap line of site `word - 256` to descriptor 2 (looping on partial writes,
-  ignoring write errors) and exits 134 (`ConcreteSpec.Observe.Observation.status`);
-* on a word that encodes nothing (no well-formed body returns one, `emit_encodes`), writes
-  `invalidLine` and aborts.
+* otherwise writes the diagnostic line at index `word - 256` to descriptor 2 (looping on partial
+  writes, ignoring write errors) and exits 134 (`ConcreteSpec.Observe.Observation.status`);
+* on a word that encodes nothing, writes `invalidLine` and aborts.
 
-Its correctness is premise `P_rt`, and the site it reports is premise `P_trap_site`
-(`Concrete/README.md`). This file emits it as LLVM text and as QBE text for LCB.
-
-The trap line is the owner's decided form (2026-11-06):
-`concrete: trap: <kind> at <path>:<line>:<col> (site <id>)`, the path relative to the project
-root with forward slashes, line and column 1-based. That the executable writes exactly this line
-for the site it trapped at is premise `P_trap_site`.
+This frozen leaf renders that fixed runtime entry from ordered, newline-terminated diagnostic
+lines as both LLVM assembly items (`llvmDiagnostics`) and QBE text (`qbeDiagnostics`), with no
+dependency on provisional `Concrete.BIR`.
 -/
 
 namespace Concrete.Backend.Runtime
-open Concrete.BIR
 open Concrete.Backend.LLVM
-open ConcreteSpec (IntTy Trap)
 open ConcreteSpec.Core (toBits)
-
-/-- The trap's name in the trap line. -/
-def trapName : Trap → String
-  | .arithmeticOverflow => "overflow"
-
-/-- The trap line for one site, without the final newline. -/
-def trapLine (e : SiteEntry) : String :=
-  s!"concrete: trap: {trapName e.kind} at {e.loc.path}:{decimal e.loc.line}:{decimal e.loc.col} (site {decimal e.site.id})"
 
 /-- What the runtime writes before aborting on a result word that encodes nothing. -/
 def invalidLine : String := "concrete: runtime: invalid result word"
-
-/-- The decided form, checked against a literal (not against `trapLine` itself). -/
-example : trapLine ⟨.arithmeticOverflow, ⟨9⟩, ⟨40, 47⟩, ⟨"src/main.con", 4, 12⟩⟩ =
-    "concrete: trap: overflow at src/main.con:4:12 (site 9)" := by decide
 
 /-- Pair every element with its index. -/
 def indexedFrom {α : Type} (n : Nat) : List α → List (Nat × α)
@@ -82,13 +62,12 @@ theorem mem_indexed {α : Type} {l : List α} {k : Nat} {x : α} (h : l[k]? = so
     (k, x) ∈ indexed l := by
   simpa [indexed] using mem_indexedFrom (n := 0) h
 
-private def siteBytes (e : SiteEntry) : ByteArray := (trapLine e ++ "\n").toUTF8
-
 private def invalidBytes : ByteArray := (invalidLine ++ "\n").toUTF8
 
-/-- The fixed runtime entry and its byte globals as LLVM assembly items. -/
-def llvmItems (tbl : SiteTable) : List Item :=
-  let sites := indexed tbl
+/-- The fixed runtime entry and its byte globals as LLVM assembly items, consuming the same
+ordered, newline-terminated diagnostics as `qbeDiagnostics`. -/
+def llvmDiagnostics (diagnostics : List String) : List Item :=
+  let sites := indexed diagnostics
   let i32 := TypeCode.integer .u32
   let i64 := TypeCode.integer .u64
   let byte := TypeCode.integer .u8
@@ -99,10 +78,10 @@ def llvmItems (tbl : SiteTable) : List Item :=
     Item.instruction (.call none .void .writeAll [(.ptr, .global name), (i64, count data.size)])
   let abort := Item.instruction (.call none .void .abort [])
   let trapExit := Item.instruction (.call none .void .exit [(i32, .immediate (.natural 134))])
-  let globals := sites.map fun (i, e) => Item.constant (.site i) (siteBytes e)
+  let globals := sites.map fun (i, message) => Item.constant (.site i) message.toUTF8
   let cases := sites.map fun (i, _) => (Immediate.natural (toBits .u32 (Int.ofNat i)), Label.trapSite i)
-  let traps := sites.flatMap fun (i, e) =>
-    [Item.label (.trapSite i), writeAll (.site i) (siteBytes e), trapExit, .terminator .unreachable]
+  let traps := sites.flatMap fun (i, message) =>
+    [Item.label (.trapSite i), writeAll (.site i) message.toUTF8, trapExit, .terminator .unreachable]
   globals ++
   [.constant .bad invalidBytes,
    .declare i64 .write [i32, .ptr, i64],
@@ -147,9 +126,6 @@ def llvmItems (tbl : SiteTable) : List Item :=
    .terminator .unreachable,
    .endFunction]
 
-/-- The runtime as standalone LLVM text. -/
-def llvm (tbl : SiteTable) : String := render (llvmItems tbl)
-
 /-- QBE data bytes for a string: one `b N` per UTF-8 byte, so no character needs escaping. -/
 def qbeBytes (s : String) : String := ", ".intercalate (s.toUTF8.toList.map fun b => s!"b {b}")
 
@@ -177,9 +153,5 @@ def qbeDiagnostics (diagnostics : List String) : String :=
   s!"@c{diagnostics.length}\n    call $concrete_rt_write_all(l $bad, l {(invalidLine ++ "\n").utf8ByteSize})\n" ++
   "    call $abort()\n    ret 0\n" ++
   "}\n"
-
-/-- The current compiler renders its legacy site table with the same runtime template. -/
-def qbe (tbl : SiteTable) : String :=
-  qbeDiagnostics (tbl.map fun entry => trapLine entry ++ "\n")
 
 end Concrete.Backend.Runtime

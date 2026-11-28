@@ -287,7 +287,7 @@ example : EmitsLCB testLanguage trapBIR trapJob := by
 set_option maxRecDepth 2048 in
 example :
     let output := {trapJob with body := (lcbReturnJob 134).body}
-    validateJob (Backend.LCB.job output.body) = .ok () ∧
+    validateJob (Backend.LCBJob.lcbFunctionJob output.body) = .ok () ∧
       ¬ EmitsLCB testLanguage trapBIR output := by
   refine ⟨by with_unfolding_all rfl, ?_⟩
   intro emitted
@@ -397,7 +397,7 @@ def bundledBIR (project : Project) : BIR testLowering testProfile :=
     signatures := [(callee, ⟨[], some ()⟩)]}
 
 private def leafJob (value : BitVec 32) : LeanCompilerBackend.Verified.FunctionJob :=
-  let job := Backend.LCB.job (lcbReturnJob value).body
+  let job := Backend.LCBJob.lcbFunctionJob (lcbReturnJob value).body
   {job with code := {job.code with symbol := {job.code.symbol with name := "concrete_callee"}}}
 
 def bundledJobs (value : BitVec 32) : LCBInput testProfile :=

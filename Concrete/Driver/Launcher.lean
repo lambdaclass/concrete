@@ -1,4 +1,5 @@
 import Concrete.Backend.LLVM
+import Concrete.Backend.ProvisionalRuntime
 
 /-! Native link inputs for Q8.4–Q8.6. Both inputs are derived from the same BIR program, so the
 launcher's trap sites and the component's trap indices have the same source. The final image and

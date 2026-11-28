@@ -1,5 +1,6 @@
 import Concrete.Stages
-import Concrete.Backend.Observation
+import Concrete.Backend.ProvisionalRuntime
+import Concrete.Backend.ProvisionalObservation
 import LeanCompilerBackend.Verified.BuildIdentity
 
 namespace Concrete.ImageTheorem

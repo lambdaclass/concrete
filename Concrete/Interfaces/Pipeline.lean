@@ -199,7 +199,7 @@ def P_print (bir : BIR lang profile) (output : LLVMInput profile) : Prop :=
 
 private def LCBInput.validateJobs (output : LCBInput profile) :
     Except LeanCompilerBackend.Verified.CompileError Unit := do
-  LeanCompilerBackend.Verified.validateJob (Backend.LCB.job output.body)
+  LeanCompilerBackend.Verified.validateJob (Backend.LCBJob.lcbFunctionJob output.body)
   output.additionalJobs.forM fun pair => LeanCompilerBackend.Verified.validateJob pair.2
 
 /-- The hosted LCB word reserves 0 through 255 for ordinary exits. -/

@@ -60,7 +60,7 @@ example (unchecked : Bool) :
 -- observes their different returns from the supplied body and runtime input.
 example (project : Project) :
     let valid := fun status => LeanCompilerBackend.Verified.validateJob
-      (Backend.LCB.job (lcbReturnJob status).body) = .ok ()
+      (Backend.LCBJob.lcbFunctionJob (lcbReturnJob status).body) = .ok ()
     let execution := LCBInput.Execution (profile := testProfile) Nat project
     valid 0 ∧ valid 42 ∧ (lcbReturnJob 0).RuntimeMatches project ∧
     execution.observes (lcbReturnJob 0) (.returned 0 ByteArray.empty) ∧

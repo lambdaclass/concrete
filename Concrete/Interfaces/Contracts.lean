@@ -2,6 +2,8 @@ import Concrete.Interfaces.Carriers
 import Concrete.Lex
 import Concrete.Interfaces.Behavior
 import Concrete.Backend.Observation
+import Concrete.Backend.Runtime
+import Concrete.Backend.LCBJob
 import Concrete.Interfaces.SurfaceElaboration
 import ConcreteSpec.StageGrammar
 
@@ -1831,7 +1833,7 @@ def BIR.requiresLCBLinking (bir : BIR lang profile) : Bool :=
 
 def LCBEncoding (language : CoreLanguage) {lang : LoweringLanguage language.operands.Ty}
     {profile : Profile} (bir : BIR lang profile) (output : LCBInput profile) : Prop :=
-  ((Backend.LCB.job output.body :: List.map Prod.snd output.additionalJobs).map
+  ((Backend.LCBJob.lcbFunctionJob output.body :: List.map Prod.snd output.additionalJobs).map
     (fun job => job.code.symbol.name)).Nodup ∧
   output.sites = bir.sites ∧ output.RuntimeMatches bir.project ∧
   BehaviorRefinement (BIR.Execution (language := language)) (LCBInput.Execution _ bir.project)
@@ -1845,7 +1847,7 @@ def LCBEncoding (language : CoreLanguage) {lang : LoweringLanguage language.oper
 def EmitsLCB (language : CoreLanguage) {lang : LoweringLanguage language.operands.Ty}
     {profile : Profile} (bir : BIR lang profile) (output : LCBInput profile) : Prop :=
   profile.backend = .lcb ∧
-  LeanCompilerBackend.Verified.validateJob (Backend.LCB.job output.body) = .ok () ∧
+  LeanCompilerBackend.Verified.validateJob (Backend.LCBJob.lcbFunctionJob output.body) = .ok () ∧
   (∀ pair ∈ output.additionalJobs, LeanCompilerBackend.Verified.validateJob pair.2 = .ok ()) ∧
   LCBEncoding language bir output
 

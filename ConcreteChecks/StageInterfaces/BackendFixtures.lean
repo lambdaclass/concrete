@@ -11,7 +11,7 @@ def macLLVM : Profile := ⟨.llvm, .aarch64Macos, 2, 4096⟩
 def lcbReturnJob (status : BitVec 32) : LCBInput testProfile :=
   let body : LeanCompilerBackend.Verified.Source.Function :=
     ⟨.word, #[], #[], #[⟨#[], #[], .ret (.literal (.word status))⟩]⟩
-  ⟨body, [], #[], (Backend.Runtime.qbe []).toUTF8⟩
+  ⟨body, [], #[], (Backend.Runtime.qbeDiagnostics []).toUTF8⟩
 
 def birReturnBlock (alternate : Bool) :
     Block (Sigma (SSAValue Unit)) (LocatedOp (SSAInst testLowering))

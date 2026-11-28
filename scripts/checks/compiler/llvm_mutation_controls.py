@@ -14,6 +14,7 @@ import time
 LLVM = Path("Concrete/Backend/LLVM.lean")
 IR = Path("Concrete/Backend/LLVMIR.lean")
 RUNTIME = Path("Concrete/Backend/Runtime.lean")
+PROVISIONAL_RUNTIME = Path("Concrete/Backend/ProvisionalRuntime.lean")
 RETURN_LOCAL = "(.integer .u8, operandAt 8 a) (.integer .u32)"
 TOKEN = "def Immediate.token (v : Immediate) : String := decimal v.value"
 PIECE = "  | .immediate v before after => String.singleton before.char ++ v.token ++ String.singleton after.char"
@@ -105,7 +106,7 @@ MUTATIONS = (
         RUNTIME,
         "(Immediate.natural (toBits .u32 (Int.ofNat i)), Label.trapSite i)",
         "(Immediate.natural (toBits .u32 (Int.ofNat i)), "
-        "Label.trapSite (if tbl.length < 2 then i else if i = 0 then 1 else if i = 1 then 0 else i))",
+        "Label.trapSite (if diagnostics.length < 2 then i else if i = 0 then 1 else if i = 1 then 0 else i))",
     ),
     (
         "Core u64 mapped to LLVM i32",
@@ -175,7 +176,7 @@ BENIGN = (
 FIXTURES = "scripts/checks/compiler/llvm_rendering.lean"
 GOLDEN = Path("tests/golden/slice0_llvm.txt")
 NATIVE = "scripts/checks/lib/slice0_native.sh"
-MODULES = (IR, RUNTIME, LLVM)
+MODULES = (IR, RUNTIME, PROVISIONAL_RUNTIME, LLVM)
 LEAN = ["lean", "-DwarningAsError=true", "-j", os.environ.get("LEAN_NUM_THREADS", "2"), "-M", "2048"]
 
 

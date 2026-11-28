@@ -1,14 +1,20 @@
-import Concrete.BIR
-import ConcreteSpec.Spec.Surface0
+import ConcreteSpec.Spec.Ident
 import ConcreteSpec.Spec.Outcome
 
 namespace Concrete.Contracts
 
+/-- Source path and 1-based line and column reported by the runtime diagnostic boundary. -/
+structure DiagnosticLocation where
+  path : String
+  line : Nat
+  col : Nat
+  deriving DecidableEq, Repr
+
 /-- The diagnostic identity carried by the runtime. Source byte ranges belong to provenance. -/
 structure DiagnosticSite where
-  id : BIR.SiteId
-  location : BIR.Loc
-  deriving DecidableEq
+  id : ConcreteSpec.Core.SiteId
+  location : DiagnosticLocation
+  deriving DecidableEq, Repr
 
 /-- Terminal observations preserve the distinction between normal exit and a runtime trap. -/
 inductive Observation where
