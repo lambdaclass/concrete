@@ -29,7 +29,11 @@ Standalone freeze controls written directly against the frozen interface modules
 8. Launcher byte sensitivity (changed diagnostic line with identical `.component`): identical
    `.component` bytes, distinct `.launcher` bytes and `packageBytes`;
 9. Wrong backend kind (`.lcb`) rejected by `LLVMMetadataMatches`;
-10. Two-result checked-add LLVM component rendering (`@llvm.uadd.with.overflow.i8` + `extractvalue`).
+10. Two-result checked-add LLVM component rendering (`@llvm.uadd.with.overflow.i8` + `extractvalue`);
+11. Symbol-ownership split (`ComponentOwnsSymbols`) and `.body` exclusivity: negative controls
+    rejecting components that define any launcher-owned symbol (`.main`, `.writeAll`, `.bad`,
+    `.site 0`, `.write`, `.exit`, `.abort`) or bind `.body` via `.constant`, `.declare`,
+    `internal`, wrong signature, or omit it.
 -/
 
 namespace StageInterfaceControls.TwoModuleLLVMControls
@@ -84,9 +88,18 @@ private def compReturn (status : Nat) : LLVMModule :=
     .terminator (.ret (.integer .u32, .immediate (.natural status))),
     .endFunction]⟩
 
-/-- Structured LLVM launcher module rendered directly from canonical diagnostic lines. -/
+/-- Structured LLVM launcher module rendered directly from canonical diagnostic lines via
+`launcherItems` (`llvmBodyDeclaration :: llvmDiagnostics lines`). -/
 private def launchOfLines (lines : List String) : LLVMModule :=
-  ⟨llvmDiagnostics lines⟩
+  ⟨launcherItems lines⟩
+
+private theorem compReturn_ownsSymbols (status : Nat) (diagnostics : List String) :
+    ComponentOwnsSymbols (compReturn status).items (launcherItems diagnostics) := by
+  refine ComponentOwnsSymbols.of_component_globals diagnostics ?_ ?_
+  · intro g hg
+    exact List.mem_singleton.mp hg
+  · intro g hg
+    exact Or.inl (List.mem_singleton.mp hg)
 
 private def line0 : String :=
   s!"concrete: trap: overflow at {mainSourcePath.render.text}:1:30 (site 0)\n"
@@ -144,8 +157,8 @@ private theorem render_cons (x : Item) (xs : List Item) :
   simp only [List.flatMap_cons, List.map_append]
   exact hjoin _ _
 
-private theorem items_ne_of_head_ne {a b : List Item} (h : a.head? ≠ b.head?) : a ≠ b :=
-  fun heq => h (congrArg List.head? heq)
+private theorem items_ne_of_second_ne {a b : List Item} (h : a[1]? ≠ b[1]?) : a ≠ b :=
+  fun heq => h (congrArg (fun l => l[1]?) heq)
 
 private theorem items_ne_of_length_ne {a b : List Item} (h : a.length ≠ b.length) : a ≠ b :=
   fun heq => h (congrArg List.length heq)
@@ -183,19 +196,27 @@ private theorem first_site_launcher_bytes_ne {p : Profile}
       (renderOne (.constant (.site 0) s₂.toUTF8)).toUTF8.data[idx]?) :
     (⟨c₁, launchOfLines [s₁], sites₁⟩ : LLVMInput p).bytesAt .launcher ≠
       (⟨c₂, launchOfLines [s₂], sites₂⟩ : LLVMInput p).bytesAt .launcher := by
-  refine body_diff_bytesAt idx ?_
-  change (render (llvmDiagnostics [s₁])).toUTF8.data[idx]? ≠
-    (render (llvmDiagnostics [s₂])).toUTF8.data[idx]?
+  -- `launcherItems` prepends `llvmBodyDeclaration` (`"declare i32 @concrete_body()\n"`, 29 bytes)
+  -- before `@.site0`, shifting the rendered `.launcher` byte offset by `declLen = 29`.
+  let declLen := (renderOne llvmBodyDeclaration).toUTF8.data.size
+  refine body_diff_bytesAt (declLen + idx) ?_
+  change (render (launcherItems [s₁])).toUTF8.data[declLen + idx]? ≠
+    (render (launcherItems [s₂])).toUTF8.data[declLen + idx]?
   obtain ⟨t₁, ht₁⟩ : ∃ t, llvmDiagnostics [s₁] = Item.constant (.site 0) s₁.toUTF8 :: t := ⟨_, rfl⟩
   obtain ⟨t₂, ht₂⟩ : ∃ t, llvmDiagnostics [s₂] = Item.constant (.site 0) s₂.toUTF8 :: t := ⟨_, rfl⟩
-  rw [ht₁, ht₂, render_cons, render_cons, prefixByte _ _ idx h₁, prefixByte _ _ idx h₂]
+  simp only [launcherItems, ht₁, ht₂, render_cons]
+  rw [suffixByte (renderOne llvmBodyDeclaration) _ idx,
+    suffixByte (renderOne llvmBodyDeclaration) _ idx,
+    prefixByte _ _ idx h₁, prefixByte _ _ idx h₂]
   exact hne
 
 /-! ## Control 1: Two trap-table slots for one operation -/
 
 /-- One operation origin (`orig0`) occupying two distinct trap-table slots (`0` and `1`):
-`LauncherMatches` and `LLVMMetadataMatches` accept the two-slot table, both `@.site0` and `@.site1`
-globals and switch cases `0`/`1` are emitted, and dropping either slot fails `LauncherMatches`. -/
+`LauncherMatches` and `LLVMMetadataMatches` accept the two-slot table, the launcher leads with
+`llvmBodyDeclaration`, the component has `llvmBodyDefinition` as its unique body header, both
+`@.site0` and `@.site1` globals and switch cases `0`/`1` are emitted, and dropping either slot
+fails `LauncherMatches`. -/
 theorem two_slots_for_one_op :
     let sitesTwo : TrapTable := #[⟨.overflow, orig0⟩, ⟨.overflow, orig0⟩]
     let bir := mkBIR llvmLinux projMain sitesTwo
@@ -203,6 +224,8 @@ theorem two_slots_for_one_op :
     let oneSlotLauncher : LLVMInput llvmLinux := ⟨compReturn 42, launchOfLines [line0], sitesTwo⟩
     LauncherMatches bir out ∧
     LLVMMetadataMatches bir out ∧
+    out.component.items.filter isLLVMBodyHeader = [llvmBodyDefinition] ∧
+    out.launcher.items.head? = some llvmBodyDeclaration ∧
     out.launcher.items.contains (.constant (.site 0) line0.toUTF8) = true ∧
     out.launcher.items.contains (.constant (.site 1) line0.toUTF8) = true ∧
     out.launcher.items.contains (.terminator (.switch .u32 .i .bad
@@ -213,10 +236,12 @@ theorem two_slots_for_one_op :
   have hMap : bir.sites.toList.mapM (fun entry => entry.diagnosticLine bir.project) =
       some [line0, line0] := by
     decide
-  refine ⟨⟨[line0, line0], hMap, rfl⟩, ⟨rfl, rfl, ⟨[line0, line0], hMap, rfl⟩⟩,
+  have hMatch : LauncherMatches bir out :=
+    ⟨[line0, line0], hMap, rfl, rfl, compReturn_ownsSymbols 42 [line0, line0]⟩
+  refine ⟨hMatch, ⟨rfl, rfl, hMatch⟩, rfl, rfl,
     by decide, by decide, by decide, ?_, ?_⟩
-  · intro hMatch
-    exact items_ne_of_length_ne (by decide) (hMatch.launcher_items_eq hMap)
+  · intro hBad
+    exact items_ne_of_length_ne (by decide) (hBad.launcher_items_eq hMap)
   · intro hMeta
     exact items_ne_of_length_ne (by decide) (hMeta.launcherMatches.launcher_items_eq hMap)
 
@@ -241,17 +266,19 @@ theorem nonzero_site_diagnostic_and_bytes :
   have hMap7 : bir7.sites.toList.mapM (fun entry => entry.diagnosticLine bir7.project) =
       some [lineSite7] := by
     decide
-  have hHeadNe : (launchOfLines [line0]).items.head? ≠ (llvmDiagnostics [lineSite7]).head? := by
+  -- Index 0 of `launcherItems` is `llvmBodyDeclaration`; `@.site0` is at index 1.
+  have hSecondNe : (launchOfLines [line0]).items[1]? ≠ (launcherItems [lineSite7])[1]? := by
     intro h
     have hBytes := congrArg (fun o => o.map fun
       | Item.constant _ bs => bs.data.toList
       | _ => []) h
     exact (by decide : some line0.toUTF8.data.toList ≠ some lineSite7.toUTF8.data.toList) hBytes
-  -- Byte 90 in `@.site0 = private constant [56 x i8] c"concrete: trap: overflow at main.con:1:30 (site 7)\0A"\n`
-  -- is `'7'` (55) vs `'0'` (48).
-  refine ⟨by decide, by decide, ⟨rfl, rfl, ⟨[lineSite7], hMap7, rfl⟩⟩,
-    fun h => items_ne_of_head_ne hHeadNe (h.launcher_items_eq hMap7),
-    fun h => items_ne_of_head_ne hHeadNe (h.launcherMatches.launcher_items_eq hMap7),
+  -- Byte 87 of `@.site0 = private constant [56 x i8] c"concrete: trap: overflow at main.con:1:30 (site 7)\0A"\n`
+  -- (byte 29 + 87 = 116 of rendered `launcherItems`) is `'7'` (55) vs `'0'` (48).
+  refine ⟨by decide, by decide,
+    ⟨rfl, rfl, ⟨[lineSite7], hMap7, rfl, rfl, compReturn_ownsSymbols 42 [lineSite7]⟩⟩,
+    fun h => items_ne_of_second_ne hSecondNe (h.launcher_items_eq hMap7),
+    fun h => items_ne_of_second_ne hSecondNe (h.launcherMatches.launcher_items_eq hMap7),
     first_site_launcher_bytes_ne lineSite7 line0 (compReturn 42) (compReturn 42) bir7.sites bir0.sites 87
       (by cbv) (by cbv) (by cbv; decide)⟩
 
@@ -284,17 +311,20 @@ theorem changed_coordinates_invalidate_launcher :
       some [lineCol31] := by decide
   have hMapAlt : birAltPath.sites.toList.mapM (fun entry => entry.diagnosticLine birAltPath.project) =
       some [lineAltPath] := by decide
-  have hHeadNe (s : String) (hne : line0.toUTF8.data.toList ≠ s.toUTF8.data.toList) :
-      (launchOfLines [line0]).items.head? ≠ (llvmDiagnostics [s]).head? := by
+  -- Index 0 of `launcherItems` is `llvmBodyDeclaration`; `@.site0` is at index 1.
+  have hSecondNe (s : String) (hne : line0.toUTF8.data.toList ≠ s.toUTF8.data.toList) :
+      (launchOfLines [line0]).items[1]? ≠ (launcherItems [s])[1]? := by
     intro h
     have hb := congrArg (fun o => o.map fun | Item.constant _ bs => bs.data.toList | _ => []) h
     exact hne (Option.some.inj hb)
-  refine ⟨⟨rfl, rfl, ⟨[lineRow2], hMapL2, rfl⟩⟩,
-    ⟨rfl, rfl, ⟨[lineCol31], hMapC31, rfl⟩⟩,
-    ⟨rfl, rfl, ⟨[lineAltPath], hMapAlt, rfl⟩⟩,
-    fun h => items_ne_of_head_ne (hHeadNe lineRow2 (by decide)) (h.launcher_items_eq hMapL2),
-    fun h => items_ne_of_head_ne (hHeadNe lineCol31 (by decide)) (h.launcher_items_eq hMapC31),
-    fun h => items_ne_of_head_ne (hHeadNe lineAltPath (by decide)) (h.launcher_items_eq hMapAlt),
+  -- Shifted offsets inside rendered `launcherItems` after the 29-byte `llvmBodyDeclaration` line:
+  -- line diff: 29 + 76 = 105; col diff: 29 + 79 = 108; path/length diff: 29 + 29 = 58.
+  refine ⟨⟨rfl, rfl, ⟨[lineRow2], hMapL2, rfl, rfl, compReturn_ownsSymbols 42 [lineRow2]⟩⟩,
+    ⟨rfl, rfl, ⟨[lineCol31], hMapC31, rfl, rfl, compReturn_ownsSymbols 42 [lineCol31]⟩⟩,
+    ⟨rfl, rfl, ⟨[lineAltPath], hMapAlt, rfl, rfl, compReturn_ownsSymbols 42 [lineAltPath]⟩⟩,
+    fun h => items_ne_of_second_ne (hSecondNe lineRow2 (by decide)) (h.launcher_items_eq hMapL2),
+    fun h => items_ne_of_second_ne (hSecondNe lineCol31 (by decide)) (h.launcher_items_eq hMapC31),
+    fun h => items_ne_of_second_ne (hSecondNe lineAltPath (by decide)) (h.launcher_items_eq hMapAlt),
     first_site_launcher_bytes_ne lineRow2 line0 (compReturn 42) (compReturn 42) birLine2.sites birBase.sites 76
       (by cbv) (by cbv) (by cbv; decide),
     first_site_launcher_bytes_ne lineCol31 line0 (compReturn 42) (compReturn 42) birCol31.sites birBase.sites 79
@@ -449,12 +479,13 @@ theorem target_headers_distinct_on_both_roles :
     header_diff_bytesAt 25 (by cbv) (by cbv) (by cbv; decide),
     header_diff_bytesAt 25 (by cbv) (by cbv) (by cbv; decide)⟩
 
-/-! ## Control 5 & 6: Swapped roles, stale launcher diagnostics, and launcher uniqueness -/
+/-! ## Control 5 & 6: Swapped roles, stale launcher diagnostics, bare diagnostics, and launcher uniqueness -/
 
 /-- Swapping `.component` and `.launcher` modules fails both `LauncherMatches` and
-`LLVMMetadataMatches`; pairing updated `sites` with a stale launcher also fails both; wrong
-backend kind (`.lcb`) fails `LLVMMetadataMatches`; and `LauncherMatches.launcher_unique` pins
-`.launcher` uniquely for a given `BIR`. -/
+`LLVMMetadataMatches`; pairing updated `sites` with a stale launcher also fails both; omitting the
+leading `llvmBodyDeclaration` (bare `llvmDiagnostics`) fails both; wrong backend kind (`.lcb`)
+fails `LLVMMetadataMatches`; and `LauncherMatches.launcher_unique` pins `.launcher` uniquely for
+a given `BIR`. -/
 theorem swapped_roles_and_stale_launcher_rejected :
     let bir0 := mkBIR llvmLinux projMain #[⟨.overflow, orig0⟩]
     let birEmpty := mkBIR llvmLinux projMain #[]
@@ -463,6 +494,7 @@ theorem swapped_roles_and_stale_launcher_rejected :
     let swapped : LLVMInput llvmLinux := ⟨out0.launcher, out0.component, out0.sites⟩
     let staleEmptyLauncher : LLVMInput llvmLinux := ⟨compReturn 42, outEmpty.launcher, bir0.sites⟩
     let staleSitesOnEmpty : LLVMInput llvmLinux := ⟨compReturn 42, out0.launcher, birEmpty.sites⟩
+    let bareDiagLauncher : LLVMInput llvmLinux := ⟨compReturn 42, ⟨llvmDiagnostics [line0]⟩, bir0.sites⟩
     let lcbOut : LLVMInput lcbLinux := ⟨compReturn 42, launchOfLines [line0], bir0.sites⟩
     let birLCB := mkBIR lcbLinux projMain #[⟨.overflow, orig0⟩]
     LLVMMetadataMatches bir0 out0 ∧
@@ -471,20 +503,25 @@ theorem swapped_roles_and_stale_launcher_rejected :
     ¬ LauncherMatches bir0 staleEmptyLauncher ∧
     ¬ LLVMMetadataMatches bir0 staleEmptyLauncher ∧
     ¬ LauncherMatches birEmpty staleSitesOnEmpty ∧
+    ¬ LauncherMatches bir0 bareDiagLauncher ∧
+    ¬ LLVMMetadataMatches bir0 bareDiagLauncher ∧
     ¬ LLVMMetadataMatches birLCB lcbOut ∧
     (∀ other : LLVMInput llvmLinux, LauncherMatches bir0 other → other.launcher = out0.launcher) := by
-  intro bir0 birEmpty out0 outEmpty swapped staleEmptyLauncher staleSitesOnEmpty lcbOut birLCB
+  intro bir0 birEmpty out0 outEmpty swapped staleEmptyLauncher staleSitesOnEmpty bareDiagLauncher lcbOut birLCB
   have hMap0 : bir0.sites.toList.mapM (fun entry => entry.diagnosticLine bir0.project) =
       some [line0] := by decide
   have hMapE : birEmpty.sites.toList.mapM (fun entry => entry.diagnosticLine birEmpty.project) =
       some [] := by decide
-  have hMatch0 : LauncherMatches bir0 out0 := ⟨[line0], hMap0, rfl⟩
+  have hMatch0 : LauncherMatches bir0 out0 :=
+    ⟨[line0], hMap0, rfl, rfl, compReturn_ownsSymbols 42 [line0]⟩
   refine ⟨⟨rfl, rfl, hMatch0⟩,
     fun h => items_ne_of_length_ne (by decide) (h.launcher_items_eq hMap0),
     fun h => items_ne_of_length_ne (by decide) (h.launcherMatches.launcher_items_eq hMap0),
     fun h => items_ne_of_length_ne (by decide) (h.launcher_items_eq hMap0),
     fun h => items_ne_of_length_ne (by decide) (h.launcherMatches.launcher_items_eq hMap0),
     fun h => items_ne_of_length_ne (by decide) (h.launcher_items_eq hMapE),
+    fun h => items_ne_of_length_ne (by decide) (h.launcher_items_eq hMap0),
+    fun h => items_ne_of_length_ne (by decide) (h.launcherMatches.launcher_items_eq hMap0),
     fun h => BackendKind.noConfusion h.1,
     fun other hOther => LauncherMatches.launcher_unique hOther hMatch0⟩
 
@@ -528,13 +565,14 @@ theorem component_and_launcher_byte_sensitivity :
   -- In `define i32 @concrete_body() {\nentry:\n  ret i32 0\n}\n` vs `...42\n}\n`, byte 47 is `'0'` vs `'4'`.
   have hCompNe : in0.bytesAt .component ≠ in42.bytesAt .component :=
     body_diff_bytesAt 47 (by cbv; decide)
+  -- In rendered `launcherItems`, byte 29 + 76 = 105 differs (`'1'` vs `'2'`).
   have hLaunchNe : in42.bytesAt .launcher ≠ inLine2.bytesAt .launcher :=
     first_site_launcher_bytes_ne line0 lineRow2 (compReturn 42) (compReturn 42) bir0.sites birLine2.sites 76
       (by cbv) (by cbv) (by cbv; decide)
-  exact ⟨⟨rfl, rfl, ⟨[line0], hMap0, rfl⟩⟩,
-    ⟨rfl, rfl, ⟨[line0], hMap0, rfl⟩⟩,
+  exact ⟨⟨rfl, rfl, ⟨[line0], hMap0, rfl, rfl, compReturn_ownsSymbols 0 [line0]⟩⟩,
+    ⟨rfl, rfl, ⟨[line0], hMap0, rfl, rfl, compReturn_ownsSymbols 42 [line0]⟩⟩,
     rfl, rfl, hCompNe, hCompNe, packageBytes_ne_of_component hCompNe,
-    ⟨rfl, rfl, ⟨[lineRow2], hMapL2, rfl⟩⟩,
+    ⟨rfl, rfl, ⟨[lineRow2], hMapL2, rfl, rfl, compReturn_ownsSymbols 42 [lineRow2]⟩⟩,
     rfl, rfl, hLaunchNe, hLaunchNe, packageBytes_ne_of_launcher hLaunchNe,
     fun hp hsafe hwrong => hp hsafe .wrong hwrong⟩
 
@@ -556,6 +594,18 @@ private def compCheckedAddU8 : LLVMModule :=
     .instruction (.convert (.result 2) .zext (.integer .u8, .local (.register 0)) (.integer .u32)),
     .terminator (.ret (.integer .u32, .local (.result 2))),
     .endFunction]⟩
+
+private theorem compCheckedAddU8_ownsSymbols (diagnostics : List String) :
+    ComponentOwnsSymbols compCheckedAddU8.items (launcherItems diagnostics) := by
+  refine ComponentOwnsSymbols.of_component_globals diagnostics ?_ ?_
+  · intro g hg
+    exact List.mem_singleton.mp hg
+  · intro g hg
+    simp only [compCheckedAddU8, llvmModuleGlobals, List.filterMap, llvmItemGlobal,
+      List.mem_cons, List.not_mem_nil, or_false] at hg
+    rcases hg with rfl | rfl
+    · exact Or.inr ⟨.add, .u8, rfl⟩
+    · exact Or.inl rfl
 
 /-- Two-result checked-add LLVM IR component renders `@llvm.uadd.with.overflow.i8` and
 `extractvalue {i8, i1}` cleanly, satisfies `LLVMMetadataMatches` paired with the matching launcher,
@@ -635,6 +685,101 @@ theorem checked_add_llvm_component_rendering :
     rw [prefixByte (renderOne (.declare (.overflowPair .u8) (.overflow .add .u8) [.integer .u8, .integer .u8])) _ 2 (by cbv),
       prefixByte (renderOne (.define false (.integer .u32) .body [])) _ 2 (by cbv)]
     cbv; decide
-  exact ⟨⟨rfl, rfl, ⟨[line0], hMap0, rfl⟩⟩, hRen, rfl, hDiff⟩
+  exact ⟨⟨rfl, rfl, ⟨[line0], hMap0, rfl, rfl, compCheckedAddU8_ownsSymbols [line0]⟩⟩, hRen, rfl, hDiff⟩
+
+/-! ## Control 10: Symbol-ownership split and `.body` exclusivity negative controls -/
+
+/-- Negative controls for every launcher-owned symbol class (`.main`, `.writeAll`, `.bad`,
+`.site 0`, `.write`, `.exit`, `.abort`) plus `.constant .body` (both standalone and alongside
+`llvmBodyDefinition`), internal/wrong-signature/declared/missing/duplicate `.body`: every case is
+rejected by both `LauncherMatches` and `LLVMMetadataMatches` even when paired with exact
+`launcherItems`. -/
+theorem symbol_ownership_and_body_exclusivity_controls :
+    let bir0 := mkBIR llvmLinux projMain #[⟨.overflow, orig0⟩]
+    let mkOut (items : List Item) : LLVMInput llvmLinux :=
+      ⟨⟨items⟩, launchOfLines [line0], bir0.sites⟩
+    let withBody (extra : List Item) : LLVMInput llvmLinux :=
+      mkOut ((compReturn 42).items ++ extra)
+    -- Launcher-owned symbol classes:
+    ¬ LauncherMatches bir0 (withBody [.define false (.integer .u32) .main [], .endFunction]) ∧
+    ¬ LLVMMetadataMatches bir0 (withBody [.define false (.integer .u32) .main [], .endFunction]) ∧
+    ¬ LauncherMatches bir0 (withBody [.define true .void .writeAll [(.ptr, .p), (.integer .u64, .n)], .endFunction]) ∧
+    ¬ LLVMMetadataMatches bir0 (withBody [.define true .void .writeAll [(.ptr, .p), (.integer .u64, .n)], .endFunction]) ∧
+    ¬ LauncherMatches bir0 (withBody [.constant .bad ⟨#[0]⟩]) ∧
+    ¬ LLVMMetadataMatches bir0 (withBody [.constant .bad ⟨#[0]⟩]) ∧
+    ¬ LauncherMatches bir0 (withBody [.constant (.site 0) ⟨#[0]⟩]) ∧
+    ¬ LLVMMetadataMatches bir0 (withBody [.constant (.site 0) ⟨#[0]⟩]) ∧
+    ¬ LauncherMatches bir0 (withBody [.define false (.integer .u64) .write
+      [(.integer .u32, .p), (.ptr, .pp), (.integer .u64, .n)], .endFunction]) ∧
+    ¬ LLVMMetadataMatches bir0 (withBody [.define false (.integer .u64) .write
+      [(.integer .u32, .p), (.ptr, .pp), (.integer .u64, .n)], .endFunction]) ∧
+    ¬ LauncherMatches bir0 (withBody [.define false .void .exit [(.integer .u32, .p)], .endFunction]) ∧
+    ¬ LLVMMetadataMatches bir0 (withBody [.define false .void .exit [(.integer .u32, .p)], .endFunction]) ∧
+    ¬ LauncherMatches bir0 (withBody [.define false .void .abort [], .endFunction]) ∧
+    ¬ LLVMMetadataMatches bir0 (withBody [.define false .void .abort [], .endFunction]) ∧
+    -- `.constant .body` (standalone and alongside `llvmBodyDefinition`):
+    ¬ LauncherMatches bir0 (mkOut [.constant .body ⟨#[0]⟩]) ∧
+    ¬ LLVMMetadataMatches bir0 (mkOut [.constant .body ⟨#[0]⟩]) ∧
+    ¬ LauncherMatches bir0 (withBody [.constant .body ⟨#[0]⟩]) ∧
+    ¬ LLVMMetadataMatches bir0 (withBody [.constant .body ⟨#[0]⟩]) ∧
+    -- Invalid `.body` headers (missing, internal, wrong return type, wrong params, declare, duplicate):
+    ¬ LauncherMatches bir0 (mkOut []) ∧
+    ¬ LauncherMatches bir0 (mkOut [.define true (.integer .u32) .body [], .endFunction]) ∧
+    ¬ LauncherMatches bir0 (mkOut [.define false (.integer .u8) .body [], .endFunction]) ∧
+    ¬ LauncherMatches bir0 (mkOut [.define false (.integer .u32) .body [(.integer .u32, .p)], .endFunction]) ∧
+    ¬ LauncherMatches bir0 (mkOut [.declare (.integer .u32) .body []]) ∧
+    ¬ LauncherMatches bir0 (withBody [llvmBodyDefinition, .endFunction]) := by
+  intro bir0 mkOut withBody
+  have rejectLauncherSym : ∀ (extra : List Item) (item : Item) (g : Global),
+      item ∈ extra →
+      llvmItemGlobal item = some g →
+      g ∈ llvmModuleGlobals (launcherItems [line0]) →
+      g ≠ llvmBodyGlobal →
+      ¬ LauncherMatches bir0 (withBody extra) := by
+    intro extra item g hIn hGlob hInLaunch hNe hMatch
+    have hCompGlob : g ∈ llvmModuleGlobals (withBody extra).component.items :=
+      List.mem_filterMap.mpr ⟨item, List.mem_append_right _ hIn, hGlob⟩
+    exact hNe (hMatch.shared_global_eq_body g hCompGlob hInLaunch)
+  have hMain : ¬ LauncherMatches bir0 (withBody [.define false (.integer .u32) .main [], .endFunction]) :=
+    rejectLauncherSym _ (.define false (.integer .u32) .main []) .main List.mem_cons_self rfl
+      (by rw [llvmModuleGlobals_launcherItems]; simp) (by intro h; cases h)
+  have hWriteAll : ¬ LauncherMatches bir0
+      (withBody [.define true .void .writeAll [(.ptr, .p), (.integer .u64, .n)], .endFunction]) :=
+    rejectLauncherSym _ (.define true .void .writeAll [(.ptr, .p), (.integer .u64, .n)]) .writeAll
+      List.mem_cons_self rfl (by rw [llvmModuleGlobals_launcherItems]; simp) (by intro h; cases h)
+  have hBad : ¬ LauncherMatches bir0 (withBody [.constant .bad ⟨#[0]⟩]) :=
+    rejectLauncherSym _ (.constant .bad ⟨#[0]⟩) .bad List.mem_cons_self rfl
+      (by rw [llvmModuleGlobals_launcherItems]; simp) (by intro h; cases h)
+  have hSite0 : ¬ LauncherMatches bir0 (withBody [.constant (.site 0) ⟨#[0]⟩]) :=
+    rejectLauncherSym _ (.constant (.site 0) ⟨#[0]⟩) (.site 0) List.mem_cons_self rfl
+      (by rw [llvmModuleGlobals_launcherItems]; simp [indexed, indexedFrom])
+      (by intro h; cases h)
+  have hWrite : ¬ LauncherMatches bir0 (withBody [.define false (.integer .u64) .write
+      [(.integer .u32, .p), (.ptr, .pp), (.integer .u64, .n)], .endFunction]) :=
+    rejectLauncherSym _ (.define false (.integer .u64) .write
+      [(.integer .u32, .p), (.ptr, .pp), (.integer .u64, .n)]) .write
+      List.mem_cons_self rfl (by rw [llvmModuleGlobals_launcherItems]; simp) (by intro h; cases h)
+  have hExit : ¬ LauncherMatches bir0
+      (withBody [.define false .void .exit [(.integer .u32, .p)], .endFunction]) :=
+    rejectLauncherSym _ (.define false .void .exit [(.integer .u32, .p)]) .exit
+      List.mem_cons_self rfl (by rw [llvmModuleGlobals_launcherItems]; simp) (by intro h; cases h)
+  have hAbort : ¬ LauncherMatches bir0 (withBody [.define false .void .abort [], .endFunction]) :=
+    rejectLauncherSym _ (.define false .void .abort []) .abort
+      List.mem_cons_self rfl (by rw [llvmModuleGlobals_launcherItems]; simp) (by intro h; cases h)
+  have hConstBodyAlone : ¬ LauncherMatches bir0 (mkOut [.constant .body ⟨#[0]⟩]) := fun h =>
+    h.no_component_constant_body ⟨#[0]⟩ List.mem_cons_self
+  have hConstBodyExtra : ¬ LauncherMatches bir0 (withBody [.constant .body ⟨#[0]⟩]) := fun h =>
+    h.no_component_constant_body ⟨#[0]⟩ (List.mem_append_right _ List.mem_cons_self)
+  refine ⟨hMain, fun h => hMain h.launcherMatches,
+    hWriteAll, fun h => hWriteAll h.launcherMatches,
+    hBad, fun h => hBad h.launcherMatches,
+    hSite0, fun h => hSite0 h.launcherMatches,
+    hWrite, fun h => hWrite h.launcherMatches,
+    hExit, fun h => hExit h.launcherMatches,
+    hAbort, fun h => hAbort h.launcherMatches,
+    hConstBodyAlone, fun h => hConstBodyAlone h.launcherMatches,
+    hConstBodyExtra, fun h => hConstBodyExtra h.launcherMatches,
+    ?_, ?_, ?_, ?_, ?_, ?_⟩
+  all_goals (intro h; have hc := h.component_body_header_eq; cases hc)
 
 end StageInterfaceControls.TwoModuleLLVMControls

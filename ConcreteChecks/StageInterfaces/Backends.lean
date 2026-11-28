@@ -26,7 +26,7 @@ example : testProfile.isa = .x86_64 ∧
 -- The wrong backend's metadata check rejects an LLVM handoff under the LCB profile.
 example (project : Project) :
     ¬ LLVMMetadataMatches (testBIR project (profile := testProfile))
-      ⟨⟨[]⟩, ⟨Backend.Runtime.llvmDiagnostics []⟩, #[]⟩ := by
+      ⟨⟨[llvmBodyDefinition]⟩, ⟨launcherItems []⟩, #[]⟩ := by
   intro success
   have backend := success.1
   contradiction
@@ -39,7 +39,7 @@ example (project : Project) (m : LoweringModels testLanguage testLowering macLLV
   intro sound
   have success := (sound.1.1 (testBIR project)
     ⟨⟨[]⟩, ⟨[]⟩, #[]⟩ eligible rfl).2
-  obtain ⟨diagnostics, hmap, hitems⟩ := success.2.2.2
+  obtain ⟨diagnostics, hmap, _, hitems, _⟩ := success.2.2.2
   cases Option.some.inj hmap
   cases hitems
 
@@ -47,7 +47,7 @@ example (project : Project) (m : LoweringModels testLanguage testLowering macLLV
     ¬ (r m parser).emit.success (testBIR project)
       ⟨⟨[]⟩, ⟨[]⟩, #[]⟩ := by
   intro success
-  obtain ⟨diagnostics, hmap, hitems⟩ := success.2.2.2
+  obtain ⟨diagnostics, hmap, _, hitems, _⟩ := success.2.2.2
   cases Option.some.inj hmap
   cases hitems
 
@@ -58,12 +58,20 @@ example (project : Project) (m : LoweringModels testLanguage testLowering macLLV
     let ir (status : Nat) : LLVMInput macLLVM :=
       ⟨⟨[.define false (.integer .u32) .body [], .label .entry,
           .terminator (.ret (.integer .u32, .immediate ⟨status⟩)), .endFunction]⟩,
-       ⟨Backend.Runtime.llvmDiagnostics []⟩, #[]⟩
+       ⟨launcherItems []⟩, #[]⟩
     (r m parser).emit.kind = .namedPremise "P_print" ∧
     LLVMMetadataMatches (testBIR project) (ir 0) ∧
     LLVMMetadataMatches (testBIR project) (ir 42) ∧
     (ir 0).packageBytes.component.data.toList ≠ (ir 42).packageBytes.component.data.toList := by
-  refine ⟨rfl, ⟨rfl, rfl, [], rfl, rfl⟩, ⟨rfl, rfl, [], rfl, rfl⟩, ?_⟩
+  have hOwn : ∀ status : Nat,
+      ComponentOwnsSymbols
+        [.define false (.integer .u32) .body [], .label .entry,
+          .terminator (.ret (.integer .u32, .immediate ⟨status⟩)), .endFunction]
+        (launcherItems []) := fun _ =>
+    ComponentOwnsSymbols.of_component_globals []
+      (fun _ hg => List.mem_singleton.mp hg)
+      (fun _ hg => Or.inl (List.mem_singleton.mp hg))
+  refine ⟨rfl, ⟨rfl, rfl, [], rfl, rfl, rfl, hOwn 0⟩, ⟨rfl, rfl, [], rfl, rfl, rfl, hOwn 42⟩, ?_⟩
   decide
 
 -- Four BIR definitions exceed the registered profile's three-slot ceiling.
@@ -199,7 +207,7 @@ theorem birReturnTables (project : Project) (profile : Profile) :
 private def llvmReturn (status : Nat) : LLVMInput macLLVM :=
   ⟨⟨[.define false (.integer .u32) .body [], .label .entry,
       .terminator (.ret (.integer .u32, .immediate ⟨status⟩)), .endFunction]⟩,
-   ⟨Backend.Runtime.llvmDiagnostics []⟩, #[]⟩
+   ⟨launcherItems []⟩, #[]⟩
 
 -- Both registered emitters produce structurally valid LLVM for the selected
 -- profile. The fixed behavior interpretation distinguishes their bytes.
@@ -222,7 +230,11 @@ example (parser : Parser grammar) (hsteps : 2 ≤ parser.stepsPerToken) (project
         ¬ (stages 42).emit.Checks) := by
   intro stages original input expected
   let start := BIR.entryState (language := testLanguage) input
-  refine ⟨rfl, rfl, ⟨rfl, rfl, rfl, [], rfl, rfl⟩, ?_, ?_⟩
+  have hOwn42 : ComponentOwnsSymbols (llvmReturn 42).component.items (launcherItems []) :=
+    ComponentOwnsSymbols.of_component_globals []
+      (fun _ hg => List.mem_singleton.mp hg)
+      (fun _ hg => Or.inl (List.mem_singleton.mp hg))
+  refine ⟨rfl, rfl, ⟨rfl, rfl, rfl, [], rfl, rfl, rfl, hOwn42⟩, ?_, ?_⟩
   · intro exactLLVM _ behavior emitted
     obtain rfl := exactLLVM behavior emitted
     with_unfolding_all exact ⟨start, ⟨start, rfl, .nil _⟩, rfl, rfl⟩

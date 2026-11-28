@@ -1582,9 +1582,9 @@ private theorem assembleMacOS {f : Source.Function} {stack : StackMIR.Function}
   have body : (LCB.job f).code.body = f := rfl
   have layout : (LCB.job f).code.layout = planFrame f := rfl
   have symbol : (LCB.job f).code.symbol = LCB.bodySymbol := rfl
-  simp only [LCB.assemble, compileFunction, compileFunctionWithWork, checked, bind, Except.bind,
-    Except.mapError, requested, Bool.false_eq_true, ite_false, body, layout, lower, stackOK,
-    select, asmOK, symbol, render]
+  simp only [LCB.assemble, Backend.EmitLCB.assembleFunction, compileFunction, compileFunctionWithWork,
+    checked, bind, Except.bind, Except.mapError, requested, Bool.false_eq_true, ite_false, body,
+    layout, lower, stackOK, select, asmOK, symbol, render]
   rfl
 
 

@@ -2,11 +2,10 @@ import Concrete.Interfaces.Carriers
 import ConcreteSpec.Proofs.Basics
 import Concrete.Backend.Runtime
 import Concrete.Backend.LCBJob
+import Concrete.Backend.EmitLCB
 import Concrete.BIR.Progress
 import Concrete.Refusal
 import LeanCompilerBackend.Verified.Job
-import LeanCompilerBackend.AMD64
-import LeanCompilerBackend.AArch64
 
 /-!
 # BIR → LCB-IR: the adapter (the first backend proof target)
@@ -227,27 +226,24 @@ def jobRefusal : LeanCompilerBackend.Verified.CompileError → Refusal
     .backendProfile "LCB" error.message
   | e => .internal s!"LCB job: {repr e}"
 
-/-- The adapted body as assembly text for `target`, computed in process from the value. -/
+/-- Map pure `EmitLCB.AssembleError` to provisional `Refusal`. -/
+def assembleRefusal : EmitLCB.AssembleError → Refusal
+  | .compile e => jobRefusal e
+  | .unsupportedReifyBinary op =>
+    .backendProfile "LCB" s!"compatibility reification does not support {op.constructorName}"
+  | .compatValidate e => .internal s!"LCB compatibility module: {e}"
+  | .compatEmit e => .internal s!"LCB compatibility emitter: {e}"
+
+/-- The adapted body as assembly text for `target`, computed in process from the value
+by delegating to `EmitLCB.assembleFunction`. -/
 def assemble (target : Target) (f : Source.Function) : Except Refusal String :=
-  match target with
-  | .aarch64Macos => do
-    let artifact ← (LeanCompilerBackend.Verified.compileFunction (job f)).mapError
-      jobRefusal
-    return ".text\n" ++ artifact.code.fragment ++ ".subsections_via_symbols\n"
-  | .x86_64Linux | .aarch64Linux => do
-    (LeanCompilerBackend.Verified.validateJob (job f)).mapError jobRefusal
-    let body ← (LeanCompilerBackend.Verified.reify f bodySymbol.name bodySymbol.exported).mapError
-      (fun
-      | .unsupportedBinary op =>
-        .backendProfile "LCB" s!"compatibility reification does not support {op.constructorName}")
-    let m : LeanCompilerBackend.Module := { functions := #[body] }
-    (LeanCompilerBackend.validateModule m).mapError
-      (fun e => .internal s!"LCB compatibility module: {e}")
-    let emitted := match target with
-      | .x86_64Linux => LeanCompilerBackend.AMD64.emitModuleValidated m false false
-      | _ => LeanCompilerBackend.AArch64.emitModuleValidated m false false
-    -- Admission bounds the frame and excludes calls before compatibility emission.
-    emitted.mapError (fun e => .internal s!"LCB compatibility emitter: {e}")
+  (EmitLCB.assembleFunction target f).mapError assembleRefusal
+
+/-- Provisional `LCB.assemble` agrees identically with pure `EmitLCB.assembleFunction`
+under `assembleRefusal`. -/
+theorem assemble_eq_emitLCB (target : Target) (f : Source.Function) :
+    assemble target f = (EmitLCB.assembleFunction target f).mapError assembleRefusal :=
+  rfl
 
 /-- The LCB body artifact for `target`: the assembly of a successful `emit`, or its refusal. -/
 def artifact (target : Target) (p : Program) : Except Refusal String := do
