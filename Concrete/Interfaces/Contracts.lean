@@ -80,6 +80,212 @@ def Pipeline.run {A C : Type} (pipeline : Pipeline A C) (input : A) :
     | .error failure => .error ⟨_, failure⟩
     | .ok output => rest.run output
 
+inductive Pipeline.Validated : {A B : Type} → Pipeline A B → Prop where
+  | done {A : Type} : Validated (.done : Pipeline A A)
+  | last {A R B : Type} {edge : Stage A R B} : edge.Validated → Validated (.next edge .done)
+  | next {A R B S C D : Type} {edge : Stage A R B} {after : Stage B S C}
+      {rest : Pipeline C D} : edge.Validated → edge.Compatible after →
+      Validated (.next after rest) → Validated (.next edge (.next after rest))
+
+def Pipeline.Trusted {A B : Type} : Pipeline A B → Prop
+  | .done => True
+  | .next edge rest => edge.Trusted ∧ rest.Trusted
+
+def Pipeline.Sound {A B : Type} (pipeline : Pipeline A B) : Prop :=
+  pipeline.Validated ∧ pipeline.Trusted
+
+def Pipeline.Ready {A B : Type} (pipeline : Pipeline A B) (input : A) : Prop :=
+  match pipeline with
+  | .done => True
+  | .next edge _ => edge.inputInvariant input
+
+/-- A successful run retains the exact intermediate values, their invariants,
+and the verified and trusted correspondence obligations at each edge. -/
+def Pipeline.Corresponds {A B : Type} (pipeline : Pipeline A B) (input : A) (output : B) : Prop :=
+  match pipeline with
+  | .done => input = output
+  | .next edge rest =>
+    ∃ middle, Graph edge.run input middle ∧ edge.outputInvariant middle ∧
+      edge.success input middle ∧ edge.trust input middle ∧ rest.Corresponds middle output
+
+theorem Pipeline.compose {A B : Type} {pipeline : Pipeline A B}
+    (validated : pipeline.Validated) (trusted : pipeline.Trusted)
+    {input : A} {output : B} (ready : pipeline.Ready input)
+    (ran : pipeline.run input = .ok output) : pipeline.Corresponds input output := by
+  induction validated with
+  | done => exact Except.ok.inj ran
+  | @last _ _ _ edge proof =>
+    change (match edge.run input with
+      | .error failure => Except.error (⟨_, failure⟩ : Σ R : Type, R)
+      | .ok middle => Except.ok middle) = Except.ok output at ran
+    cases h : edge.run input with
+    | error failure => rw [h] at ran; cases ran
+    | ok middle =>
+      have same : middle = output := by rw [h] at ran; exact Except.ok.inj ran
+      subst output
+      have checked := proof.1 _ _ ready h
+      exact ⟨middle, h, checked.1, checked.2, trusted.1 _ _ ready h, rfl⟩
+  | @next _ _ _ _ _ _ edge after rest proof compatible _ ih =>
+    change (match edge.run input with
+      | .error failure => Except.error (⟨_, failure⟩ : Σ R : Type, R)
+      | .ok middle => (Pipeline.next after rest).run middle) = .ok output at ran
+    cases h : edge.run input with
+    | error failure => rw [h] at ran; cases ran
+    | ok middle =>
+      rw [h] at ran
+      have checked := proof.1 _ _ ready h
+      exact ⟨middle, h, checked.1, checked.2, trusted.1 _ _ ready h,
+        ih trusted.2 (compatible middle checked.1) ran⟩
+
+/-- Boundary compatibility between two sequentially composed pipelines: when both are
+non-empty, the final stage of `left` establishes the input invariant of the first stage
+of `right`. An empty pipeline (`.done`) imposes no extra boundary obligation. -/
+def Pipeline.Compatible {A B C : Type} : Pipeline A B → Pipeline B C → Prop
+  | .done, _ => True
+  | _, .done => True
+  | .next edge .done, .next after _ => edge.Compatible after
+  | .next _ (.next nextEdge rest), right => Pipeline.Compatible (.next nextEdge rest) right
+
+/-- Sequential composition of two heterogeneous stage pipelines. -/
+def pipelineAppend {A B C : Type} : Pipeline A B → Pipeline B C → Pipeline A C
+  | .done, right => right
+  | .next edge rest, right => .next edge (pipelineAppend rest right)
+
+theorem pipelineAppend_done_left {A B : Type} (right : Pipeline A B) :
+    pipelineAppend .done right = right := rfl
+
+theorem pipelineAppend_done_right {A B : Type} (left : Pipeline A B) :
+    pipelineAppend left .done = left := by
+  induction left with
+  | done => rfl
+  | next edge rest ih => simp only [pipelineAppend, ih]
+
+theorem pipelineAppend_assoc {A B C D : Type}
+    (first : Pipeline A B) (second : Pipeline B C) (third : Pipeline C D) :
+    pipelineAppend (pipelineAppend first second) third =
+      pipelineAppend first (pipelineAppend second third) := by
+  induction first with
+  | done => rfl
+  | next edge rest ih => simp only [pipelineAppend, ih]
+
+/-- Executing `pipelineAppend left right` is exact sequential monadic bind of `left.run`
+followed by `right.run`. -/
+theorem pipelineAppend_run {A B C : Type}
+    (left : Pipeline A B) (right : Pipeline B C) (input : A) :
+    (pipelineAppend left right).run input = (left.run input).bind right.run := by
+  induction left with
+  | done => rfl
+  | next edge rest ih =>
+    simp only [pipelineAppend, Pipeline.run]
+    cases edge.run input with
+    | error failure => rfl
+    | ok output => exact ih right output
+
+theorem pipelineAppend_run_ok_iff {A B C : Type}
+    (left : Pipeline A B) (right : Pipeline B C) (input : A) (output : C) :
+    (pipelineAppend left right).run input = .ok output ↔
+      ∃ middle, left.run input = .ok middle ∧ right.run middle = .ok output := by
+  rw [pipelineAppend_run]
+  cases hLeft : left.run input with
+  | error failure => simp [Except.bind]
+  | ok middle => simp [Except.bind]
+
+theorem Pipeline.corresponds_run {A B : Type} {pipeline : Pipeline A B} {input : A} {output : B}
+    (corr : pipeline.Corresponds input output) : pipeline.run input = .ok output := by
+  induction pipeline with
+  | done => exact congrArg Except.ok corr
+  | next edge rest ih =>
+    obtain ⟨middle, hGraph, _, _, _, hRest⟩ := corr
+    unfold Graph at hGraph
+    simp only [Pipeline.run, hGraph]
+    exact ih hRest
+
+theorem pipelineAppend_validated {A B C : Type} {left : Pipeline A B} {right : Pipeline B C}
+    (hLeft : left.Validated) (hRight : right.Validated) (hCompat : left.Compatible right) :
+    (pipelineAppend left right).Validated := by
+  induction hLeft with
+  | done => exact hRight
+  | @last _ _ _ edge hEdge =>
+    cases right with
+    | done => exact .last hEdge
+    | next after rest => exact .next hEdge hCompat hRight
+  | @next _ _ _ _ _ _ edge after rest hEdge hEdgeCompat _ ih =>
+    cases right with
+    | done =>
+      have hRest := ih .done trivial
+      exact .next hEdge hEdgeCompat hRest
+    | next rEdge rRest =>
+      exact .next hEdge hEdgeCompat (ih hRight hCompat)
+
+theorem pipelineAppend_trusted {A B C : Type} (left : Pipeline A B) (right : Pipeline B C) :
+    (pipelineAppend left right).Trusted ↔ left.Trusted ∧ right.Trusted := by
+  induction left with
+  | done => simp [pipelineAppend, Pipeline.Trusted]
+  | next edge rest ih =>
+    simp only [pipelineAppend, Pipeline.Trusted, ih, and_assoc]
+
+theorem pipelineAppend_sound {A B C : Type} {left : Pipeline A B} {right : Pipeline B C}
+    (hLeft : left.Sound) (hRight : right.Sound) (hCompat : left.Compatible right) :
+    (pipelineAppend left right).Sound :=
+  ⟨pipelineAppend_validated hLeft.1 hRight.1 hCompat,
+    (pipelineAppend_trusted left right).mpr ⟨hLeft.2, hRight.2⟩⟩
+
+/-- Correspondence across `pipelineAppend left right` decomposes at the exact intermediate
+value `middle : B` handed from `left` to `right`. -/
+theorem pipelineAppend_corresponds {A B C : Type}
+    (left : Pipeline A B) (right : Pipeline B C) (input : A) (output : C) :
+    (pipelineAppend left right).Corresponds input output ↔
+      ∃ middle, left.Corresponds input middle ∧ right.Corresponds middle output := by
+  induction left with
+  | done =>
+    simp only [pipelineAppend, Pipeline.Corresponds]
+    constructor
+    · intro h; exact ⟨input, rfl, h⟩
+    · rintro ⟨middle, rfl, h⟩; exact h
+  | next edge rest ih =>
+    simp only [pipelineAppend, Pipeline.Corresponds]
+    constructor
+    · rintro ⟨stepOut, hGraph, hInv, hSucc, hTrust, hRest⟩
+      obtain ⟨middle, hLeft, hRight⟩ := (ih right stepOut).mp hRest
+      exact ⟨middle, ⟨stepOut, hGraph, hInv, hSucc, hTrust, hLeft⟩, hRight⟩
+    · rintro ⟨middle, ⟨stepOut, hGraph, hInv, hSucc, hTrust, hLeft⟩, hRight⟩
+      exact ⟨stepOut, hGraph, hInv, hSucc, hTrust, (ih right stepOut).mpr ⟨middle, hLeft, hRight⟩⟩
+
+theorem pipelineAppend_corresponds_of_run {A B C : Type}
+    {left : Pipeline A B} {right : Pipeline B C}
+    (hLeft : left.Sound) (hRight : right.Sound) (hCompat : left.Compatible right)
+    {input : A} {output : C}
+    (ready : (pipelineAppend left right).Ready input)
+    (ran : (pipelineAppend left right).run input = .ok output) :
+    ∃ middle, left.run input = .ok middle ∧ right.run middle = .ok output ∧
+      left.Corresponds input middle ∧ right.Corresponds middle output := by
+  have hSound := pipelineAppend_sound hLeft hRight hCompat
+  have hCorr := Pipeline.compose hSound.1 hSound.2 ready ran
+  obtain ⟨middle, hL, hR⟩ := (pipelineAppend_corresponds left right input output).mp hCorr
+  exact ⟨middle, Pipeline.corresponds_run hL, Pipeline.corresponds_run hR, hL, hR⟩
+
+theorem Pipeline.compatible_append_right_of_next {A B R C D : Type}
+    (first : Pipeline A B) (edge : Stage B R C) (rest : Pipeline C D) :
+    first.Compatible (pipelineAppend (.next edge .done) rest) ↔
+      first.Compatible (.next edge .done) := by
+  induction first with
+  | done => rfl
+  | next _ tail ih =>
+    cases tail with
+    | done => rfl
+    | next _ _ => exact ih edge
+
+theorem Pipeline.compatible_append_left_of_next {A B R C D E : Type}
+    (first : Pipeline A B) (edge : Stage B R C) (rest : Pipeline C D) (after : Pipeline D E) :
+    (pipelineAppend first (.next edge rest)).Compatible after ↔
+      (Pipeline.next edge rest).Compatible after := by
+  induction first with
+  | done => rfl
+  | next _ tail ih =>
+    cases tail with
+    | done => cases after <;> rfl
+    | next _ _ => cases after <;> exact ih edge
+
 private def fileSpan (span : ConcreteSpec.Surface0.Span) : FileSpan :=
   ⟨span.fileId, span.start, span.stop, span.line, span.column⟩
 
@@ -292,6 +498,26 @@ def PromotionSound {language : CoreLanguage} {lang : LoweringLanguage language.o
       (fn, source, sourceGraph) ∈ mir.functions ∧ (place, ty) ∈ source ∧
       (fn, target, targetGraph) ∈ memory.functions ∧ (place, ty) ∈ target ∧
       (language.scalarType ty).isSome ∧ ¬ mir.Escapes fn place
+
+/-- Every root in `mir` that must be materialized on `profile` (either non-scalar or
+address-taken) admits a well-formed physical layout in `mir.declarations` under the
+single geometry authority `Layout.WellFormed`. -/
+def Materializable {language : CoreLanguage} {lang : LoweringLanguage language.operands.Ty}
+    {profile : Profile} (mir : MIR lang profile) : Prop :=
+  ∀ fn locals graph, (fn, locals, graph) ∈ mir.functions →
+    ∀ place ty, (place, ty) ∈ locals →
+      ((language.scalarType ty).isNone ∨ mir.Escapes fn place) →
+        ∃ d, language.layout mir.declarations profile.memoryTarget ty = some d ∧
+          d.WellFormed profile.memoryTarget = true
+
+/-- Every function and typed local root declared in `mir` is retained with the same type
+in `memory`, so lowering cannot drop or retype a root (including unused or materialized
+roots) to bypass layout or storage obligations. -/
+def RetainsTypedRoots {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    (mir : MIR lang profile) (memory : Memory lang profile) : Prop :=
+  ∀ fn srcLocals srcGraph, (fn, srcLocals, srcGraph) ∈ mir.functions →
+    ∃ dstLocals dstGraph, (fn, dstLocals, dstGraph) ∈ memory.functions ∧
+      ∀ place ty, (place, ty) ∈ srcLocals → (place, ty) ∈ dstLocals
 
 /-- The logical MIR frame used to verify Memory's representation of live places. -/
 structure LogicalFrame (Value : Type) where
@@ -1080,6 +1306,12 @@ def applyOperation (state : MemoryRegisters language profile) (logical : Bool)
     bytes := store.bytes
     ownership := store.ownership}
 
+/-- Two logical places are disjoint when they name distinct roots or non-overlapping field
+paths under the same root. For whole-root places (`path = []`), this reduces to `left.root ≠ right.root`. -/
+def placesDisjoint {Ty : Type} {ty₁ ty₂ : Ty}
+    (left : Place Ty ty₁) (right : Place Ty ty₂) : Prop :=
+  left.root ≠ right.root ∨ pathsOverlap left.path right.path = false
+
 def InstructionStepWith (memory : Memory lang profile)
     (state next : MemoryRegisters language profile) (logical startDefinitions : Bool) (instruction : MemoryInst lang)
     (exhausting : Bool := false) : Prop := match instruction with
@@ -1102,6 +1334,24 @@ def InstructionStepWith (memory : Memory lang profile)
       (if logical || startDefinitions then memory.ParamOutcome [⟨_, dst⟩] [result] afterOperation stored exhausting
         else if exhausting then False else memory.Writes afterOperation dst result stored) ∧
       next = {stored.advance with effects := stored.effects ++ effects}
+  | @MemoryInst.addWithOverflow _ _ t dst flag lhs rhs =>
+    language.scalarType (lang.intTy t) = some (.int t) ∧
+    language.scalarType lang.bool = some .bool ∧
+    placesDisjoint dst.logical flag.logical ∧
+    ∃ lv afterLhs rv afterReads x y stored,
+      memory.readValue state lhs = some (lv, afterLhs) ∧
+      memory.readValue afterLhs rhs = some (rv, afterReads) ∧
+      language.valueShape ▸ lv = CoreValue.scalar (.int t x) ∧
+      language.valueShape ▸ rv = CoreValue.scalar (.int t y) ∧
+      let sum : language.operands.Val :=
+        language.valueShape.symm ▸ CoreValue.scalar (.int t (wrapping t .add x y))
+      let overflowed : language.operands.Val :=
+        language.valueShape.symm ▸ CoreValue.scalar (.bool (decide (checked t .add x y = .error .overflow)))
+      (if logical || startDefinitions then
+        memory.ParamOutcome [⟨_, dst⟩, ⟨_, flag⟩] [sum, overflowed] afterReads stored exhausting
+      else if exhausting then False
+      else ∃ mid, memory.Writes afterReads dst sum mid ∧ memory.Writes mid flag overflowed stored) ∧
+      next = stored.advance
   | .beginLifetime place => if exhausting then memory.BeginExhausted state place else
     ∃ started, memory.Begins state place started ∧ next = started.advance
   | .endLifetime place => if exhausting then False else
@@ -1116,6 +1366,213 @@ def InstructionStepWith (memory : Memory lang profile)
   | .call callee dst args checks =>
     memory.instructionTrap state (.call callee dst args checks) = none ∧
       memory.Call callee dst args state next exhausting
+
+/-! ### `addWithOverflow` step lemmas -/
+
+theorem addWithOverflow_no_trap (memory : Memory lang profile)
+    (state : MemoryRegisters language profile) (t : IntTy)
+    (dst : MemoryPlace _ (lang.intTy t)) (flag : MemoryPlace _ lang.bool)
+    (lhs rhs : MemoryRead _ lang.literal (lang.intTy t)) :
+    memory.instructionTrap state (.addWithOverflow t dst flag lhs rhs) = none :=
+  rfl
+
+theorem addWithOverflow_cannot_exhaust {memory : Memory lang profile}
+    {state next : MemoryRegisters language profile} {t : IntTy}
+    {dst : MemoryPlace _ (lang.intTy t)} {flag : MemoryPlace _ lang.bool}
+    {lhs rhs : MemoryRead _ lang.literal (lang.intTy t)} :
+    ¬ memory.InstructionStepWith state next false false (.addWithOverflow t dst flag lhs rhs) true := by
+  rintro ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, hFail, _⟩
+  exact hFail
+
+theorem addWithOverflow_distinct {memory : Memory lang profile}
+    {state next : MemoryRegisters language profile} {logical startDefinitions exhausting : Bool}
+    {t : IntTy} {dst : MemoryPlace _ (lang.intTy t)} {flag : MemoryPlace _ lang.bool}
+    {lhs rhs : MemoryRead _ lang.literal (lang.intTy t)}
+    (step : memory.InstructionStepWith state next logical startDefinitions
+      (.addWithOverflow t dst flag lhs rhs) exhausting) :
+    placesDisjoint dst.logical flag.logical :=
+  step.2.2.1
+
+theorem addWithOverflow_aliased_stuck {memory : Memory lang profile}
+    {state next : MemoryRegisters language profile} {logical startDefinitions exhausting : Bool}
+    {t : IntTy} {dst : MemoryPlace _ (lang.intTy t)} {flag : MemoryPlace _ lang.bool}
+    {lhs rhs : MemoryRead _ lang.literal (lang.intTy t)}
+    (hRoot : dst.logical.root = flag.logical.root)
+    (hDstPath : dst.logical.path = []) (hFlagPath : flag.logical.path = []) :
+    ¬ memory.InstructionStepWith state next logical startDefinitions
+      (.addWithOverflow t dst flag lhs rhs) exhausting := by
+  intro step
+  rcases addWithOverflow_distinct step with hNe | hNoOverlap
+  · exact hNe hRoot
+  · simp [pathsOverlap, hDstPath, hFlagPath] at hNoOverlap
+
+private theorem readValue_instruction_eq {memory : Memory lang profile}
+    {state next : MemoryRegisters language profile} {ty : language.operands.Ty}
+    {read : MemoryRead _ lang.literal ty} {v : language.operands.Val}
+    (h : memory.readValue state read = some (v, next)) :
+    next.instruction = state.instruction ∧ next.effects = state.effects := by
+  cases read with
+  | literal lit =>
+    simp only [readValue] at h
+    obtain ⟨_, _, eq⟩ := Option.bind_eq_some_iff.mp h
+    cases eq
+    exact ⟨rfl, rfl⟩
+  | copy place =>
+    obtain rfl := ((copyRead_iff memory state place v next).mp h).2.2.2
+    exact ⟨rfl, rfl⟩
+  | move place =>
+    simp only [readValue, bind, Option.bind] at h
+    cases ho : Own.move (memory.ownerView state place.logical.root ty .owned).1
+        (memory.ownerView state place.logical.root ty .owned).2 <;>
+      cases hv : memory.loadValue state place <;> simp only [ho, hv] at h <;> try contradiction
+    split at h <;> obtain ⟨_, rfl⟩ := Prod.mk.inj (Option.some.inj h) <;> exact ⟨rfl, rfl⟩
+
+private theorem writeValue_instruction_eq {memory : Memory lang profile}
+    {state next : MemoryRegisters language profile} {ty : language.operands.Ty}
+    {place : MemoryPlace _ ty} {v : language.operands.Val} {ceiling : Nat}
+    (h : memory.writeValue state place v ceiling = some next) :
+    next.instruction = state.instruction ∧ next.effects = state.effects := by
+  simp only [writeValue] at h
+  split at h
+  · cases h
+  · simp only [bind, Option.bind] at h
+    cases ha : memory.authorizeWrite state place ceiling with
+    | none => simp [ha] at h
+    | some owners =>
+      simp only [ha] at h
+      cases hst : place.storage with
+      | virtual =>
+        simp only [hst] at h
+        cases hr : replaceLocal (language := language) (markWritten state place owners).virtualValues place.logical v with
+        | none => simp [hr] at h
+        | some tbl =>
+          simp only [hr, pure, Option.some.injEq] at h
+          subst h; exact ⟨rfl, rfl⟩
+      | materialized =>
+        simp only [hst] at h
+        split at h
+        · cases hr : replaceLocal (language := language) (markWritten state place owners).zeroValues place.logical v with
+          | none => simp [hr] at h
+          | some tbl =>
+            simp only [hr, pure, Option.some.injEq] at h
+            subst h; exact ⟨rfl, rfl⟩
+        · cases hrg : memory.rangeAt (markWritten state place owners) place.logical with
+          | none => simp [hrg] at h
+          | some rg =>
+            simp only [hrg] at h
+            cases hbr : byteRuns profile.memoryTarget ty v with
+            | none => simp [hbr] at h
+            | some runs =>
+              simp only [hbr] at h
+              cases hsr : storeRuns profile.memoryTarget ceiling rg runs (markWritten state place owners).bytes with
+              | none => simp [hsr] at h
+              | some bs =>
+                simp only [hsr, pure, Option.some.injEq] at h
+                subst h; exact ⟨rfl, rfl⟩
+
+private theorem begins_instruction_eq {memory : Memory lang profile}
+    {state next : MemoryRegisters language profile} {place : PlaceId} {ceiling : Nat}
+    (h : memory.Begins state place next ceiling) :
+    next.instruction = state.instruction ∧ next.effects = state.effects := by
+  rcases h.2 with ⟨_, rfl⟩ | ⟨_, _, _, ⟨_, rfl⟩ | ⟨_, _, _, _, _, _, rfl⟩⟩ <;> exact ⟨rfl, rfl⟩
+
+private theorem writeParams_instruction_eq {memory : Memory lang profile}
+    {ps : List (Sigma (MemoryPlace language.operands.Ty))} {vs : List language.operands.Val}
+    {state next : MemoryRegisters language profile} {exhausting : Bool} {ceiling : Nat}
+    (h : memory.WriteParams ps vs state next exhausting ceiling) :
+    next.instruction = state.instruction ∧ next.effects = state.effects := by
+  induction h with
+  | nil _ => exact ⟨rfl, rfl⟩
+  | @cons _ _ _ _ _ state' started' stored' _ _ _ hStart hWrite _ ih =>
+    have hs : started'.instruction = state'.instruction ∧ started'.effects = state'.effects := by
+      split at hStart
+      · subst hStart; exact ⟨rfl, rfl⟩
+      · exact begins_instruction_eq hStart
+    have hw := writeValue_instruction_eq hWrite.2.2.1
+    exact ⟨ih.1.trans (hw.1.trans hs.1), ih.2.trans (hw.2.trans hs.2)⟩
+  | exhausted _ => exact ⟨rfl, rfl⟩
+
+/-- A normal `addWithOverflow` step advances the program counter by exactly one and
+emits no side effects. -/
+theorem addWithOverflow_step_advances {memory : Memory lang profile}
+    {state next : MemoryRegisters language profile} {logical startDefinitions : Bool}
+    {t : IntTy} {dst : MemoryPlace _ (lang.intTy t)} {flag : MemoryPlace _ lang.bool}
+    {lhs rhs : MemoryRead _ lang.literal (lang.intTy t)}
+    (step : memory.InstructionStepWith state next logical startDefinitions
+      (.addWithOverflow t dst flag lhs rhs) false) :
+    next.instruction = state.instruction + 1 ∧ next.effects = state.effects := by
+  obtain ⟨_, _, _, lv, afterLhs, rv, afterReads, x, y, stored, hLhs, hRhs, _, _, hStore, rfl⟩ := step
+  have h1 := readValue_instruction_eq hLhs
+  have h2 := readValue_instruction_eq hRhs
+  have h3 : stored.instruction = afterReads.instruction ∧ stored.effects = afterReads.effects := by
+    cases hMode : (logical || startDefinitions)
+    · simp only [hMode, Bool.false_eq_true, ↓reduceIte] at hStore
+      obtain ⟨mid, hW1, hW2⟩ := hStore
+      have hw1 := writeValue_instruction_eq hW1.2.2.1
+      have hw2 := writeValue_instruction_eq hW2.2.2.1
+      exact ⟨hw2.1.trans hw1.1, hw2.2.trans hw1.2⟩
+    · simp only [hMode, ↓reduceIte, ParamOutcome, Bool.false_eq_true] at hStore
+      exact writeParams_instruction_eq hStore
+  exact ⟨by simp only [MemoryRegisters.advance, h3.1, h2.1, h1.1],
+    by simp only [MemoryRegisters.advance, h3.2, h2.2, h1.2]⟩
+
+/-- Virtual two-result `addWithOverflow` (as decoded from SSA/BIR registers) can never
+exhaust physical allocation space. -/
+theorem addWithOverflow_virtual_cannot_exhaust {memory : Memory lang profile}
+    {state next : MemoryRegisters language profile} {logical startDefinitions : Bool}
+    {t : IntTy} {dst : MemoryPlace _ (lang.intTy t)} {flag : MemoryPlace _ lang.bool}
+    {lhs rhs : MemoryRead _ lang.literal (lang.intTy t)}
+    (hDst : memory.classAt state.frame dst.logical.root = some .virtual)
+    (hFlag : memory.classAt state.frame flag.logical.root = some .virtual) :
+    ¬ memory.InstructionStepWith state next logical startDefinitions
+      (.addWithOverflow t dst flag lhs rhs) true := by
+  rintro ⟨_, _, _, lv, afterLhs, rv, afterReads, x, y, stored, hLhs, hRhs, _, _, hStore, _⟩
+  cases hMode : (logical || startDefinitions)
+  · simp only [hMode, Bool.false_eq_true, ↓reduceIte] at hStore
+  · simp only [hMode, ↓reduceIte, ParamOutcome] at hStore
+    have hFrame1 : afterLhs.frame = state.frame := by
+      cases lhs with
+      | literal _ =>
+        simp only [readValue] at hLhs
+        obtain ⟨_, _, eq⟩ := Option.bind_eq_some_iff.mp hLhs
+        cases eq; rfl
+      | copy place => exact congrArg (fun s => s.frame) (((copyRead_iff ..).mp hLhs).2.2.2)
+      | move place =>
+        simp only [readValue, bind, Option.bind] at hLhs
+        cases ho : Own.move (memory.ownerView state place.logical.root (lang.intTy t) .owned).1
+            (memory.ownerView state place.logical.root (lang.intTy t) .owned).2 <;>
+          cases hv : memory.loadValue state place <;> simp only [ho, hv] at hLhs <;> try contradiction
+        split at hLhs <;> obtain ⟨_, rfl⟩ := Prod.mk.inj (Option.some.inj hLhs) <;> rfl
+    have hFrame2 : afterReads.frame = afterLhs.frame := by
+      cases rhs with
+      | literal _ =>
+        simp only [readValue] at hRhs
+        obtain ⟨_, _, eq⟩ := Option.bind_eq_some_iff.mp hRhs
+        cases eq; rfl
+      | copy place => exact congrArg (fun s => s.frame) (((copyRead_iff ..).mp hRhs).2.2.2)
+      | move place =>
+        simp only [readValue, bind, Option.bind] at hRhs
+        cases ho : Own.move (memory.ownerView afterLhs place.logical.root (lang.intTy t) .owned).1
+            (memory.ownerView afterLhs place.logical.root (lang.intTy t) .owned).2 <;>
+          cases hv : memory.loadValue afterLhs place <;> simp only [ho, hv] at hRhs <;> try contradiction
+        split at hRhs <;> obtain ⟨_, rfl⟩ := Prod.mk.inj (Option.some.inj hRhs) <;> rfl
+    have hFrame : afterReads.frame = state.frame := hFrame2.trans hFrame1
+    have hEmpty : memory.freshLayouts afterReads [dst.logical.root, flag.logical.root] = [] := by
+      have hSingle (live : List PlaceId) :
+          memory.freshLayoutsFrom state.frame live [flag.logical.root] = [] := by
+        unfold freshLayoutsFrom
+        split
+        · rfl
+        · simp [freshLayoutsFrom, hFlag]
+      unfold freshLayouts freshLayoutsFrom
+      rw [hFrame]
+      split
+      · exact hSingle afterReads.live
+      · simp [hDst, hSingle]
+    have hFits : memory.ParamSpaceFits [⟨_, dst⟩, ⟨_, flag⟩] afterReads := by
+      unfold ParamSpaceFits ReservationsFit
+      simp only [List.map_cons, List.map_nil, hEmpty, List.foldr_nil]
+    exact hStore.2.2 hFits
 
 def InstructionStep (memory : Memory lang profile)
     (state next : MemoryRegisters language profile) (logical : Bool := false) (op : MemoryInst lang)
@@ -1162,21 +1619,143 @@ def Initial (memory : Memory lang profile) (state : MemoryRegisters language pro
 
 end Memory
 
-/-- Render the hosted trap diagnostic from the originating source location. -/
-private def trapMessage (kind : TrapKind) (site : SiteId) (span : FileSpan) (file : File) :
-    String :=
-  s!"concrete: trap: {kind.name} at {file.path.render.text}:{span.line}:{span.col} (site {site.id})\n"
+/-! ### `addWithOverflow` arithmetic pair lemmas -/
 
+theorem checked_add_overflow_iff (t : IntTy) (x y : Int) :
+    decide (checked t .add x y = .error .overflow) = true ↔ ¬ t.InRange (x + y) := by
+  simp only [checked, inRangeOr]
+  split
+  · rename_i hIn
+    constructor
+    · intro h; cases (of_decide_eq_true h)
+    · intro hNot; exact absurd hIn hNot
+  · rename_i hNot
+    exact ⟨fun _ => hNot, fun _ => rfl⟩
+
+theorem checked_add_no_overflow_iff (t : IntTy) (x y : Int) :
+    decide (checked t .add x y = .error .overflow) = false ↔ t.InRange (x + y) := by
+  simp only [checked, inRangeOr]
+  split
+  · rename_i hIn
+    exact ⟨fun _ => hIn, fun _ => decide_eq_false (fun h => by cases h)⟩
+  · rename_i hNot
+    exact ⟨fun h => absurd rfl (of_decide_eq_false h), fun hIn => absurd hIn hNot⟩
+
+private theorem toBitsAtWidth_lt (width : Nat) (n : Int) :
+    toBitsAtWidth width n < 2 ^ width := by
+  unfold toBitsAtWidth
+  have hPos : (0 : Int) < (2 : Int) ^ width := Int.pow_pos (by decide)
+  have hModNonneg : 0 ≤ n % (2 : Int) ^ width := Int.emod_nonneg n (Int.ne_of_gt hPos)
+  have hModLt : n % (2 : Int) ^ width < (2 : Int) ^ width := Int.emod_lt_of_pos n hPos
+  have hCast : ((n % (2 : Int) ^ width).toNat : Int) = n % (2 : Int) ^ width :=
+    Int.toNat_of_nonneg hModNonneg
+  have hPow : (((2 ^ width : Nat) : Int)) = (2 : Int) ^ width := by
+    exact Int.natCast_pow 2 width
+  omega
+
+private theorem wrap_inRange_local (t : IntTy) (n : Int) : t.InRange (wrap t n) := by
+  have hLt : toBits t n < 2 ^ t.bits := toBitsAtWidth_lt t.bits n
+  unfold wrap ofBits IntTy.InRange
+  split
+  · rename_i hCond
+    obtain ⟨hSigned, hGe⟩ := hCond
+    cases t with
+    | i8 | i16 | i32 | i64 =>
+      simp only [IntTy.min, IntTy.max, IntTy.signed, IntTy.bits, ↓reduceIte, Nat.reduceSub,
+        Nat.reducePow, Int.reducePow] at hLt hGe ⊢
+      exact ⟨by omega, by omega⟩
+    | u8 | u16 | u32 | u64 => cases hSigned
+  · rename_i hNot
+    have hSignedLt (hs : t.signed = true) : toBits t n < 2 ^ (t.bits - 1) := by
+      cases Nat.lt_or_ge (toBits t n) (2 ^ (t.bits - 1)) with
+      | inl h => exact h
+      | inr h => exact absurd ⟨hs, h⟩ hNot
+    cases t with
+    | i8 | i16 | i32 | i64 =>
+      have hLtHalf := hSignedLt rfl
+      simp only [IntTy.min, IntTy.max, IntTy.signed, IntTy.bits, ↓reduceIte, Nat.reduceSub,
+        Nat.reducePow, Int.reducePow] at hLt hLtHalf ⊢
+      exact ⟨by omega, by omega⟩
+    | u8 | u16 | u32 | u64 =>
+      simp only [IntTy.min, IntTy.max, IntTy.signed, IntTy.bits, Bool.false_eq_true, ↓reduceIte,
+        Nat.reducePow, Int.reducePow] at hLt ⊢
+      exact ⟨by omega, by omega⟩
+
+private theorem wrap_of_inRange_local (t : IntTy) (n : Int) (h : t.InRange n) : wrap t n = n := by
+  cases t <;>
+    simp [IntTy.InRange, IntTy.min, IntTy.max, IntTy.signed, IntTy.bits] at h <;>
+    simp [wrap, ofBits, toBits, toBitsAtWidth, IntTy.signed, IntTy.bits] <;>
+    (try split) <;> omega
+
+theorem wrapping_add_inRange (t : IntTy) (x y : Int) :
+    t.InRange (wrapping t .add x y) :=
+  wrap_inRange_local t (x + y)
+
+theorem wrapping_add_eq_of_no_overflow (t : IntTy) (x y : Int)
+    (h : decide (checked t .add x y = .error .overflow) = false) :
+    wrapping t .add x y = x + y :=
+  wrap_of_inRange_local t (x + y) ((checked_add_no_overflow_iff t x y).mp h)
+
+theorem plain_add_eq_ok_of_no_overflow (t : IntTy) (x y : Int)
+    (h : decide (checked t .add x y = .error .overflow) = false) :
+    plain t .add x y = .ok (wrapping t .add x y) := by
+  have hIn : t.InRange (x + y) := (checked_add_no_overflow_iff t x y).mp h
+  rw [wrapping_add_eq_of_no_overflow t x y h]
+  unfold plain checked inRangeOr
+  simp [hIn]
+
+theorem plain_add_eq_trap_of_overflow (t : IntTy) (x y : Int)
+    (h : decide (checked t .add x y = .error .overflow) = true) :
+    plain t .add x y = .trap .overflow := by
+  have hErr : checked t .add x y = .error .overflow := of_decide_eq_true h
+  unfold plain
+  rw [hErr]
+  rfl
+
+/-- Combined arithmetic specification of the `(wrapping, overflow)` pair computed by
+`addWithOverflow`: the wrapped sum is always in `t.InRange`, equals `x + y` and the plain
+result when `overflow = false`, and coincides with `plain t .add x y = .trap .overflow`
+when `overflow = true`. -/
+theorem addWithOverflow_pair_spec (t : IntTy) (x y : Int) :
+    let sum := wrapping t .add x y
+    let ovf := decide (checked t .add x y = .error .overflow)
+    t.InRange sum ∧
+      (ovf = false → plain t .add x y = .ok sum ∧ sum = x + y) ∧
+      (ovf = true → plain t .add x y = .trap .overflow) := by
+  refine ⟨wrapping_add_inRange t x y,
+    fun h => ⟨plain_add_eq_ok_of_no_overflow t x y h, wrapping_add_eq_of_no_overflow t x y h⟩,
+    fun h => plain_add_eq_trap_of_overflow t x y h⟩
+
+/-- Render the hosted trap diagnostic from the originating source location using the
+single canonical format `Carriers.renderTrapLine`. -/
 def trapDiagnostic (project : Project) (kind : TrapKind) (site : SiteId)
     (span : FileSpan) : ByteArray :=
-  (project.files[span.file.index]?.map fun file => (trapMessage kind site span file).toUTF8)
+  ((project.fileAt span.file).map fun file =>
+    (renderTrapLine kind ⟨site, ⟨file.path.render.text, span.line, span.col⟩⟩).toUTF8)
     |>.getD ByteArray.empty
+
+theorem trapDiagnostic_origin (project : Project) (kind : TrapKind) (origin : Origin) :
+    trapDiagnostic project kind origin.operation origin.lexical =
+      ((runtimeSite project origin).map fun site =>
+        (renderTrapLine kind site).toUTF8).getD ByteArray.empty := by
+  unfold trapDiagnostic runtimeSite
+  cases project.fileAt origin.lexical.file <;> rfl
 
 def coreTrapDiagnostic {language : CoreLanguage} (core : CoreInput language)
     (kind : TrapKind) (site : SiteId) : ByteArray :=
   match AList.lookup core.machineProgram.origins site with
-  | some origin => trapDiagnostic core.project kind site origin.lexical
+  | some origin =>
+    ((runtimeSite core.project {origin with operation := site}).map fun resolved =>
+      (renderTrapLine kind resolved).toUTF8).getD ByteArray.empty
   | none => ByteArray.empty
+
+theorem coreTrapDiagnostic_of_origin {language : CoreLanguage} {core : CoreInput language}
+    {kind : TrapKind} {site : SiteId} {origin : Origin}
+    {resolved : Concrete.Contracts.DiagnosticSite}
+    (hOrigin : AList.lookup core.machineProgram.origins site = some origin)
+    (hSite : runtimeSite core.project {origin with operation := site} = some resolved) :
+    coreTrapDiagnostic core kind site = (renderTrapLine kind resolved).toUTF8 := by
+  simp [coreTrapDiagnostic, hOrigin, hSite]
 
 /-- A hosted observation comes from the terminator at the current PC. Return
 operands use the same target-indexed reads as instructions. A callee return
@@ -1305,15 +1884,15 @@ private def hostedResultFor (memory : Memory lang profile) (state : MemoryRegist
     Option Concrete.Contracts.Observation := do
   match ← memory.terminalObservation state with
   | .returned status bytes => return .returned status bytes
-  | .trapped status kind span bytes =>
+  | .trapped status kind _ bytes =>
     let block ← memory.blockAt state
     let origin ← match block.body[state.instruction]? with
       | some op => some op.origin
       | none => match block.ending with
         | .trap _ origin => some origin
         | _ => none
-    let file ← memory.project.files[span.file.index]?
-    return .trapped status kind ⟨⟨origin.operation.id⟩, ⟨file.path.render.text, span.line, span.col⟩⟩ bytes
+    let site ← runtimeSite memory.project origin
+    return .trapped status kind site bytes
   | .startupRefused status bytes => return .startupRefused status bytes
   | .resourceExhausted => return .resourceExhausted
 
@@ -1374,15 +1953,22 @@ private abbrev CoreState (language : CoreLanguage) :=
   (Σ env : AList ConcreteSpec.Var Own.Descriptor × Declarations, Exec.Config (language.instrumented env.1 env.2)) ×
     List language.operands.Event
 
-/-- Render a Core result using the source location on the executing input. -/
+/-- Render a Core result using the single runtime diagnostic site resolution on the executing input. -/
 def CoreInput.observeHosted (core : CoreInput language) : HostedResult → Option Concrete.Contracts.Observation
   | .returned status => some <| .returned status ByteArray.empty
   | .trapped status kind site => do
     let origin ← AList.lookup core.machineProgram.origins site
-    let file ← core.project.files[origin.lexical.file.index]?
-    return .trapped status kind ⟨⟨site.id⟩,
-      ⟨file.path.render.text, origin.lexical.line, origin.lexical.col⟩⟩
-      (coreTrapDiagnostic core kind site)
+    let resolved ← runtimeSite core.project {origin with operation := site}
+    return .trapped status kind resolved (coreTrapDiagnostic core kind site)
+
+theorem CoreInput.observeHosted_trapped_eq {core : CoreInput language}
+    {status : UInt8} {kind : TrapKind} {site : SiteId} {origin : Origin}
+    {resolved : Concrete.Contracts.DiagnosticSite}
+    (hOrigin : AList.lookup core.machineProgram.origins site = some origin)
+    (hSite : runtimeSite core.project {origin with operation := site} = some resolved) :
+    CoreInput.observeHosted core (.trapped status kind site) =
+      some (.trapped status kind resolved (renderTrapLine kind resolved).toUTF8) := by
+  simp [CoreInput.observeHosted, hOrigin, hSite, coreTrapDiagnostic_of_origin hOrigin hSite]
 
 private def coreHostedResult (core : CoreInput language) (state : CoreState language) :
     Option Concrete.Contracts.Observation := do
@@ -1478,6 +2064,33 @@ theorem CoreInput.safe_of_silent_path {core : CoreInput language} {q : Exec.Conf
       · exact (S.terminal _ _ _ observed _ tick).elim
     · rintro rfl
       exact ⟨_, ⟨_, rfl, lift path⟩, last⟩
+
+/-- Companion to `CoreInput.safe_of_silent_path`: a finite path of deterministic silent
+dispatcher steps to a hosted result rules out every infinite execution from the Core entry. -/
+theorem CoreInput.noDivergesOfSilentPath {core : CoreInput language}
+    {q : Exec.Config core.machineProgram.machine}
+    (path : Steps (fun p q => Exec.step core.machineProgram.body p = some (.next q))
+      core.machineProgram.initial q)
+    {f hosted result} (final : q.final? = some f) (host : language.hostedResult f = some hosted)
+    (render : CoreInput.observeHosted core hosted = some result) :
+    ¬ ∃ run, CoreInput.Execution.diverges core run := by
+  let S := CoreInput.Execution (language := language)
+  have last : S.result core (coreStateAt core q) result := by
+    change coreHostedResult _ _ = _
+    simp [coreHostedResult, coreStateAt, final, host, render]
+  rintro ⟨run, init, steps⟩
+  change run 0 = coreStateAt core core.machineProgram.initial at init
+  have follow {p r}
+      (h : Steps (fun a b => Exec.step core.machineProgram.body a = some (.next b)) p r) :
+      ∀ k, run k = coreStateAt core p → ∃ n, run n = coreStateAt core r := by
+    induction h with
+    | nil => intro k hk; exact ⟨k, hk⟩
+    | cons tick _ ih =>
+      intro k hk
+      obtain ⟨_, unique⟩ := silent_progress tick
+      exact ih (k + 1) (unique _ (hk ▸ steps k))
+  obtain ⟨n, hn⟩ := follow path 0 init
+  exact S.terminal core (coreStateAt core q) result last (run (n + 1)) (hn ▸ steps n)
 
 def MIR.Execution : Semantics (MIR lang profile) language.operands.Event :=
   graphExecution MIR.Step (fun mir => entryStateFor mir.logicalView)
@@ -1580,7 +2193,9 @@ def Memory.RepresentsCheckpoint (memory : Memory lang profile)
 def LowersMemory (mir : MIR lang profile) (memory : Memory lang profile) : Prop :=
   memory.project = mir.project ∧ memory.entry = mir.entry ∧
   PreservesOrigins mir.origins memory.origins ∧ LayoutsMatch language.layout memory ∧
-  (memory.signatures = mir.signatures ∧ memory.declarations = mir.declarations) ∧ PromotionSound (language := language) mir memory ∧
+  (memory.signatures = mir.signatures ∧ memory.declarations = mir.declarations) ∧
+  PromotionSound (language := language) mir memory ∧
+  RetainsTypedRoots mir memory ∧ memory.LayoutsWF ∧
   memory.TablesWF ∧ mir.logicalView.TablesWF ∧
   let source := MIR.Execution (language := language)
   let target := Memory.Execution (language := language)
@@ -1589,6 +2204,59 @@ def LowersMemory (mir : MIR lang profile) (memory : Memory lang profile) : Prop 
     ∃ sim : CheckpointSimulation source target source.result (Memory.MatchingResult (language := language)) mir memory,
       ∀ p q, source.finite mir p → target.finite memory q → sim.related p q →
         memory.RepresentsCheckpoint p q ∧ p.effects = q.effects)
+
+theorem LowersMemory.retainsTypedRoots {mir : MIR lang profile} {memory : Memory lang profile}
+    (lowered : LowersMemory (language := language) mir memory) :
+    RetainsTypedRoots mir memory :=
+  lowered.2.2.2.2.2.2.1
+
+theorem LowersMemory.layoutsWF {mir : MIR lang profile} {memory : Memory lang profile}
+    (lowered : LowersMemory (language := language) mir memory) :
+    memory.LayoutsWF :=
+  lowered.2.2.2.2.2.2.2.1
+
+private theorem alist_lookup_mem_local {κ α : Type} [DecidableEq κ] {l : AList κ α} {k : κ} {v : α}
+    (h : AList.lookup l k = some v) : (k, v) ∈ l := by
+  induction l with
+  | nil => cases h
+  | cons hd tl ih =>
+    rcases hd with ⟨k', v'⟩
+    simp only [AList.lookup] at h
+    split at h
+    · rename_i heq
+      subst heq
+      cases Option.some.inj h
+      exact List.mem_cons_self
+    · exact List.mem_cons_of_mem _ (ih h)
+
+/-- Any MIR that lowers validly to `Memory` is `Materializable` on `profile`: retaining
+all typed roots, matching layouts, and enforcing `Layout.WellFormed` guarantees every
+non-scalar or escaping root admits a well-formed target layout in `mir.declarations`. -/
+theorem LowersMemory.materializable {mir : MIR lang profile} {memory : Memory lang profile}
+    (lowered : LowersMemory (language := language) mir memory) :
+    Materializable (language := language) mir := by
+  intro fn srcLocals srcGraph hFn place ty hLocal hNeed
+  obtain ⟨dstLocals, dstGraph, hDstFn, hRetained⟩ := lowered.retainsTypedRoots fn srcLocals srcGraph hFn
+  obtain ⟨classes, storage, hStorageFn, hStoragePlace, hVirtualIff⟩ :=
+    lowered.2.2.2.2.2.1.1 fn srcLocals srcGraph hFn place ty hLocal
+  have hMat : storage = .materialized := by
+    cases storage with
+    | materialized => rfl
+    | virtual =>
+      obtain ⟨hScalar, hNoEsc⟩ := hVirtualIff.mp rfl
+      rcases hNeed with hNone | hEsc
+      · cases hs : language.scalarType ty <;> simp [hs] at hScalar hNone
+      · exact absurd hEsc hNoEsc
+  obtain ⟨classes', hStorageFn', hCase⟩ :=
+    lowered.2.2.2.1.1 fn dstLocals dstGraph hDstFn place ty (hRetained place ty hLocal)
+  rw [hStorageFn] at hStorageFn'
+  cases Option.some.inj hStorageFn'
+  rcases hCase with hVirt | ⟨_, slots, d, hSlots, hDesc, hLayout⟩
+  · rw [hStoragePlace, hMat] at hVirt
+    cases hVirt
+  · refine ⟨d, lowered.2.2.2.2.1.2 ▸ hLayout, ?_⟩
+    exact lowered.layoutsWF (fn, slots) (alist_lookup_mem_local hSlots)
+      (place, d) (alist_lookup_mem_local hDesc)
 
 def BIR.TrapsMatch {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
     (ssa : SSA lang profile) (bir : BIR lang profile) : Prop :=
@@ -1599,16 +2267,9 @@ def BIR.TrapsMatch {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
         ∃ slot, next.ending = .trap slot ∧
           ∃ entry, bir.sites[slot.index]? = some entry ∧ entry.kind = kind ∧ entry.origin = origin
 
-private def TrapEntry.runtimeFile (entry : TrapEntry) (project : Project) : Option File :=
-  project.files[entry.origin.lexical.file.index]?
-
-private def TrapEntry.runtimeMessage (entry : TrapEntry) (file : File) : String :=
-  trapMessage entry.kind entry.origin.operation entry.origin.lexical file
-
 def LCBInput.RuntimeMatches (output : LCBInput profile) (project : Project) : Prop :=
   ∃ diagnostics,
-    output.sites.toList.mapM (fun entry =>
-      (entry.runtimeFile project).map entry.runtimeMessage) = some diagnostics ∧
+    output.sites.toList.mapM (fun entry => entry.diagnosticLine project) = some diagnostics ∧
     output.runtimeInput = (Backend.Runtime.qbeDiagnostics diagnostics).toUTF8
 
 private def LCBInput.runtimeResult (project : Project) (output : LCBInput profile) :
@@ -1618,10 +2279,8 @@ private def LCBInput.runtimeResult (project : Project) (output : LCBInput profil
       return .returned (UInt8.ofNat word.toNat) ByteArray.empty
     else
       let entry ← output.sites[word.toNat - 256]?
-      let file ← entry.runtimeFile project
-      let site : Concrete.Contracts.DiagnosticSite := ⟨⟨entry.origin.operation.id⟩,
-        ⟨file.path.render.text, entry.origin.lexical.line, entry.origin.lexical.col⟩⟩
-      return .trapped 134 entry.kind site (entry.runtimeMessage file).toUTF8
+      let site ← runtimeSite project entry.origin
+      return .trapped 134 entry.kind site (renderTrapLine entry.kind site).toUTF8
   | _ => none
 
 def LCBInput.Execution (E : Type) (project : Project) : Semantics (LCBInput profile) E :=
@@ -1654,6 +2313,9 @@ private def arguments (base : Nat) : {types : List language.operands.Ty} →
 private def instruction (base : Nat) : SSAInst lang → MemoryInst lang
   | .op dst op args addresses =>
     .op (register base dst) op (arguments base args) [] (addresses.map fun p => ⟨p.1, materialized p.2⟩)
+  | .addWithOverflow t dst flag lhs rhs =>
+    .addWithOverflow t (register base dst) (register base flag)
+      (registerRead base lhs) (registerRead base rhs)
   | .load (ty := ty) dst src =>
     .bind (register base dst) (if language.operands.isCopy ty then .copy (materialized src)
       else .move (materialized src))
@@ -1670,10 +2332,41 @@ private def instruction (base : Nat) : SSAInst lang → MemoryInst lang
 
 private def registerDeclarations (base : Nat) : SSAInst lang → LocalTypes language.operands.Ty
   | .op (ty := ty) dst .. | .load (ty := ty) dst .. => [((register base dst).logical.root, ty)]
+  | .addWithOverflow t dst flag .. =>
+    [((register base dst).logical.root, lang.intTy t),
+     ((register base flag).logical.root, lang.bool)]
   | .destructure _ bindings =>
     bindings.map fun (_, dst) => ((register base dst.2).logical.root, dst.1)
   | .call _ (some ⟨ty, dst⟩) _ => [((register base dst).logical.root, ty)]
   | _ => []
+
+private theorem registerDeclarations_length_eq_slotCount (base : Nat) (inst : SSAInst lang) :
+    (registerDeclarations (language := language) (lang := lang) base inst).length = inst.slotCount := by
+  cases inst with
+  | op _ _ _ _ => rfl
+  | addWithOverflow _ _ _ _ _ => rfl
+  | load _ _ => rfl
+  | destructure _ bindings => simp [registerDeclarations, SSAInst.slotCount]
+  | store _ _ => rfl
+  | beginLifetime _ => rfl
+  | endLifetime _ => rfl
+  | call _ dst _ => cases dst <;> rfl
+
+private theorem nodup_of_append_right {α : Type} {xs ys : List α} (h : (xs ++ ys).Nodup) :
+    ys.Nodup := by
+  induction xs with
+  | nil => exact h
+  | cons _ rest ih => exact ih (List.nodup_cons.mp h).2
+
+private theorem nodup_of_flatMap_mem {α β : Type} {xs : List α} {f : α → List β}
+    (h : (xs.flatMap f).Nodup) {x : α} (hx : x ∈ xs) : (f x).Nodup := by
+  induction xs with
+  | nil => cases hx
+  | cons a rest ih =>
+    rw [List.flatMap_cons] at h
+    rcases List.mem_cons.mp hx with rfl | hrest
+    · exact (List.nodup_append.mp h).1
+    · exact ih (List.nodup_append.mp h).2.1 hrest
 
 private def terminator (bir : BIR lang profile) (base : Nat) :
     BIRTerm (Sigma (SSARead _ lang.literal)) (SSARead _ lang.literal lang.bool) → MemoryTerm lang
@@ -1720,6 +2413,50 @@ private def registerView {T : Type} (project : Project) (entry : FnId)
     else (fn, registers ++ (AList.lookup table fn).getD []) :: AList.erase table fn) mutableLocals
   ⟨project, entry, signatures, views.map Prod.fst, layouts, views.map (·.2.1), mutableLocals, declarations⟩
 
+private theorem registerView_addWithOverflow_aliased_not_tablesWF {T : Type}
+    {project : Project} {entry : FnId}
+    {signatures : AList FnId (FunctionSignature language.operands.Ty)}
+    {functions : AList FnId (LocalTypes language.operands.Ty ×
+      CFG (Sigma (SSAValue language.operands.Ty)) (LocatedOp (SSAInst lang)) T)}
+    {layouts : AList FnId (AList PlaceId Layout)} {mutableLocals : AList FnId (List PlaceId)}
+    {declarations : Declarations} {lowerTerm : Nat → T → MemoryTerm lang}
+    {fn : FnId} {locals : LocalTypes language.operands.Ty}
+    {graph : CFG (Sigma (SSAValue language.operands.Ty)) (LocatedOp (SSAInst lang)) T}
+    {block : Block (Sigma (SSAValue language.operands.Ty)) (LocatedOp (SSAInst lang)) T}
+    {origin : Origin} {t : IntTy} {dst : SSAValue _ (lang.intTy t)}
+    {flag : SSAValue _ lang.bool} {lhs rhs : SSARead _ lang.literal (lang.intTy t)}
+    (hFn : (fn, locals, graph) ∈ functions)
+    (hBlock : block ∈ graph.blocks.toList)
+    (hOp : ⟨origin, .addWithOverflow t dst flag lhs rhs⟩ ∈ block.body)
+    (hAlias : dst.id = flag.id) :
+    ¬ (registerView (language := language) (lang := lang) (profile := profile)
+        project entry signatures functions layouts mutableLocals declarations lowerTerm).TablesWF := by
+  intro wf
+  have hMemFn : ∃ regs body, (fn, locals ++ regs, body) ∈
+      (registerView (language := language) (lang := lang) (profile := profile)
+        project entry signatures functions layouts mutableLocals declarations lowerTerm).functions ∧
+      ∃ base, regs = graph.blocks.toList.flatMap fun b =>
+        (b.params.map fun p => ((register base p.2).logical.root, p.1)) ++
+        (b.body.flatMap fun op => registerDeclarations (language := language) (lang := lang) base op.instruction) := by
+    unfold registerView
+    dsimp only
+    rw [List.map_map]
+    refine ⟨_, _, List.mem_map.mpr ⟨(fn, locals, graph), hFn, rfl⟩, _, rfl⟩
+  obtain ⟨regs, body, hViewFn, base, hRegs⟩ := hMemFn
+  have hLocalsNodup : (List.map Prod.fst (locals ++ regs)).Nodup :=
+    (wf.2.2.2.2.2.2 fn (locals ++ regs) body hViewFn).1
+  rw [List.map_append] at hLocalsNodup
+  have hRegsNodup : (List.map Prod.fst regs).Nodup := nodup_of_append_right hLocalsNodup
+  rw [hRegs, List.map_flatMap] at hRegsNodup
+  have hBlockNodup := nodup_of_flatMap_mem hRegsNodup hBlock
+  rw [List.map_append] at hBlockNodup
+  have hBodyNodup := nodup_of_append_right hBlockNodup
+  rw [List.map_flatMap] at hBodyNodup
+  have hOpNodup := nodup_of_flatMap_mem hBodyNodup hOp
+  simp only [registerDeclarations, register, hAlias, List.map_cons, List.map_nil,
+    List.nodup_cons, List.mem_singleton] at hOpNodup
+  exact hOpNodup.1 trivial
+
 
 def memoryView (bir : BIR lang profile) : Memory lang profile :=
   registerView bir.project bir.entry bir.signatures bir.functions bir.layouts bir.mutableLocals bir.declarations (terminator bir)
@@ -1743,14 +2480,66 @@ private def registerExecution : Semantics (Memory lang profile) language.operand
 def Execution : Semantics (BIR lang profile) language.operands.Event :=
   registerExecution.onInput (memoryView (language := language))
 
+/-- An aliased two-result `addWithOverflow` (`dst.id = flag.id`) breaks `TablesWF` in
+the decoded `BIR.memoryView`. -/
+theorem memoryView_addWithOverflow_aliased_not_tablesWF {bir : BIR lang profile}
+    {fn : FnId} {locals : LocalTypes language.operands.Ty} {graph : BIRGraph lang}
+    {block : Block (Sigma (SSAValue language.operands.Ty)) (LocatedOp (SSAInst lang))
+      (BIRTerm (Sigma (SSARead _ lang.literal)) (SSARead _ lang.literal lang.bool))}
+    {origin : Origin} {t : IntTy} {dst : SSAValue _ (lang.intTy t)}
+    {flag : SSAValue _ lang.bool} {lhs rhs : SSARead _ lang.literal (lang.intTy t)}
+    (hFn : (fn, locals, graph) ∈ bir.functions)
+    (hBlock : block ∈ graph.blocks.toList)
+    (hOp : ⟨origin, .addWithOverflow t dst flag lhs rhs⟩ ∈ block.body)
+    (hAlias : dst.id = flag.id) :
+    ¬ (bir.memoryView (language := language)).TablesWF :=
+  registerView_addWithOverflow_aliased_not_tablesWF hFn hBlock hOp hAlias
+
 end BIR
 
-/-- Structural obligations of the LLVM handoff. Semantic correctness of the
-exact printed module is the trusted-base assumption P_print. -/
+/-- The LLVM launcher module is the exact fixed runtime entry rendered by
+`Backend.Runtime.llvmDiagnostics` from the ordered diagnostic lines of `bir.sites`
+resolved in `bir.project` via `runtimeSite` / `TrapEntry.diagnosticLine`. -/
+def LauncherMatches {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    (bir : BIR lang profile) (output : LLVMInput profile) : Prop :=
+  ∃ diagnostics,
+    bir.sites.toList.mapM (fun entry => entry.diagnosticLine bir.project) = some diagnostics ∧
+    output.launcher.items = Backend.Runtime.llvmDiagnostics diagnostics
+
+theorem LauncherMatches.launcher_unique {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {bir : BIR lang profile} {left right : LLVMInput profile}
+    (hLeft : LauncherMatches bir left) (hRight : LauncherMatches bir right) :
+    left.launcher = right.launcher := by
+  obtain ⟨d₁, hMap₁, hItems₁⟩ := hLeft
+  obtain ⟨d₂, hMap₂, hItems₂⟩ := hRight
+  have hDiag : d₁ = d₂ := Option.some.inj (hMap₁.symm.trans hMap₂)
+  subst hDiag
+  cases left; cases right
+  simp only at hItems₁ hItems₂
+  exact congrArg LLVMModule.mk (hItems₁.trans hItems₂.symm)
+
+theorem LauncherMatches.launcher_items_eq {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    {bir : BIR lang profile} {output : LLVMInput profile} {diagnostics : List String}
+    (hMatch : LauncherMatches bir output)
+    (hDiag : bir.sites.toList.mapM (fun entry => entry.diagnosticLine bir.project) = some diagnostics) :
+    output.launcher.items = Backend.Runtime.llvmDiagnostics diagnostics := by
+  obtain ⟨d, hMap, hItems⟩ := hMatch
+  have hEq : d = diagnostics := Option.some.inj (hMap.symm.trans hDiag)
+  subst hEq
+  exact hItems
+
+/-- Structural obligations of the two-module LLVM handoff. The target datalayout and
+triple headers are rendered unconditionally from `profile` inside `LLVMInput.bytesAt`,
+and semantic correctness of the exact rendered component and launcher bytes is the
+trusted-base assumption `P_print`. -/
 def LLVMMetadataMatches {Ty : Type} {lang : LoweringLanguage Ty}
     (bir : BIR lang profile) (output : LLVMInput profile) : Prop :=
-  profile.backend = .llvm ∧ output.triple = profile.llvmTriple ∧
-  output.dataLayout = profile.llvmDataLayout ∧ output.sites = bir.sites
+  profile.backend = .llvm ∧ output.sites = bir.sites ∧ LauncherMatches bir output
+
+theorem LLVMMetadataMatches.launcherMatches {Ty : Type} {lang : LoweringLanguage Ty}
+    {bir : BIR lang profile} {output : LLVMInput profile}
+    (h : LLVMMetadataMatches bir output) : LauncherMatches bir output :=
+  h.2.2
 
 def SSA.memoryView (ssa : SSA lang profile) : Memory lang profile :=
   BIR.registerView ssa.project ssa.entry ssa.signatures ssa.functions ssa.layouts ssa.mutableLocals ssa.declarations fun base ending =>
@@ -1763,15 +2552,114 @@ def SSA.memoryView (ssa : SSA lang profile) : Memory lang profile :=
     | .trap kind origin => .trap kind origin
     | .invalid => .invalid
 
+/-- An aliased two-result `addWithOverflow` (`dst.id = flag.id`) breaks `TablesWF` in
+the decoded `SSA.memoryView`. -/
+theorem SSA.memoryView_addWithOverflow_aliased_not_tablesWF {ssa : SSA lang profile}
+    {fn : FnId} {locals : LocalTypes language.operands.Ty} {graph : SSAGraph lang}
+    {block : Block (Sigma (SSAValue language.operands.Ty)) (LocatedOp (SSAInst lang))
+      (Terminator (Sigma (SSARead _ lang.literal)) (SSARead _ lang.literal lang.bool))}
+    {origin : Origin} {t : IntTy} {dst : SSAValue _ (lang.intTy t)}
+    {flag : SSAValue _ lang.bool} {lhs rhs : SSARead _ lang.literal (lang.intTy t)}
+    (hFn : (fn, locals, graph) ∈ ssa.functions)
+    (hBlock : block ∈ graph.blocks.toList)
+    (hOp : ⟨origin, .addWithOverflow t dst flag lhs rhs⟩ ∈ block.body)
+    (hAlias : dst.id = flag.id) :
+    ¬ (ssa.memoryView (language := language)).TablesWF :=
+  BIR.registerView_addWithOverflow_aliased_not_tablesWF hFn hBlock hOp hAlias
+
 def SSA.Execution : Semantics (SSA lang profile) language.operands.Event :=
   BIR.registerExecution.onInput (SSA.memoryView (language := language))
+
+/-- A Memory instruction is a residual plain addition of width `t` when it performs
+`.arithmetic (.plain .add)` on `[lang.intTy t, lang.intTy t] → lang.intTy t` with at
+least one residual `.overflow` check. -/
+def MemoryInst.IsResidualPlainAdd {Ty : Type} {lang : LoweringLanguage Ty}
+    (t : IntTy) : MemoryInst lang → Prop
+  | @MemoryInst.op _ _ (.arithmetic (.plain .add)) types ty _ _ _ checks _ =>
+    types = [lang.intTy t, lang.intTy t] ∧ ty = lang.intTy t ∧
+    ∃ c ∈ checks, c.disposition = .residual ∧ c.trap = .overflow
+  | _ => False
+
+/-- A Memory instruction is a residual plain addition at any width. -/
+def MemoryInst.HasResidualAdd {Ty : Type} {lang : LoweringLanguage Ty} :
+    MemoryInst lang → Prop
+  | @MemoryInst.op _ _ (.arithmetic (.plain .add)) _ _ _ _ _ checks _ =>
+    ∃ c ∈ checks, c.disposition = .residual ∧ c.trap = .overflow
+  | _ => False
+
+/-- A specific SSA block guards an `addWithOverflow` of width `t` at `origin`: the
+two-result instruction is the final instruction of `block.body`, its destinations are
+distinct, its terminator branches on the overflow flag with no trap-edge arguments, and
+the `true` successor is an empty trap block recording `.overflow` at the exact same `origin`. -/
+def SSAGraph.BlockGuardsAddWithOverflow {Ty : Type} {lang : LoweringLanguage Ty}
+    (graph : SSAGraph lang)
+    (block : Block (Sigma (SSAValue Ty)) (LocatedOp (SSAInst lang))
+      (Terminator (Sigma (SSARead Ty lang.literal)) (SSARead Ty lang.literal lang.bool)))
+    (t : IntTy) (origin : Origin)
+    (dst : SSAValue Ty (lang.intTy t)) (flag : SSAValue Ty lang.bool)
+    (lhs rhs : SSARead Ty lang.literal (lang.intTy t)) : Prop :=
+  dst.id ≠ flag.id ∧
+  block.body.getLast? = some ⟨origin, .addWithOverflow t dst flag lhs rhs⟩ ∧
+  ∃ yes no trapBlock,
+    block.ending = .branch (.value flag) yes no ∧
+    yes.arguments = [] ∧
+    trapBlock ∈ graph.blocks.toList ∧ trapBlock.id = yes.target ∧
+    trapBlock.params = [] ∧ trapBlock.body = [] ∧
+    trapBlock.ending = .trap .overflow origin
+
+/-- Some block in `graph` guards an `addWithOverflow` of width `t` at `origin`. -/
+def SSAGraph.GuardsAddWithOverflow {Ty : Type} {lang : LoweringLanguage Ty}
+    (graph : SSAGraph lang) (t : IntTy) (origin : Origin) : Prop :=
+  ∃ block ∈ graph.blocks.toList, ∃ dst flag lhs rhs,
+    graph.BlockGuardsAddWithOverflow block t origin dst flag lhs rhs
+
+/-- Every residual plain addition in `memory` lowers in the same function of `ssa` to a
+guarded `addWithOverflow` at the exact same origin and width (and never to an unguarded
+plain `SSAInst.op`), and every `SSAInst.addWithOverflow` in `ssa` has distinct destinations
+and traces to either a matching guarded residual plain addition or an existing
+`MemoryInst.addWithOverflow` at the same origin in `memory`. Discharged checked-route
+additions therefore retain exact-once evidence consumption without spurious runtime guards. -/
+def ResidualAddsMatch {Ty : Type} {lang : LoweringLanguage Ty} {profile : Profile}
+    (memory : Memory lang profile) (ssa : SSA lang profile) : Prop :=
+  (∀ fn mLocals mGraph, (fn, mLocals, mGraph) ∈ memory.functions →
+    ∀ mBlock ∈ mGraph.blocks.toList, ∀ mOp ∈ mBlock.body,
+      mOp.instruction.HasResidualAdd →
+        ∃ t sLocals sGraph, mOp.instruction.IsResidualPlainAdd t ∧
+          (fn, sLocals, sGraph) ∈ ssa.functions ∧
+          sGraph.GuardsAddWithOverflow t mOp.origin ∧
+          ∀ sBlock ∈ sGraph.blocks.toList, ∀ sOp ∈ sBlock.body,
+            sOp.origin = mOp.origin →
+              match sOp.instruction with
+              | @SSAInst.op _ _ (.arithmetic (.plain .add)) .. => False
+              | _ => True) ∧
+  ∀ fn sLocals sGraph, (fn, sLocals, sGraph) ∈ ssa.functions →
+    ∀ sBlock ∈ sGraph.blocks.toList, ∀ sOp ∈ sBlock.body,
+      match sOp.instruction with
+      | .addWithOverflow t dst flag lhs rhs =>
+        dst.id ≠ flag.id ∧
+        ∃ mLocals mGraph, (fn, mLocals, mGraph) ∈ memory.functions ∧
+          ∃ mBlock ∈ mGraph.blocks.toList, ∃ mOp ∈ mBlock.body,
+            mOp.origin = sOp.origin ∧
+            ((mOp.instruction.IsResidualPlainAdd t ∧
+                sGraph.BlockGuardsAddWithOverflow sBlock t sOp.origin dst flag lhs rhs) ∨
+              match mOp.instruction with
+              | .addWithOverflow mt .. => mt = t
+              | _ => False)
+      | _ => True
 
 def BuildsSSA
     (memory : Memory lang profile) (ssa : SSA lang profile) : Prop :=
   ssa.project = memory.project ∧ ssa.entry = memory.entry ∧ ssa.layouts = memory.layouts ∧
-  (ssa.signatures = memory.signatures ∧ ssa.declarations = memory.declarations) ∧ PreservesOrigins memory.origins ssa.origins ∧
+  (ssa.signatures = memory.signatures ∧ ssa.declarations = memory.declarations) ∧
+  PreservesOrigins memory.origins ssa.origins ∧
+  ResidualAddsMatch memory ssa ∧
   BehaviorRefinement (Memory.Execution (language := language)) (SSA.Execution (language := language))
     (Memory.Execution (language := language)).result (SSA.Execution (language := language)).result memory ssa
+
+theorem BuildsSSA.residualAddsMatch {memory : Memory lang profile} {ssa : SSA lang profile}
+    (built : BuildsSSA (language := language) memory ssa) :
+    ResidualAddsMatch memory ssa :=
+  built.2.2.2.2.2.1
 
 /-- BIR formation re-encodes the entry graph. Linked behavior is checked
 separately, so unreachable helper bodies can differ. -/
