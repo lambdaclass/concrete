@@ -680,6 +680,212 @@ Concrete.Backend.LCB.term.eq_2	propext
 Concrete.Backend.LCB.term.eq_3	propext
 Concrete.Backend.LCB.term.eq_4	propext
 Concrete.Backend.LCB.word.eq_1	propext
+Concrete.Backend.LCBWordLemmas.DecodedReturnWord.exit.inj	
+Concrete.Backend.LCBWordLemmas.DecodedReturnWord.exit.injEq	propext
+Concrete.Backend.LCBWordLemmas.DecodedReturnWord.exit.sizeOf_spec	
+Concrete.Backend.LCBWordLemmas.DecodedReturnWord.trap.inj	
+Concrete.Backend.LCBWordLemmas.DecodedReturnWord.trap.injEq	propext
+Concrete.Backend.LCBWordLemmas.DecodedReturnWord.trap.sizeOf_spec	
+Concrete.Backend.LCBWordLemmas.add_natAbs_le	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.add_natAbs_le._proof_1_1	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.biased_raw_eq	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.biased_toNat_le_iff	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.biased_toNat_le_iff._proof_1_1	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.biased_toNat_le_iff._proof_1_2	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.biased_toNat_lt_iff	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.biased_toNat_lt_iff._proof_1_1	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.biased_toNat_lt_iff._proof_1_10	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.biased_toNat_lt_iff._proof_1_11	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.biased_toNat_lt_iff._proof_1_12	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.biased_toNat_lt_iff._proof_1_2	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.biased_toNat_lt_iff._proof_1_3	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.biased_toNat_lt_iff._proof_1_4	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.biased_toNat_lt_iff._proof_1_5	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.biased_toNat_lt_iff._proof_1_6	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.biased_toNat_lt_iff._proof_1_7	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.biased_toNat_lt_iff._proof_1_8	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.biased_toNat_lt_iff._proof_1_9	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.binaryBits_exact	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.boolWord_branch	
+Concrete.Backend.LCBWordLemmas.boolWord_eq_word	propext
+Concrete.Backend.LCBWordLemmas.boolWord_toNat	
+Concrete.Backend.LCBWordLemmas.boolWord_width	
+Concrete.Backend.LCBWordLemmas.checkedAddU8_steps	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.checkedAddU8_steps._proof_1_1	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.checkedAddU8_steps._proof_1_2	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.checkedAddU8_steps._proof_1_3	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.checkedAddU8_steps._proof_1_4	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.checkedAddU8_steps._proof_1_5	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.checkedAddU8_steps._proof_1_6	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.checkedAddU8_steps._proof_1_7	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.checkedAdd_overflow_iff	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.checkedAdd_plain_ok_iff	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.checkedAdd_plain_trap_iff	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.checkedAdd_rangeTest_iff	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.checkedAdd_steps	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.checkedAdd_u8_flag_ule	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.checkedAdd_u8_flag_ult	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.checkedAdd_u8_ge_iff	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.checkedAdd_u8_lt_iff	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.checkedAdd_u8_toNat	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.checkedAdd_u8_toNat._proof_1_1	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.checkedAdd_u8_wrap	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.checkedOp_steps	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.checkedOp_steps._proof_1_1	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.checkedOp_steps._proof_1_10	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.checkedOp_steps._proof_1_2	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.checkedOp_steps._proof_1_3	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.checkedOp_steps._proof_1_4	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.checkedOp_steps._proof_1_5	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.checkedOp_steps._proof_1_6	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.checkedOp_steps._proof_1_7	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.checkedOp_steps._proof_1_8	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.checkedOp_steps._proof_1_9	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.cmp_eq	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.cmp_ule	
+Concrete.Backend.LCBWordLemmas.cmp_ult	
+Concrete.Backend.LCBWordLemmas.decodeReturnWord_exit	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.decodeReturnWord_spec	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.decodeReturnWord_spec._proof_1_1	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.decodeReturnWord_trap	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.decodeReturnWord_u8	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.decodeReturnWord_u8._proof_1_1	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.eval_bin	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.eval_cmp	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.eval_copy	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.exact_natAbs_le	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.exact_natAbs_le._proof_1_1	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.exact_natAbs_le._proof_1_2	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.exitWordBits_injective	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.exitWordBits_lt	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.exitWordBits_ne_trapWordBits	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.exitWordBits_ne_trapWordBits._proof_1_1	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.exitWordBits_ofInt	propext
+Concrete.Backend.LCBWordLemmas.exitWordBits_toNat	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.exitWordBits_toNat._proof_1_1	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.exitWordBits_uint8	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.flag_steps	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.flag_steps._proof_1_1	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.flag_ule	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.flag_ult_eq	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.flag_ult_max	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.hasBehavior_unique	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.inWordProfile_cases	
+Concrete.Backend.LCBWordLemmas.inWordProfile_iff	
+Concrete.Backend.LCBWordLemmas.initial_no_params	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.instDecidableEqDecodedReturnWord.decEq._proof_1	
+Concrete.Backend.LCBWordLemmas.instDecidableEqDecodedReturnWord.decEq._proof_2	
+Concrete.Backend.LCBWordLemmas.instDecidableEqDecodedReturnWord.decEq._proof_3	
+Concrete.Backend.LCBWordLemmas.instDecidableEqDecodedReturnWord.decEq._proof_4	
+Concrete.Backend.LCBWordLemmas.instDecidableEqDecodedReturnWord.decEq._proof_5	
+Concrete.Backend.LCBWordLemmas.instDecidableEqDecodedReturnWord.decEq._proof_6	
+Concrete.Backend.LCBWordLemmas.mask_lit	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.mask_lit._proof_1_1	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.mask_lit._proof_1_2	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.mask_ofInt	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.natAbs_le_of_inRange	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.natAbs_le_of_inRange._proof_1_1	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.natAbs_le_of_inRange._proof_1_2	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.natAbs_le_of_inRange._proof_1_3	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.natAbs_le_of_inRange._proof_1_4	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.pow_bits_sub_one_toNat	propext
+Concrete.Backend.LCBWordLemmas.pow_bits_toNat	propext
+Concrete.Backend.LCBWordLemmas.rangeTest_word	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.raw_eq	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.read_literal	propext
+Concrete.Backend.LCBWordLemmas.read_set_other	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.read_set_self	propext
+Concrete.Backend.LCBWordLemmas.read_word_literal	propext
+Concrete.Backend.LCBWordLemmas.returned_not_step	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.returns_not_diverges	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.returns_unique	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.runtime_sub_trap	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.runtime_sub_trap._proof_1_1	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.runtime_sub_trap_toNat	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.runtime_sub_trap_toNat._proof_1_1	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.runtime_ult_exit	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.runtime_ult_trap	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.runtime_ult_trap._proof_1_1	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.size_set!	propext
+Concrete.Backend.LCBWordLemmas.size_set4	propext
+Concrete.Backend.LCBWordLemmas.step_body	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.step_branch	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.step_branch._proof_1_1	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.step_jump	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.step_jump._proof_1_1	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.step_ret	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.step_ret._proof_1_1	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.steps_append	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.steps_prefix	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.steps_split	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.steps_split._proof_1_3	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.transfer_no_phis	propext
+Concrete.Backend.LCBWordLemmas.trapCapacity_max_decodes	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.trapCapacity_wraps_to_zero	
+Concrete.Backend.LCBWordLemmas.trapWordBits_injective	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.trapWordBits_injective._proof_1_1	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.trapWordBits_not_lt	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.trapWordBits_not_lt._proof_1_1	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.trapWordBits_ofInt	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.trapWordBits_ofInt._proof_1_1	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.trapWordBits_sub	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.trapWordBits_toNat	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.trapWordBits_toNat._proof_1_1	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.u8_wordBits_lt	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.u8_wordBits_lt._proof_1_1	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.u8_wordBits_toNat	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.u8_wordBits_toNat._proof_1_1	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wordBits_add	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wordBits_injective_inRange	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wordBits_mul	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wordBits_ofNat	propext
+Concrete.Backend.LCBWordLemmas.wordBits_sub	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wordBits_sub._proof_1_1	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wordBits_toInt_eq	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wordBits_toInt_eq._proof_1_1	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wordBits_toInt_eq._proof_1_2	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wordBits_toInt_eq._proof_1_3	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wordBits_toInt_eq._proof_1_4	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wordBits_toInt_eq._proof_1_5	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wordBits_toInt_eq._proof_1_6	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wordBits_toInt_eq._proof_1_7	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wordBits_toInt_eq._proof_1_8	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wordBits_toNat_eq_toBitsAtWidth	propext
+Concrete.Backend.LCBWordLemmas.wordBits_unsigned_eq_ofNat_toBits	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wordBits_unsigned_eq_ofNat_toBits._proof_1_1	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wordBits_unsigned_eq_ofNat_toBits._proof_1_2	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.word_bne	
+Concrete.Backend.LCBWordLemmas.word_ofNat	propext
+Concrete.Backend.LCBWordLemmas.word_width	propext
+Concrete.Backend.LCBWordLemmas.wrap_eq_biased_mod	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wrap_eq_biased_mod._proof_1_10	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wrap_eq_biased_mod._proof_1_11	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wrap_eq_biased_mod._proof_1_12	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wrap_eq_biased_mod._proof_1_13	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wrap_eq_biased_mod._proof_1_2	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wrap_eq_biased_mod._proof_1_3	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wrap_eq_biased_mod._proof_1_4	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wrap_eq_biased_mod._proof_1_5	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wrap_eq_biased_mod._proof_1_6	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wrap_eq_biased_mod._proof_1_7	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wrap_eq_biased_mod._proof_1_8	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wrap_eq_biased_mod._proof_1_9	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wrap_steps	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wrap_steps._proof_1_1	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wrap_steps._proof_1_2	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wrap_steps._proof_1_3	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wrap_steps._proof_1_4	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wrap_steps._proof_1_5	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wrap_steps._proof_1_6	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wrap_steps._proof_1_7	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wrap_steps._proof_1_8	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wrap_steps._proof_1_9	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wrap_word	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wrap_word_of_inRange	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wrap_word_u8	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wrap_word_unsigned	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.wrapping_word	Quot.sound propext
+Concrete.Backend.LCBWordLemmas.write_ok	propext
 Concrete.Backend.LLVM.Argument.global.inj	
 Concrete.Backend.LLVM.Argument.global.injEq	propext
 Concrete.Backend.LLVM.Argument.global.sizeOf_spec	
@@ -2533,6 +2739,7 @@ ConcreteSpec.Core.SourcePathSpan.Project.fileAt.eq_1	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.SlotResolves.eq_1	Quot.sound propext
 ConcreteSpec.Core.inRangeOr.eq_1	propext
 ConcreteSpec.Core.plain.eq_1	propext
+ConcreteSpec.Core.wrap.eq_1	propext
 ConcreteSpec.StageInterface.AdmissionView.failure.eq_1	propext
 ConcreteSpec.StageInterface.AdmissionView.located.eq_1	
 ConcreteSpec.StageInterface.AdmissionView.located.eq_2	
@@ -2840,6 +3047,18 @@ _private.Concrete.Backend.LCB.0.LeanCompilerBackend.Verified.Source.transfer.mat
 _private.Concrete.Backend.LCB.0.LeanCompilerBackend.Verified.Source.transfer.match_5.eq_2	propext
 _private.Concrete.Backend.LCB.0.Option.bind.match_1.eq_1	
 _private.Concrete.Backend.LCB.0.Option.bind.match_1.eq_2	
+_private.Concrete.Backend.LCBWordLemmas.0.Concrete.Backend.LCBWordLemmas.nat_and_two_pow_sub_one_eq_mod	Quot.sound propext
+_private.Concrete.Backend.LCBWordLemmas.0.Concrete.Backend.LCBWordLemmas.returns_le	Quot.sound propext
+_private.Concrete.Backend.LCBWordLemmas.0.Concrete.Backend.LCBWordLemmas.testBit_two_pow_sub_one	Quot.sound propext
+_private.Concrete.Backend.LCBWordLemmas.0.Concrete.Backend.LCBWordLemmas.testBit_two_pow_sub_one._proof_1_1	Quot.sound propext
+_private.Concrete.Backend.LCBWordLemmas.0.Concrete.Backend.LCBWordLemmas.testBit_two_pow_sub_one._proof_1_2	Quot.sound propext
+_private.Concrete.Backend.LCBWordLemmas.0.Concrete.Backend.LCBWordLemmas.testBit_two_pow_sub_one._proof_1_3	Quot.sound propext
+_private.Concrete.Backend.LCBWordLemmas.0.Except.map.match_1.eq_1	
+_private.Concrete.Backend.LCBWordLemmas.0.Except.map.match_1.eq_2	
+_private.Concrete.Backend.LCBWordLemmas.0.LeanCompilerBackend.Verified.Source.read.match_1.eq_1	propext
+_private.Concrete.Backend.LCBWordLemmas.0.LeanCompilerBackend.Verified.Source.read.match_1.eq_2	propext
+_private.Concrete.Backend.LCBWordLemmas.0.LeanCompilerBackend.Verified.Source.read.match_4.eq_1	
+_private.Concrete.Backend.LCBWordLemmas.0.LeanCompilerBackend.Verified.Source.read.match_4.eq_2	
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.arithmetic._proof_1	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.arithmetic._proof_2	Classical.choice Quot.sound propext
 _private.Concrete.Backend.LLVMIR.0.Concrete.Backend.LLVM.arithmetic._proof_3	Classical.choice Quot.sound propext
