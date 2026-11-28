@@ -1293,6 +1293,18 @@ def AdmissionView.render (v : AdmissionView) (r : Admission.Refusal) : Option Re
     let (_, span) ← v.located.declarations[index]?
     return .core v.context (surfaceFileSpan span) [] r
 
+def atomLiterals (a : Slice0.Atom) (span : Surface0.Span) : List (Nat × Surface0.Span) :=
+  match a with
+  | .lit n => [(n, span)]
+  | .var _ => []
+
+def LocatedBinding.literals : LocatedBinding → List (Nat × Surface0.Span)
+  | ⟨⟨_, .atom a⟩, span, _, _, _⟩ => atomLiterals a span
+  | ⟨⟨_, .add l r⟩, _, _, (ls, rs), _⟩ => atomLiterals l ls ++ atomLiterals r rs
+
+def EarlyProgram.literals (p : EarlyProgram) : List (Nat × Surface0.Span) :=
+  p.bindings.flatMap LocatedBinding.literals ++ atomLiterals p.ret p.resultSpan
+
 namespace SurfacePreparation
 open ConcreteSpec.Surface0
 
@@ -1351,7 +1363,13 @@ private def expr (scope : Scope) (s : State) : Surface0.Expr → Except RefusalC
 
   | .add left right site => do
     let (lhs, s) ← expr scope s left
-    let (a, s) := lhs.asAtom s
+    -- Materialize `lhs` before lowering a compound `right` so A-normalization
+    -- preserves left-to-right evaluation and Core checking order.
+    let (a, s) := match right with
+      | .add .. =>
+        let ((x, span), s) := lhs.bind s
+        (⟨.var x, span⟩, s)
+      | .integer .. | .local .. => lhs.asAtom s
     let (rhs, s) ← expr scope s right
     let (b, s) := rhs.asAtom s
     return (.add a b site, s)
@@ -1389,7 +1407,803 @@ def prepareSurface0 (ast : Surface0.Program) (_purpose : Purpose := .admission) 
 theorem prepareSurface0_purpose_indep (ast : Surface0.Program) (p₁ p₂ : Purpose) :
     prepareSurface0 ast p₁ = prepareSurface0 ast p₂ := rfl
 
+/-- All integer literals in a Slice 0 surface expression, in left-to-right source order. -/
+def exprLiterals : Surface0.Expr → List (Nat × Surface0.Span)
+  | .integer n _ span => [(n, span)]
+  | .local _ _ => []
+  | .add lhs rhs _ => exprLiterals lhs ++ exprLiterals rhs
+
+/-- All integer literals in reachable statements of a Slice 0 body up to the first return,
+in left-to-right source order. -/
+def bodyLiterals : List Surface0.Statement → List (Nat × Surface0.Span)
+  | [] => []
+  | .bind b _ :: rest => exprLiterals b.rhs ++ bodyLiterals rest
+  | .ret value _ :: _ => exprLiterals value
+
+/-- All reachable integer literals of a Slice 0 surface program, in left-to-right source order. -/
+def programLiterals (prog : Surface0.Program) : List (Nat × Surface0.Span) :=
+  bodyLiterals prog.body
+
+private def Rhs.literals : Rhs → List (Nat × Surface0.Span)
+  | .atom a => atomLiterals a.atom a.span
+  | .add l r _ => atomLiterals l.atom l.span ++ atomLiterals r.atom r.span
+
+def atomBoundIn (bound : List Var) : Slice0.Atom → Prop
+  | .lit _ => True
+  | .var v => v ∈ bound
+
+def exprBoundIn (bound : List Var) : Slice0.Expr → Prop
+  | .atom a => atomBoundIn bound a
+  | .add l r => atomBoundIn bound l ∧ atomBoundIn bound r
+
+private def Rhs.boundIn (bound : List Var) : Rhs → Prop
+  | .atom a => atomBoundIn bound a.atom
+  | .add l r _ => atomBoundIn bound l.atom ∧ atomBoundIn bound r.atom
+
+/-- Every binding introduces a variable fresh against earlier bindings and reads
+only variables already bound. -/
+def BindingsWellScoped (bound : List Var) : List LocatedBinding → Prop
+  | [] => True
+  | b :: rest =>
+    b.statement.x ∉ bound ∧ exprBoundIn bound b.statement.e ∧
+      BindingsWellScoped (b.statement.x :: bound) rest
+
+private theorem atomBoundIn_mono {xs ys : List Var} {a : Slice0.Atom}
+    (sub : ∀ v, v ∈ xs → v ∈ ys) (h : atomBoundIn xs a) : atomBoundIn ys a := by
+  cases a with
+  | lit _ => trivial
+  | var v => exact sub v h
+
+private theorem exprBoundIn_mono {xs ys : List Var} {e : Slice0.Expr}
+    (sub : ∀ v, v ∈ xs → v ∈ ys) (h : exprBoundIn xs e) : exprBoundIn ys e := by
+  cases e with
+  | atom a => exact atomBoundIn_mono sub h
+  | add l r => exact ⟨atomBoundIn_mono sub h.1, atomBoundIn_mono sub h.2⟩
+
+private theorem BindingsWellScoped.append_singleton {bound : List Var} {bs : List LocatedBinding}
+    {b : LocatedBinding} (hwf : BindingsWellScoped bound bs)
+    (hfresh₁ : b.statement.x ∉ bound)
+    (hfresh₂ : b.statement.x ∉ bs.map (·.statement.x))
+    (hreads : exprBoundIn (bs.map (·.statement.x) ++ bound) b.statement.e) :
+    BindingsWellScoped bound (bs ++ [b]) := by
+  induction bs generalizing bound with
+  | nil =>
+    exact ⟨hfresh₁, by simpa using hreads, trivial⟩
+  | cons c cs ih =>
+    obtain ⟨hcFresh, hcReads, hcsWf⟩ := hwf
+    simp only [List.map_cons, List.mem_cons, not_or] at hfresh₂
+    refine ⟨hcFresh, hcReads, ih hcsWf ?_ hfresh₂.2 ?_⟩
+    · intro hm
+      rcases List.mem_cons.mp hm with hEq | hm
+      · exact hfresh₂.1 hEq
+      · exact hfresh₁ hm
+    · apply exprBoundIn_mono _ hreads
+      intro v hv
+      simp only [List.map_cons, List.mem_append, List.mem_cons] at hv ⊢
+      rcases hv with (rfl | hv) | hv
+      · exact Or.inr (Or.inl rfl)
+      · exact Or.inl hv
+      · exact Or.inr (Or.inr hv)
+
+private structure StateWF (scope : Scope) (s : State) : Prop where
+  below : ∀ b ∈ s.bindings, b.statement.x.id < s.next
+  wellScoped : BindingsWellScoped [] s.bindings.reverse
+  scopeBound : ∀ p ∈ scope, p.2 ∈ s.bindings.map (·.statement.x)
+
+private theorem Rhs.bind_spec (rhs : Rhs) (scope : Scope) (s : State)
+    (decl : Option Surface0.Span) (name : ConstructName)
+    (hs : StateWF scope s) (hr : rhs.boundIn (s.bindings.map (·.statement.x))) :
+    let res := rhs.bind s decl name
+    StateWF scope res.2 ∧
+    res.1.1 ∈ res.2.bindings.map (·.statement.x) ∧
+    (∀ v, v ∈ s.bindings.map (·.statement.x) → v ∈ res.2.bindings.map (·.statement.x)) ∧
+    ∃ b, res.2.bindings.reverse = s.bindings.reverse ++ [b] ∧
+      b.literals = rhs.literals := by
+  have subRev : ∀ v, v ∈ s.bindings.map (·.statement.x) →
+      v ∈ s.bindings.reverse.map (·.statement.x) ++ [] := by
+    intro v hv
+    simp only [List.append_nil, List.mem_map, List.mem_reverse] at hv ⊢
+    exact hv
+  have hnotInNext : (⟨s.next⟩ : Var) ∉ s.bindings.reverse.map (·.statement.x) := by
+    intro hm
+    simp only [List.mem_map, List.mem_reverse] at hm
+    obtain ⟨b', hb', heq⟩ := hm
+    have hlt := hs.below b' hb'
+    rw [heq] at hlt
+    exact Nat.lt_irrefl _ hlt
+  cases rhs with
+  | atom a =>
+    let b : LocatedBinding := ⟨⟨⟨s.next⟩, .atom a.atom⟩, a.span, decl.getD a.span, (), name⟩
+    have hwf : StateWF scope { s with next := s.next + 1, bindings := b :: s.bindings } := by
+      refine ⟨?_, ?_, fun p hp => List.mem_cons_of_mem _ (hs.scopeBound p hp)⟩
+      · intro b' hb'
+        rcases List.mem_cons.mp hb' with rfl | hb'
+        · exact Nat.lt_succ_self _
+        · exact Nat.lt_trans (hs.below b' hb') (Nat.lt_succ_self _)
+      · simp only [List.reverse_cons]
+        exact hs.wellScoped.append_singleton (by simp) hnotInNext (atomBoundIn_mono subRev hr)
+    refine ⟨hwf, List.mem_cons_self, fun v hv => List.mem_cons_of_mem _ hv, b, by simp [Rhs.bind, b], rfl⟩
+  | add l r site =>
+    let b : LocatedBinding := ⟨⟨⟨s.next⟩, .add l.atom r.atom⟩, site, decl.getD site, (l.span, r.span), name⟩
+    have hwf : StateWF scope { s with next := s.next + 1, bindings := b :: s.bindings } := by
+      refine ⟨?_, ?_, fun p hp => List.mem_cons_of_mem _ (hs.scopeBound p hp)⟩
+      · intro b' hb'
+        rcases List.mem_cons.mp hb' with rfl | hb'
+        · exact Nat.lt_succ_self _
+        · exact Nat.lt_trans (hs.below b' hb') (Nat.lt_succ_self _)
+      · simp only [List.reverse_cons]
+        exact hs.wellScoped.append_singleton (by simp) hnotInNext
+          ⟨atomBoundIn_mono subRev hr.1, atomBoundIn_mono subRev hr.2⟩
+    refine ⟨hwf, List.mem_cons_self, fun v hv => List.mem_cons_of_mem _ hv, b, by simp [Rhs.bind, b], rfl⟩
+
+private theorem Rhs.asAtom_spec (rhs : Rhs) (scope : Scope) (s : State)
+    (hs : StateWF scope s) (hr : rhs.boundIn (s.bindings.map (·.statement.x))) :
+    let res := rhs.asAtom s
+    StateWF scope res.2 ∧
+    atomBoundIn (res.2.bindings.map (·.statement.x)) res.1.atom ∧
+    (∀ v, v ∈ s.bindings.map (·.statement.x) → v ∈ res.2.bindings.map (·.statement.x)) ∧
+    ∃ added, res.2.bindings.reverse = s.bindings.reverse ++ added ∧
+      added.flatMap LocatedBinding.literals ++ atomLiterals res.1.atom res.1.span = rhs.literals ∧
+      ((match rhs with | .atom _ => true | .add .. => false) = true → added = []) := by
+  cases rhs with
+  | atom a =>
+    exact ⟨hs, hr, fun _ hv => hv, [], by simp [Rhs.asAtom], by simp [Rhs.asAtom, Rhs.literals], fun _ => rfl⟩
+  | add l r site =>
+    obtain ⟨hwf, hmem, hsub, b, hrev, hlit⟩ := Rhs.bind_spec (.add l r site) scope s none (.unnamed none) hs hr
+    refine ⟨hwf, hmem, hsub, [b], hrev, ?_, fun h => by cases h⟩
+    simp [Rhs.asAtom, hlit, atomLiterals]
+
+private theorem lookup_mem_scope {scope : Scope} {name : String} {x : Var}
+    (h : scope.lookup name = some x) : (name, x) ∈ scope := by
+  induction scope with
+  | nil => simp [List.lookup] at h
+  | cons p rest ih =>
+    obtain ⟨k, v⟩ := p
+    simp only [List.lookup] at h
+    split at h
+    · rename_i heq
+      cases h
+      have : name = k := beq_iff_eq.mp heq
+      subst this
+      exact List.mem_cons_self
+    · exact List.mem_cons_of_mem _ (ih h)
+
+private theorem expr_spec (scope : Scope) (s : State) (e : Surface0.Expr)
+    {rhs : Rhs} {s' : State}
+    (hs : StateWF scope s) (he : expr scope s e = .ok (rhs, s')) :
+    StateWF scope s' ∧
+    rhs.boundIn (s'.bindings.map (·.statement.x)) ∧
+    (∀ v, v ∈ s.bindings.map (·.statement.x) → v ∈ s'.bindings.map (·.statement.x)) ∧
+    ∃ added,
+      s'.bindings.reverse = s.bindings.reverse ++ added ∧
+      added.flatMap LocatedBinding.literals ++ rhs.literals = exprLiterals e ∧
+      ((match e with | .add .. => false | _ => true) = true →
+        added = [] ∧ ∃ a, rhs = .atom a) := by
+  induction e generalizing s rhs s' with
+  | integer n suffix span =>
+    unfold expr at he
+    by_cases hsuf : suffix = none
+    · simp only [Slice0Rules.ExpectedTypeLiteral, hsuf, not_true_eq_false, ↓reduceIte,
+        Except.ok.injEq, Prod.mk.injEq] at he
+      obtain ⟨rfl, rfl⟩ := he
+      exact ⟨hs, trivial, fun _ hv => hv, [], by simp, by simp [Rhs.literals, atomLiterals, exprLiterals],
+        fun _ => ⟨rfl, _, rfl⟩⟩
+    · simp [Slice0Rules.ExpectedTypeLiteral, hsuf, throw, MonadExcept.throw, throwThe,
+        MonadExceptOf.throw] at he
+  | «local» name span =>
+    unfold expr at he
+    cases hlook : scope.lookup name with
+    | none =>
+      simp [hlook, throw, MonadExcept.throw, throwThe, MonadExceptOf.throw] at he
+    | some x =>
+      simp only [hlook, Except.ok.injEq, Prod.mk.injEq] at he
+      obtain ⟨rfl, rfl⟩ := he
+      refine ⟨hs, hs.scopeBound (name, x) (lookup_mem_scope hlook), fun _ hv => hv,
+        [], by simp, by simp [Rhs.literals, atomLiterals, exprLiterals], fun _ => ⟨rfl, _, rfl⟩⟩
+  | add left right site ihl ihr =>
+    unfold expr at he
+    cases hl : expr scope s left with
+    | error err => simp [hl, Bind.bind, Except.bind] at he
+    | ok resL =>
+      obtain ⟨lhs, s₁⟩ := resL
+      simp only [hl, Bind.bind, Except.bind] at he
+      obtain ⟨hwf₁, hbl, hsub₁, added₁, hrev₁, hlit₁, _⟩ := ihl s hs hl
+      cases right with
+      | add r₁ r₂ rsite =>
+        dsimp only at he
+        obtain ⟨hwf₂, haMem, hsub₂, bL, hrev₂, hlit₂⟩ :=
+          Rhs.bind_spec lhs scope s₁ none (.unnamed none) hwf₁ hbl
+        cases hr : expr scope (lhs.bind s₁).2 (.add r₁ r₂ rsite) with
+        | error err => simp [hr] at he
+        | ok resR =>
+          obtain ⟨rhsR, s₃⟩ := resR
+          simp only [hr, Pure.pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at he
+          obtain ⟨rfl, rfl⟩ := he
+          obtain ⟨hwf₃, hbr, hsub₃, added₂, hrev₃, hlit₃, _⟩ := ihr (lhs.bind s₁).2 hwf₂ hr
+          obtain ⟨hwf₄, hbBound, hsub₄, addedB, hrev₄, hlit₄, _⟩ :=
+            Rhs.asAtom_spec rhsR scope s₃ hwf₃ hbr
+          refine ⟨hwf₄, ⟨hsub₄ _ (hsub₃ _ haMem), hbBound⟩,
+            fun v hv => hsub₄ _ (hsub₃ _ (hsub₂ _ (hsub₁ _ hv))),
+            added₁ ++ [bL] ++ added₂ ++ addedB, ?_, ?_, fun h => by cases h⟩
+          · rw [hrev₄, hrev₃, hrev₂, hrev₁]
+            simp only [List.append_assoc]
+          · change (added₁ ++ [bL] ++ added₂ ++ addedB).flatMap LocatedBinding.literals ++
+              (atomLiterals (.var (lhs.bind s₁).1.1) (lhs.bind s₁).1.2 ++
+                atomLiterals (rhsR.asAtom s₃).1.atom (rhsR.asAtom s₃).1.span) =
+              exprLiterals left ++ exprLiterals (.add r₁ r₂ rsite)
+            calc (added₁ ++ [bL] ++ added₂ ++ addedB).flatMap LocatedBinding.literals ++
+                  (atomLiterals (.var (lhs.bind s₁).1.1) (lhs.bind s₁).1.2 ++
+                    atomLiterals (rhsR.asAtom s₃).1.atom (rhsR.asAtom s₃).1.span)
+                = (added₁.flatMap LocatedBinding.literals ++ lhs.literals) ++
+                    (added₂.flatMap LocatedBinding.literals ++
+                      (addedB.flatMap LocatedBinding.literals ++
+                        atomLiterals (rhsR.asAtom s₃).1.atom (rhsR.asAtom s₃).1.span)) := by
+                  simp only [List.flatMap_append, List.flatMap_cons, List.flatMap_nil, List.append_nil,
+                    atomLiterals, List.nil_append, List.append_assoc, hlit₂]
+              _ = (added₁.flatMap LocatedBinding.literals ++ lhs.literals) ++
+                    (added₂.flatMap LocatedBinding.literals ++ rhsR.literals) := by rw [hlit₄]
+              _ = exprLiterals left ++ exprLiterals (.add r₁ r₂ rsite) := by rw [hlit₁, hlit₃]
+      | integer n suffix rspan =>
+        dsimp only at he
+        obtain ⟨hwf₂, haBound, hsub₂, addedA, hrev₂, hlit₂, _⟩ :=
+          Rhs.asAtom_spec lhs scope s₁ hwf₁ hbl
+        cases hr : expr scope (lhs.asAtom s₁).2 (.integer n suffix rspan) with
+        | error err => simp [hr] at he
+        | ok resR =>
+          obtain ⟨rhsR, s₃⟩ := resR
+          simp only [hr, Pure.pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at he
+          obtain ⟨rfl, rfl⟩ := he
+          obtain ⟨hwf₃, hbr, hsub₃, added₂, hrev₃, hlit₃, hsimpleR⟩ := ihr (lhs.asAtom s₁).2 hwf₂ hr
+          obtain ⟨rfl, bAtom, rfl⟩ := hsimpleR rfl
+          obtain ⟨hwf₄, hbBound, hsub₄, addedB, hrev₄, hlit₄, hsimpleB⟩ :=
+            Rhs.asAtom_spec (.atom bAtom) scope s₃ hwf₃ hbr
+          have hBnil : addedB = [] := hsimpleB rfl
+          subst hBnil
+          refine ⟨hwf₄, ⟨atomBoundIn_mono (fun v hv => hsub₄ _ (hsub₃ _ hv)) haBound, hbBound⟩,
+            fun v hv => hsub₄ _ (hsub₃ _ (hsub₂ _ (hsub₁ _ hv))),
+            added₁ ++ addedA, ?_, ?_, fun h => by cases h⟩
+          · rw [hrev₄, hrev₃, hrev₂, hrev₁]
+            simp only [List.append_nil, List.append_assoc]
+          · change (added₁ ++ addedA).flatMap LocatedBinding.literals ++
+              (atomLiterals (lhs.asAtom s₁).1.atom (lhs.asAtom s₁).1.span ++
+                atomLiterals ((Rhs.atom bAtom).asAtom s₃).1.atom ((Rhs.atom bAtom).asAtom s₃).1.span) =
+              exprLiterals left ++ exprLiterals (.integer n suffix rspan)
+            simp only [List.flatMap_append, List.flatMap_nil, List.nil_append] at hlit₃ hlit₄ ⊢
+            rw [List.append_assoc, ← List.append_assoc (addedA.flatMap LocatedBinding.literals),
+              hlit₂, ← List.append_assoc, hlit₁, hlit₄, hlit₃]
+      | «local» name rspan =>
+        dsimp only at he
+        obtain ⟨hwf₂, haBound, hsub₂, addedA, hrev₂, hlit₂, _⟩ :=
+          Rhs.asAtom_spec lhs scope s₁ hwf₁ hbl
+        cases hr : expr scope (lhs.asAtom s₁).2 (.local name rspan) with
+        | error err => simp [hr] at he
+        | ok resR =>
+          obtain ⟨rhsR, s₃⟩ := resR
+          simp only [hr, Pure.pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at he
+          obtain ⟨rfl, rfl⟩ := he
+          obtain ⟨hwf₃, hbr, hsub₃, added₂, hrev₃, hlit₃, hsimpleR⟩ := ihr (lhs.asAtom s₁).2 hwf₂ hr
+          obtain ⟨rfl, bAtom, rfl⟩ := hsimpleR rfl
+          obtain ⟨hwf₄, hbBound, hsub₄, addedB, hrev₄, hlit₄, hsimpleB⟩ :=
+            Rhs.asAtom_spec (.atom bAtom) scope s₃ hwf₃ hbr
+          have hBnil : addedB = [] := hsimpleB rfl
+          subst hBnil
+          refine ⟨hwf₄, ⟨atomBoundIn_mono (fun v hv => hsub₄ _ (hsub₃ _ hv)) haBound, hbBound⟩,
+            fun v hv => hsub₄ _ (hsub₃ _ (hsub₂ _ (hsub₁ _ hv))),
+            added₁ ++ addedA, ?_, ?_, fun h => by cases h⟩
+          · rw [hrev₄, hrev₃, hrev₂, hrev₁]
+            simp only [List.append_nil, List.append_assoc]
+          · change (added₁ ++ addedA).flatMap LocatedBinding.literals ++
+              (atomLiterals (lhs.asAtom s₁).1.atom (lhs.asAtom s₁).1.span ++
+                atomLiterals ((Rhs.atom bAtom).asAtom s₃).1.atom ((Rhs.atom bAtom).asAtom s₃).1.span) =
+              exprLiterals left ++ exprLiterals (.local name rspan)
+            simp only [List.flatMap_append, List.flatMap_nil, List.nil_append] at hlit₃ hlit₄ ⊢
+            rw [List.append_assoc, ← List.append_assoc (addedA.flatMap LocatedBinding.literals),
+              hlit₂, ← List.append_assoc, hlit₁, hlit₄, hlit₃]
+
+private theorem body_spec (scope : Scope) (s : State) (closeBrace : Surface0.Span)
+    (stmts : List Surface0.Statement) {p : EarlyProgram}
+    (hs : StateWF scope s) (hb : body scope s closeBrace stmts = .ok p) :
+    BindingsWellScoped [] p.bindings ∧
+    atomBoundIn (p.bindings.map (·.statement.x)) p.ret ∧
+    p.literals = s.bindings.reverse.flatMap LocatedBinding.literals ++ bodyLiterals stmts := by
+  induction stmts generalizing scope s with
+  | nil =>
+    simp [body, throw, MonadExcept.throw, throwThe, MonadExceptOf.throw] at hb
+  | cons stmt rest ih =>
+    cases stmt with
+    | bind binding stmtSpan =>
+      unfold body at hb
+      by_cases hnamed : Slice0Rules.NamedBinding binding.name
+      · by_cases hdup : binding.name ∈ scope.map Prod.fst
+        · simp [hnamed, hdup, Pure.pure, Except.pure, Bind.bind, Except.bind,
+            throw, MonadExcept.throw, throwThe, MonadExceptOf.throw] at hb
+        · by_cases hres : Slice0Rules.UnreservedLocal binding.name
+          · simp only [hnamed, hdup, hres, ↓reduceIte,
+              Pure.pure, Except.pure, Bind.bind, Except.bind] at hb
+            cases he : expr scope s binding.rhs with
+            | error err => simp [he] at hb
+            | ok resE =>
+              obtain ⟨rhs, s₁⟩ := resE
+              simp only [he] at hb
+              obtain ⟨hwf₁, hbr, _, added, hrev₁, hlit₁, _⟩ := expr_spec scope s binding.rhs hs he
+              obtain ⟨hwf₂, hxMem, _, b, hrev₂, hlit₂⟩ :=
+                Rhs.bind_spec rhs scope s₁ (some binding.span) (.named ⟨binding.name⟩) hwf₁ hbr
+              have hwf₂' : StateWF ((binding.name, (rhs.bind s₁ (some binding.span) (.named ⟨binding.name⟩)).1.1) :: scope)
+                  (rhs.bind s₁ (some binding.span) (.named ⟨binding.name⟩)).2 :=
+                ⟨hwf₂.below, hwf₂.wellScoped, fun q hq => by
+                  rcases List.mem_cons.mp hq with rfl | hq
+                  · exact hxMem
+                  · exact hwf₂.scopeBound q hq⟩
+              obtain ⟨hwfP, hretP, hlitP⟩ := ih _ _ hwf₂' hb
+              refine ⟨hwfP, hretP, ?_⟩
+              rw [hlitP, hrev₂, hrev₁]
+              simp only [List.flatMap_append, List.flatMap_cons, List.flatMap_nil, List.append_nil,
+                hlit₂, bodyLiterals, List.append_assoc]
+              rw [← List.append_assoc (added.flatMap LocatedBinding.literals), hlit₁]
+          · simp [hnamed, hdup, hres, Pure.pure, Except.pure, Bind.bind, Except.bind,
+              throw, MonadExcept.throw, throwThe, MonadExceptOf.throw] at hb
+      · simp [hnamed, Bind.bind, Except.bind,
+          throw, MonadExcept.throw, throwThe, MonadExceptOf.throw] at hb
+    | ret value retSpan =>
+      unfold body at hb
+      cases he : expr scope s value with
+      | error err => simp [he, Bind.bind, Except.bind] at hb
+      | ok resE =>
+        obtain ⟨rhs, s₁⟩ := resE
+        simp only [he, Bind.bind, Except.bind] at hb
+        cases rest with
+        | cons next more =>
+          simp [throw, MonadExcept.throw, throwThe, MonadExceptOf.throw] at hb
+        | nil =>
+          simp only [Pure.pure, Except.pure, Except.ok.injEq] at hb
+          subst hb
+          obtain ⟨hwf₁, hbr, _, added₁, hrev₁, hlit₁, _⟩ := expr_spec scope s value hs he
+          obtain ⟨hwf₂, hretBound, _, added₂, hrev₂, hlit₂, _⟩ := Rhs.asAtom_spec rhs scope s₁ hwf₁ hbr
+          refine ⟨hwf₂.wellScoped, ?_, ?_⟩
+          · apply atomBoundIn_mono _ hretBound
+            intro v hv
+            simp only [List.mem_map, List.mem_reverse] at hv ⊢
+            exact hv
+          · simp only [EarlyProgram.literals, hrev₂, hrev₁, List.flatMap_append, bodyLiterals,
+              List.append_assoc, hlit₂]
+            rw [hlit₁]
+
+/-- Left-to-right A-normalization preserves exact source-order literals and
+well-scopedness across arbitrary nesting on both sides of `+`. -/
+theorem prepareSurface0_spec (ast : Surface0.Program) (purpose : Purpose) {p : EarlyProgram}
+    (h : prepareSurface0 ast purpose = .ok p) :
+    BindingsWellScoped [] p.bindings ∧
+    atomBoundIn (p.bindings.map (·.statement.x)) p.ret ∧
+    p.literals = programLiterals ast := by
+  unfold prepareSurface0 at h
+  by_cases hname : Slice0Rules.EntryName ast.name
+  · simp only [hname, ↓reduceIte, Pure.pure, Except.pure, Bind.bind, Except.bind] at h
+    have hinit : StateWF [] {} := ⟨(fun _ hm => nomatch hm), trivial, (fun _ hm => nomatch hm)⟩
+    simpa [programLiterals] using body_spec [] {} ast.closeBrace ast.body hinit h
+  · simp [hname, throw, MonadExcept.throw, throwThe, MonadExceptOf.throw,
+      Bind.bind, Except.bind] at h
+
+private theorem find?_append_eq {α : Type} (p : α → Bool) (xs ys : List α) :
+    (xs ++ ys).find? p = match xs.find? p with | some a => some a | none => ys.find? p := by
+  induction xs with
+  | nil => rfl
+  | cons x rest ih =>
+    simp only [List.cons_append, List.find?_cons]
+    cases p x <;> simp [ih]
+
+private theorem lookup_none_of_not_mem_keys {κ α : Type} [DecidableEq κ] :
+    ∀ (xs : AList κ α) {k : κ}, k ∉ List.map Prod.fst xs → AList.lookup xs k = none
+  | [], _, _ => rfl
+  | (a, _) :: rest, k, h => by
+    simp only [List.map_cons, List.mem_cons, not_or] at h
+    simp [AList.lookup, Ne.symm h.1, lookup_none_of_not_mem_keys rest h.2]
+
+private theorem lookup_of_mem_keys {κ α : Type} [DecidableEq κ] :
+    ∀ (xs : AList κ α) {k : κ}, k ∈ List.map Prod.fst xs → ∃ v, AList.lookup xs k = some v ∧ (k, v) ∈ xs
+  | [], _, h => nomatch h
+  | (a, v) :: rest, k, h => by
+    by_cases eq : a = k
+    · subst eq
+      exact ⟨v, by simp [AList.lookup], List.mem_cons_self⟩
+    · simp only [List.map_cons, List.mem_cons] at h
+      rcases h with rfl | hrest
+      · exact False.elim (eq rfl)
+      · obtain ⟨w, hw, hmem⟩ := lookup_of_mem_keys rest hrest
+        exact ⟨w, by simp [AList.lookup, eq, hw], List.mem_cons_of_mem _ hmem⟩
+
+private theorem lookup_map_eq {κ α β : Type} [DecidableEq κ] (f : α → β) :
+    ∀ (xs : AList κ α) (k : κ), AList.lookup (AList.map f xs) k = (AList.lookup xs k).map f
+  | [], _ => rfl
+  | (a, v) :: rest, k => by
+    by_cases eq : a = k
+    · simp [AList.map, AList.lookup, eq]
+    · simp only [AList.map, List.map_cons, AList.lookup, eq, ↓reduceIte]
+      exact lookup_map_eq f rest k
+
+private theorem keys_update_eq {κ α : Type} [DecidableEq κ] (k : κ) (f : α → α) :
+    ∀ (xs : AList κ α), List.map Prod.fst (AList.update xs k f) = List.map Prod.fst xs
+  | [] => rfl
+  | (a, v) :: rest => by
+    by_cases eq : a = k
+    · simp [AList.update, eq]
+    · simp [AList.update, eq, keys_update_eq k f rest]
+
+private def Slice0Ctx (Γ : Ctx) : Prop :=
+  ∀ x entry, (x, entry) ∈ Γ → entry.ty = .scalar (.int .u8) ∧ entry.live = true
+
+private theorem slice0Ctx_ctxMark {Γ : Ctx} (hΓ : Slice0Ctx Γ) (x : Var) :
+    Slice0Ctx (ctxMark Γ x false) := by
+  induction Γ with
+  | nil => exact hΓ
+  | cons p rest ih =>
+    obtain ⟨k, v⟩ := p
+    intro y entry he
+    simp only [ctxMark, AList.update] at he
+    split at he
+    · rcases List.mem_cons.mp he with hEq | hrest
+      · cases hEq
+        obtain ⟨hty, hlive⟩ := hΓ k v List.mem_cons_self
+        exact ⟨hty, by simpa [Entry.read] using hlive⟩
+      · exact hΓ y entry (List.mem_cons_of_mem _ hrest)
+    · rcases List.mem_cons.mp he with hEq | hrest
+      · cases hEq
+        exact hΓ k v List.mem_cons_self
+      · exact ih (fun z e' he' => hΓ z e' (List.mem_cons_of_mem _ he')) y entry hrest
+
+private theorem useAtom_slice0 {Γ : Ctx} {a : Slice0.Atom}
+    (hΓ : Slice0Ctx Γ) (hbound : atomBoundIn (List.map Prod.fst Γ) a) :
+    ∃ Γ', useAtom [] Γ a.toCore = .ok Γ' ∧ Slice0Ctx Γ' ∧ List.map Prod.fst Γ' = List.map Prod.fst Γ := by
+  cases a with
+  | lit n => exact ⟨Γ, rfl, hΓ, rfl⟩
+  | var x =>
+    obtain ⟨entry, hlook, hmem⟩ := lookup_of_mem_keys Γ hbound
+    obtain ⟨hty, hlive⟩ := hΓ x entry hmem
+    refine ⟨ctxMark Γ x false, ?_, slice0Ctx_ctxMark hΓ x, keys_update_eq x _ Γ⟩
+    simp [Slice0.Atom.toCore, useAtom, hlook, hlive, hty, Ty.isCopy]
+
+private theorem inferAddOperand_valid {Γ : Ctx} {a : Slice0.Atom} {span : Surface0.Span}
+    (hΓ : Slice0Ctx Γ) (hbound : atomBoundIn (List.map Prod.fst Γ) a)
+    (hok : (atomLiterals a span).find? (fun lit => !IntTy.u8.inRange lit.1) = none) :
+    inferAddOperand Γ.tys a.toCore = .ok .u8 := by
+  cases a with
+  | lit n =>
+    simp only [atomLiterals, List.find?_cons, List.find?_nil] at hok
+    cases hr : IntTy.u8.inRange n
+    · simp [hr] at hok
+    · simp [Slice0.Atom.toCore, inferAddOperand, inferAtomType, hr]
+  | var x =>
+    obtain ⟨entry, hlook, hmem⟩ := lookup_of_mem_keys Γ hbound
+    obtain ⟨hty, _⟩ := hΓ x entry hmem
+    simp [Slice0.Atom.toCore, inferAddOperand, inferAtomType, Ctx.tys, lookup_map_eq, hlook, hty]
+
+private def isBadLit (lit : Nat × Surface0.Span) : Bool := !IntTy.u8.inRange lit.1
+
+private theorem checkStmt_bad_literal {Γ : Ctx} {b : LocatedBinding} {n : Nat} {span : Surface0.Span}
+    (hΓ : Slice0Ctx Γ) (hfresh : b.statement.x ∉ List.map Prod.fst Γ)
+    (hbound : exprBoundIn (List.map Prod.fst Γ) b.statement.e)
+    (hbad : b.literals.find? isBadLit = some (n, span)) :
+    ∃ reason,
+      (∀ policy : ArithmeticPolicy, checkStmtWith policy.permits [] Γ b.statement.toCore = .error reason) ∧
+      rejectedLiteral reason = some (.int .u8 n) ∧
+      b.readSpans.find? (fun read => read.1 == .int .u8 n) = some (.int .u8 n, span) ∧
+      (∀ pos, (CoreContext.slice0.rule (.atPosition pos reason)).val = ⟨``Slice0Rules.LiteralTyped, 1⟩) ∧
+      (∀ x, reason ≠ .duplicateBinding x) ∧
+      (∀ x, reason ≠ .unusedBinding x ∧ reason ≠ .liveLinearBinding x) := by
+  have hf : Fresh Γ b.statement.x := lookup_none_of_not_mem_keys Γ hfresh
+  rcases b with ⟨⟨x, e⟩, opSpan, declSpan, opSpans, cname⟩
+  cases e with
+  | atom a =>
+    cases a with
+    | var v => simp [LocatedBinding.literals, atomLiterals] at hbad
+    | lit m =>
+      simp only [LocatedBinding.literals, atomLiterals, List.find?_cons, List.find?_nil,
+        isBadLit] at hbad
+      cases hr : IntTy.u8.inRange m
+      · simp only [hr, Bool.not_false, Option.some.injEq, Prod.mk.injEq] at hbad
+        obtain ⟨rfl, rfl⟩ := hbad
+        refine ⟨.literalOutOfRange .u8 m, ?_, rfl, ?_, (fun _ => rfl), (fun _ h => by cases h),
+          (fun _ => ⟨(fun h => by cases h), (fun h => by cases h)⟩)⟩
+        · intro policy
+          simp [Slice0.Stmt.toCore, Slice0.Expr.toCore, Slice0.Atom.toCore, checkStmtWith, hf,
+            checkStmtExprWith, requireExprType, inferExprType, inferAtomType, hr,
+            Except.mapError, Bind.bind, Except.bind]
+        · simp [LocatedBinding.readSpans, Slice0.Atom.toCore]
+      · simp [hr] at hbad
+  | add l r =>
+    obtain ⟨ls, rs⟩ := opSpans
+    simp only [LocatedBinding.literals, find?_append_eq] at hbad
+    cases hlBad : (atomLiterals l ls).find? isBadLit with
+    | some pairL =>
+      rw [hlBad] at hbad
+      cases hbad
+      cases l with
+      | var v => simp [atomLiterals] at hlBad
+      | lit m =>
+        simp only [atomLiterals, List.find?_cons, List.find?_nil, isBadLit] at hlBad
+        cases hr : IntTy.u8.inRange m
+        · simp only [hr, Bool.not_false, Option.some.injEq, Prod.mk.injEq] at hlBad
+          obtain ⟨rfl, rfl⟩ := hlBad
+          refine ⟨.additionOperandType (.int .u8 m) (.atomFailure (.outOfRange .u8 m)),
+            ?_, rfl, ?_, (fun _ => rfl), (fun _ h => by cases h),
+            (fun _ => ⟨(fun h => by cases h), (fun h => by cases h)⟩)⟩
+          · intro policy
+            simp [Slice0.Stmt.toCore, Slice0.Expr.toCore, Slice0.Atom.toCore, checkStmtWith, hf,
+              checkStmtExprWith, requireExprType, inferExprType, inferAddOperand, inferAtomType, hr,
+              Bind.bind, Except.bind]
+          · simp [LocatedBinding.readSpans, Slice0.Atom.toCore]
+        · simp [hr] at hlBad
+    | none =>
+      rw [hlBad] at hbad
+      have hlOk : inferAddOperand Γ.tys l.toCore = .ok .u8 :=
+        inferAddOperand_valid hΓ hbound.1 hlBad
+      cases r with
+      | var v => simp [atomLiterals] at hbad
+      | lit k =>
+        simp only [atomLiterals, List.find?_cons, List.find?_nil, isBadLit] at hbad
+        cases hr : IntTy.u8.inRange k
+        · simp only [hr, Bool.not_false, Option.some.injEq, Prod.mk.injEq] at hbad
+          obtain ⟨rfl, rfl⟩ := hbad
+          have hlNe : (l.toCore == .int .u8 k) = false := by
+            cases l with
+            | var v => rfl
+            | lit m =>
+              simp only [atomLiterals, List.find?_cons, List.find?_nil, isBadLit] at hlBad
+              cases hm : IntTy.u8.inRange m
+              · simp [hm] at hlBad
+              · have hne : (m : Int) ≠ (k : Int) := by
+                  intro heq
+                  rw [heq] at hm
+                  rw [hm] at hr
+                  cases hr
+                simp [Slice0.Atom.toCore, beq_eq_false_iff_ne, hne]
+          refine ⟨.additionOperandType (.int .u8 k) (.atomFailure (.outOfRange .u8 k)),
+            ?_, rfl, ?_, (fun _ => rfl), (fun _ h => by cases h),
+            (fun _ => ⟨(fun h => by cases h), (fun h => by cases h)⟩)⟩
+          · intro policy
+            simp only [Slice0.Stmt.toCore, Slice0.Expr.toCore, checkStmtWith, hf, ↓reduceIte,
+              checkStmtExprWith, requireExprType, inferExprType, hlOk, Bind.bind, Except.bind]
+            simp [Slice0.Atom.toCore, inferAddOperand, inferAtomType, hr]
+          · simp only [LocatedBinding.readSpans, List.find?_cons, hlNe]
+            simp [Slice0.Atom.toCore]
+        · simp [hr] at hbad
+
+private theorem checkStmt_good_literals {Γ : Ctx} {b : LocatedBinding}
+    (hΓ : Slice0Ctx Γ) (hfresh : b.statement.x ∉ List.map Prod.fst Γ)
+    (hbound : exprBoundIn (List.map Prod.fst Γ) b.statement.e)
+    (hgood : b.literals.find? isBadLit = none) :
+    ∃ Γ',
+      checkStmtWith ArithmeticPolicy.runtime.permits [] Γ b.statement.toCore = .ok Γ' ∧
+      Slice0Ctx Γ' ∧
+      List.map Prod.fst Γ' = b.statement.x :: List.map Prod.fst Γ ∧
+      (checkStmtWith ArithmeticPolicy.static.permits [] Γ b.statement.toCore = .ok Γ' ∨
+        checkStmtWith ArithmeticPolicy.static.permits [] Γ b.statement.toCore =
+          .error .additionOverflowUnproven) := by
+  have hf : Fresh Γ b.statement.x := lookup_none_of_not_mem_keys Γ hfresh
+  rcases b with ⟨⟨x, e⟩, opSpan, declSpan, opSpans, cname⟩
+  cases e with
+  | atom a =>
+    have hreq : requireExprType [] Γ.tys (.scalar (.int .u8)) (.atom a.toCore) = .ok () := by
+      cases a with
+      | lit n =>
+        simp only [LocatedBinding.literals, atomLiterals, List.find?_cons, List.find?_nil,
+          isBadLit] at hgood
+        cases hr : IntTy.u8.inRange n
+        · simp [hr] at hgood
+        · simp [Slice0.Atom.toCore, requireExprType, inferExprType, inferAtomType, hr,
+            Except.mapError, Bind.bind, Except.bind]
+      | var v =>
+        obtain ⟨entry, hlook, hmem⟩ := lookup_of_mem_keys Γ hbound
+        obtain ⟨hty, _⟩ := hΓ v entry hmem
+        simp [Slice0.Atom.toCore, requireExprType, inferExprType, inferAtomType, Ctx.tys,
+          lookup_map_eq, hlook, hty, Except.mapError, Bind.bind, Except.bind]
+    obtain ⟨Γ₁, huse, hΓ₁, hkeys₁⟩ := useAtom_slice0 hΓ hbound
+    let Γ' : Ctx := (x, ⟨.scalar (.int .u8), true, false, knownExpr Γ (.atom a.toCore),
+      knownFields Γ (.atom a.toCore)⟩) :: Γ₁
+    refine ⟨Γ', ?_, ?_, by simp [Γ', hkeys₁], Or.inl ?_⟩
+    · simp [Slice0.Stmt.toCore, Slice0.Expr.toCore, checkStmtWith, hf, checkStmtExprWith,
+        hreq, Expr.atoms, readAtoms, huse, ArithmeticPolicy.permits, Bind.bind, Except.bind, Γ']
+    · intro y entry hentry
+      rcases List.mem_cons.mp hentry with hEq | hrest
+      · cases hEq; exact ⟨rfl, rfl⟩
+      · exact hΓ₁ y entry hrest
+    · simp [Slice0.Stmt.toCore, Slice0.Expr.toCore, checkStmtWith, hf, checkStmtExprWith,
+        hreq, Expr.atoms, readAtoms, huse, ArithmeticPolicy.permits, admitted, Bind.bind, Except.bind, Γ']
+  | add l r =>
+    obtain ⟨ls, rs⟩ := opSpans
+    simp only [LocatedBinding.literals, find?_append_eq] at hgood
+    cases hlGood : (atomLiterals l ls).find? isBadLit with
+    | some _ => rw [hlGood] at hgood; cases hgood
+    | none =>
+      rw [hlGood] at hgood
+      have hlOk := inferAddOperand_valid hΓ hbound.1 hlGood
+      have hrOk := inferAddOperand_valid hΓ hbound.2 hgood
+      have hreq : requireExprType [] Γ.tys (.scalar (.int .u8)) (.add l.toCore r.toCore) = .ok () := by
+        simp [requireExprType, inferExprType, hlOk, hrOk, Bind.bind, Except.bind]
+      obtain ⟨Γ₁, huse₁, hΓ₁, hkeys₁⟩ := useAtom_slice0 hΓ hbound.1
+      obtain ⟨Γ₂, huse₂, hΓ₂, hkeys₂⟩ := useAtom_slice0 hΓ₁ (hkeys₁ ▸ hbound.2)
+      let Γ' : Ctx := (x, ⟨.scalar (.int .u8), true, false, knownExpr Γ (.add l.toCore r.toCore),
+        knownFields Γ (.add l.toCore r.toCore)⟩) :: Γ₂
+      refine ⟨Γ', ?_, ?_, by simp [Γ', hkeys₂, hkeys₁], ?_⟩
+      · simp [Slice0.Stmt.toCore, Slice0.Expr.toCore, checkStmtWith, hf, checkStmtExprWith,
+          hreq, Expr.atoms, readAtoms, huse₁, huse₂, ArithmeticPolicy.permits, Bind.bind, Except.bind, Γ']
+      · intro y entry hentry
+        rcases List.mem_cons.mp hentry with hEq | hrest
+        · cases hEq; exact ⟨rfl, rfl⟩
+        · exact hΓ₂ y entry hrest
+      · cases hadm : admitted Γ (.add l.toCore r.toCore)
+        · right
+          simp [Slice0.Stmt.toCore, Slice0.Expr.toCore, checkStmtWith, hf, checkStmtExprWith,
+            hreq, Expr.atoms, readAtoms, huse₁, huse₂, ArithmeticPolicy.permits, hadm, Bind.bind, Except.bind]
+        · left
+          simp [Slice0.Stmt.toCore, Slice0.Expr.toCore, checkStmtWith, hf, checkStmtExprWith,
+            hreq, Expr.atoms, readAtoms, huse₁, huse₂, ArithmeticPolicy.permits, hadm, Bind.bind, Except.bind, Γ']
+
+private theorem checkCoreBody_first_bad_literal (bs : List LocatedBinding) (ret : Slice0.Atom)
+    (resultSpan : Surface0.Span) (Γ : Ctx) (pos : Nat) {n : Nat} {span : Surface0.Span}
+    (hΓ : Slice0Ctx Γ) (hwf : BindingsWellScoped (List.map Prod.fst Γ) bs)
+    (hbad : (bs.flatMap LocatedBinding.literals ++ atomLiterals ret resultSpan).find? isBadLit = some (n, span)) :
+    ∃ k reason, k ≤ bs.length ∧
+      checkCoreBodyWith .runtime [] Γ pos (bs.map (Slice0.Stmt.toCore ∘ LocatedBinding.statement)) (.ret ret.toCore) =
+        .error (.atPosition (pos + k) reason) ∧
+      rejectedLiteral reason = some (.int .u8 n) ∧
+      (CoreContext.slice0.rule (.atPosition (pos + k) reason)).val = ⟨``Slice0Rules.LiteralTyped, 1⟩ ∧
+      (∀ x, reason ≠ .duplicateBinding x) ∧
+      (∀ x, reason ≠ .unusedBinding x ∧ reason ≠ .liveLinearBinding x) ∧
+      ((if k = bs.length then [(ret.toCore, resultSpan)]
+        else (bs[k]?.map LocatedBinding.readSpans).getD []).find? (fun read => read.1 == .int .u8 n) =
+          some (.int .u8 n, span)) ∧
+      (checkCoreBodyWith .static [] Γ pos (bs.map (Slice0.Stmt.toCore ∘ LocatedBinding.statement)) (.ret ret.toCore) =
+          .error (.atPosition (pos + k) reason) ∨
+        ∃ j < bs.length,
+          checkCoreBodyWith .static [] Γ pos (bs.map (Slice0.Stmt.toCore ∘ LocatedBinding.statement)) (.ret ret.toCore) =
+            .error (.atPosition (pos + j) .additionOverflowUnproven) ∧
+          ((bs.take (j + 1)).flatMap LocatedBinding.literals).find? isBadLit = none) := by
+  induction bs generalizing Γ pos with
+  | nil =>
+    simp only [List.flatMap_nil, List.nil_append] at hbad
+    cases ret with
+    | var v => simp [atomLiterals] at hbad
+    | lit m =>
+      simp only [atomLiterals, List.find?_cons, List.find?_nil, isBadLit] at hbad
+      cases hr : IntTy.u8.inRange m
+      · simp only [hr, Bool.not_false, Option.some.injEq, Prod.mk.injEq] at hbad
+        obtain ⟨rfl, rfl⟩ := hbad
+        refine ⟨0, .literalOutOfRange .u8 m, Nat.le_refl 0, ?_, rfl, rfl,
+          (fun _ h => by cases h), (fun _ => ⟨(fun h => by cases h), (fun h => by cases h)⟩),
+          ?_, Or.inl ?_⟩
+        · simp [checkCoreBodyWith, checkEnd, requireExprType, inferExprType, inferAtomType,
+            Slice0.Atom.toCore, hr, Except.mapError, Bind.bind, Except.bind]
+        · simp [Slice0.Atom.toCore]
+        · simp [checkCoreBodyWith, checkEnd, requireExprType, inferExprType, inferAtomType,
+            Slice0.Atom.toCore, hr, Except.mapError, Bind.bind, Except.bind]
+      · simp [hr] at hbad
+  | cons b rest ih =>
+    obtain ⟨hfresh, hbound, hrestWf⟩ := hwf
+    rw [List.flatMap_cons, List.append_assoc, find?_append_eq] at hbad
+    cases hbBad : b.literals.find? isBadLit with
+    | some pair =>
+      rw [hbBad] at hbad
+      cases hbad
+      obtain ⟨reason, hchk, hrej, hreads, hrule, hndup, hnun⟩ :=
+        checkStmt_bad_literal hΓ hfresh hbound hbBad
+      refine ⟨0, reason, Nat.zero_le _, ?_, hrej, hrule _, hndup, hnun, ?_, Or.inl ?_⟩
+      · simp [checkCoreBodyWith, hchk .runtime]
+      · simp [hreads]
+      · simp [checkCoreBodyWith, hchk .static]
+    | none =>
+      rw [hbBad] at hbad
+      obtain ⟨Γ', hrunStmt, hΓ', hkeys', hstaticStmt⟩ :=
+        checkStmt_good_literals hΓ hfresh hbound hbBad
+      obtain ⟨k, reason, hk, hrunRest, hrej, hrule, hndup, hnun, hreads, hstaticRest⟩ :=
+        ih Γ' (pos + 1) hΓ' (hkeys' ▸ hrestWf) hbad
+      refine ⟨k + 1, reason, Nat.succ_le_succ hk, ?_, hrej, ?_, hndup, hnun, ?_, ?_⟩
+      · simp only [List.map_cons, Function.comp_apply, checkCoreBodyWith, hrunStmt, hrunRest,
+          Nat.add_assoc, Nat.add_comm 1 k]
+      · simpa only [Nat.add_assoc, Nat.add_comm 1 k] using hrule
+      · simpa [Nat.succ_eq_add_one] using hreads
+      · rcases hstaticStmt with hstOk | hstOv
+        · rcases hstaticRest with hstSame | ⟨j, hj, hstOvRest, hprefix⟩
+          · left
+            simp only [List.map_cons, Function.comp_apply, checkCoreBodyWith, hstOk, hstSame,
+              Nat.add_assoc, Nat.add_comm 1 k]
+          · right
+            refine ⟨j + 1, Nat.succ_lt_succ hj, ?_, ?_⟩
+            · simp only [List.map_cons, Function.comp_apply, checkCoreBodyWith, hstOk, hstOvRest,
+                Nat.add_assoc, Nat.add_comm 1 j]
+            · simp only [List.take_succ_cons, List.flatMap_cons, find?_append_eq, hbBad, hprefix]
+        · right
+          refine ⟨0, Nat.zero_lt_succ _, ?_, ?_⟩
+          · simp [checkCoreBodyWith, hstOv]
+          · simp [hbBad]
+
 end SurfacePreparation
+
+private theorem mapSiblingKeys_length {α β : Type} (kind : ConstructKind) (name : α → ConstructName)
+    (emit : α → FunctionRelativeKey → β) (preceding : List KeyConstruct) (items : List α) :
+    (KeyConstruct.mapSiblingKeys kind name emit preceding items).length = items.length := by
+  induction items generalizing preceding with
+  | nil => rfl
+  | cons _ rest ih => simp [KeyConstruct.mapSiblingKeys, ih]
+
+theorem originAt_isSome_early (p : EarlyProgram) {k : Nat} (hk : k ≤ p.bindings.length) :
+    ∃ origin, (AdmissionView.zero p).originAt k = some origin := by
+  unfold AdmissionView.originAt
+  have hlen : (AdmissionView.zero p).located.bindings.length = p.bindings.length := by
+    simp [AdmissionView.located]
+  rw [hlen]
+  by_cases hEq : k = p.bindings.length
+  · simp [hEq]
+  · have hlt : k < (AdmissionView.zero p).located.bindingOrigins.length := by
+      simp only [AdmissionView.located, StraightProgram.bindingOrigins, mapSiblingKeys_length,
+        List.length_zipIdx, List.length_map]
+      omega
+    simp only [hEq, ↓reduceIte, List.getElem?_eq_getElem hlt, Option.map_some]
+    exact ⟨_, rfl⟩
+
+theorem SurfacePreparation.prepareSurface0_checkProgramWith_first_bad_literal
+    (ast : Surface0.Program) (purpose : SurfacePreparation.Purpose) {p : EarlyProgram}
+    {n : Nat} {span : Surface0.Span}
+    (prepared : SurfacePreparation.prepareSurface0 ast purpose = .ok p)
+    (firstBad : (SurfacePreparation.programLiterals ast).find?
+      (fun lit => !IntTy.u8.inRange lit.1) = some (n, span)) :
+    ∃ reason,
+      checkProgramWith .runtime (AdmissionView.zero p).program = .error reason ∧
+      (AdmissionView.zero p).render reason = some (.core .slice0 (surfaceFileSpan span) [] reason) ∧
+      (RefusalCause.core .slice0 (surfaceFileSpan span) [] reason).rule = ⟨``Slice0Rules.LiteralTyped, 1⟩ ∧
+      (checkProgramWith .static (AdmissionView.zero p).program = .error reason ∨
+        ∃ j < p.bindings.length,
+          checkProgramWith .static (AdmissionView.zero p).program =
+            .error (.atPosition j .additionOverflowUnproven) ∧
+          ((p.bindings.take (j + 1)).flatMap LocatedBinding.literals).find?
+            (fun lit => !IntTy.u8.inRange lit.1) = none) := by
+  obtain ⟨hwf, _, hlits⟩ := SurfacePreparation.prepareSurface0_spec ast purpose prepared
+  rw [← hlits] at firstBad
+  obtain ⟨k, reason, hk, hrun, hrej, hrule, hndup, hnun, hreads, hstatic⟩ :=
+    SurfacePreparation.checkCoreBody_first_bad_literal p.bindings p.ret p.resultSpan [] 0
+      (fun _ _ hm => nomatch hm) hwf firstBad
+  have hprog : (AdmissionView.zero p).program =
+      ⟨[], p.bindings.map (Slice0.Stmt.toCore ∘ LocatedBinding.statement), .ret p.ret.toCore⟩ := by
+    simp [AdmissionView.program, Slice0.toCore, EarlyProgram.eraseLocations, List.map_map]
+  have hcheckRun : checkProgramWith .runtime (AdmissionView.zero p).program = .error (.atPosition k reason) := by
+    rw [hprog]
+    simpa [checkProgramWith, checkDecls, checkDeclsFrom] using hrun
+  obtain ⟨origin, horigin⟩ := originAt_isSome_early p hk
+  have hrender : (AdmissionView.zero p).render (.atPosition k reason) =
+      some (.core .slice0 (surfaceFileSpan span) [] (.atPosition k reason)) := by
+    unfold AdmissionView.render
+    simp only [horigin, Bind.bind, Option.bind]
+    cases reason with
+    | duplicateBinding x => exact False.elim (hndup x rfl)
+    | unusedBinding x => exact False.elim ((hnun x).1 rfl)
+    | liveLinearBinding x => exact False.elim ((hnun x).2 rfl)
+    | literalOutOfRange ty m =>
+      simp only [rejectedLiteral, Option.some.injEq, Atom.int.injEq] at hrej
+      obtain ⟨rfl, hm⟩ := hrej
+      have hreads' : (p.readsAt k).find? (fun read => read.1 == .int .u8 m) = some (.int .u8 m, span) := by
+        simpa [EarlyProgram.readsAt, hm] using hreads
+      simp [rejectedLiteral, hreads', AdmissionView.context, Pure.pure]
+    | additionOperandType a fail =>
+      cases fail with
+      | wrongType _ => cases hrej
+      | atomFailure af =>
+        cases af with
+        | unbound _ => cases hrej
+        | outOfRange ty m =>
+          simp only [rejectedLiteral, Option.some.injEq, Atom.int.injEq] at hrej
+          obtain ⟨rfl, hm⟩ := hrej
+          have hreads' : (p.readsAt k).find? (fun read => read.1 == .int .u8 m) = some (.int .u8 m, span) := by
+            simpa [EarlyProgram.readsAt, hm] using hreads
+          simp [rejectedLiteral, hreads', AdmissionView.context, Pure.pure]
+    | _ => cases hrej
+  refine ⟨.atPosition k reason, hcheckRun, hrender, by simpa [RefusalCause.rule, RefusalCause.citation] using hrule, ?_⟩
+  rcases hstatic with hsame | ⟨j, hj, hov, hprefix⟩
+  · left
+    rw [hprog]
+    simpa [checkProgramWith, checkDecls, checkDeclsFrom] using hsame
+  · right
+    refine ⟨j, hj, ?_, hprefix⟩
+    rw [hprog]
+    simpa [checkProgramWith, checkDecls, checkDeclsFrom] using hov
 
 def AdmissionView.failure (v : AdmissionView) (reason : Admission.Refusal) : AdmissionFailure :=
   match v.render reason with

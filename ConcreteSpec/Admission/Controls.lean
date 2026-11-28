@@ -1,4 +1,5 @@
 import ConcreteSpec.Admission.Early
+import ConcreteSpec.Proofs.Memory
 
 namespace ConcreteSpec.Admission.Controls
 
@@ -317,22 +318,173 @@ theorem sliceLanguage_layout_wf_examples :
       (.nominal ctrlDecl) (.scalar 0 1) rfl,
    sliceLanguage_layout_wf slice0 [] linuxX8664 (.scalar (.int .u32)) (.scalar 4 4) rfl⟩
 
--- ISS-0125 negative control: a hypothetical operation that frees a live incoming block
--- violates the `preservesResidentHandles` contract.
+/-- A hypothetical operation relation that frees a live incoming block on `linuxX8664`. -/
+private def freeingOperation {O : Exec.Operands}
+    (_env : Declarations) (op : Operator) (_inputs : List O.Ty) (_output : O.Ty)
+    (_values : List O.Val) (_target : Target) (_addresses : List (OperationAddress O.Ty))
+    (before : OperationStore O.Val) (result : O.Val) (_effects : List O.Event)
+    (after : OperationStore O.Val) : Prop :=
+  op = .named ⟨"freeBlock"⟩ ∧ result = O.unitVal ∧
+    ∃ id freed, before.bytes.free id = some freed ∧ after = { before with bytes := freed }
+
+-- ISS-0125 negative control: no `CoreLanguage` instance can admit a freeing operation;
+-- `CoreLanguage.preservesResidentHandles` is directly refuted on an allocated live block.
 theorem freeing_operation_violates_preservesResidentHandles :
-    let initMem := Mem.Memory.empty
-    ∃ id allocated freed,
-      initMem.alloc linuxX8664 ⟨0⟩ 1 1 1 = .ok (id, allocated) ∧
-      allocated.free id = some freed ∧
-      ¬ (∀ b, allocated.block id = some b → b.live = true →
-          ∃ b', freed.block id = some b' ∧ b'.live = true) := by
-  refine ⟨⟨0⟩, ⟨[(⟨0⟩, Mem.candidate ⟨0⟩ 1 1 1)], 1⟩,
-    ⟨[(⟨0⟩, {Mem.candidate ⟨0⟩ 1 1 1 with live := false, exposed := false})], 1⟩,
-    rfl, rfl, ?_⟩
-  intro h
-  obtain ⟨b', found, live⟩ := h (Mem.candidate ⟨0⟩ 1 1 1) rfl rfl
+    ¬ ∃ lang : CoreLanguage,
+      ∀ env op inputs output values target addresses before result effects after,
+        freeingOperation (O := lang.operands) env op inputs output values target addresses
+          before result effects after →
+        lang.operation env op inputs output values target addresses before result effects after := by
+  rintro ⟨lang, hfree⟩
+  have halloc := Mem.alloc_wellFormed linuxX8664 Mem.Memory.empty (Mem.empty_wellFormed linuxX8664) ⟨0⟩ 1 1 1
+  have allocEq : Mem.Memory.empty.alloc linuxX8664 ⟨0⟩ 1 1 1 =
+      .ok (⟨0⟩, ⟨[(⟨0⟩, Mem.candidate ⟨0⟩ 1 1 1)], 1⟩) := rfl
+  rw [allocEq] at halloc
+  let allocated : Mem.Memory := ⟨[(⟨0⟩, Mem.candidate ⟨0⟩ 1 1 1)], 1⟩
+  let freed : Mem.Memory := ⟨[(⟨0⟩, {Mem.candidate ⟨0⟩ 1 1 1 with live := false, exposed := false})], 1⟩
+  let before : OperationStore lang.operands.Val := ⟨allocated, {}, []⟩
+  let after : OperationStore lang.operands.Val := { before with bytes := freed }
+  have hstep : lang.operation [] (.named ⟨"freeBlock"⟩) [] lang.operands.unitTy []
+      linuxX8664 [] before lang.operands.unitVal [] after :=
+    hfree _ _ _ _ _ _ _ _ _ _ _ ⟨rfl, rfl, ⟨0⟩, freed, rfl, rfl⟩
+  have ⟨_, _, hpres⟩ := lang.preservesResidentHandles _ _ _ _ _ _ _ _ _ _ _ hstep halloc
+  obtain ⟨block', found, live, _⟩ := hpres ⟨0⟩ (Mem.candidate ⟨0⟩ 1 1 1) rfl rfl
   cases found
   cases live
+
+/-! ### Freeze F1a round 2: Core checking source-order controls (both routes) -/
+
+private def slice0Project (src : String) : Project :=
+  Project.singleton mainSourcePath (SourceText.ofBytes src.toUTF8.data.toList)
+
+private def runBothRoutes (src : String) (prog : Surface0.Program) :
+    Option ((RuleId × Nat × Nat) × (RuleId × Nat × Nat)) := do
+  let prepared ← (SurfacePreparation.prepareSurface0 prog).toOption
+  let input : CoreInput (sliceLanguage slice0) :=
+    ⟨slice0Project src, slice0, .straightLine (.zero prepared) rfl⟩
+  let checked ← match checkInput input with
+    | .error (.refused c) => some (c.rule, c.primary.startOffset, c.primary.endOffset)
+    | _ => none
+  let unchecked ← match input.checkStatic with
+    | .error (.refused c) => some (c.rule, c.primary.startOffset, c.primary.endOffset)
+    | _ => none
+  return (checked, unchecked)
+
+private def sliceChars (src : String) (start stop : Nat) : String :=
+  String.ofList ((src.toList.drop start).take (stop - start))
+
+-- Required source-order controls on BOTH checked (`checkInput`) and unchecked (`checkStatic`) routes:
+-- 1. `fn main() -> u8 { return 300 + (1 + 400); }` → `300` [25, 28)
+-- 2. `fn main() -> u8 { return (1 + 400) + 300; }` → `400` [30, 33) (and compact `(1+400)` → [28, 31))
+-- 3. `fn main() -> u8 { return 300 + 1; }` → `300` [25, 28)
+-- 4. `fn main() -> u8 { return 300 + (1 + 2); }` → `300` [25, 28)
+theorem core_checking_source_order_controls :
+    let litRule : RuleId := ⟨``Slice0Rules.LiteralTyped, 1⟩
+    let sRightBad := r"fn main() -> u8 { return 300 + (1 + 400); }"
+    let pRightBad : Surface0.Program := ⟨"main", mkSpan 3 7,
+      [.ret (.add (.integer 300 none (mkSpan 25 28))
+        (.add (.integer 1 none (mkSpan 32 33)) (.integer 400 none (mkSpan 36 39)) (mkSpan 34 35))
+        (mkSpan 29 30)) (mkSpan 18 41)], mkSpan 42 43⟩
+    let sLeftBad := r"fn main() -> u8 { return (1 + 400) + 300; }"
+    let pLeftBad : Surface0.Program := ⟨"main", mkSpan 3 7,
+      [.ret (.add
+        (.add (.integer 1 none (mkSpan 26 27)) (.integer 400 none (mkSpan 30 33)) (mkSpan 28 29))
+        (.integer 300 none (mkSpan 37 40))
+        (mkSpan 35 36)) (mkSpan 18 41)], mkSpan 42 43⟩
+    let sLeftBadCompact := r"fn main() -> u8 { return (1+400) + 300; }"
+    let pLeftBadCompact : Surface0.Program := ⟨"main", mkSpan 3 7,
+      [.ret (.add
+        (.add (.integer 1 none (mkSpan 26 27)) (.integer 400 none (mkSpan 28 31)) (mkSpan 27 28))
+        (.integer 300 none (mkSpan 35 38))
+        (mkSpan 33 34)) (mkSpan 18 39)], mkSpan 40 41⟩
+    let sFlat := r"fn main() -> u8 { return 300 + 1; }"
+    let pFlat : Surface0.Program := ⟨"main", mkSpan 3 7,
+      [.ret (.add (.integer 300 none (mkSpan 25 28)) (.integer 1 none (mkSpan 31 32))
+        (mkSpan 29 30)) (mkSpan 18 33)], mkSpan 34 35⟩
+    let sRightGood := r"fn main() -> u8 { return 300 + (1 + 2); }"
+    let pRightGood : Surface0.Program := ⟨"main", mkSpan 3 7,
+      [.ret (.add (.integer 300 none (mkSpan 25 28))
+        (.add (.integer 1 none (mkSpan 32 33)) (.integer 2 none (mkSpan 36 37)) (mkSpan 34 35))
+        (mkSpan 29 30)) (mkSpan 18 39)], mkSpan 40 41⟩
+    sliceChars sRightBad 25 28 = "300" ∧
+    runBothRoutes sRightBad pRightBad = some ((litRule, 25, 28), (litRule, 25, 28)) ∧
+    sliceChars sLeftBad 30 33 = "400" ∧
+    runBothRoutes sLeftBad pLeftBad = some ((litRule, 30, 33), (litRule, 30, 33)) ∧
+    sliceChars sLeftBadCompact 28 31 = "400" ∧
+    runBothRoutes sLeftBadCompact pLeftBadCompact = some ((litRule, 28, 31), (litRule, 28, 31)) ∧
+    sliceChars sFlat 25 28 = "300" ∧
+    runBothRoutes sFlat pFlat = some ((litRule, 25, 28), (litRule, 25, 28)) ∧
+    sliceChars sRightGood 25 28 = "300" ∧
+    runBothRoutes sRightGood pRightGood = some ((litRule, 25, 28), (litRule, 25, 28)) := by
+  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+
+-- Nested operands on BOTH sides, mixed literal/overflow order, stage-order preservation,
+-- and valid right-nested acceptance on both routes.
+theorem core_checking_nested_both_sides_and_mixed_controls :
+    let litRule : RuleId := ⟨``Slice0Rules.LiteralTyped, 1⟩
+    let addRule : RuleId := ⟨``Slice0Rules.AdditionFits, 1⟩
+    -- Nested on both sides: bad literal in right subtree (`300` before `400`).
+    let sBothRight := r"fn main() -> u8 { return (1 + 2) + (300 + (4 + 400)); }"
+    let pBothRight : Surface0.Program := ⟨"main", mkSpan 3 7,
+      [.ret (.add
+        (.add (.integer 1 none (mkSpan 26 27)) (.integer 2 none (mkSpan 30 31)) (mkSpan 28 29))
+        (.add (.integer 300 none (mkSpan 36 39))
+          (.add (.integer 4 none (mkSpan 43 44)) (.integer 400 none (mkSpan 47 50)) (mkSpan 45 46))
+          (mkSpan 40 41))
+        (mkSpan 33 34)) (mkSpan 18 53)], mkSpan 54 55⟩
+    -- Nested on both sides: bad literal in left subtree (`300` before `400` and `500`).
+    let sBothLeft := r"fn main() -> u8 { return (300 + (1 + 400)) + (2 + 500); }"
+    let pBothLeft : Surface0.Program := ⟨"main", mkSpan 3 7,
+      [.ret (.add
+        (.add (.integer 300 none (mkSpan 26 29))
+          (.add (.integer 1 none (mkSpan 33 34)) (.integer 400 none (mkSpan 37 40)) (mkSpan 35 36))
+          (mkSpan 30 31))
+        (.add (.integer 2 none (mkSpan 46 47)) (.integer 500 none (mkSpan 50 53)) (mkSpan 48 49))
+        (mkSpan 43 44)) (mkSpan 18 55)], mkSpan 56 57⟩
+    -- Left bad literal before right overflowing addition: both routes report `300` [25, 28).
+    let sLitBeforeOv := r"fn main() -> u8 { return 300 + (200 + 100); }"
+    let pLitBeforeOv : Surface0.Program := ⟨"main", mkSpan 3 7,
+      [.ret (.add (.integer 300 none (mkSpan 25 28))
+        (.add (.integer 200 none (mkSpan 32 35)) (.integer 100 none (mkSpan 38 41)) (mkSpan 36 37))
+        (mkSpan 29 30)) (mkSpan 18 43)], mkSpan 44 45⟩
+    -- Left overflowing addition before right bad literal: checked reports inner `+` [30, 31),
+    -- unchecked skips runtime overflow and reports `400` [39, 42).
+    let sOvBeforeLit := r"fn main() -> u8 { return (200 + 100) + 400; }"
+    let pOvBeforeLit : Surface0.Program := ⟨"main", mkSpan 3 7,
+      [.ret (.add
+        (.add (.integer 200 none (mkSpan 26 29)) (.integer 100 none (mkSpan 32 35)) (mkSpan 30 31))
+        (.integer 400 none (mkSpan 39 42))
+        (mkSpan 37 38)) (mkSpan 18 43)], mkSpan 44 45⟩
+    -- Stage order preserved: surface `missing` in nested right still beats Core `300` on left.
+    let sStageOrder := r"fn main() -> u8 { return 300 + (1 + missing); }"
+    let pStageOrder : Surface0.Program := ⟨"main", mkSpan 3 7,
+      [.ret (.add (.integer 300 none (mkSpan 25 28))
+        (.add (.integer 1 none (mkSpan 32 33)) (.local "missing" (mkSpan 36 43)) (mkSpan 34 35))
+        (mkSpan 29 30)) (mkSpan 18 45)], mkSpan 46 47⟩
+    -- Valid right-nested program: accepted on both routes and evaluates to 6.
+    let sValidRight := r"fn main() -> u8 { return 1 + (2 + 3); }"
+    let pValidRight : Surface0.Program := ⟨"main", mkSpan 3 7,
+      [.ret (.add (.integer 1 none (mkSpan 25 26))
+        (.add (.integer 2 none (mkSpan 30 31)) (.integer 3 none (mkSpan 34 35)) (mkSpan 32 33))
+        (mkSpan 27 28)) (mkSpan 18 37)], mkSpan 38 39⟩
+    sliceChars sBothRight 36 39 = "300" ∧
+    runBothRoutes sBothRight pBothRight = some ((litRule, 36, 39), (litRule, 36, 39)) ∧
+    sliceChars sBothLeft 26 29 = "300" ∧
+    runBothRoutes sBothLeft pBothLeft = some ((litRule, 26, 29), (litRule, 26, 29)) ∧
+    sliceChars sLitBeforeOv 25 28 = "300" ∧
+    runBothRoutes sLitBeforeOv pLitBeforeOv = some ((litRule, 25, 28), (litRule, 25, 28)) ∧
+    sliceChars sOvBeforeLit 30 31 = "+" ∧ sliceChars sOvBeforeLit 39 42 = "400" ∧
+    runBothRoutes sOvBeforeLit pOvBeforeLit = some ((addRule, 30, 31), (litRule, 39, 42)) ∧
+    sliceChars sStageOrder 36 43 = "missing" ∧
+    SurfacePreparation.prepareSurface0 pStageOrder = .error (.surface (.unknownLocal "missing" (mkSpan 36 43))) ∧
+    (match SurfacePreparation.prepareSurface0 pValidRight with
+      | .ok ep =>
+        let inp : CoreInput (sliceLanguage slice0) :=
+          ⟨slice0Project sValidRight, slice0, .straightLine (.zero ep) rfl⟩
+        (checkInput inp).isOk && inp.checkStatic.isOk &&
+          decide (run (AdmissionView.zero ep).program 10 = .exit 6)
+      | .error _ => false) = true := by
+  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 -- Rich `CoreInput.checkStatic`: passes unchecked overflow (while `checkInput` refuses `AdditionFits@1`),
 -- and refuses static violations with exact `RegisteredRule`, primary span, related spans, and `StaticRefuses`.
