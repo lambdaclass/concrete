@@ -1154,7 +1154,7 @@ def firstViolation (raw : SourceText) : Option (Violation raw.length) :=
 structure Refusal where
   raw : SourceText
   violation : Violation raw.length
-  deriving Repr
+  deriving DecidableEq, Repr
 
 /-- The byte slice named by the refusal, retaining its exact spelling. -/
 def Refusal.contextBytes (refusal : Refusal) : ConcreteSpec.Numbers :=

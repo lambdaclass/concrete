@@ -1,11 +1,12 @@
 import ConcreteSpec.Spec.Slice0Layout
-import Concrete.Refusal
+import Concrete.Stages
 
 open Concrete ConcreteSpec.Core
 open ConcreteSpec.Project
 open Slice0Layout
 
-private def refusal : Refusal := .checker "unreachable code"
+private def span : ConcreteSpec.Surface0.Span := ⟨0, 1, 1, 1, ⟨0⟩⟩
+private def refusal : Refusal := .source (.surface (.unreachable span))
 example : ((refusal.diagnostic ``Slice0Rules.ReachableBody).map (fun d => d.rule.val.name)) =
     some ``Slice0Rules.ReachableBody := by decide
 example : (refusal.diagnostic `unregistered).isNone = true := by decide
@@ -16,17 +17,17 @@ example : (refusal.diagnosticAt ⟨``Slice0Rules.ReachableBody, 1⟩).isSome = t
 example : (refusal.diagnostic ``Slice0Rules.Lexed).isNone = true := by decide
 example : (refusal.diagnosticAt ⟨``Slice0Rules.Lexed, 2⟩).isNone = true := by decide
 
-example : ((Refusal.syntaxError "invalid source").diagnostic ``Slice0Rules.Lexed).isSome =
+example : ((Refusal.source (.lexical (.encoding .nul) span)).diagnostic ``Slice0Rules.Lexed).isSome =
     true := by decide
 
-example : ((Refusal.syntaxError "invalid source").diagnosticAt ⟨``Slice0Rules.Lexed, 1⟩).isNone =
+example : ((Refusal.source (.lexical (.encoding .nul) span)).diagnosticAt ⟨``Slice0Rules.Lexed, 1⟩).isNone =
     true := by decide
-example : (refusal.diagnosticAt ⟨``Slice0Rules.UnreservedLocal, 2⟩).isSome = true := by decide
+example : (refusal.diagnosticAt ⟨``Slice0Rules.UnreservedLocal, 2⟩).isNone = true := by decide
 example : (refusal.diagnosticAt ⟨``Slice0Rules.UnreservedLocal, 1⟩).isNone = true := by decide
 
-example : ((Refusal.lexerDigitLimit 0 1024).diagnostic ``Slice0Rules.WithinLimit).isSome =
+example : ((Refusal.source (.lexical (.digitLimit 1024) span)).diagnostic ``Slice0Rules.WithinLimit).isSome =
     true := by decide
-example : ((Refusal.lexerDigitLimit 0 1024).diagnostic ``Slice0Rules.Lexed).isNone =
+example : ((Refusal.source (.lexical (.digitLimit 1024) span)).diagnostic ``Slice0Rules.Lexed).isNone =
     true := by decide
 
 example : ((Refusal.manifest .size).diagnosticAt Manifest.sizeRule).isSome = true :=
@@ -39,6 +40,18 @@ example : ((Refusal.manifest .size).diagnosticAt Manifest.depthRule).isNone = tr
   by decide
 example : ((Refusal.manifest .schemaPending).diagnosticAt Manifest.sizeRule).isNone = true :=
   by decide
+
+-- The changed judgments have new live revisions. Older diagnostics remain identifiable.
+example : Slice0Rules.AdmittedProduction (.decls, []) ∧
+    ¬ Manifest.DepthAccepted "[a.b.c.d.e.f.g.h.i.j.k.l.m.n.o.p]\nx = \"oops" := by
+  cbv <;> decide
+
+example : (validateRule ⟨``Slice0Rules.AdmittedProduction, 3⟩).isSome ∧
+    (validateRule ⟨``Slice0Rules.AdmittedProduction, 2⟩).isNone := by decide
+example : (validateRule ⟨``Manifest.DepthAccepted, 2⟩).isSome ∧
+    (validateRule ⟨``Manifest.DepthAccepted, 1⟩).isNone := by decide
+example : ⟨``Slice0Rules.AdmittedProduction, 2⟩ ∈ retiredRuleIds ∧
+    ⟨``Manifest.DepthAccepted, 1⟩ ∈ retiredRuleIds := by decide
 
 -- A literal-range or generic admission example cannot stand in for OWN-5.
 example : ((rulesForSlice ⟨0⟩).getD []).any
@@ -73,3 +86,15 @@ example : storageFacts smallProfile .u32 = some (4, 2, .big) := rfl
 example : query smallProfile (.integer .u64) = none := rfl
 example : query smallProfile .logical = some .logical := rfl
 example : (query smallProfile .logical).map Layout.byteSize = some 0 := rfl
+
+-- The location belongs to the original path bytes, including an empty boundary.
+private def pathWitness (path : String) (rule : RuleId) : Option (Nat × Nat × Bool) := do
+  let .error (failure@(.path r)) := Concrete.Stages.Input.parsePath path | none
+  let loc := r.violation.location
+  return (loc.offset, loc.stop, (failure.diagnosticAt rule).isSome)
+
+example : pathWitness "a b.con" ⟨``SourcePath.NoSpaces, 1⟩ = some (1, 7, true) ∧
+    pathWitness "a b.con" ⟨``SourcePath.NoReservedStem, 1⟩ = some (1, 7, false) ∧
+    pathWitness "con.con" ⟨``SourcePath.NoReservedStem, 1⟩ = some (0, 7, true) ∧
+    pathWitness "" ⟨``SourcePath.Nonempty, 1⟩ = some (0, 0, true) := by
+  with_unfolding_all exact ⟨rfl, rfl, rfl, rfl⟩

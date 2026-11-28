@@ -84,12 +84,59 @@ private def requireRefusal (clause : Clause) (bad : FunctionFacts) (source : Evi
     (decide (coverage.function = function ∧ coverage.requirements = predictable []))
   requireRefusal .stackBound actual .function .unknown
 
+open Concrete.Stages in
+example :
+    let input := Input.load "main.con" "fn main() -> u8 { return '!x'; }".toUTF8
+    let cause := ConcreteSpec.StageInterface.RefusalCause.lexical (.byte .unterminated) ⟨27, 28, 1, 28, ⟨0⟩⟩
+    input.bind compile = .error (.source cause) ∧ input.bind unchecked = .error (.source cause) := by
+  with_unfolding_all exact ⟨rfl, rfl⟩
+
+-- A comment cannot add a seventeenth path segment.
+example :
+    let text := "[a.b.c.d.e.f.g.h.i.j.k.l.m.n.o.p]\n#ok" ++ String.singleton (Char.ofNat 1)
+    Manifest.DepthAccepted text ∧ ¬ Manifest.SyntaxAccepted text ∧
+      Project.parseManifest text = .error (.invalid (.malformed ⟨37, 38⟩)) := by
+  cbv <;> decide
+
+-- Every quoted key starts at the first delimiter, including an empty key.
+-- At ordinary depth the first two quotes can still be completed with =0.
+example :
+    let header := "[a.b.c.d.e.f.g.h.i.j.k.l.m.n.o.p]\n"
+    let exceeded : Except Concrete.ManifestRefusal Unit := .error (.invalid (.depth ⟨34, 35⟩))
+    Project.parseManifest (header ++ "\"") = exceeded ∧
+    Project.parseManifest (header ++ "\"\"") = exceeded ∧
+    Project.parseManifest (header ++ "\"\"\"") = exceeded ∧
+    Project.parseManifest "\"\"=0" = .ok () ∧
+    Project.parseManifest "\"\"\"" = .error (.invalid (.malformed ⟨2, 3⟩)) := by
+  cbv <;> decide
+
+-- Nested arrays reach the actual lookahead, including EOF and an invalid comment byte.
+example : Project.parseManifest "a=[[[[[0]]]]]" = .ok () ∧
+    Project.parseManifest "a=[[[[[" = .error (.invalid (.malformed ⟨7, 7⟩)) ∧
+    Project.parseManifest "a=[[[[[[[[[[[[[[[[" = .error (.invalid (.depth ⟨17, 18⟩)) ∧
+    Project.parseManifest ("a = [[[[[[[[[[[[[[[ #ok" ++ String.singleton (Char.ofNat 1)) =
+      .error (.invalid (.malformed ⟨23, 24⟩)) := by
+  cbv <;> decide
+
+-- A missing token binds EOF. A wrong token binds its own byte range,
+-- including after multibyte text or before a later unterminated quote.
+example : Project.parseManifest "\"é\" = [" = .error (.invalid (.malformed ⟨8, 8⟩)) ∧
+    Project.parseManifest "x = [0 1]" = .error (.invalid (.malformed ⟨7, 8⟩)) ∧
+    Project.parseManifest "]\nx = \"open" = .error (.invalid (.malformed ⟨0, 1⟩)) ∧
+    Project.manifestText ⟨#[120, 61, 0xc2]⟩ = .error (.encoding ⟨3, 3⟩) := by
+  cbv <;> decide
+
+private def manifestRule (text : String) :=
+  match Project.parseManifest text with
+  | .error e => e.ruleId
+  | .ok () => none
+
 #eval show IO Unit from do
   let valid := Project.parseManifest "[policy]\n[assumptions]\n"
   expect "valid TOML table syntax" valid.isOk
   for text in ["[policy\n", "[policy]\nx = true\nx = false\n"] do
     match Project.parseManifest text with
-    | .error .malformed => pure ()
+    | .error (.invalid (.malformed _)) => pure ()
     | _ => expect "malformed or duplicate assignment" false
   let quotes := String.ofList (List.replicate 40 '[')
   let quoted := Project.parseManifest s!"x = \"{quotes}\" # {quotes}\n"
@@ -100,18 +147,18 @@ private def requireRefusal (clause : Clause) (bad : FunctionFacts) (source : Evi
   let limit := Project.parseManifest (arrayAtDepth (Project.manifestDepthLimit - 1))
   expect "array at depth limit" limit.isOk
   match Project.parseManifest (arrayAtDepth Project.manifestDepthLimit) with
-  | .error .depth => pure ()
+  | .error (.invalid (.depth _)) => pure ()
   | _ => expect "excess nesting" false
   let segments := fun n => String.intercalate "." (List.replicate n "a")
   let nested := fun n =>
     "[" ++ segments 8 ++ "]\n" ++ segments n ++ " = true\n"
   expect "combined header and dotted path at limit" (Project.parseManifest (nested 8)).isOk
   expect "combined header and dotted path exceeds limit"
-    (decide (Project.parseManifest (nested 9) = .error .depth))
+    (decide (manifestRule (nested 9) = some Manifest.depthRule))
   let inlineAt := fun n => "[" ++ segments 8 ++ "]\nx = {" ++ segments n ++ " = true}\n"
   expect "combined inline table path at limit" (Project.parseManifest (inlineAt 6)).isOk
   expect "depth includes inline table keys"
-    (decide (Project.parseManifest (inlineAt 7) = .error .depth))
+    (decide (manifestRule (inlineAt 7) = some Manifest.depthRule))
   for (table, cost) in [("{}", 1), ("{ y = true }", 2)] do
     for extra in [0, 1] do
       let n := Project.manifestDepthLimit - cost + extra
@@ -121,27 +168,27 @@ private def requireRefusal (clause : Clause) (bad : FunctionFacts) (source : Evi
           "x = " ++ String.ofList (List.replicate arrays '[') ++ table ++
             String.ofList (List.replicate arrays ']')] do
         expect ("inline table at depth boundary: " ++ text)
-          (decide (Project.parseManifest text = if extra == 0 then .ok () else .error .depth))
+          (if extra == 0 then (Project.parseManifest text).isOk else manifestRule text == some Manifest.depthRule)
   for text in ["a.b = 1\n[a]\nc = 2\n", "[a]\nb.c = 1\n[a.b]\nd = 2\n",
       "[a.b]\nx = 1\n[a]\nb.y = 2\n", "x = 00", "x = -01", "# " ++ String.singleton (Char.ofNat 0),
       "# " ++ String.singleton (Char.ofNat 1), "x = \"\"\"a\\\n \r b\"\"\""] do
     expect ("malformed manifest: " ++ reprStr text)
-      (decide (Project.parseManifest text = .error .malformed))
+      (decide (manifestRule text = some Manifest.syntaxRule))
   for text in ["[a.b]\nx = 1\n[a]\nc = 2\n", "a.b = 1\na.c = 2\n[a.d]\ne = 3\n",
       "x = 0\ny = -10\n#\t comment", "x = \"\"\"a\\\r\n \t\r\n b\"\"\""] do
     expect ("valid manifest: " ++ reprStr text) (Project.parseManifest text).isOk
   expect "quoted dots are one segment"
     (Project.parseManifest ("\"" ++ segments 20 ++ "\".a = true\n")).isOk
   expect "duplicate decoded key"
-    (decide (Project.parseManifest "a = true\n\"\\u0061\" = false\n" = .error .malformed))
+    (decide (manifestRule "a = true\n\"\\u0061\" = false\n" = some Manifest.syntaxRule))
   expect "single-line string does not consume following lines"
-    (decide (Project.parseManifest ("a = \"unterminated\n" ++ arrayAtDepth 40) = .error .malformed))
+    (decide (manifestRule ("a = \"unterminated\n" ++ arrayAtDepth 40) = some Manifest.syntaxRule))
   expect "multiline string hides delimiters and consumes a closing run"
     (Project.parseManifest ("a = \"\"\"\n" ++ quotes ++ "\"\"\"\"\"\nb = true\n")).isOk
   match Project.parseManifest (String.ofList (List.replicate (Project.manifestByteLimit + 1) ' ')) with
   | .error .size => pure ()
   | _ => expect "oversize manifest" false
-  expect "invalid UTF-8" (decide (Project.manifestText ⟨#[255]⟩ = .error .encoding))
+  expect "invalid UTF-8" (decide (Project.manifestText ⟨#[120, 61, 255]⟩ = .error (.encoding ⟨2, 3⟩)))
 
 #eval show IO Unit from do
   let some component := Reference.Component.ofChecked ConcreteSpec.Examples.moveThenConsume
@@ -190,7 +237,7 @@ open ConcreteSpec.Core.Exec in
   | _ => expect "present table awaits approved schema" false
   IO.FS.writeFile path "[policy\n"
   match ← Project.checkInvocation path with
-  | .error .malformed => pure ()
+  | .error (.invalid (.malformed _)) => pure ()
   | _ => expect "malformed project never falls back" false
   IO.FS.removeFile path
   IO.FS.createDir path

@@ -26,13 +26,14 @@ CLI_CASES = {
     "cli:build-input-write-failure",
 }
 SLICE_RE = re.compile(r"[a-z0-9_]+")
-RULE_RE = re.compile(r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*@[1-9][0-9]*")
+RULE_RE = re.compile(r"[A-Z][a-zA-Z0-9]*(?:-[A-Z0-9]+)*@[1-9][0-9]*")
 TRAP_KINDS = frozenset(("arithmeticOverflow", "division_by_zero", "invalid_shift",
                         "out_of_bounds", "invalid_range", "abort"))
 ORIGIN_RE = re.compile(r"([0-9]+):([0-9]+):([1-9][0-9]*):([1-9][0-9]*)")
 CLI_CODE_RE = re.compile(r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*")
 LABEL_RE = re.compile(r"[a-z][a-z0-9_]*")
-REFUSAL_KINDS = frozenset(("unreachable_statement", "reserved_binder"))
+REFUSAL_KINDS = frozenset(("unreachable_statement", "reserved_binder", "integer_suffix",
+                           "non_decimal_literal", "outside_production", "unexpected_token"))
 PENDING_REFUSALS = frozenset(("syntax", "unsupported_form", "checker"))
 # Shrink this inventory as 4(c)/4(d)/4(f) expose typed refusals. New paths require typed fields.
 PENDING_SOURCES = frozenset(
@@ -41,13 +42,10 @@ PENDING_SOURCES = frozenset(
         "syntax_error.con",
         "unsupported.con",
         "unannotated.con",
-        "suffix.con",
         "reserved.con",
         "reserved_move.con",
         "reserved_struct.con",
         "intrinsic_shadow.con",
-        "radix_missing_semi.con",
-        "malformed_if.con",
         "multiply.con",
         "conditional.con",
         "mutable.con",
@@ -133,7 +131,7 @@ def validate_expect(path, line, expect):
         case ["pending-refusal", "1", kind] if kind in PENDING_REFUSALS:
             pass
         case ["diagnostic", status, code, *message] if (
-                status in ("2", "3", "4") and CLI_CODE_RE.fullmatch(code) and all(message)):
+                status in ("1", "2", "3", "4") and CLI_CODE_RE.fullmatch(code) and all(message)):
             pass
         case ["llvm", "exit", status, "lcb", "resource", resource, bound, measured] if (
                 LABEL_RE.fullmatch(resource) and re.fullmatch(r"[1-9][0-9]*", bound)

@@ -80,6 +80,16 @@ private def hasNamePart (accepts : String → Bool) : Name → Bool
 including contracts under structure fields and aliases of model types. -/
 private partial def inspect (env : Environment) (origin : Name) (expr : Expr) :
     StateM (Std.HashSet Name) (Option (Name × Name)) := do
+  -- A negated existential forbids every possible witness. Its predicate's
+  -- lambda binds the decoder even when Exists has no explicit forall in the AST.
+  let negativeDomain := if expr.isAppOfArity ``Not 1 then some expr.appArg!
+    else match expr with
+      | .forallE _ domain body _ => if body.isConstOf ``False then some domain else none
+      | _ => none
+  if let some domain := negativeDomain then
+    if domain.isAppOfArity ``Exists 2 && modelBinder env domain.getAppArgs[0]! then
+      let binder := match domain.appArg! with | .lam n .. => n | _ => `witness
+      return some (origin, binder)
   match expr with
   | .forallE name domain body _ =>
     if modelBinder env domain then return some (origin, name)
@@ -127,6 +137,43 @@ where
 private def check (env : Environment) (type : Expr) : Option (Name × Name) :=
   ((inspect env `endToEnd type).run {}).1
 
+-- Ties the audited field to the actual premise of the composition theorem.
+example {A R B : Type} (edge : Stage A R B) :
+    edge.Trusted = (∀ a b, edge.inputInvariant a → Concrete.Contracts.Graph edge.run a b →
+      edge.trust a b) := rfl
+
+example {A : Type} : (Pipeline.done (A := A)).Trusted = True := rfl
+
+example {A R B C : Type} (edge : Stage A R B) (rest : Pipeline B C) :
+    (Pipeline.next edge rest).Trusted = (edge.Trusted ∧ rest.Trusted) := rfl
+
+/-- Read the trust field on the composed edges. The final constructor fixes
+both the BIR input and the backend output at this slice and profile. -/
+private inductive FixedTrust (slice : Slice) (profile : Profile) :
+    {A B : Type} → Pipeline A B → Prop
+  | llvm {edge : Stage (BIR (sliceLoweringLanguage slice) profile) StageFailure (LLVMInput profile)} :
+      edge.kind = .namedPremise "P_print" →
+      edge.trust = @P_print (sliceLanguage slice) (sliceLoweringLanguage slice) profile →
+      FixedTrust slice profile (.next edge .done)
+  | lcb {edge : Stage (BIR (sliceLoweringLanguage slice) profile) StageFailure (LCBInput profile)} :
+      edge.kind = .directProof → edge.trust = (fun _ _ => True) →
+      FixedTrust slice profile (.next edge .done)
+  | step {A R B C} {edge : Stage A R B} {rest : Pipeline B C} :
+      (edge.kind = .directProof ∨ edge.kind = .provedValidator) →
+      edge.trust = (fun _ _ => True) → FixedTrust slice profile rest →
+      FixedTrust slice profile (.next edge rest)
+
+example (slice : Slice) (profile : Profile) (passes : Passes slice profile) (unchecked : Bool) :
+    FixedTrust slice profile (Registry.pipeline passes unchecked) ∧
+    FixedTrust slice profile ((registry passes).lcbPipeline unchecked) := by
+  obtain ⟨backend, target, slots, bytes⟩ := profile
+  cases backend <;> cases unchecked <;> constructor <;>
+    repeat' first
+      | exact FixedTrust.llvm rfl rfl
+      | exact FixedTrust.lcb rfl rfl
+      | apply FixedTrust.step (Or.inl rfl) rfl
+      | apply FixedTrust.step (Or.inr rfl) rfl
+
 -- This mutation hides a caller-selected model inside an unfolded relation.
 private abbrev Model := CoreLanguage
 
@@ -152,6 +199,31 @@ private structure WrappedModel where
 
 private def plantedWrapped : Prop := ∀ wrapped : WrappedModel, wrapped = wrapped
 
+-- A data-valued quantified function in a logical premise remains caller-selectable.
+private def plantedDataBinder : Prop := Nonempty ((decode : ByteArray → Option UInt8) → PLift (decode ByteArray.empty = none))
+
+-- Identity can also carry a quantified type as its value. That binder is open.
+private def plantedCodecIdentity : Prop :=
+  Nonempty (id ((decode : ByteArray → Option UInt8) → PLift (decode ByteArray.empty = none)))
+
+private def plantedCodecPair : Prop :=
+  Nonempty (Prod.fst (((decode : ByteArray → Option UInt8) → PLift (decode ByteArray.empty = none)), Nat))
+
+private def plantedCodecOption : Prop :=
+  Nonempty ((some ((decode : ByteArray → Option UInt8) → PLift (decode ByteArray.empty = none))).getD PUnit)
+
+private def plantedCodecList : Prop :=
+  Nonempty ([((decode : ByteArray → Option UInt8) → PLift (decode ByteArray.empty = none))].headD PUnit)
+
+private def plantedModelPair : Prop :=
+  Nonempty (Prod.fst (((model : Model) → PLift (model = model)), Nat))
+
+private def plantedModelOption : Prop :=
+  Nonempty ((some ((model : Model) → PLift (model = model))).getD PUnit)
+
+private def plantedModelList : Prop :=
+  Nonempty ([((model : Model) → PLift (model = model))].headD PUnit)
+
 private inductive PlantedInductive : Prop where
   | intro (evidence : ∀ decode : ByteArray → Option UInt8, decode ByteArray.empty = none)
 
@@ -172,6 +244,14 @@ example {slice : Slice} {profile : Profile} (passes : Passes slice profile) (unc
     (Registry.pipeline passes unchecked).Corresponds input output :=
   @Pipeline.endToEnd profile slice passes unchecked input output validated trusted ready ran
 
+example {slice : Slice} {profile : Profile} (passes : Passes slice profile) (unchecked : Bool)
+    {input : Source} {output : LCBInput profile}
+    (validated : ((registry passes).lcbPipeline unchecked).Validated)
+    (ready : ((registry passes).lcbPipeline unchecked).Ready input)
+    (ran : ((registry passes).lcbPipeline unchecked).run input = .ok output) :
+    ((registry passes).lcbPipeline unchecked).Corresponds input output :=
+  @registeredLCBEndToEnd profile slice passes unchecked input output validated ready ran
+
 run_cmd do
   let env ← getEnv
   -- A model packaged inside the pass argument would still be caller-selected.
@@ -190,6 +270,18 @@ run_cmd do
     | throwError "Missing registered stage soundness"
   if let some (origin, binder) := check env soundInfo.type <|> check env (.const ``Stage.Sound []) then
     throwError "Stage soundness has an open semantic binder {binder} in {origin}"
+  -- Each wrapper extracts the original quantified type inside Nonempty.
+  -- Check the actual binder so unrelated findings cannot pass the controls.
+  for (name, binder) in [(``plantedDataBinder, `decode),
+      (``plantedCodecIdentity, `decode),
+      (``plantedCodecPair, `decode),
+      (``plantedCodecOption, `decode),
+      (``plantedCodecList, `decode),
+      (``plantedModelPair, `model),
+      (``plantedModelOption, `model),
+      (``plantedModelList, `model)] do
+    unless check env (.const name []) == some (privateToUserName name, binder) do
+      throwError "End-to-end audit accepted a caller-selected binder in {name}"
   unless (check env (.const ``plantedStatement []) == some (`EndToEndAudit.plantedStatement, `model)) do
     throwError "End-to-end audit accepted a planted semantic model parameter"
   unless (check env (.const ``plantedRelation []) == some (`EndToEndAudit.plantedRelation, `meaning)) do

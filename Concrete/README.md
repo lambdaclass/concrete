@@ -195,7 +195,7 @@ The root inventory (`scripts/checks/root_inventory.txt`) lists each new root ent
   that `ll1` returns `true`. The check in `ConcreteSpec/Spec/LL1.lean` verifies closure of the
   computed nullable, FIRST and FOLLOW sets and disjointness of the prediction sets.
   `ll1_sound` shows that at most one production of a nonterminal is predicted for any lookahead.
-  Both the slice-0 grammar and the refusal grammar discharge the check by `decide`.
+  The Slice 0, Slice 1 and shared recognition projections discharge the check by `decide`.
   The parser starts at the grammar's start symbol and accepts only a `CheckedTable`, whose
   entries must equal `makeTable` of that grammar. The parser uses the precomputed Slice 0 entries. `table0_checked` proves that they equal the generated table.
   Later slices extend the shared surface grammar and must pass the same LL(1) check.

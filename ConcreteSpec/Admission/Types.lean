@@ -43,9 +43,9 @@ inductive Reason where
 /-- A body position identifies one operation in the straight-line Core payload.
 The terminator occupies the position immediately after the last statement. -/
 inductive Refusal where
-  | duplicateStructName (name : Name)
-  | duplicateDeclaredField (structName field : Name)
-  | reservedStructName (name : Name)
+  | duplicateStructName (declaration : Nat) (name : Name)
+  | duplicateDeclaredField (declaration : Nat) (structName field : Name)
+  | reservedStructName (declaration : Nat) (name : Name)
   | atPosition (position : Nat) (reason : Reason)
   deriving DecidableEq
 

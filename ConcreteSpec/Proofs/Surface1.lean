@@ -158,8 +158,8 @@ private def chars (s : String) : List Nat := s.toList.map Char.toNat
 private def word (trivia spelling : String) : Piece :=
   ⟨chars trivia, chars spelling, Surface0.wordValue spelling⟩
 
-private def punct (trivia spelling : String) (kind : Terminal) : Piece :=
-  ⟨chars trivia, chars spelling, .fixed kind⟩
+private def punct (trivia spelling : String) (kind : Terminal) (plain : kind.IsFixed := by decide) : Piece :=
+  ⟨chars trivia, chars spelling, .fixed kind plain⟩
 
 private def decimal (trivia spelling : String) (value : Nat) : Piece :=
   ⟨chars trivia, chars spelling, .integer value .decimal none⟩
@@ -309,7 +309,7 @@ private theorem punctuationFrom (spelling rest : List Nat) (kind : Terminal)
     (hkind : (Surface0.scalarText spelling, kind) ∈ Surface0.punctuation)
     (hmax : Surface0.punctuationScalars.all
       (fun other => decide (other <+: spelling ++ rest → other.length ≤ spelling.length)) = true) :
-    Tokenizes (spelling ++ rest) spelling rest (.fixed kind) :=
+    Tokenizes (spelling ++ rest) spelling rest (.fixed kind (Surface0.punctuation_fixed hkind)) :=
   .punct (.some hmem hne rfl fun other ho tail he =>
     of_decide_eq_true (List.all_eq_true.mp hmax other ho) ⟨tail, he.symm⟩) hkind
 

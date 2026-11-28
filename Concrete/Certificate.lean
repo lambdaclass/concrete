@@ -559,13 +559,16 @@ example : (.external .imageStack : Obligation) ∉
 example : .toolHandoffs ∉
     ImageDependencies .llvm (.imageValidated .provedStack ⟨ByteArray.empty⟩) := by decide
 
+private theorem answerFrameSlots : ImageTheorem.Sanity.answerOutput.bir.frameSlots = 1 := by
+  with_unfolding_all rfl
+
 example : RefusalAt ImageTheorem.Sanity.answerInput
     (.birSlotLimit { ImageTheorem.Sanity.sampleProfile with maxBIRSlots := 0 } .llvm)
     (.backendResource "LLVM" "BIR slots" ImageTheorem.Sanity.answerOutput.bir.frameSlots 0) := by
   refine ⟨_, ImageTheorem.Sanity.answerCompiles, ?_, rfl⟩
-  with_unfolding_all
-    change ¬ 1 ≤ 0
-    decide
+  change ¬ ImageTheorem.Sanity.answerOutput.bir.frameSlots ≤ 0
+  rw [answerFrameSlots]
+  decide
 
 open ImageTheorem.Sanity
 
@@ -619,7 +622,8 @@ private theorem testPreLinkValid (image : ByteArray) : PreLinkValid testCodec te
       obtain ⟨invocation, _, rfl⟩ := List.mem_map.mp member
       exact ⟨invocation.tool.toUTF8, rfl, rfl⟩
     · simp [OrderedGraph, testPreLink]
-    · change 1 ≤ 64
+    · change answerOutput.bir.frameSlots ≤ sampleProfile.maxBIRSlots
+      rw [answerFrameSlots]
       decide
     all_goals simp [HasDependencies, testPreLink, testBuild]
 

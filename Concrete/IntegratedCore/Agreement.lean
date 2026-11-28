@@ -561,13 +561,21 @@ private abbrev Machine (slice : Slice) (owners : AList Var Own.Descriptor) (ds :
 private abbrev Next {O : Exec.Operands} (P : Exec.Program O) (c q : Exec.Config O) :=
   Exec.step P c = some (.next q)
 
-/-- The hosted result retains the machine site of overflow as well as the
-explicit abort site. The straight-line evaluator reports overflow by kind. -/
-inductive Matches : Outcome → Exec.Final EarlyValue → Prop where
+/-- Locate the first trapping statement using the straight-line judgment's own
+statement step and environment. A stuck prefix never reaches a later site. -/
+def firstTrapSite (decls : Decls) (env : Env) (position : Nat) : List ConcreteSpec.Stmt → Option SiteId
+  | [] => none
+  | stmt :: rest => match execStmt decls env stmt with
+    | .ok next => firstTrapSite decls next (position + 1) rest
+    | .trap _ => some ⟨position⟩
+    | .stuck _ => none
+
+inductive Matches (first : Option SiteId) : Outcome → Exec.Final EarlyValue → Prop where
   | returned {n : Int} : IntTy.u8.inRange n = true →
-      Matches (.exit n.toNat) (.returned (.scalar (.int .u8 n)))
-  | overflow (site : SiteId) : Matches (.trap .arithmeticOverflow) (.trapped .overflow site)
-  | abort (site : SiteId) : Matches (.aborted site) (.trapped .abort site)
+      Matches first (.exit n.toNat) (.returned (.scalar (.int .u8 n)))
+  | overflow {site : SiteId} : first = some site →
+      Matches first (.trap .arithmeticOverflow) (.trapped .overflow site)
+  | abort (site : SiteId) : Matches first (.aborted site) (.trapped .abort site)
 
 private theorem eval_ok {slice owners ds cs e v mid}
     (value : earlyEval ds (locals cs) e = .ok v)
@@ -607,7 +615,8 @@ private theorem body_agrees {slice owners ds Δ base} (P : Exec.Program (Machine
       (ending.toCore site)) :
     ∃ q f o, Concrete.Contracts.Steps (Next P)
       ⟨.exec (StraightProgram.machineBody base (ending.machine site) rows pos), locals cs, store cs, frames⟩ q ∧
-      q.final? = some f ∧ Matches o f ∧
+      q.final? = some f ∧ Matches (firstTrapSite Δ (environment cs) pos
+        (rows.map (StraightBinding.toCore ∘ LocatedStraightBinding.statement))) o f ∧
       ConcreteSpec.Exec Δ (environment cs) (rows.map (StraightBinding.toCore ∘ LocatedStraightBinding.statement))
         (ending.toCore site) o := by
   induction rows generalizing pos cs with
@@ -653,7 +662,7 @@ private theorem body_agrees {slice owners ds Δ base} (P : Exec.Program (Machine
       cases row_agrees decl valid older b.statement top hs with
       | overflow state trap permit spec =>
         have eval := eval_overflow (slice := slice) (owners := owners) trap permit
-        refine ⟨⟨.trapped .overflow ⟨pos⟩, locals cs, store cs, .seq continuation :: frames⟩, _, _, .cons rfl (.cons ?_ (.nil _)), rfl, .overflow ⟨pos⟩, .trap spec⟩
+        refine ⟨⟨.trapped .overflow ⟨pos⟩, locals cs, store cs, .seq continuation :: frames⟩, _, _, .cons rfl (.cons ?_ (.nil _)), rfl, .overflow (by simp [firstTrapSite, spec]), .trap spec⟩
         change Exec.onRes _ _ _ _ _ _ = _
         rw [eval]; rfl
       | ok v entry mid alive good ctx keys rootsEq localsEq fresh eval permit spec =>
@@ -692,7 +701,7 @@ private theorem body_agrees {slice owners ds Δ base} (P : Exec.Program (Machine
         have tick := eval_ok (slice := slice) (owners := owners) eval permit
         have life := life_ok (slice := slice) (owners := owners) (ds := ds) (.bind x) bind
         refine ⟨q, f, o, .cons rfl (.cons (b := ⟨.done, (x, v) :: locals cs, store (c :: mid), .seq continuation :: frames⟩)
-          ?_ (.cons ?_ path)), final, obs, .step spec run⟩
+          ?_ (.cons ?_ path)), final, by simpa [firstTrapSite, spec] using obs, .step spec run⟩
         · change Exec.onRes _ _ _ _ _ _ = _
           rw [tick]
           change ((Machine slice owners ds).life (.bind x) (store mid)).map _ = _
@@ -714,7 +723,7 @@ private theorem view_program (v : AdmissionView) :
 private theorem view_agrees (v : AdmissionView) (decls : DeclsOk v.program.decls)
     (body : BodyOkWith ArithmeticPolicy.runtime.permits v.program.decls [] v.program.body v.program.ending) :
     ∃ q f, Concrete.Contracts.Steps (Next v.execution.body) v.execution.initial q ∧ q.final? = some f ∧
-      Matches (ConcreteSpec.run v.program (v.program.body.length + 1)) f := by
+      Matches (firstTrapSite v.program.decls [] 0 v.program.body) (ConcreteSpec.run v.program (v.program.body.length + 1)) f := by
   let p := v.located
   have bound {rows : List LocatedStraightBinding} {n} {b} (member : b ∈ rows) :
       b.statement.bound ≤ rows.foldr (fun k m => max k.statement.bound m) n := by
@@ -736,10 +745,11 @@ private theorem view_agrees (v : AdmissionView) (decls : DeclsOk v.program.decls
 
 /-- A straight-line outcome as a process observation. Overflow acquires its
 actual Core operation's source location; explicit abort already has a site. -/
-def Observable {language : CoreLanguage} (i : CoreInput language) :
+def Observable {language : CoreLanguage} (i : CoreInput language) (program : ConcreteSpec.Program) :
     Outcome → Concrete.Contracts.Observation → Prop
   | .exit n, o => o = .returned (UInt8.ofNat n) ByteArray.empty
-  | .trap .arithmeticOverflow, o => ∃ site, CoreInput.observeHosted i (.trapped 134 .overflow site) = some o
+  | .trap .arithmeticOverflow, o => (firstTrapSite program.decls [] 0 program.body).bind
+      (fun site => CoreInput.observeHosted i (.trapped 134 .overflow site)) = some o
   | .aborted site, o => CoreInput.observeHosted i (.trapped 134 .abort site) = some o
   | _, _ => False
 
@@ -749,7 +759,7 @@ private theorem located_agreement (v : AdmissionView) (project : Project)
     (wf : i.WF) (decls : DeclsOk v.program.decls)
     (body : BodyOkWith ArithmeticPolicy.runtime.permits v.program.decls [] v.program.body v.program.ending) :
     ProgramSafe CoreInput.Execution i ∧ ∃ o,
-      Observable i (ConcreteSpec.run v.program (v.program.body.length + 1)) o ∧
+      Observable i v.program (ConcreteSpec.run v.program (v.program.body.length + 1)) o ∧
       ∀ result, CoreInput.Execution.observes i result ↔ result = o := by
   subst i
   let core : CoreInput (sliceLanguage v.slice) := ⟨project, v.slice, .straightLine v rfl⟩
@@ -768,8 +778,8 @@ private theorem located_agreement (v : AdmissionView) (project : Project)
     change core.project.files[org.lexical.file.index]? = some file at fileAt
     exact ⟨.trapped 134 k ⟨⟨site.id⟩, ⟨file.path.render.text, org.lexical.line, org.lexical.col⟩⟩
       (coreTrapDiagnostic core k site), by simp [CoreInput.observeHosted, found, fileAt]⟩
-  have finish {f : Core.Exec.Final EarlyValue} {o : Outcome} (m : Matches o f) (fin : q.final? = some f) :
-      ProgramSafe CoreInput.Execution core ∧ ∃ obs, Observable core o obs ∧
+  have finish {f : Core.Exec.Final EarlyValue} {o : Outcome} (m : Matches (firstTrapSite v.program.decls [] 0 v.program.body) o f) (fin : q.final? = some f) :
+      ProgramSafe CoreInput.Execution core ∧ ∃ obs, Observable core v.program o obs ∧
         ∀ result, CoreInput.Execution.observes core result ↔ result = obs := by
     cases m with
     | returned range =>
@@ -782,10 +792,10 @@ private theorem located_agreement (v : AdmissionView) (project : Project)
         simp [CoreLanguage.hostedResult, bounds, Observe.Observation.status]
       obtain ⟨safe, observed⟩ := CoreInput.safe_of_silent_path (core := core) path fin hosted rfl
       exact ⟨safe, _, rfl, observed⟩
-    | overflow site =>
+    | overflow located =>
       obtain ⟨obs, render⟩ := trap fin
       obtain ⟨safe, observed⟩ := CoreInput.safe_of_silent_path (core := core) path fin rfl render
-      exact ⟨safe, obs, ⟨site, render⟩, observed⟩
+      exact ⟨safe, obs, by simpa [Observable, located] using render, observed⟩
     | abort site =>
       obtain ⟨obs, render⟩ := trap fin
       obtain ⟨safe, observed⟩ := CoreInput.safe_of_silent_path (core := core) path fin rfl render
@@ -797,7 +807,7 @@ straight-line evaluator at sufficient fuel, and has no reachable stuck state. -/
 theorem unchecked_agreement {language : CoreLanguage} {i : CoreInput language} (eligible : i.UncheckedWF)
     (v : AdmissionView) (represents : v.Represents i) :
     ProgramSafe CoreInput.Execution i ∧ ∃ o,
-      Observable i (ConcreteSpec.run v.program (v.program.body.length + 1)) o ∧
+      Observable i v.program (ConcreteSpec.run v.program (v.program.body.length + 1)) o ∧
       ∀ result, CoreInput.Execution.observes i result ↔ result = o := by
   obtain ⟨wf, ⟨t, ht, decls, _⟩, w, hw, body⟩ := eligible
   cases t.unique ht represents

@@ -1,4 +1,4 @@
-import ConcreteSpec.Spec.Rules
+import ConcreteSpec.StageInterface
 import ConcreteSpec.Spec.Manifest
 
 namespace Concrete
@@ -8,9 +8,8 @@ open ConcreteSpec.Core
 inductive ManifestRefusal where
   | read (detail : String)
   | size
-  | encoding
-  | depth
-  | malformed
+  | encoding (span : Manifest.ByteSpan)
+  | invalid (error : Manifest.Error)
   | schemaPending
   deriving DecidableEq, Repr
 
@@ -18,72 +17,95 @@ inductive ManifestRefusal where
 def ManifestRefusal.code : ManifestRefusal → String
   | .read _ => "MANIFEST-READ"
   | .size => "MANIFEST-SIZE"
-  | .encoding => "MANIFEST-ENCODING"
-  | .depth => "MANIFEST-DEPTH"
-  | .malformed => "MANIFEST-SYNTAX"
+  | .encoding _ => "MANIFEST-ENCODING"
+  | .invalid (.depth _) => "MANIFEST-DEPTH"
+  | .invalid (.malformed _) => "MANIFEST-SYNTAX"
   | .schemaPending => "MANIFEST-SCHEMA"
 
 /-- Manifest diagnostics cite the exact registered rule for the refusal. -/
-private def ManifestRefusal.registeredRule : ManifestRefusal → Option RegisteredRule
-  | .size => some ⟨Manifest.sizeRule, by decide⟩
-  | .encoding => some ⟨Manifest.encodingRule, by decide⟩
-  | .depth => some ⟨Manifest.depthRule, by decide⟩
-  | .malformed => some ⟨Manifest.syntaxRule, by decide⟩
+private def ManifestRefusal.reference : ManifestRefusal → Option (RegisteredRule × Manifest.ByteSpan)
+  | .size => some (⟨Manifest.sizeRule, by decide⟩, ⟨Manifest.byteLimit, Manifest.byteLimit + 1⟩)
+  | .encoding span => some (⟨Manifest.encodingRule, by decide⟩, span)
+  | .invalid (.depth span) => some (⟨Manifest.depthRule, by decide⟩, span)
+  | .invalid (.malformed span) => some (⟨Manifest.syntaxRule, by decide⟩, span)
   | .read _ | .schemaPending => none
 
 def ManifestRefusal.ruleId (refusal : ManifestRefusal) : Option RuleId :=
-  refusal.registeredRule.map Subtype.val
+  refusal.reference.map (·.1.val)
 
 def ManifestRefusal.message : ManifestRefusal → String
   | .read detail => s!"cannot read Concrete.toml ({detail})"
   | .size => s!"Concrete.toml exceeds {Manifest.byteLimit} bytes"
-  | .encoding => "Concrete.toml must be UTF-8"
-  | .depth => s!"Concrete.toml exceeds the nesting limit of {Manifest.depthLimit}"
-  | .malformed => "Concrete.toml is malformed"
+  | .encoding _ => "Concrete.toml must be UTF-8"
+  | .invalid (.depth _) => s!"Concrete.toml exceeds the nesting limit of {Manifest.depthLimit}"
+  | .invalid (.malformed _) => "Concrete.toml is malformed"
   | .schemaPending => "Concrete.toml requires an approved manifest schema"
 
 
-/-- A parser issue determines its registered rule independently of its wording. -/
-inductive ParserIssue where
-  | unexpectedToken | unexpectedEnd | trailingTokens
-  | outsideProduction | nonDecimal
-  | internal (detail : String)
-  deriving DecidableEq, Repr
+open ConcreteSpec.StageInterface (RefusalCause ParserIssue Surface0Issue)
 
-structure ParserError where
-  issue : ParserIssue
-  span : ConcreteSpec.Surface0.Span
-  deriving DecidableEq, Repr
+private def RefusalCause.code : RefusalCause → String
+  | .lexical (.digitLimit _) _ => "RESOURCE"
+  | .lexical .. => "SYNTAX"
+  | .parser (.internal _) _ => "INTERNAL"
+  | .parser .outsideProduction _ | .parser .nonDecimal _
+  | .surface (.unexpectedEntry _) | .surface (.wildcard _) => "SLICE-0"
+  | .parser .. => "SYNTAX"
+  | .surface _ | .core .. => "CORE-CHECK"
 
-def ParserError.rule (error : ParserError) : RegisteredRule :=
-  match error.issue with
-  | .unexpectedToken | .unexpectedEnd | .trailingTokens => ⟨⟨``Slice0Rules.Parsed, 1⟩, by decide⟩
-  | .outsideProduction => ⟨⟨``Slice0Rules.AdmittedProduction, 2⟩, by decide⟩
-  | .nonDecimal => ⟨⟨``Slice0Rules.DecimalLiteral, 1⟩, by decide⟩
-  | .internal _ => ⟨⟨``Slice0Rules.Predictive, 1⟩, by decide⟩
+private def RefusalCause.message : RefusalCause → String
+  | .lexical (.encoding reason) span => s!"invalid source at byte {span.start}: {repr reason}"
+  | .lexical (.digitLimit limit) span => s!"integer digit at byte {span.start} exceeds limit {limit}"
+  | .lexical issue span =>
+    let detail := match issue with
+      | .integer .leadingZero => "leading zero in decimal integer"
+      | .integer (.invalidSuffix suffix) => s!"invalid integer suffix '{ConcreteSpec.Surface0.scalarText suffix}'"
+      | .integer (.missingDigits radix) => s!"missing digits in {repr radix} integer"
+      | .string .unterminated => "unterminated string"
+      | .string (.invalidEscape c) => s!"invalid string escape ({c})"
+      | .string (.rawForbidden c) => s!"forbidden string character ({c})"
+      | .byte .unterminated => "unterminated byte literal"
+      | .byte (.invalidEscape c) => s!"invalid byte escape ({c})"
+      | .byte (.invalidRaw c) => s!"forbidden byte character ({c})"
+      | .comment => "forbidden comment character"
+      | _ => "unexpected character"
+    s!"{detail} at byte {span.start}"
+  | .parser .unexpectedToken span => s!"unexpected token at byte {span.start}"
+  | .parser .unexpectedEnd _ => "unexpected end of file"
+  | .parser .trailingTokens _ => "trailing tokens"
+  | .parser .outsideProduction _ => "not supported in slice 0: program uses a form outside the slice-0 fragment"
+  | .parser .nonDecimal span => s!"not supported in slice 0: non-decimal integer at byte {span.start}"
+  | .parser (.internal _) _ => "compiler failure: invalid parser transition"
+  | .surface (.unexpectedEntry span) => s!"expected the entry point 'main' at byte {span.start}"
+  | .surface (.wildcard span) => s!"wildcard binding at byte {span.start}"
+  | .surface (.fallthrough _) => "checker refusal: reachable end of a u8 function (STMT-9)"
+  | .surface (.unreachable span) =>
+    s!"checker refusal: unreachable code (STMT-14) at {span.line}:{span.column}, bytes {span.start}..{span.stop}"
+  | .surface (.integerSuffix span) => s!"checker refusal: integer suffix in an expected-type position at byte {span.start}"
+  | .surface (.unknownLocal name span) => s!"checker refusal: unknown local '{name}' at byte {span.start}"
+  | .surface (.duplicateBinder name span) => s!"checker refusal: duplicate binding '{name}' at byte {span.start}"
+  | .surface (.reservedBinder name span) => s!"checker refusal: reserved binding '{name}' at byte {span.start}"
+  | .core .. => "checker refusal: Core check rejected the program"
+
+instance : Repr RefusalCause where
+  reprPrec cause prec := reprPrec (cause.rule, cause.primary) prec
 
 inductive Refusal where
-  | parser (error : ParserError)
-  | syntaxError (message : String)
-  | unsupported (message : String)
-  | checker (message : String)
-  | lexerDigitLimit (offset limit : Nat)
+  | source (cause : RefusalCause)
+  | path (failure : SourcePath.Refusal)
+  | missingLocation (reason : ConcreteSpec.Admission.Refusal)
   | backendResource (backend resource : String) (measured limit : Nat)
   | backendProfile (backend reason : String)
   | toolFailure (reason : String)
   | manifest (refusal : ManifestRefusal)
   | usageError (message : String)
   | internal (message : String)
-  deriving DecidableEq, Repr
+  deriving DecidableEq
 
 def Refusal.code : Refusal → String
-  | .parser ⟨.unexpectedToken, _⟩ | .parser ⟨.unexpectedEnd, _⟩ | .parser ⟨.trailingTokens, _⟩
-  | .syntaxError _ => "SYNTAX"
-  | .parser ⟨.outsideProduction, _⟩ | .parser ⟨.nonDecimal, _⟩ => "SLICE-0"
-  | .parser ⟨.internal _, _⟩ => "INTERNAL"
-  | .unsupported _ => "SLICE-0"
-  | .checker _ => "CORE-CHECK"
-  | .lexerDigitLimit .. => "RESOURCE"
+  | .source cause => RefusalCause.code cause
+  | .path .. => "SYNTAX"
+  | .missingLocation _ => "INTERNAL"
   | .backendResource .. => "BACKEND-LIMIT"
   | .backendProfile .. => "BACKEND-PROFILE"
   | .toolFailure _ => "TOOL-FAILURE"
@@ -92,32 +114,22 @@ def Refusal.code : Refusal → String
   | .internal _ => "INTERNAL"
 
 def Refusal.exitCode : Refusal → UInt32
-  | .parser ⟨.internal _, _⟩ => 4
-  | .parser _ | .syntaxError _ | .unsupported _ | .checker _ | .manifest .. => 1
-  | .lexerDigitLimit .. | .backendResource .. | .backendProfile .. | .toolFailure _ => 2
+  | .source (.parser (.internal _) _) | .missingLocation _ => 4
+  | .source (.lexical (.digitLimit _) _) => 2
+  | .source _ | .path .. | .manifest .. => 1
+  | .backendResource .. | .backendProfile .. | .toolFailure _ => 2
   | .usageError _ => 3
   | .internal _ => 4
 
 def Refusal.message : Refusal → String
-  | .parser ⟨.unexpectedToken, span⟩ => s!"unexpected token at byte {span.start}"
-  | .parser ⟨.unexpectedEnd, _⟩ => "unexpected end of file"
-  | .parser ⟨.trailingTokens, _⟩ => "trailing tokens"
-  | .parser ⟨.outsideProduction, _⟩ => "not supported in slice 0: program uses a form outside the slice-0 fragment"
-  | .parser ⟨.nonDecimal, span⟩ => s!"not supported in slice 0: non-decimal integer at byte {span.start}"
-  | .parser ⟨.internal detail, _⟩ => "compiler failure: " ++ detail
-  | .syntaxError msg => msg
-  | .unsupported msg => "not supported in slice 0: " ++ msg
-  | .checker msg => "checker refusal: " ++ msg
-  | .lexerDigitLimit offset limit =>
-    s!"integer digit run at byte {offset} exceeds limit {limit}"
+  | .source cause => RefusalCause.message cause
+  | .path .. => "expected a canonical project-relative source path"
+  | .missingLocation _ => "compiler failure: missing source location for Core refusal"
   | .backendResource backend resource measured limit =>
     s!"incomplete ({backend} backend: {resource}: {measured} exceeds limit {limit})"
   | .backendProfile backend reason => s!"incomplete ({backend} backend: {reason})"
   | .toolFailure reason => s!"incomplete ({reason})"
-  | .manifest refusal =>
-    match refusal.ruleId with
-    | none => refusal.message
-    | some rule => s!"{refusal.message} [rule {rule.name}@{rule.rev}]"
+  | .manifest refusal => refusal.message
   | .usageError msg => msg
   | .internal msg => "compiler failure: " ++ msg
 
@@ -127,37 +139,53 @@ structure Diagnostic where
   refusal : Refusal
   rule : RegisteredRule
 
-private def Refusal.ruleCategory : Refusal → Option RuleRefusalCategory
-  | .syntaxError _ => some .malformed
-  | .unsupported _ => some .unsupported
-  | .checker _ => some .checker
-  | .lexerDigitLimit .. | .backendResource .. => some .resource
-  | .internal _ => some .internal
-  | .parser _ | .backendProfile .. | .toolFailure _ | .manifest _ | .usageError _ => none
+instance : Repr Refusal where
+  reprPrec refusal prec := reprPrec refusal.message prec
 
-private def Refusal.withRule (refusal : Refusal) (rule : RegisteredRule) : Option Diagnostic :=
-  let compatible : Bool := match refusal with
-    | .parser error => error.rule.val == rule.val
-    | .manifest detail => detail.ruleId == some rule.val
-    | _ => match refusal.ruleCategory with
-      | some category => rule.val.refusalCategory == some category
-      | none => false
-  if compatible then some ⟨refusal, rule⟩ else none
+private inductive DiagnosticLocation where
+  | file (span : ConcreteSpec.StageInterface.FileSpan)
+  | path (start stop : Nat)
+  | manifest (span : Manifest.ByteSpan)
 
-/-- Generate a diagnostic from the current revision of a rule declaration. -/
-def Refusal.diagnostic (refusal : Refusal) (rule : Lean.Name) : Option Diagnostic :=
-  (referenceRule rule).bind refusal.withRule
+private def Refusal.reference : Refusal → Option (RegisteredRule × DiagnosticLocation)
+  | .source cause => some (cause.citation, .file cause.primary)
+  | .path failure =>
+    let reason := failure.violation.reason
+    let loc := failure.violation.location
+    let rule : RegisteredRule := ⟨reason.ruleId, by cases reason <;> decide⟩
+    some (rule, .path loc.offset (min (loc.offset + 1) loc.stop))
+  | .manifest detail => detail.reference.map fun (rule, span) => (rule, .manifest span)
+  | .missingLocation _ | .backendResource .. | .backendProfile .. | .toolFailure _
+  | .usageError _ | .internal _ => none
 
-/-- Check a diagnostic citation from a transport reader against the current registry. -/
-def Refusal.diagnosticAt (refusal : Refusal) (rule : RuleId) : Option Diagnostic :=
-  (validateRule rule).bind refusal.withRule
+/-- The public renderer consumes the same citation as diagnostic validation. -/
+def Refusal.render (r : Refusal) : String := Id.run do
+  let detail := if r.code == "SYNTAX" then s!"{r.code.toLower} error: {r.message}" else r.message
+  let base := s!"{r.code}: {detail}"
+  let some (rule, location) := r.reference | return base
+  let whereAt := match location with
+    | .file s => s!", file {s.file.index}, bytes {s.startOffset}..{s.endOffset}"
+    | .path start stop => s!", path, bytes {start}..{stop}"
+    | .manifest span => s!", Concrete.toml, bytes {span.start}..{span.stop}"
+  return s!"{base} [rule {rule.val.name}@{rule.val.rev}{whereAt}]"
 
-/-- A transported parser citation succeeds exactly for the rule selected at the refusal site. -/
-theorem Refusal.parser_diagnosticAt_iff (error : ParserError) (rule : RuleId) :
-    ((Refusal.parser error).diagnosticAt rule).isSome = true ↔ rule = error.rule.val := by
-  by_cases h : rule = error.rule.val
-  · subst rule
-    simp [diagnosticAt, validateRule, error.rule.property, withRule]
-  · simp [diagnosticAt, validateRule, withRule, Ne.symm h, h]
+/-- A transported citation must equal the producer's exact rule and revision. -/
+def Refusal.diagnosticAt (refusal : Refusal) (rule : RuleId) : Option Diagnostic := do
+  let (registered, _) ← refusal.reference
+  if registered.val = rule then return ⟨refusal, registered⟩ else none
+
+def Refusal.diagnostic (refusal : Refusal) (name : Lean.Name) : Option Diagnostic := do
+  let registered ← referenceRule name
+  refusal.diagnosticAt registered.val
+
+theorem Refusal.source_diagnosticAt_iff (cause : RefusalCause) (rule : RuleId) :
+    ((Refusal.source cause).diagnosticAt rule).isSome = true ↔ rule = cause.rule := by
+  change (if cause.rule = rule then some ⟨.source cause, cause.citation⟩ else (none : Option Diagnostic)).isSome =
+    true ↔ rule = cause.rule
+  by_cases same : cause.rule = rule
+  · rw [ite_eq_left same]
+    exact ⟨fun _ => same.symm, fun _ => rfl⟩
+  · rw [ite_eq_right same]
+    exact ⟨nofun, fun h => (same h.symm).elim⟩
 
 end Concrete

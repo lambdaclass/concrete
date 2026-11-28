@@ -113,6 +113,8 @@ if [[ ${CONCRETE_TEST_EMIT_ONLY:-0} != 1 ]]; then
   echo "ok   stage-interface inventory detects omissions with a warm cache"
   build stage-end-to-end-audit "$work/stage-end-to-end-audit.log" bounded 60 \
     lake lean scripts/checks/compiler/stage_end_to_end_audit.lean -- -DwarningAsError=true -DautoImplicit=false
+  build refusal-mutations "$work/refusal-mutations.log" bounded 300 \
+    lake env python3 scripts/checks/compiler/refusal_mutation_controls.py
   missing_import="$work/missing_import.lean"
   printf '%s\n' 'import ConcreteSpec.NoSuchControlModule' >"$missing_import"
   missing_rc=0
@@ -409,7 +411,7 @@ check_backend_limit() {
     control="$d/cli-wrong-refusal"
     mkdir -p "$control"
     rc=0
-    bounded "$native_secs" "${cli[@]}" build "./$path" -o "$control/lcb" --backend lcb \
+    bounded "$native_secs" "${cli[@]}" build "wrong-extension.txt" -o "$control/lcb" --backend lcb \
       >"$control/lcb.stdout" 2>"$control/lcb.stderr" || rc=$?
     if [ "$rc" = 3 ] && [ ! -s "$control/lcb.stdout" ] && [ ! -e "$control/lcb" ] &&
         has_match -Fx 'USAGE: expected a project-relative .con path' <"$control/lcb.stderr" &&
@@ -545,11 +547,14 @@ fi
 
 if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" != 1 ]; then
   build "concrete driver" "$work/cli-build.log" bounded 1800 lake build concrete
+  bounded 60 python3 -B scripts/checks/compiler/refusal_cli.py
+  echo "ok   CLI refusal causes, revisions and byte spans"
   project_dir="$work/project-control"
   mkdir -p "$project_dir"
   printf 'fn main() -> u8 { return 42; }\n' >"$project_dir/answer.con"
   cli=(bash -c 'cd "$1" && shift && exec "$@"' _ "$project_dir" "$root/.lake/build/bin/concrete")
-  for manifest_case in schema malformed depth size encoding directory symlink; do
+  for manifest_case in schema malformed comment quote_after_key quote_value triple_key array_eof array_depth array_comment \
+      depth 'depth:"' 'depth:""' 'depth:"""' size encoding directory symlink; do
     project_file="$project_dir/Concrete.toml"
     case "$manifest_case" in
       schema)
@@ -558,14 +563,38 @@ if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" != 1 ]; then
       malformed)
         printf 'a = "open\n' >"$project_file"
         expected='Concrete.toml is malformed' ;;
+      comment)
+        printf '[a.b.c.d.e.f.g.h.i.j.k.l.m.n.o.p]\n#ok\001' >"$project_file"
+        expected='Concrete.toml is malformed' ;;
+      quote_after_key)
+        printf 'a "oops' >"$project_file"
+        expected='Concrete.toml is malformed' ;;
+      quote_value)
+        printf 'a = "oops' >"$project_file"
+        expected='Concrete.toml is malformed' ;;
+      triple_key)
+        printf '"""' >"$project_file"
+        expected='Concrete.toml is malformed' ;;
+      array_eof)
+        printf 'a=[[[[[' >"$project_file"
+        expected='Concrete.toml is malformed' ;;
+      array_comment)
+        printf 'a = [[[[[[[[[[[[[[[ #ok\001' >"$project_file"
+        expected='Concrete.toml is malformed' ;;
+      array_depth)
+        printf 'a=[[[[[[[[[[[[[[[[' >"$project_file"
+        expected='Concrete.toml exceeds the nesting limit of 16' ;;
       depth)
         printf '[a.b.c.d.e.f.g.h.i.j.k.l.m.n.o.p]\nx = true\n' >"$project_file"
+        expected='Concrete.toml exceeds the nesting limit of 16' ;;
+      depth:*)
+        printf '[a.b.c.d.e.f.g.h.i.j.k.l.m.n.o.p]\n%s' "${manifest_case#depth:}" >"$project_file"
         expected='Concrete.toml exceeds the nesting limit of 16' ;;
       size)
         printf '%65537s' '' >"$project_file"
         expected='Concrete.toml exceeds 65536 bytes' ;;
       encoding)
-        printf '\377' >"$project_file"
+        printf 'x=\377' >"$project_file"
         expected='Concrete.toml must be UTF-8' ;;
       directory)
         mkdir "$project_file"
@@ -576,16 +605,24 @@ if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" != 1 ]; then
         expected='cannot read Concrete.toml (expected a regular file)' ;;
     esac
     rule=
+    revision=1
     case "$manifest_case" in
-      malformed) rule=SyntaxAccepted ;;
-      depth) rule=DepthAccepted ;;
-      size) rule=SizeAccepted ;;
-      encoding) rule=EncodingAccepted ;;
+      malformed) span=9..10; rule=SyntaxAccepted ;;
+      comment) span=37..38; rule=SyntaxAccepted ;;
+      quote_after_key|triple_key) span=2..3; rule=SyntaxAccepted ;;
+      quote_value) span=9..9; rule=SyntaxAccepted ;;
+      array_eof) span=7..7; rule=SyntaxAccepted ;;
+      array_comment) span=23..24; rule=SyntaxAccepted ;;
+      array_depth) span=17..18; rule=DepthAccepted; revision=2 ;;
+      depth|depth:*) span=34..35; rule=DepthAccepted; revision=2 ;;
+      size) span=65536..65537; rule=SizeAccepted ;;
+      encoding) span=2..3; rule=EncodingAccepted ;;
     esac
-    if [ -n "$rule" ]; then expected+=" [rule ConcreteSpec.Project.Manifest.$rule@1]"; fi
+    if [ -n "$rule" ]; then expected+=" [rule ConcreteSpec.Project.Manifest.$rule@$revision, Concrete.toml, bytes $span]"; fi
     case "$manifest_case" in
       directory|symlink) code=READ ;;
-      malformed) code=SYNTAX ;;
+      array_depth|depth:*) code=DEPTH ;;
+      malformed|comment|quote_after_key|quote_value|triple_key|array_eof|array_comment) code=SYNTAX ;;
       *) code=${manifest_case^^} ;;
     esac
     rc=0
@@ -594,7 +631,8 @@ if [ "${CONCRETE_TEST_EMIT_ONLY:-0}" != 1 ]; then
     test "$rc" = 1
     test ! -e "$project_dir/output"
     test ! -s "$project_dir/stdout"
-    has_match -Fx "MANIFEST-$code: $expected" <"$project_dir/stderr"
+    printf '%s\n' "MANIFEST-$code: $expected" >"$project_dir/expected-stderr"
+    cmp "$project_dir/expected-stderr" "$project_dir/stderr"
     if [ "$manifest_case" = directory ]; then rmdir "$project_file"; else rm -- "$project_file"; fi
   done
   echo "ok   malformed, over-limit, non-file and pending-schema inputs refuse before output"
@@ -708,8 +746,8 @@ while IFS=$'\t' read -r name program expect; do
       mkdir -p "$d"
       read -r form status kind _ <<<"$expect"
       case "$form $kind" in
-        "pending-refusal syntax") code=SYNTAX ;;
-        "pending-refusal unsupported_form") code=SLICE-0 ;;
+        "pending-refusal syntax"|"refuse unexpected_token") code=SYNTAX ;;
+        "pending-refusal unsupported_form"|"refuse non_decimal_literal"|"refuse outside_production") code=SLICE-0 ;;
         *) code=CORE-CHECK ;;
       esac
       check_cli_diagnostic "$name" "$d/cli" "refuse $status $code" "${project_cli[@]}" \

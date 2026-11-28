@@ -128,11 +128,11 @@ theorem initializer_duplicate_field :
 
 theorem declaration_duplicate_struct :
     checkProgram ⟨[tokenDecl, itemDecl, itemDecl], [], ret42⟩ =
-      .error (.duplicateStructName item) := rfl
+      .error (.duplicateStructName 2 item) := rfl
 
 theorem declaration_duplicate_field :
     checkProgram ⟨[{ itemDecl with fields := itemDecl.fields ++ [(flag, .bool)] }], [], ret42⟩ =
-      .error (.duplicateDeclaredField item flag) := rfl
+      .error (.duplicateDeclaredField 0 item flag) := rfl
 
 theorem addition_move_of_copy :
     checkProgram ⟨[], [.let_ (.name x) u8 (.atom (.int .u8 41)),

@@ -112,7 +112,8 @@ theorem return256IllTyped : ¬ (elaboratedReturn 256).StaticallyTyped := by
 
 set_option maxRecDepth 4096 in
 example :
-    let failure : StageFailure := .invalidInput ⟨``ConcreteSpec.Core.Slice0Rules.LiteralTyped, 1⟩
+    let failure : StageFailure := .admission (.refused (.core .slice0 (surfaceFileSpan resultSpan) []
+      (.atPosition 0 (.literalOutOfRange .u8 256))))
     let passes := returnPasses fixtureElaborate
     let edge := (registry passes).typing
     edge.inputInvariant (elaboratedReturn 256) ∧
@@ -128,7 +129,8 @@ example :
 -- typing refusal. A literal-only checker suffices for this fixture.
 set_option maxRecDepth 4096 in
 example :
-    let failure : StageFailure := .invalidInput ⟨``ConcreteSpec.Core.Slice0Rules.LiteralTyped, 1⟩
+    let failure : StageFailure := .admission (.refused (.core .slice0 ⟨⟨0⟩, 25, 28, 1, 26⟩ []
+      (.atPosition 0 (.literalOutOfRange .u8 256))))
     let passes := {returnPasses fixtureElaborate with lex := fun _ => .ok (returnStream 256)}
     ((registry passes).lcbPipeline true).run (literalSource 256) = .error ⟨StageFailure, failure⟩ := by
   with_unfolding_all rfl
@@ -202,7 +204,7 @@ set_option maxRecDepth 4096 in
 example :
     let good := registry (returnPasses fixtureElaborate)
     let mutant := registry (returnPasses (fun _ => .ok (pendingLiteral 43)))
-    let refusing := registry (returnPasses (fun _ => .error (.diagnostic rule span [])))
+    let refusing := registry (returnPasses (fun _ => .error (.source (.parser .unexpectedToken span.surface))))
     good.lexer.success elaborationSource returnStream ∧
     good.lexer.run elaborationSource = .ok returnStream ∧
     good.parser.run returnStream = .ok parsedReturn ∧
@@ -215,7 +217,7 @@ example :
   · exact wrongLiteralElaboratorInvalid _ rfl
   · intro validated
     have matching := validated.2 parsedReturn _ parsedReturnDomain rfl
-    change SliceElaboration slice0 elaborationSource.project (.inl (returnSyntax 42)) (.error (.diagnostic rule span [])) at matching
+    change SliceElaboration slice0 elaborationSource.project (.inl (returnSyntax 42)) (.error (.source (.parser .unexpectedToken span.surface))) at matching
     obtain ⟨program, decoded, matching⟩ := matching
     obtain rfl := Option.some.inj (show some returnProgram = some program from decoded)
     cases matching

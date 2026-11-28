@@ -178,8 +178,8 @@ def unsafeDischarges : Discharges testLanguage := [(testSite, [unsafeDischarge])
 
 def testPasses {profile : Profile} (checks : List OperationCheck) :
     PassFunctions grammar testLanguage testLowering profile where
-  lex _ := .error (.malformed "control")
-  elaborate _ := .error (.diagnostic rule span [])
+  lex _ := .error (.source (.lexical (.integer .leadingZero) span.surface))
+  elaborate _ := .error (.source (.parser .unexpectedToken span.surface))
   checkCore _ := .ok unsafeDischarges
   lowerCore input := .ok (testMIR input.core.project checks)
   lowerUnchecked input := .ok (testMIR input.project checks)

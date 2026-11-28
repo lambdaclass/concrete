@@ -16,9 +16,9 @@ private def fromTree (slice : Slice) (source : Source)
     | .inl tree =>
       match Elab.surfaceProgram tree with
       | some program => .ok (.pending source.project (.zero program) (congrArg sliceLanguage h))
-      | none => .error (.diagnostic ⟨``Elab.surfaceProgram, 1⟩ ⟨source.entryFile, 0, 0, 1, 1⟩ [])
+      | none => .error (.invalidTree source.entryFile)
     | .inr _ =>
-      .error (.diagnostic ⟨``SliceElaboration, 1⟩ ⟨source.entryFile, 0, 0, 1, 1⟩ [])
+      .error (.unexpectedExtension source.entryFile)
   else .error (.unsupportedSlice slice)
 
 def elaborate (slice : Slice) (ast : Parsed ((sliceGrammar slice).value (sliceGrammar slice).start)) :
@@ -26,7 +26,7 @@ def elaborate (slice : Slice) (ast : Parsed ((sliceGrammar slice).value (sliceGr
   if ast.source.slice = slice then
     fromTree slice ast.source (cast (sliceGrammarStartShape slice) ast.tree)
   else
-    .error (.diagnostic ⟨``Parsed.ElaborationDomain, 1⟩ ⟨ast.source.entryFile, 0, 0, 1, 1⟩ [])
+    .error (.sliceMismatch slice ast.source.slice)
 
 private theorem fromTree_corresponds (slice : Slice) (source : Source)
     (tree : SurfaceAST sliceASTExtra slice) {result}

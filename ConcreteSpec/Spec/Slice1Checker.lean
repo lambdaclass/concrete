@@ -27,10 +27,11 @@ instance (Δ : Decls) (Γ : Ctx) : Decidable (Discharged Δ Γ) := by
 instance (Δ : Decls) : Decidable (DeclsOk Δ) := by
   unfold DeclsOk; infer_instance
 
-/-- The first entry in source order that also appears later in the list. -/
-def firstRepeated? {α : Type} [DecidableEq α] : List α → Option α
+/-- Visit declarations and fields in order, stopping at the first repeat. -/
+def firstRepeated? {α : Type} [DecidableEq α] (xs : List α) (seen : List α := []) : Option α :=
+  match xs with
   | [] => none
-  | x :: rest => if x ∈ rest then some x else firstRepeated? rest
+  | x :: rest => if x ∈ seen then some x else firstRepeated? rest (x :: seen)
 
 /-- Convert a detected violation to a refusal with the offending item. -/
 def rejectFound {α ε : Type} (found : Option α) (reason : α → ε) : Except ε Unit :=
@@ -138,8 +139,8 @@ abbrev checkStmtExpr := checkStmtExprWith admitted
 /-- Check one statement, retaining its output context for the next statement. -/
 def checkStmtWith (evidence : Ctx → Expr → Bool) (Δ : Decls) (Γ : Ctx) : Stmt → Except Reason Ctx
   | .let_ (.name x) t e => do
-    let next ← checkStmtExprWith evidence Δ Γ t e
-    if Fresh next x then
+    if Fresh Γ x then
+      let next ← checkStmtExprWith evidence Δ Γ t e
       .ok ((x, { ty := t, live := true, used := false, known := knownExpr Γ e,
                  kfields := knownFields Γ e }) :: next)
     else .error (.duplicateBinding x)
@@ -196,18 +197,17 @@ def checkCoreBodyWith (policy : ArithmeticPolicy) (Δ : Decls) (Γ : Ctx) (posit
 
 abbrev checkCoreBody := checkCoreBodyWith .static
 
-/-- Check declaration-local rules in source order. -/
-def checkDeclFields : Decls → Except Refusal Unit
+/-- The index selects the offending occurrence in the located declaration table. -/
+def checkDeclsFrom (seen : List Name) (index : Nat) : Decls → Except Refusal Unit
   | [] => .ok ()
   | d :: rest =>
-    if d.name = ⟨"main"⟩ then .error (.reservedStructName d.name)
+    if d.name ∈ seen then .error (.duplicateStructName index d.name)
+    else if d.name = ⟨"main"⟩ then .error (.reservedStructName index d.name)
     else do
-      rejectFound (firstRepeated? (d.fields.map Prod.fst)) (.duplicateDeclaredField d.name)
-      checkDeclFields rest
+      rejectFound (firstRepeated? (d.fields.map Prod.fst)) (.duplicateDeclaredField index d.name)
+      checkDeclsFrom (d.name :: seen) (index + 1) rest
 
-def checkDecls (Δ : Decls) : Except Refusal Unit := do
-  rejectFound (firstRepeated? (Δ.map StructDecl.name)) .duplicateStructName
-  checkDeclFields Δ
+def checkDecls := checkDeclsFrom [] 0
 
 /-- The sole executable Core checker for the straight-line fragment. -/
 def checkProgramWith (policy : ArithmeticPolicy) (p : Program) : Except Refusal (List Discharge) :=

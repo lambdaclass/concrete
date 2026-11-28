@@ -65,22 +65,21 @@ one selected by the registry, independently of the implementation language. -/
 def eligibilityEntry (language : CoreLanguage) (slice : Slice) :
     Stage (AdmissionInput language) StageFailure (CoreInput language) where
   run input := if input.slice = slice then
-      (input.prepare .eligibility).mapError (fun _ => .unpreparable)
-    else .error .unpreparable
+      (input.prepare .eligibility).mapError fun cause => .admission (.refused cause)
+    else .error (.admission (.fragment (.sliceMismatch slice input.slice)))
   kind := .directProof
   inputInvariant input := input.Ready slice
   outputInvariant input := input.slice = slice ∧ input.WF ∧ input.InFragment
   success input output := input.slice = slice ∧ input.prepare .eligibility = .ok output
-  refusal input failure := failure = .unpreparable ∧
-    (input.slice ≠ slice ∨ ∃ r, input.prepare .eligibility = .error r)
+  refusal input failure := if input.slice = slice then
+      ∃ cause, input.prepare .eligibility = .error cause ∧ failure = .admission (.refused cause)
+    else failure = .admission (.fragment (.sliceMismatch slice input.slice))
 
 theorem eligibilityEntry_validated (language : CoreLanguage) (slice : Slice) :
     (eligibilityEntry language slice).Validated := by
   constructor
   · intro input output ready ran
-    change (if input.slice = slice then
-      (input.prepare .eligibility).mapError (fun _ => StageFailure.unpreparable) else .error .unpreparable) = .ok output at ran
-    rw [ite_eq_left ready.1] at ran
+    simp only [Graph, eligibilityEntry, ready.1, ↓reduceIte] at ran
     cases prepared : input.prepare .eligibility with
     | error reason => simp [prepared, Except.mapError] at ran
     | ok i =>
@@ -88,30 +87,30 @@ theorem eligibilityEntry_validated (language : CoreLanguage) (slice : Slice) :
       subst output
       exact ⟨⟨(input.preparedSlice prepared).trans ready.1, ready.prepared prepared⟩, ready.1, prepared⟩
   · intro input failure ready ran
-    change (if input.slice = slice then
-      (input.prepare .eligibility).mapError (fun _ => StageFailure.unpreparable) else .error .unpreparable) = .error failure at ran
-    rw [ite_eq_left ready.1] at ran
-    cases prepared : input.prepare .eligibility <;> simp [prepared, Except.mapError] at ran
-    exact ⟨ran.symm, .inr ⟨_, prepared⟩⟩
+    change (eligibilityEntry language slice).run input = .error failure at ran
+    simp only [eligibilityEntry, ready.1, ↓reduceIte] at ran ⊢
+    cases prepared : input.prepare .eligibility with
+    | ok i => simp [prepared, Except.mapError] at ran
+    | error cause => exact ⟨cause, rfl, by simpa [prepared, Except.mapError] using ran.symm⟩
 
 def typingEntry (language : CoreLanguage) (slice : Slice) :
     Stage (CoreInput language) StageFailure (CoreInput language) where
   run input := if input.slice = slice then
-      (input.checkStatic.map (fun _ => input)).mapError StageFailure.invalidInput
+      (input.checkStatic.map (fun _ => input)).mapError StageFailure.admission
     else .error (.invalidInput ⟨``CoreInput.slice, 1⟩)
   kind := .directProof
   inputInvariant input := input.slice = slice ∧ input.WF ∧ input.InFragment
   outputInvariant input := input.slice = slice ∧ input.UncheckedWF
   success input output := input = output
   refusal input failure := if input.slice = slice then
-      ∃ rule, input.checkStatic = .error rule ∧ failure = .invalidInput rule
+      ∃ rule, input.checkStatic = .error rule ∧ failure = .admission rule
     else failure = .invalidInput ⟨``CoreInput.slice, 1⟩
 
 theorem typingEntry_validated (language : CoreLanguage) (slice : Slice) :
     (typingEntry language slice).Validated := by
   constructor
   · intro i o ready ran
-    change (if i.slice = slice then (i.checkStatic.map (fun _ => i)).mapError StageFailure.invalidInput
+    change (if i.slice = slice then (i.checkStatic.map (fun _ => i)).mapError StageFailure.admission
       else .error (.invalidInput ⟨``CoreInput.slice, 1⟩)) = Except.ok o at ran
     rw [ite_eq_left ready.1] at ran
     cases h : i.checkStatic with
@@ -121,7 +120,7 @@ theorem typingEntry_validated (language : CoreLanguage) (slice : Slice) :
       simp [h, Except.map, Except.mapError] at ran
       exact ⟨ran ▸ ⟨ready.1, (ConcreteSpec.Admission.checkStatic_iff ready.2.1).1 h⟩, ran⟩
   · intro i failure ready ran
-    change (if i.slice = slice then (i.checkStatic.map (fun _ => i)).mapError StageFailure.invalidInput
+    change (if i.slice = slice then (i.checkStatic.map (fun _ => i)).mapError StageFailure.admission
       else .error (.invalidInput ⟨``CoreInput.slice, 1⟩)) = Except.error failure at ran
     rw [ite_eq_left ready.1] at ran
     change (if i.slice = slice then _ else _)

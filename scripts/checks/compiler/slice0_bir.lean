@@ -263,15 +263,12 @@ def emit (name : String) (dir : System.FilePath) (expectation : List String)
     | IO.eprintln s!"unknown example {name}"; return 2
   emitProgram name p dir expectation target
 
--- Transitional checks over constructors and the spec's structured body error. The production
--- pipeline still drops the rule and origins when wrapping the spec error in Refusal.checker.
 def pendingRefusalMatches (kind : String) (refusal : Concrete.Refusal) : Bool :=
-  match kind, refusal with
-  | "syntax", .parser ⟨.unexpectedToken, _⟩ | "syntax", .parser ⟨.unexpectedEnd, _⟩
-  | "syntax", .parser ⟨.trailingTokens, _⟩
-  | "unsupported_form", .parser ⟨.outsideProduction, _⟩ | "unsupported_form", .parser ⟨.nonDecimal, _⟩
-  | "syntax", .syntaxError _ | "unsupported_form", .unsupported _ | "checker", .checker _ => true
-  | _, _ => false
+  match kind with
+  | "syntax" => refusal.code == "SYNTAX"
+  | "unsupported_form" => refusal.code == "SLICE-0"
+  | "checker" => refusal.code == "CORE-CHECK"
+  | _ => false
 
 open ConcreteSpec.Surface0 renaming Span → SourceSpan
 
@@ -300,31 +297,30 @@ def parseRefusal (fileId : ConcreteSpec.Core.FileId) (kind rule primary related 
 def checkSourceRefusal (input : Concrete.Stages.Input) (expected : RefusalExpectation)
     (actual : Concrete.Refusal) :
     IO UInt32 := do
-  let .ok tokens := Concrete.Lex.lex input.source input.fileId | return 13
-  let .ok ast := Concrete.Parse.parse input.eof tokens | return 13
-  if expected.kind == "reserved_binder" then
-    let .error issue@(.reservedBinder name span) :=
-        ConcreteSpec.StageInterface.SurfacePreparation.prepareSurface0 ast | return 13
-    let some diagnostic := actual.diagnosticAt issue.render.rule | return 13
-    unless diagnostic.rule.val.name == ``ConcreteSpec.Core.Slice0Rules.UnreservedLocal &&
-        expected.rule == "OD67" && expected.revision == diagnostic.rule.val.rev &&
-        expected.primary == span && expected.related.isEmpty do return 14
-    let refusal := Concrete.Refusal.checker s!"binding shadows '{name}' at byte {span.start}"
-    let .error unchecked := Concrete.Stages.unchecked input | return 13
-    return if actual == refusal && unchecked == refusal then 0 else 18
-  let .error (.unreachable span) := ConcreteSpec.Surface0.checkBody ast.body | return 13
-  let some diagnostic := actual.diagnostic ``ConcreteSpec.Core.Slice0Rules.ReachableBody
-    | return 13
-  if expected.kind != "unreachable_statement" || expected.rule != "STMT-14" ||
-      expected.revision != diagnostic.rule.val.rev then return 13
-  if expected.primary != span || !expected.related.isEmpty then
-    IO.eprintln s!"{input.path}: origin mismatch; spec reports {repr span} with no related origins"
-    return 14
-  -- Keep checking exact production rendering until the compiler transports structured origins.
-  let detail := s!"unreachable code ({expected.rule}) at {span.line}:{span.column}, bytes {span.start}..{span.stop}"
-  if actual != .checker detail then
-    IO.eprintln s!"{input.path}: production diagnostic mismatch: {actual.message}"
-    return 18
+  let .source cause := actual | return 13
+  let kindMatches := match expected.kind, cause with
+    | "reserved_binder", .surface (.reservedBinder ..)
+    | "unreachable_statement", .surface (.unreachable _)
+    | "integer_suffix", .surface (.integerSuffix _)
+    | "unexpected_token", .parser .unexpectedToken _
+    | "non_decimal_literal", .parser .nonDecimal _
+    | "outside_production", .parser .outsideProduction _ => true
+    | _, _ => false
+  unless kindMatches do return 13
+  if expected.kind == "unreachable_statement" then
+    let .ok tokens := Concrete.Lex.lex input.source input.fileId | return 13
+    let .ok ast := Concrete.Parse.parse input.eof tokens | return 13
+    let .error (.unreachable span) := ConcreteSpec.Surface0.checkBody ast.body | return 13
+    unless span == expected.primary do
+      IO.eprintln s!"{input.path}: spec reports {repr span}, fixture expects {repr expected.primary}"
+      return 14
+  let name := if expected.rule == "STMT-14" then ``ConcreteSpec.Core.Slice0Rules.ReachableBody
+    else Lean.Name.str `ConcreteSpec.Core.Slice0Rules expected.rule
+  unless (actual.diagnosticAt ⟨name, expected.revision⟩).isSome do return 13
+  let .error unchecked := Concrete.Stages.unchecked input | return 13
+  if unchecked != actual then return 18
+  if cause.primary.surface != expected.primary ||
+      cause.related.map (fun (label, span) => (label.text, span.surface)) != expected.related then return 14
   return 0
 
 def emitSource (path actual : String) (dir : System.FilePath) (expectation : List String)
@@ -337,7 +333,7 @@ def emitSource (path actual : String) (dir : System.FilePath) (expectation : Lis
       IO.println s!"pending diagnostic fields: {path} ({kind})"
       return 0
     return 13
-  | ["refuse", status, kind, rule, primary, related], .error (actual@(.checker _)) =>
+  | ["refuse", status, kind, rule, primary, related], .error (actual@(.source _)) =>
     unless toString actual.exitCode == status do return 13
     let some expected := parseRefusal input.fileId kind rule primary related | return 2
     checkSourceRefusal input expected actual
@@ -354,7 +350,7 @@ def emitSource (path actual : String) (dir : System.FilePath) (expectation : Lis
       return 0
     | .error (.backendProfile ..) => return 17
     | _ => return 15
-  | ["trap", kind, _, _], .error (.checker _) =>
+  | ["trap", kind, _, _], .error (.source (.core ..)) =>
     let .ok tokens := Concrete.Lex.lex input.source input.fileId | IO.eprintln "lex failed"; return 1
     let .ok ast := Concrete.Parse.parse input.eof tokens | IO.eprintln "parse failed"; return 1
     let .ok core := Concrete.Admission.prepareParsed .eligibility ast | IO.eprintln "elaboration failed"; return 1
@@ -455,7 +451,7 @@ def main (args : List String) : IO UInt32 := do
       | IO.eprintln s!"invalid project path: {path}"; return 1
     let some expected := parseRefusal input.fileId "unreachable_statement" "STMT-14@1" "28:37:1:29" "-"
       | return 2
-    checkSourceRefusal input expected (.checker "unreachable code (STMT-14) at 1:19, bytes 18..27")
+    checkSourceRefusal input expected (.source (.surface (.unreachable ⟨18, 27, 1, 19, ⟨0⟩⟩)))
   | ["loop", dir, t] => withTarget t (emitLoop dir)
   | ["invalid", dir, t] => withTarget t (emitInvalid dir)
   | _ => IO.eprintln "usage: slice0_bir.lean list | backend-profile | emit NAME DIR TARGET EXPECT... | source PATH FILE DIR TARGET EXPECT... | (loop | invalid) DIR TARGET"; return 2

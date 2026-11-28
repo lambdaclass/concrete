@@ -1,3 +1,4 @@
+import ConcreteSpec.Proofs.Slice1
 import ConcreteSpec.Admission.Types
 import ConcreteSpec.Spec.Ident
 import ConcreteSpec.Proofs.Basics
@@ -28,10 +29,27 @@ private theorem bind_unit_ok_iff {ε α : Type} {r : Except ε Unit} {s : Except
 
 private theorem firstRepeated_eq_none {α : Type} [DecidableEq α] (xs : List α) :
     firstRepeated? xs = none ↔ xs.Nodup := by
+  suffices h : ∀ seen, firstRepeated? xs seen = none ↔ xs.Nodup ∧ ∀ x ∈ xs, x ∉ seen by
+    simpa using h []
   induction xs with
   | nil => simp [firstRepeated?]
   | cons x rest ih =>
-    by_cases h : x ∈ rest <;> simp [firstRepeated?, h, List.nodup_cons, ih]
+    intro seen
+    by_cases h : x ∈ seen
+    · simp only [firstRepeated?, h, ↓reduceIte, List.mem_cons]
+      exact ⟨(fun hnone => nomatch hnone), fun ⟨_, hseen⟩ => False.elim (hseen x (Or.inl rfl) h)⟩
+    · simp only [firstRepeated?, h, ↓reduceIte, ih, List.nodup_cons, List.mem_cons]
+      constructor
+      · rintro ⟨hnodup, hseen⟩
+        refine ⟨⟨fun hx => hseen x hx (Or.inl rfl), hnodup⟩, ?_⟩
+        rintro y (rfl | hy)
+        · exact h
+        · exact fun hys => hseen y hy (Or.inr hys)
+      · rintro ⟨⟨hx, hnodup⟩, hseen⟩
+        refine ⟨hnodup, fun y hy => ?_⟩
+        rintro (rfl | hys)
+        · exact hx hy
+        · exact hseen y (Or.inr hy) hys
 
 private theorem rejectFound_ok_iff {α ε : Type} (found : Option α) (reason : α → ε) :
     rejectFound found reason = .ok () ↔ found = none := by
@@ -277,6 +295,12 @@ private theorem checkStmtExpr_iff {evidence : Ctx → Expr → Bool} {Δ : Decls
   · rintro ⟨ht, hu, ha⟩
     simp [checkStmtExprWith, requireExprType_iff.mpr ht, reads_iff.mpr hu, ha, Bind.bind, Except.bind]
 
+private theorem uses_fresh {Δ Γ e Γ' x} (h : Uses Δ Γ e Γ') : Fresh Γ' x ↔ Fresh Γ x := by
+  have same := congrArg (fun ctx => AList.lookup ctx x) (uses_tys h)
+  simp only [Ctx.tys, AList.lookup_map] at same
+  unfold Fresh
+  simpa only [Option.map_eq_none_iff] using congrArg (· = none) same |> Iff.of_eq
+
 theorem checkStmtWith_iff {evidence : Ctx → Expr → Bool} {Δ : Decls} {Γ Γ' : Ctx} {s : Stmt} :
     checkStmtWith evidence Δ Γ s = .ok Γ' ↔ StmtOkWith evidence Δ Γ s Γ' := by
   constructor
@@ -292,11 +316,12 @@ theorem checkStmtWith_iff {evidence : Ctx → Expr → Bool} {Δ : Decls} {Γ Γ
           exact .letWild ht ha (by assumption) hu
         · cases h
       | name x =>
-        obtain ⟨next, he, h⟩ := bind_ok_iff.mp h
-        obtain ⟨ht, hu, ha⟩ := checkStmtExpr_iff.mp he
+        simp only [checkStmtWith] at h
         split at h
-        · cases h
-          exact .let_ ht ha hu (by assumption)
+        · obtain ⟨next, he, h⟩ := bind_ok_iff.mp h
+          obtain ⟨ht, hu, ha⟩ := checkStmtExpr_iff.mp he
+          cases h
+          exact .let_ ht ha hu ((uses_fresh hu).2 (by assumption))
         · cases h
     | letStruct s pat e =>
       obtain ⟨next, he, h⟩ := bind_ok_iff.mp h
@@ -311,7 +336,7 @@ theorem checkStmtWith_iff {evidence : Ctx → Expr → Bool} {Δ : Decls} {Γ Γ
   · intro h
     cases h with
     | let_ ht hk hu hf =>
-      simp [checkStmtWith, checkStmtExpr_iff.mpr ⟨ht, hu, hk⟩, hf, Bind.bind, Except.bind]
+      simp [checkStmtWith, checkStmtExpr_iff.mpr ⟨ht, hu, hk⟩, (uses_fresh hu).1 hf, Bind.bind, Except.bind]
     | letWild ht hk hcopy hu =>
       unfold WildcardPermitted at hcopy
       simp [checkStmtWith, checkStmtExpr_iff.mpr ⟨ht, hu, hk⟩, hcopy, Bind.bind, Except.bind]
@@ -387,18 +412,41 @@ theorem checkBodyWith_iff {policy : ArithmeticPolicy} {Δ : Decls} {Γ : Ctx} {s
 theorem checkBody_iff {Δ : Decls} {Γ : Ctx} {ss : List Stmt} {r : Terminator} (position : Nat) :
     (∃ ds, checkCoreBody Δ Γ position ss r = .ok ds) ↔ BodyOk Δ Γ ss r := checkBodyWith_iff (policy := .static) position
 
-private theorem checkDeclFields_iff (Δ : Decls) :
-    checkDeclFields Δ = .ok () ↔
-      (∀ d ∈ Δ, d.name ≠ ⟨"main"⟩ ∧ (d.fields.map Prod.fst).Nodup) := by
-  induction Δ with
-  | nil => simp [checkDeclFields]
+private theorem checkDeclsFrom_iff (Δ : Decls) (seen : List Name) (index : Nat) :
+    checkDeclsFrom seen index Δ = .ok () ↔ DeclsOk Δ ∧ ∀ d ∈ Δ, d.name ∉ seen := by
+  induction Δ generalizing seen index with
+  | nil => simp [checkDeclsFrom, DeclsOk]
   | cons d rest ih =>
-    by_cases hn : d.name = ⟨"main"⟩ <;>
-      simp [checkDeclFields, hn, ih, bind_unit_ok_iff, rejectFound_ok_iff, firstRepeated_eq_none]
+    by_cases dup : d.name ∈ seen
+    · simp only [checkDeclsFrom, dup, ↓reduceIte, List.mem_cons]
+      exact ⟨(fun h => nomatch h), fun ⟨_, hseen⟩ => False.elim (hseen d (Or.inl rfl) dup)⟩
+    · by_cases reserved : d.name = ⟨"main"⟩
+      · simp only [checkDeclsFrom, dup, ↓reduceIte]
+        simp only [reserved, ↓reduceIte]
+        exact ⟨(fun h => nomatch h), fun ⟨⟨_, hok⟩, _⟩ => False.elim ((hok d List.mem_cons_self).1 reserved)⟩
+      · simp only [checkDeclsFrom, dup, reserved, ↓reduceIte, bind_unit_ok_iff,
+          rejectFound_ok_iff, firstRepeated_eq_none, ih, DeclsOk, List.map_cons,
+          List.nodup_cons, List.mem_map, List.mem_cons]
+        constructor
+        · rintro ⟨hfields, ⟨hrest_nodup, hrest_ok⟩, hrest_seen⟩
+          refine ⟨⟨⟨?_, hrest_nodup⟩, ?_⟩, ?_⟩
+          · rintro ⟨d', hd', heq⟩
+            exact hrest_seen d' hd' (Or.inl heq)
+          · rintro d' (rfl | hd')
+            · exact ⟨reserved, hfields⟩
+            · exact hrest_ok d' hd'
+          · rintro d' (rfl | hd')
+            · exact dup
+            · exact fun hmem => hrest_seen d' hd' (Or.inr hmem)
+        · rintro ⟨⟨⟨hfresh, hrest_nodup⟩, hok⟩, hseen⟩
+          refine ⟨(hok d (Or.inl rfl)).2, ⟨hrest_nodup, fun d' hd' => hok d' (Or.inr hd')⟩,
+            fun d' hd' => ?_⟩
+          rintro (heq | hmem)
+          · exact hfresh ⟨d', hd', heq⟩
+          · exact hseen d' (Or.inr hd') hmem
 
 theorem checkDecls_iff (Δ : Decls) : checkDecls Δ = .ok () ↔ DeclsOk Δ := by
-  simp [checkDecls, DeclsOk, bind_unit_ok_iff, rejectFound_ok_iff, firstRepeated_eq_none,
-    checkDeclFields_iff]
+  simp [checkDecls, checkDeclsFrom_iff]
 
 theorem checkProgramWith_iff (policy : ArithmeticPolicy) (p : Program) :
     (∃ ds, checkProgramWith policy p = .ok ds) ↔

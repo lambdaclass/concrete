@@ -20,7 +20,9 @@ theorem lexStream_refuses (source : Source) (failure : LexRefusal) :
     · rename_i err scan
       have allowed := lexLossless_failure scan
       cases err <;> try contradiction
-      all_goals cases failure <;> simp [scan,eq_comm]
+      rename_i cause
+      cases cause <;> try contradiction
+      cases failure <;> simp [scan, eq_comm]
 
 private abbrev raw : RetainedPiece → RawPiece
   | .inl trivia => trivia
@@ -278,27 +280,44 @@ private theorem retained_wf {source : Source} {file : File} {ref : LosslessStrea
     change t.decoded.span = fileSpan p.val.span at eqn
     rw [eqn]
     simpa only [List.toList_toArray] using ok
-  unfold ParserView.WF ParserView.invalidSpan
-  simp only [retain,TokenStream.parserView,Runs.stream,List.getElem?_toArray,List.getElem?_map,fileAt,
-    Option.map_some,Option.isNone_some,Bool.false_eq_true,ite_false]
-  apply Option.map_eq_none_iff.mpr
-  apply Array.find?_eq_none.mpr
-  intro token member
-  simp only [List.mem_toArray,List.mem_map] at member
-  obtain ⟨t,⟨e,he,rfl⟩,rfl⟩ := member
-  have ⟨fileId,ordered,within,coordinates⟩ := valid e.2 (List.mem_map.mpr ⟨e,he,rfl⟩)
-  have castBytes := congrArg SourceText.bytes (SourceText.ofBytes_toBytes file.source)
-  change file.source.toBytes.map UInt8.toNat = file.source.bytes at castBytes
-  simp only [fileId,fileAt,Option.map_some,Function.comp_apply]
+  unfold ParserView.WF ParserView.invalidSpan ParserView.validateCoordinates
+  simp only [retain, TokenStream.parserView, Runs.stream, List.getElem?_toArray, List.getElem?_map,
+    fileAt, Option.map_some, Function.comp_apply, Bind.bind, Except.bind, Pure.pure, Except.pure,
+    throw, throwThe, MonadExceptOf.throw]
   let positions := ((file.source.bytes.scanl Position.advanceByte {}).map fun p => (p.line,p.column)).toArray
-  change ¬ (!(decide (_ ≤ _) && decide (_ < positions.size) &&
-      positions[e.2.decoded.span.startOffset]? == some (e.2.decoded.span.line,e.2.decoded.span.col))) = true
-  simp only [positions,List.size_toArray,List.length_map,List.length_scanl,List.getElem?_toArray,
-    List.getElem?_map,List.getElem?_scanl,← castBytes,List.length_map]
-  have bound := Nat.le_trans ordered within
-  simp [ordered,coordinates]
-  simpa only [SourceText.length,SourceText.toBytes,List.length_map] using
-    And.intro (Nat.lt_succ_of_le within) bound
+  have hback : positions.back?.isSome = true := by
+    simp [Array.back?, positions]
+  split
+  · rename_i span heq
+    split at heq
+    · split at heq
+      · rename_i token hsome
+        rw [Array.find?_eq_none.mpr (by
+          intro tok member
+          simp only [List.mem_toArray, List.mem_map] at member
+          obtain ⟨t, ⟨e, he, rfl⟩, rfl⟩ := member
+          have ⟨fileId, ordered, within, coordinates⟩ := valid e.2 (List.mem_map.mpr ⟨e, he, rfl⟩)
+          have castBytes := congrArg SourceText.bytes (SourceText.ofBytes_toBytes file.source)
+          change file.source.toBytes.map UInt8.toNat = file.source.bytes at castBytes
+          simp only [fileId, fileAt, Option.map_some, Function.comp_apply]
+          change ¬ (!(decide (e.2.decoded.span.startOffset ≤ e.2.decoded.span.endOffset) &&
+              decide (e.2.decoded.span.endOffset < positions.size) &&
+              positions[e.2.decoded.span.startOffset]? == some (e.2.decoded.span.line,e.2.decoded.span.col))) = true
+          simp only [positions, List.size_toArray, List.length_map, List.length_scanl, List.getElem?_toArray,
+            List.getElem?_map, List.getElem?_scanl, ← castBytes, List.length_map]
+          have bound := Nat.le_trans ordered within
+          simp [ordered, coordinates]
+          simpa only [SourceText.length, SourceText.toBytes, List.length_map] using
+            And.intro (Nat.lt_succ_of_le within) bound)] at hsome
+        contradiction
+      · contradiction
+    · rename_i hnone
+      have hnone' : positions.back? = none := by
+        cases hb : positions.back? with
+        | none => rfl
+        | some pair => exact (hnone pair.1 pair.2 hb).elim
+      simp [hnone'] at hback
+  · rfl
 
 /-- A successful project scan satisfies the registered contract, including exact
 bytes, reference payloads, trivia order and every parser-view coordinate. -/
@@ -331,7 +350,7 @@ theorem lexStream_lexes {source : Source} {stream : TokenStream}
         cases v with
         | parsed val =>
           cases val with
-          | fixed k =>
+          | fixed k _ =>
             have plain := fixed_in_stream ref.meaning.choose_spec member
             change (if h : Terminal.HasPayload k = false then some (TokenValue.fixed k h) else none).map _ = _
             rw [dite_eq_left plain]; rfl
@@ -339,6 +358,8 @@ theorem lexStream_lexes {source : Source} {stream : TokenStream}
         | stringLiteral | byteLiteral | label => rfl
     · rename_i err scanned
       have allowed := lexLossless_failure scanned
-      cases err <;> contradiction
+      cases err <;> try contradiction
+      rename_i cause
+      cases cause <;> contradiction
 
 end Concrete.Lex.Bridge
