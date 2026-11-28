@@ -498,12 +498,18 @@ def bindReturnControl (slice : Slice) : MIR (sliceLoweringLanguage slice) profil
 
 -- Preparation retains the bind and return, but its success cannot supply a
 -- program to the frozen execution or handoff contracts.
-example : True := by
-  fail_if_success
-    have handoff : Except (MissingLayout (sliceLanguage slice1).operands.Ty)
-        (Interfaces.Memory controlLang profileControl) :=
-      prepareGraph (language := sliceLanguage slice1) (bindReturnControl slice1)
-  trivial
+/--
+error: Type mismatch
+  prepareGraph (bindReturnControl slice1)
+has type
+  Except (MissingLayout (sliceLanguage slice1).operands.Ty)
+    (PreparedGraphs (sliceLoweringLanguage slice1) profileControl)
+but is expected to have type
+  Except (MissingLayout (sliceLanguage slice1).operands.Ty) (Memory controlLang profileControl)
+-/
+#guard_msgs (error, drop info) in
+#check (prepareGraph (language := sliceLanguage slice1) (bindReturnControl slice1) :
+  Except (MissingLayout (sliceLanguage slice1).operands.Ty) (Interfaces.Memory controlLang profileControl))
 
 example :
     let root : MemoryPlace _ u8Ty := ⟨⟨⟨0⟩, []⟩, .virtual⟩

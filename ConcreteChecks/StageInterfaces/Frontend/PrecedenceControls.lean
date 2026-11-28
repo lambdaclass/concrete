@@ -1514,7 +1514,7 @@ theorem scaling_n_bindings_linear_budget (n : Nat) :
       (25 + 77 * n,
         some (.error (.malformed earlyMalformedRule .unexpectedToken
           (mkSpan1 (15 * n + 25) (15 * n + 26))))) ∧
-    ((sliceParser slice0).run (scalingView n)).1 ≤
+    ((sliceParser slice0).run (scalingView n)).1 <
       (sliceParser slice0).stepsPerToken * ((scalingView n).tokens.size + 1) := by
   have hwf := scalingView_wf n
   have hsz := scalingView_tokens_size n
@@ -1549,7 +1549,14 @@ theorem scaling_n_bindings_linear_budget (n : Nat) :
       show 18 + 15 * n + 8 = 15 * n + 26 by omega,
       show 24 + 77 * n + 1 = 25 + 77 * n by omega]
     rfl
-  exact ⟨hwf, hsz, hrun, sliceParser_steps_le slice0 (scalingView n)⟩
+  have hstrict : ((sliceParser slice0).run (scalingView n)).1 <
+      (sliceParser slice0).stepsPerToken * ((scalingView n).tokens.size + 1) := by
+    rw [hrun, hsz]
+    have hmul : 15 * (7 * n + 10 + 1) ≤ earlyStepsPerToken * (7 * n + 10 + 1) :=
+      Nat.mul_le_mul_right (7 * n + 10 + 1) earlyStepsPerToken_ge_15
+    change 25 + 77 * n < earlyStepsPerToken * (7 * n + 10 + 1)
+    omega
+  exact ⟨hwf, hsz, hrun, hstrict⟩
 
 -- Instantiation at `n = 200` bindings (`1410` tokens): exact `Parsed@1 .unexpectedToken` at `;`
 -- `[3025, 3026)` (1:3026), exact linear step count `15425`, strictly within
@@ -1560,7 +1567,7 @@ theorem scaling_200_bindings_linear_budget :
     (sliceParser slice0).run (scalingView 200) =
       (15425,
         some (.error (.malformed earlyMalformedRule .unexpectedToken ⟨⟨0⟩, 3025, 3026, 1, 3026⟩))) ∧
-    ((sliceParser slice0).run (scalingView 200)).1 ≤
+    ((sliceParser slice0).run (scalingView 200)).1 <
       (sliceParser slice0).stepsPerToken * ((scalingView 200).tokens.size + 1) ∧
     ((sliceParser slice0).run (scalingView 200)).2.isSome = true := by
   obtain ⟨hwf, hsz, hrun, hbound⟩ := scaling_n_bindings_linear_budget 200

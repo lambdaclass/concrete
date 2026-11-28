@@ -1335,22 +1335,134 @@ theorem registeredLCBEndToEnd {slice : Slice} {profile : Profile}
 /-! ### Inline F7 freeze controls -/
 
 -- Slice substitution on `Registry.admission` must fail during elaboration.
-example {profile} (passes : Passes ⟨⟨3, by decide⟩⟩ profile) : Registry ⟨⟨3, by decide⟩⟩ profile := by
-  fail_if_success exact {registry passes with admission := passes.admissionEntry sliceOne}
-  exact {registry passes with admission := passes.admissionEntry ⟨⟨3, by decide⟩⟩}
+/--
+error: Type mismatch
+  PassFunctions.admissionEntry passes sliceOne
+has type
+  AdmissionEntry (sliceLanguage s) sliceOne
+but is expected to have type
+  AdmissionEntry (sliceLanguage s) s
+-/
+#guard_msgs (error, drop info) in
+#check fun {s : Slice} {profile : Profile} (passes : Passes s profile) =>
+  ({registry passes with admission := passes.admissionEntry sliceOne} : Registry s profile)
+
+example {profile} (passes : Passes ⟨⟨3, by decide⟩⟩ profile) : Registry ⟨⟨3, by decide⟩⟩ profile :=
+  {registry passes with admission := passes.admissionEntry ⟨⟨3, by decide⟩⟩}
 
 -- `RoutePipeline` rejects cross-slice, cross-route, cross-backend, cross-slot-budget,
 -- cross-stack-budget, and cross-platform substitutions at elaboration time.
+/--
+error: Type mismatch
+  Registry.pipeline passes Route.checked
+has type
+  RoutePipeline slice0
+    { backend := BackendKind.lcb, backendTarget := Backend.LCB.Target.x86_64Linux, maxBIRSlots := 8,
+      maxImageStackBytes := 4096 }
+    Route.checked
+but is expected to have type
+  RoutePipeline sliceOne
+    { backend := BackendKind.lcb, backendTarget := Backend.LCB.Target.x86_64Linux, maxBIRSlots := 8,
+      maxImageStackBytes := 4096 }
+    Route.checked
+-/
+#guard_msgs (error, drop info) in
+#check fun (passes : Passes slice0 ⟨.lcb, .x86_64Linux, 8, 4096⟩) =>
+  (Registry.pipeline passes .checked : RoutePipeline sliceOne ⟨.lcb, .x86_64Linux, 8, 4096⟩ .checked)
+
+/--
+error: Type mismatch
+  Registry.pipeline passes Route.checked
+has type
+  RoutePipeline slice0
+    { backend := BackendKind.lcb, backendTarget := Backend.LCB.Target.x86_64Linux, maxBIRSlots := 8,
+      maxImageStackBytes := 4096 }
+    Route.checked
+but is expected to have type
+  RoutePipeline slice0
+    { backend := BackendKind.lcb, backendTarget := Backend.LCB.Target.x86_64Linux, maxBIRSlots := 8,
+      maxImageStackBytes := 4096 }
+    Route.unchecked
+-/
+#guard_msgs (error, drop info) in
+#check fun (passes : Passes slice0 ⟨.lcb, .x86_64Linux, 8, 4096⟩) =>
+  (Registry.pipeline passes .checked : RoutePipeline slice0 ⟨.lcb, .x86_64Linux, 8, 4096⟩ .unchecked)
+
+/--
+error: Type mismatch
+  Registry.pipeline passes Route.checked
+has type
+  RoutePipeline slice0
+    { backend := BackendKind.lcb, backendTarget := Backend.LCB.Target.x86_64Linux, maxBIRSlots := 8,
+      maxImageStackBytes := 4096 }
+    Route.checked
+but is expected to have type
+  RoutePipeline slice0
+    { backend := BackendKind.llvm, backendTarget := Backend.LCB.Target.x86_64Linux, maxBIRSlots := 8,
+      maxImageStackBytes := 4096 }
+    Route.checked
+-/
+#guard_msgs (error, drop info) in
+#check fun (passes : Passes slice0 ⟨.lcb, .x86_64Linux, 8, 4096⟩) =>
+  (Registry.pipeline passes .checked : RoutePipeline slice0 ⟨.llvm, .x86_64Linux, 8, 4096⟩ .checked)
+
+/--
+error: Type mismatch
+  Registry.pipeline passes Route.checked
+has type
+  RoutePipeline slice0
+    { backend := BackendKind.lcb, backendTarget := Backend.LCB.Target.x86_64Linux, maxBIRSlots := 8,
+      maxImageStackBytes := 4096 }
+    Route.checked
+but is expected to have type
+  RoutePipeline slice0
+    { backend := BackendKind.lcb, backendTarget := Backend.LCB.Target.x86_64Linux, maxBIRSlots := 4,
+      maxImageStackBytes := 4096 }
+    Route.checked
+-/
+#guard_msgs (error, drop info) in
+#check fun (passes : Passes slice0 ⟨.lcb, .x86_64Linux, 8, 4096⟩) =>
+  (Registry.pipeline passes .checked : RoutePipeline slice0 ⟨.lcb, .x86_64Linux, 4, 4096⟩ .checked)
+
+/--
+error: Type mismatch
+  Registry.pipeline passes Route.checked
+has type
+  RoutePipeline slice0
+    { backend := BackendKind.lcb, backendTarget := Backend.LCB.Target.x86_64Linux, maxBIRSlots := 8,
+      maxImageStackBytes := 4096 }
+    Route.checked
+but is expected to have type
+  RoutePipeline slice0
+    { backend := BackendKind.lcb, backendTarget := Backend.LCB.Target.x86_64Linux, maxBIRSlots := 8,
+      maxImageStackBytes := 8192 }
+    Route.checked
+-/
+#guard_msgs (error, drop info) in
+#check fun (passes : Passes slice0 ⟨.lcb, .x86_64Linux, 8, 4096⟩) =>
+  (Registry.pipeline passes .checked : RoutePipeline slice0 ⟨.lcb, .x86_64Linux, 8, 8192⟩ .checked)
+
+/--
+error: Type mismatch
+  Registry.pipeline passes Route.checked
+has type
+  RoutePipeline slice0
+    { backend := BackendKind.lcb, backendTarget := Backend.LCB.Target.x86_64Linux, maxBIRSlots := 8,
+      maxImageStackBytes := 4096 }
+    Route.checked
+but is expected to have type
+  RoutePipeline slice0
+    { backend := BackendKind.lcb, backendTarget := Backend.LCB.Target.aarch64Linux, maxBIRSlots := 8,
+      maxImageStackBytes := 4096 }
+    Route.checked
+-/
+#guard_msgs (error, drop info) in
+#check fun (passes : Passes slice0 ⟨.lcb, .x86_64Linux, 8, 4096⟩) =>
+  (Registry.pipeline passes .checked : RoutePipeline slice0 ⟨.lcb, .aarch64Linux, 8, 4096⟩ .checked)
+
 example (passes : Passes slice0 ⟨.lcb, .x86_64Linux, 8, 4096⟩) :
-    RoutePipeline slice0 ⟨.lcb, .x86_64Linux, 8, 4096⟩ .checked := by
-  let rp := Registry.pipeline passes .checked
-  fail_if_success exact (rp : RoutePipeline sliceOne ⟨.lcb, .x86_64Linux, 8, 4096⟩ .checked)
-  fail_if_success exact (rp : RoutePipeline slice0 ⟨.lcb, .x86_64Linux, 8, 4096⟩ .unchecked)
-  fail_if_success exact (rp : RoutePipeline slice0 ⟨.llvm, .x86_64Linux, 8, 4096⟩ .checked)
-  fail_if_success exact (rp : RoutePipeline slice0 ⟨.lcb, .x86_64Linux, 4, 4096⟩ .checked)
-  fail_if_success exact (rp : RoutePipeline slice0 ⟨.lcb, .x86_64Linux, 8, 8192⟩ .checked)
-  fail_if_success exact (rp : RoutePipeline slice0 ⟨.lcb, .aarch64Linux, 8, 4096⟩ .checked)
-  exact rp
+    RoutePipeline slice0 ⟨.lcb, .x86_64Linux, 8, 4096⟩ .checked :=
+  Registry.pipeline passes .checked
 
 -- Empty and cons `foldPasses` + identity fallback control on declined candidates.
 example {slice : Slice} {profile : Profile} {k : IRPoint} (x : At slice profile k)

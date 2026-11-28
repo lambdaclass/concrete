@@ -15,43 +15,109 @@ from tempfile import TemporaryDirectory
 
 PIPELINE = Path("Concrete/Interfaces/Pipeline.lean")
 AUDIT = Path("scripts/checks/compiler/stage_end_to_end_audit.lean")
-LLVM = "  r.chain unchecked r.emitLLVM"
+LEXER = (
+    "def PassFunctions.lexer (passes : PassFunctions grammar language lang profile) : Stage Source LexRefusal TokenStream where\n"
+    "  run := passes.lex\n"
+    "  kind := .directProof\n"
+    "  inputInvariant := Source.WF\n"
+    "  outputInvariant stream := stream.parserView.WF ∧ TokensOrdered stream.parserView\n"
+    "  success := Lexes\n"
+    "  refusal := LexRefuses"
+)
+LLVM_EMIT = (
+    "  | ⟨.llvm, target, maxSlots, maxStack⟩, passes =>\n"
+    "    { run := emitGuarded (language := language) passes.emit\n"
+    "      kind := .namedPremise \"P_print\"\n"
+    "      inputInvariant := BIR.WF (language := language)\n"
+    "      outputInvariant := fun output => ∃ bir : BIR lang ⟨.llvm, target, maxSlots, maxStack⟩, LLVMMetadataMatches bir output\n"
+    "      success := fun bir output =>\n"
+    "        firstUnsupported (language := language) bir = none ∧\n"
+    "        LLVMMetadataMatches bir output\n"
+    "      refusal := fun bir failure =>\n"
+    "        ∃ cause, firstUnsupported (language := language) bir = some cause ∧\n"
+    "          failure = .unsupportedFeature ⟨.llvm, target, maxSlots, maxStack⟩ cause\n"
+    "      trust := P_print (language := language) }"
+)
 PRINT = "  let source := BIR.Execution (language := language)"
+PPRINT_DECL = "def P_print (bir : BIR lang profile) (output : LLVMInput profile) : Prop :="
+PPRINT_INLINE_EXAMPLE = (
+    "-- Two-module LLVM `P_print` binds `output.packageBytes` (both `.component` and `.launcher`).\n"
+    "example {profile : Profile} (bir : BIR (sliceLoweringLanguage slice0) profile)\n"
+    "    (out : LLVMInput profile) :\n"
+    "    out.packageBytes.component = out.bytesAt .component ∧\n"
+    "    out.packageBytes.launcher = out.bytesAt .launcher ∧\n"
+    "    (P_print (language := sliceLanguage slice0) bir out →\n"
+    "      ProgramSafe (BIR.Execution (language := sliceLanguage slice0)) bir →\n"
+    "      ¬ llvmBehaviors (E := (sliceLanguage slice0).operands.Event) out.packageBytes .wrong) :=\n"
+    "  ⟨rfl, rfl, fun hp hsafe hwrong => hp hsafe .wrong hwrong⟩"
+)
 DECODER = "ByteArray → Option UInt8"
 WITNESS = f"(fun (decode : {DECODER}) => decode ByteArray.empty ≠ none)"
 VIA_ID = f"¬ (id Exists) {WITNESS}"
 EXISTS = f"∃ decode : {DECODER}, decode ByteArray.empty ≠ none"
+W_U64 = "∃ decode : ByteArray → UInt64, decode output.packageBytes.component = 0"
 
 
 def lexer(field, value):
-    return (f"  let lexer := {{r.lexer with {field} := {value}}}\n"
-            "  {r with lexer := lexer}.chain unchecked r.emitLLVM")
+    if field == "inputInvariant":
+        return LEXER.replace("  inputInvariant := Source.WF", f"  inputInvariant := {value}")
+    if field == "success":
+        return LEXER.replace("  success := Lexes", f"  success := {value}")
+    if field == "trust":
+        return LEXER + f"\n  trust := {value}"
+    raise ValueError(f"unsupported lexer field {field}")
+
+
+def llvm_emit_trust(value, kind=None):
+    out = LLVM_EMIT.replace("      trust := P_print (language := language) }",
+                            f"      trust := {value} }}")
+    if kind is not None:
+        out = out.replace('      kind := .namedPremise "P_print"', f"      kind := {kind}")
+    return out
 
 
 # The print conjunct makes trust impossible, while the implication makes it vacuous.
 # An existential over a relation or model can also hide in a success field.
+# Includes live shadow-module controls for ISS-0131 / Codex round-2 counterexamples (4a, 4b, 4c, 5a, 5b).
 MUTATIONS = [
-    ("ready-id", LLVM, lexer("inputInvariant", f"fun x => r.lexer.inputInvariant x ∧ ({VIA_ID})")),
+    ("ready-id", LEXER, lexer("inputInvariant", f"fun x => Source.WF x ∧ ({VIA_ID})")),
     ("print-conjunct", PRINT, f"  ({VIA_ID}) ∧\n" + PRINT),
     ("print-guard", PRINT, f"  ({VIA_ID}) →\n" + PRINT),
-    ("llvm-final-true", LLVM,
-     "  r.chain unchecked {r.emitLLVM with kind := .directProof, trust := fun _ _ => True}"),
-    ("success-id-relation", LLVM, lexer("success",
+    ("llvm-final-true", LLVM_EMIT, llvm_emit_trust("fun _ _ => True", kind=".directProof")),
+    ("success-id-relation", LEXER, lexer("success",
      "fun x y => ¬ (id Exists) (fun (meaning : Source → TokenStream → Prop) => meaning x y)")),
-    ("success-id-model", LLVM, lexer("success",
+    ("success-id-model", LEXER, lexer("success",
      "fun _ _ => ¬ (id Exists) (fun (model : CoreLanguage) => model = model)")),
-    ("ready-option-decoder", LLVM, lexer("inputInvariant",
-     f"fun x => r.lexer.inputInvariant x ∧ Nonempty ((some ((decode : {DECODER}) → "
+    ("ready-option-decoder", LEXER, lexer("inputInvariant",
+     f"fun x => Source.WF x ∧ Nonempty ((some ((decode : {DECODER}) → "
      "PLift (decode ByteArray.empty = none))).getD PUnit)")),
-    ("ready-exists", LLVM, lexer("inputInvariant",
-     f"fun x => r.lexer.inputInvariant x ∧ ¬ ({EXISTS})")),
+    ("ready-exists", LEXER, lexer("inputInvariant",
+     f"fun x => Source.WF x ∧ ¬ ({EXISTS})")),
     ("print-exists", PRINT, f"  (({EXISTS}) → False) →\n" + PRINT),
     ("print-let-exists", PRINT, f"  let witness := {EXISTS}\n  (¬ witness) →\n" + PRINT),
-    ("success-exists", LLVM, lexer("success",
+    ("print-neg-exists-prop", PRINT,
+     f"  let W := {W_U64}\n  ¬ (∃ _ : W, True) →\n" + PRINT),
+    ("print-match-decide", PRINT,
+     f"  open Classical in\n  let W := {W_U64}\n"
+     "  (match decide W with | true => False | false => True) →\n" + PRINT),
+    ("print-fn-eq", PRINT,
+     "  ((fun d : ByteArray → UInt64 => d output.packageBytes.component) =\n"
+     "    (fun _ : ByteArray → UInt64 => (0 : UInt64))) →\n" + PRINT),
+    ("print-local-lcb-ns", PPRINT_DECL,
+     "private def _root_.LeanCompilerBackend.EvilPrintGuard (bs : ByteArray) : Prop :=\n"
+     "  ¬ ∃ decode : ByteArray → UInt64, decode bs = 0\n"
+     + PPRINT_DECL + "\n"
+     "  _root_.LeanCompilerBackend.EvilPrintGuard output.packageBytes.component →"),
+    ("print-custom-lt", PPRINT_DECL,
+     "@[instance_reducible] private def evilPrintLT (bs : ByteArray) : LT Unit :=\n"
+     "  ⟨fun _ _ => ¬ ∃ decode : ByteArray → UInt64, decode bs = 0⟩\n"
+     + PPRINT_DECL + "\n"
+     "  @LT.lt Unit (evilPrintLT output.packageBytes.component) () () →"),
+    ("success-exists", LEXER, lexer("success",
      "fun x y => (∃ meaning : Source → TokenStream → Prop, meaning x y) → False")),
-    ("trust-id", LLVM, lexer("trust", f"fun _ _ => {VIA_ID}")),
-    ("trust-let", LLVM, lexer("trust", f"fun _ _ => let witness := {EXISTS}; ¬ witness")),
-    ("trust-projection", LLVM, lexer("trust", f"fun _ _ => (True, ¬ ({EXISTS})).2")),
+    ("trust-id", LLVM_EMIT, llvm_emit_trust(f"fun _ _ => {VIA_ID}")),
+    ("trust-let", LLVM_EMIT, llvm_emit_trust(f"fun _ _ => let witness := {EXISTS}; ¬ witness")),
+    ("trust-projection", LLVM_EMIT, llvm_emit_trust(f"fun _ _ => (True, ¬ ({EXISTS})).2")),
 ]
 
 
@@ -100,12 +166,17 @@ def compile_variant(module, env, source, old, new):
 
 def compare_audits(audits):
     source = PIPELINE.read_text()
+    if source.count(PPRINT_INLINE_EXAMPLE) != 1:
+        raise SystemExit(f"{PIPELINE}: expected one occurrence of PPRINT_INLINE_EXAMPLE")
     with shadow_module(PIPELINE) as (module, env):
         print("mutation", *(audit.name for audit in audits), sep="\t")
-        passing = [("pristine", LLVM, LLVM),
-                   ("wrapped-true", LLVM, lexer("trust", "fun _ _ => id True"))]
+        passing = [("pristine", LEXER, LEXER),
+                   ("wrapped-true", LEXER, lexer("trust", "fun _ _ => id True"))]
         for label, old, new in [*passing, *MUTATIONS]:
-            compile_variant(module, env, source, old, new)
+            variant_src = source
+            if old in (PRINT, PPRINT_DECL):
+                variant_src = variant_src.replace(PPRINT_INLINE_EXAMPLE, "")
+            compile_variant(module, env, variant_src, old, new)
             outcomes = [verdict(audit, env) for audit in audits]
             print(label, *outcomes, sep="\t", flush=True)
             if (label, old, new) in passing:

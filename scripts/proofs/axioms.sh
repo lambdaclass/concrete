@@ -96,97 +96,120 @@ audit_library() {
   fi
 }
 
-# check_no_classical_choice LOG_FILE EXPECTED_NAMES...
-# Parses `#print axioms` output and rejects any missing/extra target or any axiom outside
-# `{propext, Quot.sound}` (specifically banning `Classical.choice`, `sorryAx`, and native axioms).
-check_no_classical_choice() {
-  local log_file=$1
-  shift
-  python3 -I - "$log_file" "$@" <<'PY'
-import re, sys
-text = open(sys.argv[1], encoding="utf-8").read()
-expected = sys.argv[2:]
-allowed = {"propext", "Quot.sound"}
-seen = []
-bad = []
-for line in text.splitlines():
-    s = line.strip()
-    m1 = re.match(r"^'([^']+)' does not depend on any axioms$", s)
-    if m1:
-        seen.append(m1.group(1))
-        continue
-    m2 = re.match(r"^'([^']+)' depends on axioms: \[([^\]]*)\]$", s)
-    if m2:
-        name = m2.group(1)
-        seen.append(name)
-        axs = [a.strip() for a in m2.group(2).split(",") if a.strip()]
-        extra = [a for a in axs if a not in allowed]
-        if extra:
-            bad.append(f"{name}: {extra}")
-if seen != expected:
-    print(f"expected #print axioms for {expected}, saw {seen}")
-    sys.exit(1)
-if bad:
-    print("forbidden axioms: " + "; ".join(bad))
-    sys.exit(1)
-PY
-}
-
+# Constructive boundary check via `Lean.collectAxioms` directly (no `#print axioms` text
+# scraping), paired with an in-chain negative control that plants `Classical.choice` inside
+# a shadowed `ConcreteSpec/StageGrammar.lean` (`earlyVerification.proposalSize`) and runs
+# the exact same `Lean.collectAxioms` probe against it.
 slice_parser_constructive_check() {
   local probe="$TMP/slice-parser-axioms.lean"
+  local probe_setup="$TMP/slice-parser-axioms.setup.json"
   local probe_out="$TMP/slice-parser-axioms.out"
   local probe_err="$TMP/slice-parser-axioms.err"
-  local neg="$TMP/slice-parser-axioms-neg.lean"
-  local neg_out="$TMP/slice-parser-axioms-neg.out"
-  local neg_err="$TMP/slice-parser-axioms-neg.err"
-  local msg
-  local targets=(
-    ConcreteSpec.StageGrammar.sliceParser
-    ConcreteSpec.StageGrammar.sliceVerifierInputs
-    ConcreteSpec.StageGrammar.earlySharedGrammar_productive
-    ConcreteSpec.StageGrammar.sliceParser_rank_le
-    ConcreteSpec.StageGrammar.sliceParser_stepsPerToken_ge
-    ConcreteSpec.StageGrammar.sliceParser_nonExhausted
-    ConcreteSpec.StageGrammar.sliceParser_steps_le
-    ConcreteSpec.StageGrammar.sliceParser_ok_derives_iff
-    ConcreteSpec.StageGrammar.sliceParser_ok_iff
-    ConcreteSpec.StageGrammar.sliceParser_unsupported_iff
-    ConcreteSpec.StageGrammar.sliceParser_malformed_iff
-    ConcreteSpec.StageGrammar.sliceParser_unsupported_ne_program
-  )
-  echo "=== ConcreteSpec: constructive sliceParser boundary (no Classical.choice) ==="
-  {
-    echo "import ConcreteSpec.StageGrammar"
-    echo "import ConcreteSpec.Proofs.SliceGrammar"
-    local name
-    for name in "${targets[@]}"; do
-      echo "#print axioms $name"
-    done
-  } > "$probe"
-  if run_enumerator "$probe" > "$probe_out" 2> "$probe_err"; then
-    if msg=$(check_no_classical_choice "$probe_out" "${targets[@]}"); then
-      ok "sliceParser, sliceVerifierInputs, earlySharedGrammar_productive, and all 9 sliceParser_* lemmas use no Classical.choice"
-    else
-      no "constructive sliceParser axiom check failed: $msg"
-    fi
+  local neg_dir="$TMP/parser-chain-neg/ConcreteSpec"
+  local neg_src="$neg_dir/StageGrammar.lean"
+  local neg_src_setup="$TMP/parser-chain-neg/StageGrammar.setup.json"
+  local neg_olean="$neg_dir/StageGrammar.olean"
+  local neg_build_log="$TMP/parser-chain-neg/build.log"
+  local neg_probe_setup="$TMP/parser-chain-neg/probe.setup.json"
+  local neg_out="$TMP/parser-chain-neg/probe.out"
+  local neg_err="$TMP/parser-chain-neg/probe.err"
+  local target_count=12
+
+  echo "=== ConcreteSpec: constructive sliceParser boundary (Lean.collectAxioms, no Classical.choice) ==="
+  cat > "$probe" <<'EOF'
+import Lean
+import ConcreteSpec.StageGrammar
+import ConcreteSpec.Proofs.SliceGrammar
+
+open Lean Elab Command in
+run_cmd do
+  let env ← getEnv
+  let allowed : List Name := [``propext, ``Quot.sound]
+  let targets : List Name := [
+    ``ConcreteSpec.StageGrammar.sliceParser,
+    ``ConcreteSpec.StageGrammar.sliceVerifierInputs,
+    ``ConcreteSpec.StageGrammar.earlySharedGrammar_productive,
+    ``ConcreteSpec.StageGrammar.sliceParser_rank_le,
+    ``ConcreteSpec.StageGrammar.sliceParser_stepsPerToken_ge,
+    ``ConcreteSpec.StageGrammar.sliceParser_nonExhausted,
+    ``ConcreteSpec.StageGrammar.sliceParser_steps_le,
+    ``ConcreteSpec.StageGrammar.sliceParser_ok_derives_iff,
+    ``ConcreteSpec.StageGrammar.sliceParser_ok_iff,
+    ``ConcreteSpec.StageGrammar.sliceParser_unsupported_iff,
+    ``ConcreteSpec.StageGrammar.sliceParser_malformed_iff,
+    ``ConcreteSpec.StageGrammar.sliceParser_unsupported_ne_program
+  ]
+  let mut bad : Array String := #[]
+  for target in targets do
+    unless env.contains target do
+      throwError "missing constructive target: {target}"
+    let axioms ← Lean.collectAxioms target
+    let forbidden := axioms.toList.filter fun ax => !allowed.contains ax
+    if !forbidden.isEmpty then
+      bad := bad.push s!"{target}: {forbidden}"
+  if !bad.isEmpty then
+    throwError "forbidden axioms in constructive sliceParser boundary: {String.intercalate "; " bad.toList}"
+  IO.println s!"CONSTRUCTIVE_OK: {targets.length} targets"
+EOF
+
+  if "$LAKE" setup-file "$probe" > "$probe_setup" 2> "$probe_err" &&
+     "$LAKE" env env -u LEAN_PATH lean --setup="$probe_setup" "$probe" > "$probe_out" 2>> "$probe_err" &&
+     grep -Fxq "CONSTRUCTIVE_OK: $target_count targets" "$probe_out"; then
+    ok "sliceParser, sliceVerifierInputs, earlySharedGrammar_productive, and all 9 sliceParser_* lemmas use no Classical.choice (Lean.collectAxioms)"
   else
-    no "constructive sliceParser axiom probe failed to elaborate: $(head -5 "$probe_out" "$probe_err" | tr '\n' ' ')"
+    no "constructive sliceParser Lean.collectAxioms check failed: $(head -5 "$probe_out" "$probe_err" | tr '\n' ' ')"
   fi
 
-  cat > "$neg" <<'EOF'
-theorem sliceParserClassicalControl (P : Prop) : P ∨ ¬ P := Classical.em P
-#print axioms sliceParserClassicalControl
-EOF
-  if run_enumerator "$neg" > "$neg_out" 2> "$neg_err"; then
-    if msg=$(check_no_classical_choice "$neg_out" sliceParserClassicalControl); then
-      no "control: constructive sliceParser axiom checker unexpectedly accepted Classical.choice"
-    elif printf '%s\n' "$msg" | grep -Fq "Classical.choice"; then
-      ok "control: constructive sliceParser axiom checker rejects Classical.choice ($msg)"
-    else
-      no "control: constructive sliceParser axiom checker failed with unexpected message: $msg"
-    fi
+  mkdir -p "$neg_dir"
+  if ! python3 -I - ConcreteSpec/StageGrammar.lean "$neg_src" <<'PY'
+import sys
+src_path, dst_path = sys.argv[1], sys.argv[2]
+text = open(src_path, encoding="utf-8").read()
+old = "  proposalSize := earlyVerification_proposalSize"
+new = "  proposalSize := (Classical.em True).elim (fun _ => earlyVerification_proposalSize) (fun _ => earlyVerification_proposalSize)"
+if text.count(old) != 1:
+    sys.stderr.write(f"expected one occurrence of {old!r} in {src_path}\n")
+    sys.exit(1)
+open(dst_path, "w", encoding="utf-8").write(text.replace(old, new, 1))
+PY
+  then
+    no "control: failed to construct parser-chain Classical.choice mutation"
+    return
+  fi
+  if cmp -s ConcreteSpec/StageGrammar.lean "$neg_src"; then
+    no "control: parser-chain Classical.choice mutation did not modify StageGrammar.lean"
+    return
+  fi
+
+  if ! "$LAKE" setup-file ConcreteSpec/StageGrammar.lean > "$neg_src_setup" 2> "$neg_build_log" ||
+     ! "$LAKE" env env -u LEAN_PATH lean --setup="$neg_src_setup" -o "$neg_olean" "$neg_src" >> "$neg_build_log" 2>&1; then
+    no "control: mutated StageGrammar.lean failed to elaborate: $(head -8 "$neg_build_log" | tr '\n' ' ')"
+    return
+  fi
+
+  if ! python3 -I - "$probe_setup" "$neg_probe_setup" "$neg_olean" <<'PY'
+import json, sys
+src_setup, dst_setup, neg_olean = sys.argv[1], sys.argv[2], sys.argv[3]
+data = json.load(open(src_setup, encoding="utf-8"))
+arts = data.get("importArts", {})
+if "ConcreteSpec.StageGrammar" not in arts:
+    sys.stderr.write("ConcreteSpec.StageGrammar missing from probe importArts\n")
+    sys.exit(1)
+arts["ConcreteSpec.StageGrammar"] = [[neg_olean]]
+json.dump(data, open(dst_setup, "w", encoding="utf-8"))
+PY
+  then
+    no "control: failed to rewrite probe setup JSON for mutated StageGrammar.olean"
+    return
+  fi
+
+  if "$LAKE" env env -u LEAN_PATH lean --setup="$neg_probe_setup" "$probe" > "$neg_out" 2> "$neg_err"; then
+    no "control: constructive sliceParser Lean.collectAxioms probe unexpectedly accepted Classical.choice planted in StageGrammar.earlyVerification"
+  elif grep -Fq "Classical.choice" "$neg_out" "$neg_err" &&
+       grep -Fq "ConcreteSpec.StageGrammar.sliceParser" "$neg_out" "$neg_err"; then
+    ok "control: constructive sliceParser Lean.collectAxioms probe rejects Classical.choice planted inside StageGrammar.earlyVerification"
   else
-    no "control: classical negative control for sliceParser failed to elaborate: $(head -5 "$neg_out" "$neg_err" | tr '\n' ' ')"
+    no "control: parser-chain negative control failed with unexpected output: $(head -5 "$neg_out" "$neg_err" | tr '\n' ' ')"
   fi
 }
 

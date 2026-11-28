@@ -82,6 +82,34 @@ Concrete.BIR.BodyResult.returns.inj
 Concrete.BIR.BodyResult.returns.injEq	propext
 Concrete.BIR.BodyResult.returns.sizeOf_spec	
 Concrete.BIR.BodyResult.stuck.sizeOf_spec	
+Concrete.BIR.Build.buildBIR_buildsBIR	Quot.sound propext
+Concrete.BIR.Build.buildBIR_error_spec	Quot.sound propext
+Concrete.BIR.Build.buildBIR_frameSlots_eq	Quot.sound propext
+Concrete.BIR.Build.buildBIR_memoryView_eq	Quot.sound propext
+Concrete.BIR.Build.buildBIR_mutableLocals_eq	Quot.sound propext
+Concrete.BIR.Build.buildBIR_normalize_eq	Quot.sound propext
+Concrete.BIR.Build.buildBIR_ok_of_wf	Quot.sound propext
+Concrete.BIR.Build.buildBIR_origins_eq	Quot.sound propext
+Concrete.BIR.Build.buildBIR_refusal_of_gt	Quot.sound propext
+Concrete.BIR.Build.buildBIR_sites_from_ssa	Quot.sound propext
+Concrete.BIR.Build.buildBIR_sound	Classical.choice Quot.sound propext
+Concrete.BIR.Build.buildBIR_trapSlotsWF	Quot.sound propext
+Concrete.BIR.Build.buildBIR_trapsMatch	Quot.sound propext
+Concrete.BIR.Build.buildBIR_validated	Classical.choice Quot.sound propext
+Concrete.BIR.Build.buildBIR_wf	Quot.sound propext
+Concrete.BIR.Build.buildBIR_zero_slot_ok	Quot.sound propext
+Concrete.BIR.Build.lowerBlocksAux.eq_1	
+Concrete.BIR.Build.lowerBlocksAux.eq_2	
+Concrete.BIR.Build.lowerBlocksAux.eq_def	
+Concrete.BIR.Build.lowerFunctionsAux.eq_1	
+Concrete.BIR.Build.lowerFunctionsAux.eq_2	
+Concrete.BIR.Build.lowerFunctionsAux.eq_def	
+Concrete.BIR.Build.lowerTerminator.eq_1	
+Concrete.BIR.Build.lowerTerminator.eq_2	
+Concrete.BIR.Build.lowerTerminator.eq_3	
+Concrete.BIR.Build.lowerTerminator.eq_4	
+Concrete.BIR.Build.lowerTerminator.eq_5	
+Concrete.BIR.Build.ssa_memoryView_origins_eq	Quot.sound propext
 Concrete.BIR.Fits.brecOn	
 Concrete.BIR.Inst.bin.inj	
 Concrete.BIR.Inst.bin.injEq	propext
@@ -421,6 +449,7 @@ Concrete.BIR.wf_facts._simp_1_3	propext
 Concrete.BIR.wf_facts._simp_1_4	Quot.sound propext
 Concrete.BIR.wrap.eq_1	
 Concrete.BIR.wrap_inRange	Classical.choice Quot.sound propext
+Concrete.BIR.wrap_inRange._proof_1_21	Classical.choice Quot.sound propext
 Concrete.BIR.wrap_inRange._proof_1_22	Classical.choice Quot.sound propext
 Concrete.BIR.wrap_inRange._proof_1_23	Classical.choice Quot.sound propext
 Concrete.BIR.wrap_inRange._proof_1_24	Classical.choice Quot.sound propext
@@ -428,8 +457,8 @@ Concrete.BIR.wrap_inRange._proof_1_25	Classical.choice Quot.sound propext
 Concrete.BIR.wrap_inRange._proof_1_26	Classical.choice Quot.sound propext
 Concrete.BIR.wrap_inRange._proof_1_27	Classical.choice Quot.sound propext
 Concrete.BIR.wrap_inRange._proof_1_28	Classical.choice Quot.sound propext
-Concrete.BIR.wrap_inRange._proof_1_29	Classical.choice Quot.sound propext
 Concrete.BIR.wrap_of_inRange	Quot.sound propext
+Concrete.BIR.wrap_of_inRange._proof_1_21	Quot.sound propext
 Concrete.BIR.wrap_of_inRange._proof_1_22	Quot.sound propext
 Concrete.BIR.wrap_of_inRange._proof_1_23	Quot.sound propext
 Concrete.BIR.wrap_of_inRange._proof_1_24	Quot.sound propext
@@ -437,7 +466,133 @@ Concrete.BIR.wrap_of_inRange._proof_1_25	Quot.sound propext
 Concrete.BIR.wrap_of_inRange._proof_1_26	Quot.sound propext
 Concrete.BIR.wrap_of_inRange._proof_1_27	Quot.sound propext
 Concrete.BIR.wrap_of_inRange._proof_1_28	Quot.sound propext
-Concrete.BIR.wrap_of_inRange._proof_1_29	Quot.sound propext
+Concrete.Backend.EmitLCB.AssembleError.compatEmit.inj	
+Concrete.Backend.EmitLCB.AssembleError.compatEmit.injEq	propext
+Concrete.Backend.EmitLCB.AssembleError.compatEmit.sizeOf_spec	
+Concrete.Backend.EmitLCB.AssembleError.compatValidate.inj	
+Concrete.Backend.EmitLCB.AssembleError.compatValidate.injEq	propext
+Concrete.Backend.EmitLCB.AssembleError.compatValidate.sizeOf_spec	
+Concrete.Backend.EmitLCB.AssembleError.compile.inj	
+Concrete.Backend.EmitLCB.AssembleError.compile.injEq	propext
+Concrete.Backend.EmitLCB.AssembleError.compile.sizeOf_spec	
+Concrete.Backend.EmitLCB.AssembleError.unsupportedReifyBinary.inj	
+Concrete.Backend.EmitLCB.AssembleError.unsupportedReifyBinary.injEq	propext
+Concrete.Backend.EmitLCB.AssembleError.unsupportedReifyBinary.sizeOf_spec	
+Concrete.Backend.EmitLCB.NormBlock.mk.inj	
+Concrete.Backend.EmitLCB.NormBlock.mk.injEq	propext
+Concrete.Backend.EmitLCB.NormBlock.mk.sizeOf_spec	
+Concrete.Backend.EmitLCB.NormGraph.mk.inj	
+Concrete.Backend.EmitLCB.NormGraph.mk.injEq	propext
+Concrete.Backend.EmitLCB.NormGraph.mk.sizeOf_spec	
+Concrete.Backend.EmitLCB.NormTerm.branch.inj	
+Concrete.Backend.EmitLCB.NormTerm.branch.injEq	propext
+Concrete.Backend.EmitLCB.NormTerm.branch.sizeOf_spec	
+Concrete.Backend.EmitLCB.NormTerm.jump.inj	
+Concrete.Backend.EmitLCB.NormTerm.jump.injEq	propext
+Concrete.Backend.EmitLCB.NormTerm.jump.sizeOf_spec	
+Concrete.Backend.EmitLCB.NormTerm.jumpEntryParams.inj	
+Concrete.Backend.EmitLCB.NormTerm.jumpEntryParams.injEq	propext
+Concrete.Backend.EmitLCB.NormTerm.jumpEntryParams.sizeOf_spec	
+Concrete.Backend.EmitLCB.NormTerm.ret.inj	
+Concrete.Backend.EmitLCB.NormTerm.ret.injEq	propext
+Concrete.Backend.EmitLCB.NormTerm.ret.sizeOf_spec	
+Concrete.Backend.EmitLCB.NormTerm.trap.inj	
+Concrete.Backend.EmitLCB.NormTerm.trap.injEq	propext
+Concrete.Backend.EmitLCB.NormTerm.trap.sizeOf_spec	
+Concrete.Backend.EmitLCB.PhiEdgeArg.entryParam.inj	
+Concrete.Backend.EmitLCB.PhiEdgeArg.entryParam.injEq	propext
+Concrete.Backend.EmitLCB.PhiEdgeArg.entryParam.sizeOf_spec	
+Concrete.Backend.EmitLCB.PhiEdgeArg.reads.inj	
+Concrete.Backend.EmitLCB.PhiEdgeArg.reads.injEq	propext
+Concrete.Backend.EmitLCB.PhiEdgeArg.reads.sizeOf_spec	
+Concrete.Backend.EmitLCB.SplitEdge.mk.inj	
+Concrete.Backend.EmitLCB.SplitEdge.mk.injEq	propext
+Concrete.Backend.EmitLCB.SplitEdge.mk.sizeOf_spec	
+Concrete.Backend.EmitLCB.assembleFunction.eq_1	Classical.choice Quot.sound propext
+Concrete.Backend.EmitLCB.assembleFunction.eq_2	Classical.choice Quot.sound propext
+Concrete.Backend.EmitLCB.assembleFunction.eq_3	Classical.choice Quot.sound propext
+Concrete.Backend.EmitLCB.collectSplitEdges.go._sparseCasesOn_3.else_eq	propext
+Concrete.Backend.EmitLCB.collectSplitEdges.go.eq_def	propext
+Concrete.Backend.EmitLCB.edgesTo.eq_1	
+Concrete.Backend.EmitLCB.edgesTo.eq_2	
+Concrete.Backend.EmitLCB.edgesTo.eq_3	
+Concrete.Backend.EmitLCB.edgesTo.eq_4	
+Concrete.Backend.EmitLCB.edgesTo.eq_5	
+Concrete.Backend.EmitLCB.emitInst._sparseCasesOn_11.else_eq	propext
+Concrete.Backend.EmitLCB.emitRead.eq_1	propext
+Concrete.Backend.EmitLCB.emitRead.eq_2	propext
+Concrete.Backend.EmitLCB.emitUnvalidated_ok_of_wf	Quot.sound propext
+Concrete.Backend.EmitLCB.emitUnvalidated_ok_of_wf._proof_1_33	Quot.sound propext
+Concrete.Backend.EmitLCB.emitUnvalidated_ok_of_wf._proof_1_34	Quot.sound propext
+Concrete.Backend.EmitLCB.emitUnvalidated_ok_of_wf._proof_1_35	Quot.sound propext
+Concrete.Backend.EmitLCB.emitUnvalidated_ok_of_wf._proof_1_36	Quot.sound propext
+Concrete.Backend.EmitLCB.emitUnvalidated_ok_of_wf._proof_1_37	Quot.sound propext
+Concrete.Backend.EmitLCB.emitUnvalidated_ok_of_wf._proof_1_44	Quot.sound propext
+Concrete.Backend.EmitLCB.emitUnvalidated_ok_of_wf._proof_1_45	Quot.sound propext
+Concrete.Backend.EmitLCB.emitUnvalidated_ok_of_wf._simp_1_32	propext
+Concrete.Backend.EmitLCB.emitUnvalidated_ok_of_wf._simp_1_46	propext
+Concrete.Backend.EmitLCB.emitUnvalidated_refusal_capacity	Quot.sound propext
+Concrete.Backend.EmitLCB.emitUnvalidated_refusal_firstUnsupported	Quot.sound propext
+Concrete.Backend.EmitLCB.emitUnvalidated_refusal_linking	Quot.sound propext
+Concrete.Backend.EmitLCB.emitUnvalidated_structural	Quot.sound propext
+Concrete.Backend.EmitLCB.emit_eq_emitGuarded	Classical.choice Quot.sound propext
+Concrete.Backend.EmitLCB.emit_error_of_wf	Classical.choice Quot.sound propext
+Concrete.Backend.EmitLCB.emit_refusal_capacity	Classical.choice Quot.sound propext
+Concrete.Backend.EmitLCB.emit_refusal_firstUnsupported	Classical.choice Quot.sound propext
+Concrete.Backend.EmitLCB.emit_refusal_invalidJob	Classical.choice Quot.sound propext
+Concrete.Backend.EmitLCB.emit_refusal_linking	Classical.choice Quot.sound propext
+Concrete.Backend.EmitLCB.emit_validated_jobs	Classical.choice Quot.sound propext
+Concrete.Backend.EmitLCB.graphPath_hits_dominator	
+Concrete.Backend.EmitLCB.helperJob_validateJob	Classical.choice Quot.sound propext
+Concrete.Backend.EmitLCB.helperSymbolName_injective	Quot.sound propext
+Concrete.Backend.EmitLCB.helperSymbolName_ne_body	Quot.sound propext
+Concrete.Backend.EmitLCB.instDecidableEqAssembleError.decEq._proof_1	
+Concrete.Backend.EmitLCB.instDecidableEqAssembleError.decEq._proof_10	
+Concrete.Backend.EmitLCB.instDecidableEqAssembleError.decEq._proof_11	
+Concrete.Backend.EmitLCB.instDecidableEqAssembleError.decEq._proof_12	
+Concrete.Backend.EmitLCB.instDecidableEqAssembleError.decEq._proof_13	
+Concrete.Backend.EmitLCB.instDecidableEqAssembleError.decEq._proof_14	
+Concrete.Backend.EmitLCB.instDecidableEqAssembleError.decEq._proof_15	
+Concrete.Backend.EmitLCB.instDecidableEqAssembleError.decEq._proof_16	
+Concrete.Backend.EmitLCB.instDecidableEqAssembleError.decEq._proof_17	
+Concrete.Backend.EmitLCB.instDecidableEqAssembleError.decEq._proof_18	
+Concrete.Backend.EmitLCB.instDecidableEqAssembleError.decEq._proof_19	
+Concrete.Backend.EmitLCB.instDecidableEqAssembleError.decEq._proof_2	
+Concrete.Backend.EmitLCB.instDecidableEqAssembleError.decEq._proof_20	
+Concrete.Backend.EmitLCB.instDecidableEqAssembleError.decEq._proof_3	
+Concrete.Backend.EmitLCB.instDecidableEqAssembleError.decEq._proof_4	
+Concrete.Backend.EmitLCB.instDecidableEqAssembleError.decEq._proof_5	
+Concrete.Backend.EmitLCB.instDecidableEqAssembleError.decEq._proof_6	
+Concrete.Backend.EmitLCB.instDecidableEqAssembleError.decEq._proof_7	
+Concrete.Backend.EmitLCB.instDecidableEqAssembleError.decEq._proof_8	
+Concrete.Backend.EmitLCB.instDecidableEqAssembleError.decEq._proof_9	
+Concrete.Backend.EmitLCB.normalizeTerm._sparseCasesOn_3.else_eq	propext
+Concrete.Backend.EmitLCB.orderedReachableBlocks.eq_1	
+Concrete.Backend.EmitLCB.siteDiagnostics_of_sites_bind	Quot.sound propext
+Concrete.Backend.EmitLLVM.SplitEdge.mk.inj	
+Concrete.Backend.EmitLLVM.SplitEdge.mk.injEq	propext
+Concrete.Backend.EmitLLVM.SplitEdge.mk.sizeOf_spec	
+Concrete.Backend.EmitLLVM.collectSplitEdges.go._sparseCasesOn_3.else_eq	propext
+Concrete.Backend.EmitLLVM.collectSplitEdges.go.eq_def	propext
+Concrete.Backend.EmitLLVM.emitComponentGraph_bodyHeader	Quot.sound propext
+Concrete.Backend.EmitLLVM.emitComponentGraph_ownsSymbols	Quot.sound propext
+Concrete.Backend.EmitLLVM.emitEntryParamDefaults._sparseCasesOn_1.else_eq	propext
+Concrete.Backend.EmitLLVM.emitInst._sparseCasesOn_12.else_eq	propext
+Concrete.Backend.EmitLLVM.emitInst._sparseCasesOn_13.else_eq	propext
+Concrete.Backend.EmitLLVM.emitRead.eq_1	propext
+Concrete.Backend.EmitLLVM.emitRead.eq_2	propext
+Concrete.Backend.EmitLLVM.emitTerm._sparseCasesOn_1.else_eq	propext
+Concrete.Backend.EmitLLVM.emitTerm._sparseCasesOn_2.else_eq	propext
+Concrete.Backend.EmitLLVM.emit_error_of_wf	Quot.sound propext
+Concrete.Backend.EmitLLVM.emit_firstUnsupported_none	Quot.sound propext
+Concrete.Backend.EmitLLVM.emit_launcherMatches	Quot.sound propext
+Concrete.Backend.EmitLLVM.emit_metadataMatches	Quot.sound propext
+Concrete.Backend.EmitLLVM.emit_ok_of_wf	Quot.sound propext
+Concrete.Backend.EmitLLVM.emit_ok_of_wf._simp_1_10	propext
+Concrete.Backend.EmitLLVM.emit_ok_of_wf._simp_1_11	propext
+Concrete.Backend.EmitLLVM.emit_refusal_of_firstUnsupported	Quot.sound propext
+Concrete.Backend.EmitLLVM.orderedReachableBlocks.eq_1	
+Concrete.Backend.EmitLLVM.siteDiagnostics_of_sites_bind	Quot.sound propext
 Concrete.Backend.LCB.Inst.width.eq_1	
 Concrete.Backend.LCB.Inst.width.eq_2	
 Concrete.Backend.LCB.Inst.width.eq_3	
@@ -520,7 +675,7 @@ Concrete.Backend.LCB.Proof.exact_natAbs_le	Quot.sound propext
 Concrete.Backend.LCB.Proof.exact_natAbs_le._proof_1_1	Quot.sound propext
 Concrete.Backend.LCB.Proof.exact_natAbs_le._proof_1_2	Quot.sound propext
 Concrete.Backend.LCB.Proof.flag_steps	Classical.choice Quot.sound propext
-Concrete.Backend.LCB.Proof.flag_steps._proof_1_7	Quot.sound propext
+Concrete.Backend.LCB.Proof.flag_steps._proof_1_4	Quot.sound propext
 Concrete.Backend.LCB.Proof.flag_value	Classical.choice Quot.sound propext
 Concrete.Backend.LCB.Proof.flag_word	Classical.choice Quot.sound propext
 Concrete.Backend.LCB.Proof.flag_word._proof_1_2	Classical.choice Quot.sound propext
@@ -619,7 +774,7 @@ Concrete.Backend.LCB.Proof.size_set!	propext
 Concrete.Backend.LCB.Proof.size_set4	propext
 Concrete.Backend.LCB.Proof.step_body	Quot.sound propext
 Concrete.Backend.LCB.Proof.step_branch	Classical.choice Quot.sound propext
-Concrete.Backend.LCB.Proof.step_branch._simp_1_2	propext
+Concrete.Backend.LCB.Proof.step_branch._simp_1_1	propext
 Concrete.Backend.LCB.Proof.step_jump	Classical.choice Quot.sound propext
 Concrete.Backend.LCB.Proof.step_ret	Classical.choice Quot.sound propext
 Concrete.Backend.LCB.Proof.steps_append	Quot.sound propext
@@ -651,8 +806,7 @@ Concrete.Backend.LCB.Target.aarch64Macos.sizeOf_spec
 Concrete.Backend.LCB.Target.ofNat_ctorIdx	
 Concrete.Backend.LCB.Target.x86_64Linux.sizeOf_spec	
 Concrete.Backend.LCB.assemble.eq_1	Classical.choice Quot.sound propext
-Concrete.Backend.LCB.assemble.eq_2	Classical.choice Quot.sound propext
-Concrete.Backend.LCB.assemble.eq_3	Classical.choice Quot.sound propext
+Concrete.Backend.LCB.assemble_eq_emitLCB	Classical.choice Quot.sound propext
 Concrete.Backend.LCB.edgesTo._sparseCasesOn_1.else_eq	propext
 Concrete.Backend.LCB.edgesTo.eq_1	propext
 Concrete.Backend.LCB.edgesTo.eq_2	propext
@@ -1420,6 +1574,44 @@ Concrete.Contracts.instDecidableEqDiagnosticSite.decEq._proof_2
 Concrete.Contracts.instDecidableEqDiagnosticSite.decEq._proof_3	
 Concrete.Contracts.runtimePermitted_all	
 Concrete.Contracts.stderrBytes.eq_1	
+Concrete.Core.LowerMIR.LowerRow.mk.inj	Quot.sound propext
+Concrete.Core.LowerMIR.LowerRow.mk.injEq	Quot.sound propext
+Concrete.Core.LowerMIR.LowerRow.mk.sizeOf_spec	Quot.sound propext
+Concrete.Core.LowerMIR.addCheck._sparseCasesOn_1.else_eq	propext
+Concrete.Core.LowerMIR.addCheck._sparseCasesOn_2.else_eq	propext
+Concrete.Core.LowerMIR.addCheck.eq_1	Quot.sound propext
+Concrete.Core.LowerMIR.lowerAtom.eq_1	
+Concrete.Core.LowerMIR.lowerAtom.eq_2	
+Concrete.Core.LowerMIR.lowerBinding._sparseCasesOn_3.else_eq	propext
+Concrete.Core.LowerMIR.lowerBinding._sparseCasesOn_4.else_eq	propext
+Concrete.Core.LowerMIR.lowerBinding._sparseCasesOn_5.else_eq	propext
+Concrete.Core.LowerMIR.lowerBinding.eq_1	Quot.sound propext
+Concrete.Core.LowerMIR.lowerBinding.eq_10	Quot.sound propext
+Concrete.Core.LowerMIR.lowerBinding.eq_11	Quot.sound propext
+Concrete.Core.LowerMIR.lowerBinding.eq_2	Quot.sound propext
+Concrete.Core.LowerMIR.lowerBinding.eq_3	Quot.sound propext
+Concrete.Core.LowerMIR.lowerBinding.eq_4	Quot.sound propext
+Concrete.Core.LowerMIR.lowerBinding.eq_5	Quot.sound propext
+Concrete.Core.LowerMIR.lowerBinding.eq_6	Quot.sound propext
+Concrete.Core.LowerMIR.lowerBinding.eq_7	Quot.sound propext
+Concrete.Core.LowerMIR.lowerBinding.eq_8	Quot.sound propext
+Concrete.Core.LowerMIR.lowerBinding.eq_9	Quot.sound propext
+Concrete.Core.LowerMIR.lowerBindings._sparseCasesOn_1.else_eq	propext
+Concrete.Core.LowerMIR.lowerBindings.eq_1	Quot.sound propext
+Concrete.Core.LowerMIR.lowerBindings.eq_2	Quot.sound propext
+Concrete.Core.LowerMIR.lowerBindings.eq_3	Quot.sound propext
+Concrete.Core.LowerMIR.lowerBindings.eq_def	Quot.sound propext
+Concrete.Core.LowerMIR.lowerCore_sound	Classical.choice Quot.sound propext
+Concrete.Core.LowerMIR.lowerCore_spec	Quot.sound propext
+Concrete.Core.LowerMIR.lowerCore_validated	Classical.choice Quot.sound propext
+Concrete.Core.LowerMIR.lowerEnding.eq_1	Quot.sound propext
+Concrete.Core.LowerMIR.lowerUncheckedEntry_validated	Quot.sound propext
+Concrete.Core.LowerMIR.lowerUnchecked_sound	Classical.choice Quot.sound propext
+Concrete.Core.LowerMIR.lowerUnchecked_spec	Quot.sound propext
+Concrete.Core.LowerMIR.lowerUnchecked_validated	Classical.choice Quot.sound propext
+Concrete.Core.LowerMIR.lowerWith_observes_iff	Quot.sound propext
+Concrete.Core.LowerMIR.lowerWith_spec	Quot.sound propext
+Concrete.Core.LowerMIR.validDischarges_nil_of_uncheckedWF	Quot.sound propext
 Concrete.Driver.Project.Coverage.mk.inj	
 Concrete.Driver.Project.Coverage.mk.injEq	propext
 Concrete.Driver.Project.Coverage.mk.sizeOf_spec	
@@ -1461,8 +1653,26 @@ Concrete.Elab.Output.mk.sizeOf_spec
 Concrete.Elab.SourceSite.mk.inj	
 Concrete.Elab.SourceSite.mk.injEq	propext
 Concrete.Elab.SourceSite.mk.sizeOf_spec	
-Concrete.FrontendPremises.elaborate	Quot.sound propext
-Concrete.FrontendPremises.parse	Quot.sound propext
+Concrete.Frontend.Validate.elaborator_sound	Classical.choice Quot.sound propext
+Concrete.Frontend.Validate.elaborator_validated	Classical.choice Quot.sound propext
+Concrete.Frontend.Validate.frontendPipeline_corresponds_of_ok	Classical.choice Quot.sound propext
+Concrete.Frontend.Validate.frontendPipeline_sound	Classical.choice Quot.sound propext
+Concrete.Frontend.Validate.frontendPipeline_validated	Classical.choice Quot.sound propext
+Concrete.Frontend.Validate.frontend_sound	Classical.choice Quot.sound propext
+Concrete.Frontend.Validate.frontend_validated	Classical.choice Quot.sound propext
+Concrete.Frontend.Validate.lexer_sound	Classical.choice Quot.sound propext
+Concrete.Frontend.Validate.lexer_validated	Classical.choice Quot.sound propext
+Concrete.Frontend.Validate.parserElaboratorPipeline_sound	Quot.sound propext
+Concrete.Frontend.Validate.parser_sound	Classical.choice Quot.sound propext
+Concrete.Frontend.Validate.parser_validated	Classical.choice Quot.sound propext
+Concrete.Frontend.Validate.programSpansBind_ready	Quot.sound propext
+Concrete.Frontend.Validate.registeredElaboratorStage_checks	Quot.sound propext
+Concrete.Frontend.Validate.registeredElaboratorStage_validated	Quot.sound propext
+Concrete.Frontend.Validate.registeredParserStage_checks	Quot.sound propext
+Concrete.Frontend.Validate.registeredParserStage_validated	Quot.sound propext
+Concrete.Frontend.Validate.sliceParser_elaborationDomain	Quot.sound propext
+Concrete.FrontendPremises.elaborate	propext
+Concrete.FrontendPremises.parse_discharged	Quot.sound propext
 Concrete.ImageTheorem.Elaborates.originWellFormed	propext
 Concrete.ImageTheorem.ElaboratesBindings.brecOn	propext
 Concrete.ImageTheorem.ElaboratesBindings.headLegal	propext
@@ -1527,13 +1737,16 @@ Concrete.ImageTheorem.Profile.mk.inj
 Concrete.ImageTheorem.Profile.mk.injEq	propext
 Concrete.ImageTheorem.Profile.mk.sizeOf_spec	
 Concrete.ImageTheorem.Sanity.answerCompiles	Classical.choice Quot.sound propext
+Concrete.ImageTheorem.Sanity.answerCompiles._proof_1_1	Classical.choice Quot.sound propext
 Concrete.ImageTheorem.Sanity.answerDoesNotReturn43	Classical.choice Quot.sound propext
 Concrete.ImageTheorem.Sanity.answerFrontend	Classical.choice Quot.sound propext
 Concrete.ImageTheorem.Sanity.answerHandoffs	Classical.choice Quot.sound propext
+Concrete.ImageTheorem.Sanity.answerHandoffs._proof_1_1	Classical.choice Quot.sound propext
 Concrete.ImageTheorem.Sanity.answerImageRefines	Classical.choice Quot.sound propext
 Concrete.ImageTheorem.Sanity.answerInput._proof_1	Quot.sound propext
 Concrete.ImageTheorem.Sanity.answerOrigins	Classical.choice Quot.sound propext
 Concrete.ImageTheorem.Sanity.answerOutput._proof_1	Classical.choice Quot.sound propext
+Concrete.ImageTheorem.Sanity.answerOutput._proof_2	propext
 Concrete.ImageTheorem.Sanity.answerTerminates	Classical.choice Quot.sound propext
 Concrete.ImageTheorem.Sanity.instant._proof_1	
 Concrete.ImageTheorem.Sanity.instant._proof_2	Quot.sound propext
@@ -1606,9 +1819,9 @@ Concrete.IntegratedCore.Agreement.dischargeTransfer	Quot.sound propext
 Concrete.IntegratedCore.Agreement.firstTrapSite.eq_1	propext
 Concrete.IntegratedCore.Agreement.firstTrapSite.eq_2	propext
 Concrete.IntegratedCore.Agreement.firstTrapSite.eq_def	propext
-Concrete.IntegratedCore.Agreement.lowered_observations	Classical.choice Quot.sound propext
-Concrete.IntegratedCore.Agreement.unchecked_agreement	Classical.choice Quot.sound propext
-Concrete.IntegratedCore.Agreement.unchecked_programSafe	Classical.choice Quot.sound propext
+Concrete.IntegratedCore.Agreement.lowered_observations	Quot.sound propext
+Concrete.IntegratedCore.Agreement.unchecked_agreement	Quot.sound propext
+Concrete.IntegratedCore.Agreement.unchecked_programSafe	Quot.sound propext
 Concrete.IntegratedCore.Agreement.validDischarges_encoded	Quot.sound propext
 Concrete.IntegratedCore.DischargeTransfer.admissionSound_of_transfer	Quot.sound propext
 Concrete.IntegratedCore.DischargeTransfer.encode_issued_isSome	Quot.sound propext
@@ -1619,6 +1832,9 @@ Concrete.IntegratedCore.DischargeTransfer.render_of_checkProgramWith_error	Quot.
 Concrete.IntegratedCore.DischargeTransfer.render_of_checkProgram_error	Quot.sound propext
 Concrete.IntegratedCore.DischargeTransfer.validDischarges_of_terminates	Quot.sound propext
 Concrete.IntegratedCore.DischargeTransfer.view_program_eq	propext
+Concrete.IntegratedCore.admissionEntry_validated	Quot.sound propext
+Concrete.IntegratedCore.admission_sound	Classical.choice Quot.sound propext
+Concrete.IntegratedCore.admission_validated	Classical.choice Quot.sound propext
 Concrete.IntegratedCore.elaborate.eq_1	Quot.sound propext
 Concrete.IntegratedCore.elaborate_slice0_inl	Quot.sound propext
 Concrete.IntegratedCore.lcb_return_word	Quot.sound propext
@@ -1626,6 +1842,11 @@ Concrete.IntegratedCore.lcb_return_word._proof_1_1	Quot.sound propext
 Concrete.IntegratedCore.lcb_trap_word	Quot.sound propext
 Concrete.IntegratedCore.lcb_trap_word._proof_1_1	Quot.sound propext
 Concrete.IntegratedCore.lcb_trap_word._proof_1_2	Quot.sound propext
+Concrete.IntegratedCore.lowerCore_sound	Classical.choice Quot.sound propext
+Concrete.IntegratedCore.lowerCore_validated	Classical.choice Quot.sound propext
+Concrete.IntegratedCore.lowerUncheckedEntry_validated	Quot.sound propext
+Concrete.IntegratedCore.lowerUnchecked_sound	Classical.choice Quot.sound propext
+Concrete.IntegratedCore.lowerUnchecked_validated	Classical.choice Quot.sound propext
 Concrete.IntegratedCore.typingEntry_validated	Quot.sound propext
 Concrete.IntegratedCore.validated	Classical.choice Quot.sound propext
 Concrete.Interfaces.Account.Equiv.refl	
@@ -1731,9 +1952,18 @@ Concrete.Interfaces.BIRTerm.branch.sizeOf_spec
 Concrete.Interfaces.BIRTerm.jump.inj	
 Concrete.Interfaces.BIRTerm.jump.injEq	propext
 Concrete.Interfaces.BIRTerm.jump.sizeOf_spec	
+Concrete.Interfaces.BIRTerm.regReads.eq_1	
+Concrete.Interfaces.BIRTerm.regReads.eq_2	
+Concrete.Interfaces.BIRTerm.regReads.eq_3	
+Concrete.Interfaces.BIRTerm.regReads.eq_4	
+Concrete.Interfaces.BIRTerm.regReads.eq_5	
 Concrete.Interfaces.BIRTerm.ret.inj	
 Concrete.Interfaces.BIRTerm.ret.injEq	propext
 Concrete.Interfaces.BIRTerm.ret.sizeOf_spec	
+Concrete.Interfaces.BIRTerm.successors.eq_1	
+Concrete.Interfaces.BIRTerm.successors.eq_2	
+Concrete.Interfaces.BIRTerm.successors.eq_3	
+Concrete.Interfaces.BIRTerm.successors.eq_4	
 Concrete.Interfaces.BIRTerm.trap.inj	
 Concrete.Interfaces.BIRTerm.trap.injEq	propext
 Concrete.Interfaces.BIRTerm.trap.sizeOf_spec	
@@ -1775,6 +2005,9 @@ Concrete.Interfaces.CheckpointSimulation.mk.sizeOf_spec
 Concrete.Interfaces.CheckpointSimulation.targetAdvance	
 Concrete.Interfaces.CheckpointSimulation.targetFinish	
 Concrete.Interfaces.CheckpointSimulation.targetInitial	
+Concrete.Interfaces.ComponentOwnsSymbols.of_component_globals	Quot.sound propext
+Concrete.Interfaces.ComponentOwnsSymbols.of_component_globals._simp_1_1	propext
+Concrete.Interfaces.ComponentOwnsSymbols.of_component_globals._simp_1_2	propext
 Concrete.Interfaces.CoreInput.Execution._proof_1	Quot.sound propext
 Concrete.Interfaces.CoreInput.Execution._proof_2	Quot.sound propext
 Concrete.Interfaces.CoreInput.Execution._proof_3	Quot.sound propext
@@ -1899,8 +2132,15 @@ Concrete.Interfaces.LLVMPackageBytes.mk.sizeOf_spec
 Concrete.Interfaces.LLVMRole.component.sizeOf_spec	
 Concrete.Interfaces.LLVMRole.launcher.sizeOf_spec	
 Concrete.Interfaces.LLVMRole.ofNat_ctorIdx	
+Concrete.Interfaces.LauncherMatches.body_decl_matches_define	Quot.sound propext
+Concrete.Interfaces.LauncherMatches.component_body_header_eq	Quot.sound propext
+Concrete.Interfaces.LauncherMatches.component_defines_body	Quot.sound propext
+Concrete.Interfaces.LauncherMatches.component_owns_symbols	Quot.sound propext
+Concrete.Interfaces.LauncherMatches.defines_disjoint	Quot.sound propext
 Concrete.Interfaces.LauncherMatches.launcher_items_eq	Quot.sound propext
 Concrete.Interfaces.LauncherMatches.launcher_unique	Quot.sound propext
+Concrete.Interfaces.LauncherMatches.no_component_constant_body	Quot.sound propext
+Concrete.Interfaces.LauncherMatches.shared_global_eq_body	Quot.sound propext
 Concrete.Interfaces.LexRefusal.missingFile.inj	
 Concrete.Interfaces.LexRefusal.missingFile.injEq	propext
 Concrete.Interfaces.LexRefusal.missingFile.sizeOf_spec	
@@ -1937,6 +2177,7 @@ Concrete.Interfaces.MIR.logicalView_inventories_eq	Quot.sound propext
 Concrete.Interfaces.MIR.mk.inj	Quot.sound propext
 Concrete.Interfaces.MIR.mk.injEq	Quot.sound propext
 Concrete.Interfaces.MIR.mk.sizeOf_spec	Quot.sound propext
+Concrete.Interfaces.MIR.operations._sparseCasesOn_1.else_eq	propext
 Concrete.Interfaces.MIR.origins.eq_1	Quot.sound propext
 Concrete.Interfaces.MIRInst.assign.inj	
 Concrete.Interfaces.MIRInst.assign.injEq	propext
@@ -2007,6 +2248,15 @@ Concrete.Interfaces.Memory.HandoffWF.layoutsWF	Quot.sound propext
 Concrete.Interfaces.Memory.HandoffWF.mutableLocalsWF	Quot.sound propext
 Concrete.Interfaces.Memory.HandoffWF.origins_bind	Quot.sound propext
 Concrete.Interfaces.Memory.HandoffWF.tablesWF	Quot.sound propext
+Concrete.Interfaces.Memory.InstructionStep.eq_1	Quot.sound propext
+Concrete.Interfaces.Memory.InstructionStepWith.eq_1	Quot.sound propext
+Concrete.Interfaces.Memory.InstructionStepWith.eq_2	Quot.sound propext
+Concrete.Interfaces.Memory.InstructionStepWith.eq_3	Quot.sound propext
+Concrete.Interfaces.Memory.InstructionStepWith.eq_4	Quot.sound propext
+Concrete.Interfaces.Memory.InstructionStepWith.eq_5	Quot.sound propext
+Concrete.Interfaces.Memory.InstructionStepWith.eq_6	Quot.sound propext
+Concrete.Interfaces.Memory.InstructionStepWith.eq_7	Quot.sound propext
+Concrete.Interfaces.Memory.InstructionStepWith.eq_8	Quot.sound propext
 Concrete.Interfaces.Memory.JumpAt.args	Quot.sound propext
 Concrete.Interfaces.Memory.JumpAt.checkpoint	Quot.sound propext
 Concrete.Interfaces.Memory.JumpAt.exhausted_iff	Classical.choice Quot.sound propext
@@ -2100,6 +2350,7 @@ Concrete.Interfaces.Memory.addWithOverflow_no_trap	Quot.sound propext
 Concrete.Interfaces.Memory.addWithOverflow_step_advances	Quot.sound propext
 Concrete.Interfaces.Memory.addWithOverflow_virtual_cannot_exhaust	Quot.sound propext
 Concrete.Interfaces.Memory.allocated_project_access	Quot.sound propext
+Concrete.Interfaces.Memory.applyOperation.eq_1	propext
 Concrete.Interfaces.Memory.atOffset.eq_1	
 Concrete.Interfaces.Memory.authorizeWrite.eq_1	Quot.sound propext
 Concrete.Interfaces.Memory.bind_cannot_exhaust	Quot.sound propext
@@ -2115,6 +2366,7 @@ Concrete.Interfaces.Memory.copyRead_iff._simp_1_5	propext
 Concrete.Interfaces.Memory.endOwnerView.eq_1	Quot.sound propext
 Concrete.Interfaces.Memory.exhausted_result	Quot.sound propext
 Concrete.Interfaces.Memory.fieldRange.eq_1	
+Concrete.Interfaces.Memory.firstTrap.eq_1	propext
 Concrete.Interfaces.Memory.freshLayouts.eq_1	Quot.sound propext
 Concrete.Interfaces.Memory.freshLayoutsFrom.eq_1	Quot.sound propext
 Concrete.Interfaces.Memory.freshLayoutsFrom.eq_2	Quot.sound propext
@@ -2313,6 +2565,15 @@ Concrete.Interfaces.RegTerminator.invalid.sizeOf_spec
 Concrete.Interfaces.RegTerminator.jump.inj	
 Concrete.Interfaces.RegTerminator.jump.injEq	propext
 Concrete.Interfaces.RegTerminator.jump.sizeOf_spec	
+Concrete.Interfaces.RegTerminator.ofBIR.eq_1	
+Concrete.Interfaces.RegTerminator.ofBIR.eq_2	
+Concrete.Interfaces.RegTerminator.ofBIR.eq_3	
+Concrete.Interfaces.RegTerminator.ofBIR.eq_4	
+Concrete.Interfaces.RegTerminator.ofSSA.eq_1	
+Concrete.Interfaces.RegTerminator.ofSSA.eq_2	
+Concrete.Interfaces.RegTerminator.ofSSA.eq_3	
+Concrete.Interfaces.RegTerminator.ofSSA.eq_4	
+Concrete.Interfaces.RegTerminator.ofSSA.eq_5	
 Concrete.Interfaces.RegTerminator.ret.inj	
 Concrete.Interfaces.RegTerminator.ret.injEq	propext
 Concrete.Interfaces.RegTerminator.ret.sizeOf_spec	
@@ -2458,6 +2719,8 @@ Concrete.Interfaces.Terminator.jump.inj
 Concrete.Interfaces.Terminator.jump.injEq	propext
 Concrete.Interfaces.Terminator.jump.sizeOf_spec	
 Concrete.Interfaces.Terminator.origins._sparseCasesOn_1.else_eq	propext
+Concrete.Interfaces.Terminator.origins.eq_1	propext
+Concrete.Interfaces.Terminator.origins.eq_2	propext
 Concrete.Interfaces.Terminator.ret.inj	
 Concrete.Interfaces.Terminator.ret.injEq	propext
 Concrete.Interfaces.Terminator.ret.sizeOf_spec	
@@ -2469,6 +2732,7 @@ Concrete.Interfaces.Terminator.successors.eq_5
 Concrete.Interfaces.Terminator.trap.inj	
 Concrete.Interfaces.Terminator.trap.injEq	propext
 Concrete.Interfaces.Terminator.trap.sizeOf_spec	
+Concrete.Interfaces.TrapEntry.diagnosticLine.eq_1	Quot.sound propext
 Concrete.Interfaces.TrapEntry.mk.inj	
 Concrete.Interfaces.TrapEntry.mk.injEq	propext
 Concrete.Interfaces.TrapEntry.mk.sizeOf_spec	
@@ -2670,11 +2934,43 @@ Concrete.Interfaces.instDecidableEqUseSite.decEq._proof_1
 Concrete.Interfaces.instDecidableEqUseSite.decEq._proof_2	
 Concrete.Interfaces.instDecidableEqUseSite.decEq._proof_3	
 Concrete.Interfaces.isIntType._sparseCasesOn_1.else_eq	propext
+Concrete.Interfaces.isIntType.eq_1	propext
+Concrete.Interfaces.isLLVMBodyHeader.eq_1	propext
+Concrete.Interfaces.isLLVMBodyHeader_eq_true_iff	propext
+Concrete.Interfaces.llvmBodyDeclaration.eq_1	
+Concrete.Interfaces.llvmBodyGlobal.eq_1	
+Concrete.Interfaces.llvmItemDefines.eq_1	
+Concrete.Interfaces.llvmItemDefines.eq_2	
+Concrete.Interfaces.llvmItemDefines.eq_3	
+Concrete.Interfaces.llvmItemDefines.eq_4	
+Concrete.Interfaces.llvmItemDefines.eq_5	
+Concrete.Interfaces.llvmItemDefines.eq_6	
+Concrete.Interfaces.llvmItemDefines.eq_7	
+Concrete.Interfaces.llvmItemDefines.eq_8	
+Concrete.Interfaces.llvmItemGlobal.eq_1	
+Concrete.Interfaces.llvmItemGlobal.eq_2	
+Concrete.Interfaces.llvmItemGlobal.eq_3	
+Concrete.Interfaces.llvmItemGlobal.eq_4	
+Concrete.Interfaces.llvmItemGlobal.eq_5	
+Concrete.Interfaces.llvmItemGlobal.eq_6	
+Concrete.Interfaces.llvmItemGlobal.eq_7	
+Concrete.Interfaces.llvmItemGlobal.eq_8	
+Concrete.Interfaces.llvmItemGlobal_of_defines	
+Concrete.Interfaces.llvmModuleDefines_launcherItems	propext
+Concrete.Interfaces.llvmModuleGlobals_launcherItems	propext
+Concrete.Interfaces.mem_llvmModuleGlobals_of_defines	Quot.sound propext
 Concrete.Interfaces.mem_reachGraph_iff	Quot.sound propext
 Concrete.Interfaces.notAvoided.congr_simp	Quot.sound
 Concrete.Interfaces.notAvoided.eq_1	
 Concrete.Interfaces.notAvoided.eq_2	
 Concrete.Interfaces.opcodeSignatureOk._sparseCasesOn_1.else_eq	propext
+Concrete.Interfaces.opcodeSignatureOk._sparseCasesOn_2.else_eq	propext
+Concrete.Interfaces.opcodeSignatureOk.eq_1	propext
+Concrete.Interfaces.opcodeSignatureOk.eq_2	propext
+Concrete.Interfaces.opcodeSignatureOk.eq_3	propext
+Concrete.Interfaces.opcodeSignatureOk.eq_4	propext
+Concrete.Interfaces.opcodeSignatureOk.eq_5	propext
+Concrete.Interfaces.opcodeSignatureOk.eq_6	propext
 Concrete.Interfaces.parserEntry._proof_1	Quot.sound propext
 Concrete.Interfaces.parserEntry_run_eq_error_iff	Quot.sound propext
 Concrete.Interfaces.parserEntry_run_eq_ok_iff	Quot.sound propext
@@ -2698,6 +2994,8 @@ Concrete.Interfaces.plain_add_eq_trap_of_overflow	propext
 Concrete.Interfaces.reachGraphLoop.eq_1	
 Concrete.Interfaces.reachGraphLoop.eq_2	
 Concrete.Interfaces.reachGraphLoop.eq_def	
+Concrete.Interfaces.readLiteralOk.eq_1	propext
+Concrete.Interfaces.readLiteralOk.eq_2	propext
 Concrete.Interfaces.reconstruct_tokensOrdered	Quot.sound propext
 Concrete.Interfaces.reconstruct_tokensOrdered._proof_1_1	Quot.sound propext
 Concrete.Interfaces.reconstruct_tokensOrdered._proof_1_2	Quot.sound propext
@@ -3079,7 +3377,14 @@ Concrete.Memory.BindReturn.unplaced_stuck	Quot.sound propext
 Concrete.Memory.BindReturn.wrong_decl_stuck	Quot.sound propext
 Concrete.Memory.BodyPlacement.brecOn	propext
 Concrete.Memory.EntryPath.brecOn	propext
+Concrete.Memory.EntryPath.ind_step	Quot.sound propext
+Concrete.Memory.EntryPath.mk_edge	Quot.sound propext
+Concrete.Memory.EntryPath.mk_initial	Quot.sound propext
 Concrete.Memory.FrameAligned.unique_pc	Quot.sound propext
+Concrete.Memory.FrameResident.liveNodup	Quot.sound propext
+Concrete.Memory.FrameResident.matNodup	Quot.sound propext
+Concrete.Memory.FrameResident.matSubLive	Quot.sound propext
+Concrete.Memory.FrameResident.resident	Quot.sound propext
 Concrete.Memory.GraphFailure.layout.inj	
 Concrete.Memory.GraphFailure.layout.injEq	propext
 Concrete.Memory.GraphFailure.layout.sizeOf_spec	
@@ -3104,7 +3409,11 @@ Concrete.Memory.LocalCorrespondence.advance	Quot.sound propext
 Concrete.Memory.LocalCorrespondence.divergence	Classical.choice Quot.sound propext
 Concrete.Memory.LocalCorrespondence.finish	Quot.sound propext
 Concrete.Memory.LocalCorrespondence.initial	Quot.sound propext
+Concrete.Memory.LocalCorrespondence.matchStep	Quot.sound propext
+Concrete.Memory.LocalCorrespondence.matchStep._simp_1_2	propext
 Concrete.Memory.LocalCorrespondence.progress	Quot.sound propext
+Concrete.Memory.LowersMemory.reachable_represents_resident	Quot.sound propext
+Concrete.Memory.LowersMemory.reachable_return_exhausted_iff	Quot.sound propext
 Concrete.Memory.LowersMemory.refines_of_bound	Quot.sound propext
 Concrete.Memory.LowersMemory.result_or_exhausted	Quot.sound propext
 Concrete.Memory.MissingLayout.mk.inj	
@@ -3133,6 +3442,21 @@ Concrete.Memory.Related.active	Quot.sound propext
 Concrete.Memory.Related.effects	Quot.sound propext
 Concrete.Memory.Related.representation	Quot.sound propext
 Concrete.Memory.Related.suspended	Quot.sound propext
+Concrete.Memory.ResidentHandles.active	Quot.sound propext
+Concrete.Memory.ResidentHandles.branch_arrive	Quot.sound propext
+Concrete.Memory.ResidentHandles.bytesWF	Quot.sound propext
+Concrete.Memory.ResidentHandles.call_arrive	Quot.sound propext
+Concrete.Memory.ResidentHandles.callers	Quot.sound propext
+Concrete.Memory.ResidentHandles.destructure_read	Quot.sound propext
+Concrete.Memory.ResidentHandles.initial	Quot.sound propext
+Concrete.Memory.ResidentHandles.jump_arrive	Quot.sound propext
+Concrete.Memory.ResidentHandles.of_operation	Quot.sound propext
+Concrete.Memory.ResidentHandles.of_step	Quot.sound propext
+Concrete.Memory.ResidentHandles.paramsValid_of_writes	Quot.sound propext
+Concrete.Memory.ResidentHandles.provsNodup	Quot.sound propext
+Concrete.Memory.ResidentHandles.return_resume_transferCheckpoint	Quot.sound propext
+Concrete.Memory.ResidentHandles.rootRange	Quot.sound propext
+Concrete.Memory.ResidentHandles.transferCheckpoint	Quot.sound propext
 Concrete.Memory.SliceValidVal._sparseCasesOn_1.else_eq	propext
 Concrete.Memory.SliceValidVal._sparseCasesOn_2.else_eq	propext
 Concrete.Memory.SliceValidVal._sparseCasesOn_6.else_eq	propext
@@ -3172,6 +3496,56 @@ Concrete.Memory.TransferProgressControls.return_transfer_control	Classical.choic
 Concrete.Memory.Traversal.backward	
 Concrete.Memory.Traversal.forward	
 Concrete.Memory.Traversal.keys	
+Concrete.Memory.Validate.GraphCovering.dstWF	
+Concrete.Memory.Validate.GraphCovering.entry	
+Concrete.Memory.Validate.GraphCovering.forward	
+Concrete.Memory.Validate.GraphCovering.srcWF	
+Concrete.Memory.Validate.GraphCovering.surjective	
+Concrete.Memory.Validate.MIRCovering.declarations	Quot.sound propext
+Concrete.Memory.Validate.MIRCovering.entry	Quot.sound propext
+Concrete.Memory.Validate.MIRCovering.fns	Quot.sound propext
+Concrete.Memory.Validate.MIRCovering.fnsLen	Quot.sound propext
+Concrete.Memory.Validate.MIRCovering.mutableLocals	Quot.sound propext
+Concrete.Memory.Validate.MIRCovering.project	Quot.sound propext
+Concrete.Memory.Validate.MIRCovering.signatures	Quot.sound propext
+Concrete.Memory.Validate.decodeBlockId.eq_1	
+Concrete.Memory.Validate.decodeBlockId_encode	Quot.sound propext
+Concrete.Memory.Validate.decodeBlockId_encode._proof_1_3	Quot.sound propext
+Concrete.Memory.Validate.encodeBlockId.eq_1	
+Concrete.Memory.Validate.encodeBlockId_inj	Quot.sound propext
+Concrete.Memory.Validate.encodeBlockId_inj._proof_1_2	Quot.sound propext
+Concrete.Memory.Validate.encodeBlockId_inj._proof_1_3	Quot.sound propext
+Concrete.Memory.Validate.encodeBlockId_inj._proof_1_4	Quot.sound propext
+Concrete.Memory.Validate.lowerGraph_specializeMIR_ok	Quot.sound propext
+Concrete.Memory.Validate.lowerMemory_eq_lowerGraph_of_ok	Quot.sound propext
+Concrete.Memory.Validate.lowerMemory_error_impossible_of_wf	Quot.sound propext
+Concrete.Memory.Validate.lowerMemory_handoff	Quot.sound propext
+Concrete.Memory.Validate.lowerMemory_lowersMemory	Quot.sound propext
+Concrete.Memory.Validate.lowerMemory_ok_of_wf	Quot.sound propext
+Concrete.Memory.Validate.lowerMemory_reachable_represents_resident	Quot.sound propext
+Concrete.Memory.Validate.lowerMemory_reachable_return_exhausted_iff	Quot.sound propext
+Concrete.Memory.Validate.lowerMemory_sound	Classical.choice Quot.sound propext
+Concrete.Memory.Validate.lowerMemory_validated	Classical.choice Quot.sound propext
+Concrete.Memory.Validate.mapTermTarget.eq_1	
+Concrete.Memory.Validate.mapTermTarget.eq_2	
+Concrete.Memory.Validate.mapTermTarget.eq_3	
+Concrete.Memory.Validate.mapTermTarget.eq_4	
+Concrete.Memory.Validate.mapTermTarget.eq_5	
+Concrete.Memory.Validate.mirInstChange.eq_1	
+Concrete.Memory.Validate.mirInstChange.eq_2	
+Concrete.Memory.Validate.mirInstChange.eq_3	
+Concrete.Memory.Validate.mirInstChange.eq_4	
+Concrete.Memory.Validate.mirInstChange.eq_5	
+Concrete.Memory.Validate.mirInstChange.eq_6	
+Concrete.Memory.Validate.prepareGraph_ok_of_materializable	Quot.sound propext
+Concrete.Memory.Validate.prepareGraph_ok_of_materializable._simp_1_1	Quot.sound propext
+Concrete.Memory.Validate.projectCallers.eq_1	
+Concrete.Memory.Validate.projectFrame.eq_1	
+Concrete.Memory.Validate.projectState.eq_1	propext
+Concrete.Memory.Validate.specializeMIR.eq_1	Quot.sound propext
+Concrete.Memory.Validate.splitBlock.eq_1	
+Concrete.Memory.Validate.splitGraphForRoot.eq_1	
+Concrete.Memory.Validate.toLogicalGraph.eq_1	propext
 Concrete.Memory.begin_decreases	Quot.sound propext
 Concrete.Memory.begin_decreases._proof_1_1	Quot.sound propext
 Concrete.Memory.begin_progress	Quot.sound propext
@@ -3215,6 +3589,7 @@ Concrete.Memory.lowerGraph_handoff	Quot.sound propext
 Concrete.Memory.lowerGraph_handoff._simp_1_1	Quot.sound propext
 Concrete.Memory.lowerGraph_lowersMemory	Quot.sound propext
 Concrete.Memory.lowerGraph_lowersMemory._simp_1_1	propext
+Concrete.Memory.lowerGraph_ok_of_unambiguous	Quot.sound propext
 Concrete.Memory.lowerGraph_refines	Classical.choice Quot.sound propext
 Concrete.Memory.lower_admitted_correct	Quot.sound propext
 Concrete.Memory.lower_correct	Quot.sound propext
@@ -3228,7 +3603,14 @@ Concrete.Memory.prepareGraph_origins	Quot.sound propext
 Concrete.Memory.prepareGraph_promotion	Quot.sound propext
 Concrete.Memory.prepareGraph_promotion._simp_1_3	Quot.sound propext
 Concrete.Memory.prepareGraph_tables	Quot.sound propext
+Concrete.Memory.reachable_bir_residentHandles	Quot.sound propext
+Concrete.Memory.reachable_residentHandles	Quot.sound propext
+Concrete.Memory.reachable_ssa_residentHandles	Quot.sound propext
+Concrete.Memory.reachable_transferCheckpoint	Quot.sound propext
 Concrete.Memory.readValue_live	Quot.sound propext
+Concrete.Memory.residentFrameProvIds.eq_1	
+Concrete.Memory.resident_iff	Quot.sound propext
+Concrete.Memory.rootUnambiguousAt_of_hasAmbiguousJoin_false	Quot.sound propext
 Concrete.Memory.run.eq_1	propext
 Concrete.Memory.runFrom.eq_1	propext
 Concrete.Memory.sliceLanguage_stepLanguage	Quot.sound propext
@@ -3237,6 +3619,8 @@ Concrete.Memory.slice_lowerGraph_lowersMemory	Quot.sound propext
 Concrete.Memory.storageClass_virtual_iff	Quot.sound propext
 Concrete.Memory.stutterRank.eq_1	Quot.sound propext
 Concrete.Memory.takesAddress.eq_1	propext
+Concrete.Memory.transferCeiling_ge	Quot.sound propext
+Concrete.Memory.transferCeiling_ge._proof_1_1	Quot.sound propext
 Concrete.Memory.traversal_mapM	Quot.sound propext
 Concrete.Memory.virtual_begin_represents	Quot.sound propext
 Concrete.Memory.write_refused_under_loan	Quot.sound propext
@@ -3264,13 +3648,61 @@ Concrete.Origins.emittedTrap_binds	Quot.sound propext
 Concrete.Origins.validateLocation._proof_1	Quot.sound propext
 Concrete.Origins.validateLocation_complete	Quot.sound propext
 Concrete.Origins.validateLocation_refusal_sound	Quot.sound propext
-Concrete.Parse.CheckedTable.entries_eq	propext
-Concrete.Parse.CheckedTable.mk.inj	propext
-Concrete.Parse.CheckedTable.mk.injEq	propext
-Concrete.Parse.CheckedTable.mk.sizeOf_spec	propext
-Concrete.Parse.parseForDriver_ok	Quot.sound propext
-Concrete.Parse.parseForDriver_ok._simp_1	Quot.sound propext
-Concrete.Parse.table0_checked	
+Concrete.Parse.KernelEval.bindingEq.eq_1	propext
+Concrete.Parse.KernelEval.eq_error_of_exceptError	
+Concrete.Parse.KernelEval.exprEq._sparseCasesOn_1.else_eq	propext
+Concrete.Parse.KernelEval.exprEq._sparseCasesOn_2.else_eq	propext
+Concrete.Parse.KernelEval.exprEq._sparseCasesOn_3.else_eq	propext
+Concrete.Parse.KernelEval.exprEq.eq_1	propext
+Concrete.Parse.KernelEval.exprEq.eq_2	propext
+Concrete.Parse.KernelEval.exprEq.eq_3	propext
+Concrete.Parse.KernelEval.exprEq.eq_4	propext
+Concrete.Parse.KernelEval.exprEq.eq_def	propext
+Concrete.Parse.KernelEval.ok_of_isOk	
+Concrete.Parse.KernelEval.parseArgsSparse.eq_def	propext
+Concrete.Parse.KernelEval.parseBytes_eq_error_of_sparse	Classical.choice Quot.sound propext
+Concrete.Parse.KernelEval.parseBytes_eq_ok_of_sparse	Classical.choice Quot.sound propext
+Concrete.Parse.KernelEval.parseBytes_eq_sparse	Classical.choice Quot.sound propext
+Concrete.Parse.KernelEval.parseForDriver_eq_sparse	Classical.choice Quot.sound propext
+Concrete.Parse.KernelEval.parseStream_eq_ok_of_sparse	Quot.sound propext
+Concrete.Parse.KernelEval.parseStream_eq_sparse	Quot.sound propext
+Concrete.Parse.KernelEval.parseSymbolSparse.eq_def	propext
+Concrete.Parse.KernelEval.parserEngine_run_eq_sparse_with	Quot.sound propext
+Concrete.Parse.KernelEval.parserEntry_run_of_sparse	Quot.sound propext
+Concrete.Parse.KernelEval.programEq.eq_1	propext
+Concrete.Parse.KernelEval.programEq_sound	Quot.sound propext
+Concrete.Parse.KernelEval.programEq_sound._simp_1_2	propext
+Concrete.Parse.KernelEval.sliceParser_run_eq_sparse	Quot.sound propext
+Concrete.Parse.KernelEval.sliceParser_run_eq_sparse_for	Quot.sound propext
+Concrete.Parse.KernelEval.sliceParser_table_lookup_eq	Quot.sound propext
+Concrete.Parse.KernelEval.stmtEq._sparseCasesOn_1.else_eq	propext
+Concrete.Parse.KernelEval.stmtEq._sparseCasesOn_2.else_eq	propext
+Concrete.Parse.KernelEval.stmtEq.eq_1	propext
+Concrete.Parse.KernelEval.stmtEq.eq_2	propext
+Concrete.Parse.KernelEval.stmtEq.eq_3	propext
+Concrete.Parse.KernelEval.stmtsEq._sparseCasesOn_1.else_eq	propext
+Concrete.Parse.KernelEval.stmtsEq._sparseCasesOn_2.else_eq	propext
+Concrete.Parse.KernelEval.stmtsEq.eq_1	propext
+Concrete.Parse.KernelEval.stmtsEq.eq_2	propext
+Concrete.Parse.KernelEval.stmtsEq.eq_3	propext
+Concrete.Parse.KernelEval.stmtsEq.eq_def	propext
+Concrete.Parse.driver_registry_parse_parity	Classical.choice Quot.sound propext
+Concrete.Parse.lexStream_source_eq	Classical.choice Quot.sound propext
+Concrete.Parse.lexStream_surfaceTokens_eq	Classical.choice Quot.sound propext
+Concrete.Parse.parseForDriver_derives	Classical.choice Quot.sound propext
+Concrete.Parse.parseStreamFor_derives	Quot.sound propext
+Concrete.Parse.parseStreamFor_exhaustive	Quot.sound propext
+Concrete.Parse.parseStreamFor_parity	Quot.sound propext
+Concrete.Parse.parseStreamFor_parity_wf	Quot.sound propext
+Concrete.Parse.parseStreamWithRefusalFor_error_some_iff	Quot.sound propext
+Concrete.Parse.parseStreamWithRefusalFor_ne_error_none	Quot.sound propext
+Concrete.Parse.parseStreamWithRefusal_ne_error_none	Quot.sound propext
+Concrete.Parse.parseStream_derives	Quot.sound propext
+Concrete.Parse.parseStream_exhaustive	Quot.sound propext
+Concrete.Parse.parseStream_parity	Quot.sound propext
+Concrete.Parse.parseWith_derives	Quot.sound propext
+Concrete.Parse.parseWith_parity	Quot.sound propext
+Concrete.Parse.parserEngine_run_error_of_wf	Quot.sound propext
 Concrete.Premises.Premise.mk.inj	
 Concrete.Premises.Premise.mk.injEq	propext
 Concrete.Premises.Premise.mk.sizeOf_spec	
@@ -3295,6 +3727,8 @@ Concrete.Refusal.manifest.sizeOf_spec
 Concrete.Refusal.missingLocation.inj	
 Concrete.Refusal.missingLocation.injEq	propext
 Concrete.Refusal.missingLocation.sizeOf_spec	
+Concrete.Refusal.ofParseRefusal_diagnosticAt_iff	Quot.sound propext
+Concrete.Refusal.ofParseRefusal_eq_source	propext
 Concrete.Refusal.path.inj	
 Concrete.Refusal.path.injEq	propext
 Concrete.Refusal.path.sizeOf_spec	
@@ -3308,6 +3742,10 @@ Concrete.Refusal.toolFailure.sizeOf_spec
 Concrete.Refusal.usageError.inj	
 Concrete.Refusal.usageError.injEq	propext
 Concrete.Refusal.usageError.sizeOf_spec	
+Concrete.RefusalCause.ofParseRefusal?_malformed	Quot.sound propext
+Concrete.RefusalCause.ofParseRefusal?_primary	Quot.sound propext
+Concrete.RefusalCause.ofParseRefusal?_unsupported_nonDecimal	Quot.sound propext
+Concrete.RefusalCause.ofParseRefusal?_unsupported_production	Quot.sound propext
 Concrete.SSA.checkHandoff.eq_1	Quot.sound propext
 Concrete.SSA.checkHandoff_iff	Quot.sound propext
 Concrete.SSA.checkHandoff_iff._simp_1_2	Quot.sound propext
@@ -3319,17 +3757,31 @@ Concrete.Stages.Input.loaded	Quot.sound propext
 Concrete.Stages.Input.mk.inj	Quot.sound propext
 Concrete.Stages.Input.mk.injEq	Quot.sound propext
 Concrete.Stages.Input.mk.sizeOf_spec	Quot.sound propext
+Concrete.Stages.KernelEval.compileSparse._proof_1	Classical.choice Quot.sound propext
+Concrete.Stages.KernelEval.compile_eq_error_of_sparse	Classical.choice Quot.sound propext
+Concrete.Stages.KernelEval.compile_eq_sparse	Classical.choice Quot.sound propext
+Concrete.Stages.KernelEval.compile_isOk_of_sparse	Classical.choice Quot.sound propext
+Concrete.Stages.KernelEval.load_compile_eq_error_of_sparse	Classical.choice Quot.sound propext
+Concrete.Stages.KernelEval.load_compile_isOk_of_sparse	Classical.choice Quot.sound propext
+Concrete.Stages.KernelEval.load_unchecked_eq_error_of_sparse	Classical.choice Quot.sound propext
+Concrete.Stages.KernelEval.load_unchecked_eq_sparse	Classical.choice Quot.sound propext
+Concrete.Stages.KernelEval.unchecked_eq_error_of_sparse	Classical.choice Quot.sound propext
+Concrete.Stages.KernelEval.unchecked_eq_sparse	Classical.choice Quot.sound propext
+Concrete.Stages.Output.derives	Classical.choice Quot.sound propext
+Concrete.Stages.Output.ofEdges._proof_1	Classical.choice Quot.sound propext
 Concrete.Stages.Output.provenance	Classical.choice Quot.sound propext
 Concrete.Stages.compile._proof_1	Classical.choice Quot.sound propext
 Concrete.Stages.compile_core_correct	Classical.choice Quot.sound propext
 Concrete.Stages.compile_lexes	Classical.choice Quot.sound propext
 Concrete.Stages.compile_of_edges	Classical.choice Quot.sound propext
+Concrete.Stages.compile_parses	Classical.choice Quot.sound propext
 Concrete.Stages.compile_project	Classical.choice Quot.sound propext
 Concrete.Stages.compile_ssa_correct	Classical.choice Quot.sound propext
 Concrete.Stages.fileEnd._proof_1	Quot.sound propext
 Concrete.Stages.prepareLCB.eq_1	Classical.choice Quot.sound propext
 Concrete.Stages.prepareLCB_of_edges	Classical.choice Quot.sound propext
 Concrete.Stages.unchecked.eq_1	Classical.choice Quot.sound propext
+Concrete.Stages.unchecked_frontend	Classical.choice Quot.sound propext
 Concrete.instDecidableEqManifestRefusal.decEq._proof_1	
 Concrete.instDecidableEqManifestRefusal.decEq._proof_10	
 Concrete.instDecidableEqManifestRefusal.decEq._proof_11	
@@ -3459,6 +3911,10 @@ ConcreteSpec.Core.ArithmeticError.trapKind.eq_1
 ConcreteSpec.Core.ArithmeticError.trapKind.eq_2	
 ConcreteSpec.Core.ArithmeticError.trapKind.eq_3	
 ConcreteSpec.Core.Exec.Config.final?._sparseCasesOn_1.else_eq	propext
+ConcreteSpec.Core.Exec.Config.final?.eq_1	propext
+ConcreteSpec.Core.Exec.Config.final?.eq_2	propext
+ConcreteSpec.Core.Exec.Config.final?.eq_3	propext
+ConcreteSpec.Core.Exec.Config.final?.eq_4	propext
 ConcreteSpec.Core.Mem.Memory.Fits.eq_1	propext
 ConcreteSpec.Core.Mem.Memory.free.eq_1	
 ConcreteSpec.Core.Mem.Ptr.Valid.eq_1	
@@ -3476,11 +3932,25 @@ ConcreteSpec.Core.SourcePathSpan.SlotResolves.eq_1	Quot.sound propext
 ConcreteSpec.Core.inRangeOr.eq_1	propext
 ConcreteSpec.Core.plain.eq_1	propext
 ConcreteSpec.Core.wrap.eq_1	propext
+ConcreteSpec.StageGrammar.earlyMalformedRule.eq_1	Quot.sound propext
+ConcreteSpec.StageGrammar.earlyUnsupportedLiteralRule.eq_1	Quot.sound propext
+ConcreteSpec.StageGrammar.earlyUnsupportedProductionRule.eq_1	Quot.sound propext
+ConcreteSpec.StageInterface.AdmissionInput.CheckerRefuses.eq_1	Quot.sound propext
+ConcreteSpec.StageInterface.AdmissionView.execution.eq_1	Quot.sound propext
+ConcreteSpec.StageInterface.CoreLanguage.emptyStore.eq_1	propext
 ConcreteSpec.StageInterface.CoreLanguage.hostedResult._sparseCasesOn_3.else_eq	propext
 ConcreteSpec.StageInterface.CoreLanguage.hostedResult._sparseCasesOn_4.else_eq	propext
 ConcreteSpec.StageInterface.CoreLanguage.hostedResult.eq_1	propext
 ConcreteSpec.StageInterface.CoreLanguage.hostedResult.eq_2	propext
 ConcreteSpec.StageInterface.CoreLanguage.hostedResult.eq_3	propext
+ConcreteSpec.StageInterface.Declarations.emptyLinear._sparseCasesOn_2.else_eq	propext
+ConcreteSpec.StageInterface.MachineProgram.activeOperation.eq_1	propext
+ConcreteSpec.StageInterface.MachineProgram.initial.eq_1	propext
+ConcreteSpec.StageInterface.MachineProgram.initial?.eq_1	propext
+ConcreteSpec.StageInterface.ParseRefusal.registeredRule.eq_1	Quot.sound propext
+ConcreteSpec.StageInterface.ParseRefusal.registeredRule.eq_2	Quot.sound propext
+ConcreteSpec.StageInterface.ParseRefusal.registeredRule.eq_3	Quot.sound propext
+ConcreteSpec.StageInterface.StraightBinding.bound.eq_1	propext
 ConcreteSpec.StageInterface.StraightBinding.destination._sparseCasesOn_1.else_eq	propext
 ConcreteSpec.StageInterface.StraightBinding.destination._sparseCasesOn_2.else_eq	propext
 ConcreteSpec.StageInterface.StraightBinding.destination.eq_1	propext
@@ -3489,6 +3959,9 @@ ConcreteSpec.StageInterface.StraightBinding.destination.eq_3	propext
 ConcreteSpec.StageInterface.StraightBinding.expression._sparseCasesOn_1.else_eq	propext
 ConcreteSpec.StageInterface.StraightBinding.expression.eq_1	propext
 ConcreteSpec.StageInterface.StraightBinding.expression.eq_2	propext
+ConcreteSpec.StageInterface.StraightBinding.rhs.eq_1	
+ConcreteSpec.StageInterface.StraightBinding.rhs.eq_2	
+ConcreteSpec.StageInterface.StraightBinding.rhs.eq_3	
 ConcreteSpec.StageInterface.StraightBinding.target.eq_1	propext
 ConcreteSpec.StageInterface.StraightBinding.toCore.eq_1	
 ConcreteSpec.StageInterface.StraightBinding.toCore.eq_2	
@@ -3509,7 +3982,10 @@ ConcreteSpec.StageInterface.StraightProgram.machineBody.eq_def	Quot.sound propex
 ConcreteSpec.StageInterface.StraightProgram.owners.eq_1	propext
 ConcreteSpec.StageInterface.StraightProgram.owners.eq_2	propext
 ConcreteSpec.StageInterface.StraightProgram.owners.eq_def	propext
+ConcreteSpec.StageInterface.StraightType.toCore.eq_1	
+ConcreteSpec.StageInterface.StraightType.toCore.eq_2	
 ConcreteSpec.StageInterface.TokenStream.parserView.eq_1	Quot.sound propext
+ConcreteSpec.StageInterface.earlyEntry.eq_1	
 ConcreteSpec.StageInterface.earlyEval._sparseCasesOn_5.else_eq	propext
 ConcreteSpec.StageInterface.earlyEval._sparseCasesOn_6.else_eq	propext
 ConcreteSpec.StageInterface.earlyEval.eq_1	propext
@@ -3533,6 +4009,8 @@ ConcreteSpec.StageInterface.earlyPermitRead.eq_3
 ConcreteSpec.StageInterface.earlyRead.eq_1	propext
 ConcreteSpec.StageInterface.earlyRead.eq_2	propext
 ConcreteSpec.StageInterface.earlyRead.eq_3	propext
+ConcreteSpec.StageInterface.sliceLanguage._sparseCasesOn_16.else_eq	propext
+ConcreteSpec.StageInterface.sliceLanguage._sparseCasesOn_17.else_eq	propext
 ConcreteSpec.StageInterface.sliceLanguage.eq_1	Quot.sound propext
 ConcreteSpec.StageInterface.stmtOperations._sparseCasesOn_1.else_eq	propext
 ConcreteSpec.StageInterface.stmtOperations.eq_1	propext
@@ -3604,6 +4082,7 @@ LeanCompilerBackend.Verified.Source.write.eq_1	propext
 LeanCompilerBackend.Verified.TypedA64.renderWithWork.eq_1	Classical.choice Quot.sound propext
 LeanCompilerBackend.Verified.compileFunction.eq_1	Classical.choice Quot.sound propext
 LeanCompilerBackend.Verified.compileFunctionWithWork.eq_1	Classical.choice Quot.sound propext
+List.forM.eq_def	
 Std.Legacy.Range.mk.congr_simp	
 _private.Concrete.Admission.0.Concrete.Admission.Output.mk.inj	
 _private.Concrete.Admission.0.Concrete.Admission.Output.mk.injEq	propext
@@ -3664,13 +4143,6 @@ _private.Concrete.BIR.0.Concrete.BIR.runBlock.match_7.eq_3
 _private.Concrete.BIR.0.Concrete.BIR.runBlock.match_7.eq_4	
 _private.Concrete.BIR.0.Concrete.BIR.runBlock.match_9.eq_1	
 _private.Concrete.BIR.0.Concrete.BIR.runBlock.match_9.eq_2	
-_private.Concrete.BIR.0.ConcreteSpec.Core.checked.match_1.eq_1	
-_private.Concrete.BIR.0.ConcreteSpec.Core.checked.match_1.eq_2	
-_private.Concrete.BIR.0.ConcreteSpec.Core.checked.match_1.eq_3	
-_private.Concrete.BIR.0.ConcreteSpec.Core.checked.match_1.eq_4	
-_private.Concrete.BIR.0.ConcreteSpec.Core.checked.match_1.eq_5	
-_private.Concrete.BIR.0.ConcreteSpec.Core.checked.match_1.eq_6	
-_private.Concrete.BIR.0.ConcreteSpec.Core.checked.match_1.eq_7	
 _private.Concrete.BIR.0.ConcreteSpec.instReprIntTy.repr.match_1.eq_1	
 _private.Concrete.BIR.0.ConcreteSpec.instReprIntTy.repr.match_1.eq_2	
 _private.Concrete.BIR.0.ConcreteSpec.instReprIntTy.repr.match_1.eq_3	
@@ -3679,6 +4151,74 @@ _private.Concrete.BIR.0.ConcreteSpec.instReprIntTy.repr.match_1.eq_5
 _private.Concrete.BIR.0.ConcreteSpec.instReprIntTy.repr.match_1.eq_6	
 _private.Concrete.BIR.0.ConcreteSpec.instReprIntTy.repr.match_1.eq_7	
 _private.Concrete.BIR.0.ConcreteSpec.instReprIntTy.repr.match_1.eq_8	
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.ListRel.brecOn	
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.array_map_eq_of_listRel	Quot.sound propext
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.array_push_append_toArray	Quot.sound propext
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.blockLowers_mono	propext
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.buildBIR.match_1.eq_1	
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.buildBIR.match_1.eq_2	
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.buildBIR_ok_inv	Quot.sound propext
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.fnLowers_mono	propext
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.listRel_exists_left	
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.listRel_exists_right	
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.listRel_flatMap_eq	propext
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.listRel_foldl_eq	
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.listRel_imp	
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.listRel_map_eq	propext
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.listRel_views_eq	Quot.sound propext
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.lowerBlockList.eq_1	
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.lowerBlockList.eq_2	
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.lowerBlockList.eq_def	
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.lowerBlockList.match_1.eq_1	
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.lowerBlockList.match_1.eq_2	
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.lowerBlockList.match_3.eq_1	
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.lowerBlockList.match_3.eq_2	
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.lowerBlockList_ok_of_no_invalid	propext
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.lowerBlockList_spec	propext
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.lowerBlocksAux.match_1.eq_1	
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.lowerBlocksAux.match_1.eq_2	
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.lowerBlocksAux.match_3.eq_1	
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.lowerBlocksAux.match_3.eq_2	
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.lowerBlocksAux_eq	Quot.sound propext
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.lowerBlocks_eq	Quot.sound propext
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.lowerFunctionsAux.match_1.eq_1	
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.lowerFunctionsAux.match_1.eq_2	
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.lowerFunctionsAux.match_3.eq_1	
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.lowerFunctionsAux.match_3.eq_2	
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.lowerFunctionsAux_eq	Quot.sound propext
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.lowerFunctionsSpec.eq_1	
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.lowerFunctionsSpec.eq_2	
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.lowerFunctionsSpec.eq_def	
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.lowerFunctionsSpec.match_1.eq_1	
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.lowerFunctionsSpec.match_1.eq_2	
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.lowerFunctionsSpec_ok_of_no_invalid	propext
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.lowerFunctionsSpec_spec	propext
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.lowerFunctions_eq	Quot.sound propext
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.lowerTerminator.match_1.eq_1	
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.lowerTerminator.match_1.eq_2	
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.lowerTerminator.match_1.eq_3	
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.lowerTerminator.match_1.eq_4	
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.lowerTerminator.match_1.eq_5	
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.lowerTerminator_ok_of_ne_invalid	
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.lowerTerminator_spec	propext
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.lt_size_of_getElem?_eq_some	propext
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.siteExtends_push	propext
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.siteExtends_refl	
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.siteExtends_trans	
+_private.Concrete.BIR.Build.0.Concrete.BIR.Build.termLowers_mono	propext
+_private.Concrete.BIR.Build.0.Concrete.Interfaces.RegTerminator.ofBIR.match_1.eq_1	
+_private.Concrete.BIR.Build.0.Concrete.Interfaces.RegTerminator.ofBIR.match_1.eq_2	
+_private.Concrete.BIR.Build.0.Concrete.Interfaces.RegTerminator.ofBIR.match_1.eq_3	
+_private.Concrete.BIR.Build.0.Concrete.Interfaces.RegTerminator.ofBIR.match_1.eq_4	
+_private.Concrete.BIR.Build.0.Concrete.Interfaces.RegTerminator.ofSSA.match_1.eq_1	
+_private.Concrete.BIR.Build.0.Concrete.Interfaces.RegTerminator.ofSSA.match_1.eq_2	
+_private.Concrete.BIR.Build.0.Concrete.Interfaces.RegTerminator.ofSSA.match_1.eq_3	
+_private.Concrete.BIR.Build.0.Concrete.Interfaces.RegTerminator.ofSSA.match_1.eq_4	
+_private.Concrete.BIR.Build.0.Concrete.Interfaces.RegTerminator.ofSSA.match_1.eq_5	
+_private.Concrete.BIR.Build.0.Concrete.Interfaces.Terminator.origins.match_1.eq_1	propext
+_private.Concrete.BIR.Build.0.Concrete.Interfaces.Terminator.origins.match_1.eq_2	propext
+_private.Concrete.BIR.Build.0.Except.map.match_1.eq_1	
+_private.Concrete.BIR.Build.0.Except.map.match_1.eq_2	
 _private.Concrete.BIR.Progress.0.Concrete.BIR.Outcome.toBehaviour.match_1.eq_1	
 _private.Concrete.BIR.Progress.0.Concrete.BIR.Outcome.toBehaviour.match_1.eq_2	
 _private.Concrete.BIR.Progress.0.Concrete.BIR.Val.HasTy.match_1.eq_1	
@@ -3709,6 +4249,225 @@ _private.Concrete.BIR.Progress.0.Concrete.BIR.runBlock.match_7.eq_1
 _private.Concrete.BIR.Progress.0.Concrete.BIR.runBlock.match_7.eq_2	
 _private.Concrete.BIR.Progress.0.Concrete.BIR.runBlock.match_7.eq_3	
 _private.Concrete.BIR.Progress.0.Concrete.BIR.runBlock.match_7.eq_4	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.alist_lookup_isSome_of_mem	Quot.sound
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.alist_lookup_mem_local	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.block_eq_of_id_eq	Quot.sound propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.block_in_orderedReachable	Quot.sound propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.block_in_orderedReachable._simp_1_1	propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.buildAdditionalJobs_keys	Quot.sound propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.buildAdditionalJobs_symbols_nodup	Quot.sound propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.collectSplitEdges.go.match_1.eq_1	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.collectSplitEdges.go.match_1.eq_2	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.collectSplitEdges.go.match_3.eq_1	propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.collectSplitEdges.go.match_3.eq_2	propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.collectSplitEdges.go.match_6.eq_1	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.collectSplitEdges.go.match_6.eq_2	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.ctrlHelper._proof_1	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.ctrlMain._proof_1	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.decodeLiteralWord_some_of_ok	propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.digitChar_isAsciiAlnum	Quot.sound propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.digitChar_isAsciiAlnum._proof_1_1	Quot.sound propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.digitChar_utf8	Quot.sound propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.digitChar_utf8._proof_1_1	Quot.sound propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.edgesTo.match_1.eq_1	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.edgesTo.match_1.eq_2	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.edgesTo.match_1.eq_3	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.edgesTo.match_1.eq_4	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.edgesTo.match_1.eq_5	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.emitInst.match_11.eq_1	propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.emitInst.match_11.eq_2	propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.emitRead.match_5.eq_1	propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.emitRead.match_5.eq_2	propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.emitUnvalidated.match_1.eq_1	propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.emitUnvalidated.match_1.eq_2	propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.emitUnvalidated.match_3.eq_1	propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.emitUnvalidated.match_3.eq_2	propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.emitUnvalidated.match_5.eq_1	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.emitUnvalidated.match_5.eq_2	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.emit_ok_of_unval_val	Classical.choice Quot.sound propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.find?_some_of_mem	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.getElem?_indexed_lt	Quot.sound propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.getElem?_indexed_lt._proof_1_2	Quot.sound propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.getElem?_indexed_lt._proof_1_3	Quot.sound propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.getElem?_indexed_lt._simp_1_1	propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.getElem?_some_of_lt	propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.helperDecimal_all_valid	Classical.choice Quot.sound propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.helperDecimal_parseBytes	Quot.sound propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.helperSymbolName_valid	Classical.choice Quot.sound propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.indexed_map_fst_nodup	Quot.sound propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.indexed_map_fst_nodup._proof_1_4	Quot.sound propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.indexed_map_fst_nodup._proof_1_6	Quot.sound propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.indexed_map_fst_nodup._simp_1_3	propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.indexed_map_fst_nodup._simp_1_5	propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.indexed_map_snd	propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.list_forM_except_ok_iff	propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.list_mapM_except_ok	Quot.sound propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.list_mapM_option_some	Quot.sound propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.list_nodup_map_of_inj	Quot.sound propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.mem_indexed_exists	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.mem_indexed_left	propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.mem_indexed_left._simp_1_1	propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.mem_reachableBlocks_entry	Quot.sound propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.mem_reachableBlocks_succ	Quot.sound propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.mem_reachableFunctions_entry	Quot.sound propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.mem_zipIdx_of_mem	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.natDigitsRev._proof_1	Quot.sound propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.natDigitsRev.eq_1	Quot.sound propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.natDigitsRev.eq_2	Quot.sound propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.natDigitsRev.eq_def	Quot.sound propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.natDigitsRev.match_1._arg_pusher	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.natDigitsRev.match_1.eq_1	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.natDigitsRev.match_1.eq_2	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.natDigitsRev_all_valid	Quot.sound propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.normalizeGraph.match_1.eq_1	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.normalizeGraph.match_1.eq_2	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.orderedReachable_mem_subset	Quot.sound propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.orderedReachable_mem_subset._simp_1_1	propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.parseBytesRev.eq_1	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.parseBytesRev.eq_2	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.parseBytesRev.eq_def	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.parseBytesRev.match_1.eq_1	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.parseBytesRev.match_1.eq_2	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.parseBytesRev_natDigitsRev	Quot.sound propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.parseBytesRev_natDigitsRev._proof_1_6	Quot.sound propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.parseBytesRev_natDigitsRev._proof_1_7	Quot.sound propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.supported_lcb_inst_shape	Quot.sound propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.supported_lcb_inst_shape._simp_1_15	propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.supported_lcb_inst_shape._simp_1_16	propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.supported_lcb_inst_shape._simp_1_17	propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Backend.EmitLCB.utf8Encode_append_bytes	Quot.sound propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Interfaces.BIRTerm.regReads.match_1.eq_1	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Interfaces.BIRTerm.regReads.match_1.eq_2	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Interfaces.BIRTerm.regReads.match_1.eq_3	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Interfaces.BIRTerm.regReads.match_1.eq_4	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Interfaces.BIRTerm.regReads.match_1.eq_5	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Interfaces.BIRTerm.successors.match_1.eq_1	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Interfaces.BIRTerm.successors.match_1.eq_2	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Interfaces.BIRTerm.successors.match_1.eq_3	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Interfaces.BIRTerm.successors.match_1.eq_4	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Interfaces.RegTerminator.ofBIR.match_1.eq_1	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Interfaces.RegTerminator.ofBIR.match_1.eq_2	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Interfaces.RegTerminator.ofBIR.match_1.eq_3	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Interfaces.RegTerminator.ofBIR.match_1.eq_4	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Interfaces.emitGuarded.match_3.eq_1	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Interfaces.emitGuarded.match_3.eq_2	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Interfaces.opcodeSignatureOk.match_1.eq_1	propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Interfaces.opcodeSignatureOk.match_1.eq_2	propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Interfaces.opcodeSignatureOk.match_5.eq_1	propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Interfaces.opcodeSignatureOk.match_5.eq_2	propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Interfaces.opcodeSignatureOk.match_7.eq_1	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Interfaces.opcodeSignatureOk.match_7.eq_2	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Interfaces.opcodeSignatureOk.match_7.eq_3	
+_private.Concrete.Backend.EmitLCB.0.Concrete.Interfaces.readLiteralOk.match_1.eq_1	propext
+_private.Concrete.Backend.EmitLCB.0.Concrete.Interfaces.readLiteralOk.match_1.eq_2	propext
+_private.Concrete.Backend.EmitLCB.0.Except.map.match_1.eq_1	
+_private.Concrete.Backend.EmitLCB.0.Except.map.match_1.eq_2	
+_private.Concrete.Backend.EmitLCB.0.List.filter.match_1.eq_1	
+_private.Concrete.Backend.EmitLCB.0.List.filter.match_1.eq_2	
+_private.Concrete.Backend.EmitLCB.0.List.forM.match_1.eq_1	
+_private.Concrete.Backend.EmitLCB.0.List.forM.match_1.eq_2	
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.alist_lookup_isSome_of_mem	Quot.sound
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.alist_lookup_mem_local	
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.block_in_orderedReachable	Quot.sound propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.block_in_orderedReachable._simp_1_1	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.collectSplitEdges.go.match_1.eq_1	
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.collectSplitEdges.go.match_1.eq_2	
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.collectSplitEdges.go.match_3.eq_1	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.collectSplitEdges.go.match_3.eq_2	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.collectSplitEdges.go.match_6.eq_1	
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.collectSplitEdges.go.match_6.eq_2	
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.ctrlMain._proof_1	
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.decodeLiteralArg_some_of_ok	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emit.match_1.eq_1	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emit.match_1.eq_2	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emit.match_3.eq_1	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emit.match_3.eq_2	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emit.match_5.eq_1	
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emit.match_5.eq_2	
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitComponentGraph_symbolStructure	Quot.sound propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitComponentGraph_symbolStructure._simp_1_2	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitComponentGraph_symbolStructure._simp_1_3	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitComponentGraph_symbolStructure._simp_1_4	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitEntryParamDefaults.match_1.eq_1	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitEntryParamDefaults.match_1.eq_2	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitEntryParamDefaults_no_global	Quot.sound propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitInst.match_10.eq_1	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitInst.match_10.eq_2	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitInst.match_12.eq_1	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitInst.match_12.eq_2	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitInst.match_6.eq_1	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitInst.match_6.eq_2	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitInst.match_8.eq_1	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitInst.match_8.eq_2	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitInst_no_global	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitInst_no_global._simp_1_7	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitInst_no_global._simp_1_8	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitInst_ok_of_supported	Quot.sound propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitPhis.match_1.eq_1	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitPhis.match_1.eq_2	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitPhis_no_global	Quot.sound propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitRead.match_1.eq_1	
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitRead.match_1.eq_2	
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitRead.match_3.eq_1	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitRead.match_3.eq_2	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitRead_ok_of_literalOk	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitTerm.match_1.eq_1	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitTerm.match_1.eq_2	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitTerm.match_1.eq_3	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitTerm.match_1.eq_4	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitTerm.match_1.eq_5	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitTerm.match_5.eq_1	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitTerm.match_5.eq_2	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitTerm.match_7.eq_1	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitTerm.match_7.eq_2	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitTerm_no_global	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitTerm_no_global._simp_1_2	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.emitTerm_no_global._simp_1_3	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.filterMap_eq_nil_of_all_none	
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.filter_eq_nil_of_all_false	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.find?_some_of_mem	
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.getElem?_indexed_lt	Quot.sound propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.getElem?_indexed_lt._proof_1_2	Quot.sound propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.getElem?_indexed_lt._proof_1_3	Quot.sound propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.getElem?_indexed_lt._simp_1_1	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.getElem?_some_of_lt	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.intrinsicDeclarations_globals	Quot.sound propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.isLLVMBodyHeader_false_of_global_none	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.list_mapM_except_ok	Quot.sound propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.list_mapM_except_ok_mem	Quot.sound propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.list_mapM_option_some	Quot.sound propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.llvmItemDefines_none_of_global_none	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.mem_indexed_exists	
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.mem_indexed_left	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.mem_indexed_left._simp_1_1	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.mem_reachableBlocks_entry	Quot.sound propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.mem_reachableBlocks_succ	Quot.sound propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.mem_reachableFunctions_entry	Quot.sound propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.mem_zipIdx_of_mem	
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.orderedReachable_mem_subset	Quot.sound propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Backend.EmitLLVM.orderedReachable_mem_subset._simp_1_1	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Interfaces.BIRTerm.regReads.match_1.eq_1	
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Interfaces.BIRTerm.regReads.match_1.eq_2	
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Interfaces.BIRTerm.regReads.match_1.eq_3	
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Interfaces.BIRTerm.regReads.match_1.eq_4	
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Interfaces.BIRTerm.regReads.match_1.eq_5	
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Interfaces.BIRTerm.successors.match_1.eq_1	
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Interfaces.BIRTerm.successors.match_1.eq_2	
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Interfaces.BIRTerm.successors.match_1.eq_3	
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Interfaces.BIRTerm.successors.match_1.eq_4	
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Interfaces.opcodeSignatureOk.match_1.eq_1	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Interfaces.opcodeSignatureOk.match_1.eq_2	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Interfaces.opcodeSignatureOk.match_5.eq_1	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Interfaces.opcodeSignatureOk.match_5.eq_2	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Interfaces.opcodeSignatureOk.match_7.eq_1	
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Interfaces.opcodeSignatureOk.match_7.eq_2	
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Interfaces.opcodeSignatureOk.match_7.eq_3	
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Interfaces.readLiteralOk.match_1.eq_1	propext
+_private.Concrete.Backend.EmitLLVM.0.Concrete.Interfaces.readLiteralOk.match_1.eq_2	propext
+_private.Concrete.Backend.EmitLLVM.0.Except.map.match_1.eq_1	
+_private.Concrete.Backend.EmitLLVM.0.Except.map.match_1.eq_2	
+_private.Concrete.Backend.EmitLLVM.0.List.filter.match_1.eq_1	
+_private.Concrete.Backend.EmitLLVM.0.List.filter.match_1.eq_2	
 _private.Concrete.Backend.LCB.0.Concrete.BIR.Block.wf.match_1.eq_1	
 _private.Concrete.Backend.LCB.0.Concrete.BIR.execInst.match_3.eq_1	propext
 _private.Concrete.Backend.LCB.0.Concrete.BIR.execInst.match_3.eq_2	propext
@@ -3783,8 +4542,6 @@ _private.Concrete.Backend.LCB.0.LeanCompilerBackend.Verified.Source.instReprValu
 _private.Concrete.Backend.LCB.0.LeanCompilerBackend.Verified.Source.instReprValue.repr.match_1.eq_2	
 _private.Concrete.Backend.LCB.0.LeanCompilerBackend.Verified.Source.read.match_1.eq_1	propext
 _private.Concrete.Backend.LCB.0.LeanCompilerBackend.Verified.Source.read.match_1.eq_2	propext
-_private.Concrete.Backend.LCB.0.LeanCompilerBackend.Verified.Source.read.match_4.eq_1	
-_private.Concrete.Backend.LCB.0.LeanCompilerBackend.Verified.Source.read.match_4.eq_2	
 _private.Concrete.Backend.LCB.0.LeanCompilerBackend.Verified.Source.transfer.match_5.eq_1	propext
 _private.Concrete.Backend.LCB.0.LeanCompilerBackend.Verified.Source.transfer.match_5.eq_2	propext
 _private.Concrete.Backend.LCB.0.Option.bind.match_1.eq_1	
@@ -3909,9 +4666,404 @@ _private.Concrete.Contracts.0.Concrete.Contracts.Evaluation.events.match_1.eq_2	
 _private.Concrete.Contracts.0.Concrete.Contracts.Steps.append	
 _private.Concrete.Contracts.0.Concrete.Contracts.stderrBytes.match_1.eq_1	
 _private.Concrete.Contracts.0.Concrete.Contracts.stderrBytes.match_1.eq_2	
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.DetChain.brecOn	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.FlatInv.ctxAgree	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.FlatInv.initNodup	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.FlatInv.initSubLive	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.FlatInv.liveGeU8	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.FlatInv.liveLtInCtx	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.InstMatchesRow._sparseCasesOn_1.else_eq	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.InstMatchesRow.match_1.eq_1	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.InstMatchesRow.match_1.eq_2	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.InstMatchesRow.match_1.eq_3	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.LowerBindingsSpec.addComplete	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.LowerBindingsSpec.instMatches	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.LowerBindingsSpec.instSiteGe	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.LowerBindingsSpec.instSitesNodup	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.LowerBindingsSpec.localsBound	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.LowerBindingsSpec.localsNodup	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.LowerBindingsSpec.localsTypes	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.LowerBindingsSpec.originsMatch	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.ObservableAt._sparseCasesOn_1.else_eq	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.ObservableAt.eq_1	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.ObservableAt.eq_2	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.ObservableAt.eq_3	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.ObservableAt.eq_4	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.ObservableAt.match_1.eq_1	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.ObservableAt.match_1.eq_2	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.ObservableAt.match_1.eq_3	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.ObservableAt.match_1.eq_4	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.SingleBlockMir.blkId	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.SingleBlockMir.blkParams	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.SingleBlockMir.entryEq	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.SingleBlockMir.fnsEq	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.SingleBlockMir.localsNodup	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.SingleBlockMir.mutEq	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.addCheck.match_1.eq_1	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.addCheck.match_1.eq_2	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.add_safety_eq	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.alist_lookup_erase_ne	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.alist_lookup_map	Quot.sound
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.alist_lookup_mem	
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.alist_lookup_of_mem	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.alist_lookup_update	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.array_find?_map	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.behaviorRefinement_of_detChain	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.bindingOrigins_getElem?_site	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.bindingOrigins_length	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.core_mir_trace_eq	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.core_observes_trapped_reaches	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.ctxInv_ctxMark	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.decls_wf_of_declsOk	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.decls_wf_of_declsOk._simp_1_1	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.detChain_all_states	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.detChain_no_diverges	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.discharged_site_not_overflow	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.earlyOperand_inj	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.emptyLinear_not_copy	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.emptyLinear_not_copy._simp_1_1	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.execStmt_trap_is_overflow	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.exec_final_trapped	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.exec_step_to_overflow_active	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.exec_step_to_overflow_active._simp_1_23	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.exec_steps_to_overflow_active	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.execution_operations_binding_mem	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.execution_operations_eq	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.execution_operations_nonAbort_at	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.execution_operations_nonAbort_at._proof_1_1	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.execution_operations_nonAbort_at._simp_1_2	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.filter_unique_of_nodup	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.findDecl_emptyLinear	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.findDecl_emptyLinear._simp_1_1	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.findDecl_not_copy	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.findDecl_not_copy._simp_1_1	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.firstTrapSite_implies_run_overflow	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.flatInv_bind_named	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.flatInv_bind_named._proof_1_1	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.flatInv_bind_named._proof_1_2	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.flatInv_bind_wild	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.flatInv_bind_wild._proof_1_1	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.flatInv_bind_wild._proof_1_2	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.flatInv_bind_wild._proof_1_3	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.flatInv_bind_wild._proof_1_4	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.flatInv_bind_wild._proof_1_5	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.flatInv_copy	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.flatInv_move	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.flatInv_step_pos	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.flatInv_step_pos._proof_1_3	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.flatState.eq_1	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.foldr_bound_ge	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.freshBase_bounds_binding	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.instMatchesRow_shift	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.list_empty_eq_nil	
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.list_mem_erase_of_ne	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.list_nodup_erase	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.list_nodup_erase._simp_1_1	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.list_nodup_map_inj	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.list_not_mem_erase_of_nodup	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.list_not_mem_erase_of_nodup._simp_1_1	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.list_not_mem_erase_of_nodup._simp_1_2	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lookup_ctxMark	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerAtom.match_1.eq_1	
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerAtom.match_1.eq_2	
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerBinding.match_1.eq_1	
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerBinding.match_1.eq_2	
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerBinding.match_3.eq_1	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerBinding.match_3.eq_2	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerBinding.match_3.eq_3	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerBinding.match_3.eq_4	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerBinding.match_3.eq_5	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerBinding.match_3.eq_6	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerBinding.match_3.eq_7	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerBinding.match_3.eq_8	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerBinding.match_3.eq_9	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerBindings.match_1.eq_1	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerBindings.match_1.eq_2	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerBindings.match_1.eq_3	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerBindings_spec	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerBindings_spec._proof_1_15	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerBindings_spec._proof_1_16	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerBindings_spec._proof_1_17	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerBindings_spec._proof_1_18	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerBindings_spec._proof_1_20	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerBindings_spec._simp_1_19	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerEnding.match_1.eq_1	
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerEnding.match_1.eq_2	
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerProgram_origins	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerWith_behaviorRefinement	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerWith_consumesEvidence	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerWith_consumesEvidence._proof_1_10	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerWith_consumesEvidence._proof_1_13	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerWith_consumesEvidence._proof_1_14	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerWith_consumesEvidence._proof_1_8	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerWith_consumesEvidence._proof_1_9	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerWith_consumesEvidence._simp_1_12	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerWith_handoffWF	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerWith_handoffWF._simp_1_5	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerWith_handoffWF._simp_1_8	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.lowerWith_preservesOwnerMutability	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.mapSiblingKeys_getElem?_fst	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.mapSiblingKeys_length	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.mem_of_getElem?_some	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.memory_validPlace_virtual	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.mir_no_escapes	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.mir_no_escapes._proof_1_8	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.mir_simulate_rows	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.mir_simulate_rows._proof_1_13	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.mir_simulate_rows._proof_1_22	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.mir_step_of_bind	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.mir_step_of_destructure0	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.mir_step_of_op0	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.mir_step_of_op2	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.mir_terminalObservation_ret	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.mir_terminalObservation_ret._sparseCasesOn_1.else_eq	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.mir_terminalObservation_ret.match_1.eq_1	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.mir_terminalObservation_ret.match_1.eq_2	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.nodup_getElem_inj	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.owners_not_mutable	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.sbm_applyOperation_id	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.sbm_blockAt_find	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.sbm_canEnd_all	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.sbm_classAt	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.sbm_endOwnerView_eq	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.sbm_exec_step_of_raw	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.sbm_exec_step_to_raw	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.sbm_initial_iff	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.sbm_instAt	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.sbm_loadValue_virtual	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.sbm_ownerView	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.sbm_readAtom	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.sbm_readMove	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.sbm_result_abort	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.sbm_result_add_overflow	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.sbm_result_add_overflow._sparseCasesOn_1_6.else_eq	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.sbm_result_add_overflow.match_1_6.eq_1	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.sbm_result_add_overflow.match_1_6.eq_2	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.sbm_result_ret	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.sbm_rootType	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.sbm_step_add_ok_det	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.sbm_step_add_ok_det._sparseCasesOn_1_16.else_eq	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.sbm_step_add_ok_det.match_1_16.eq_1	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.sbm_step_add_ok_det.match_1_16.eq_2	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.sbm_step_bind_det	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.sbm_step_construct_det	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.sbm_step_destructure_det	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.sbm_validPlace	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.sbm_writeFresh_iff	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.specValOf._sparseCasesOn_1.else_eq	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.specValOf.eq_1	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.specValOf.eq_2	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.specValOf.eq_3	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.specValOf.match_1.eq_1	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.specValOf.match_1.eq_2	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.specValOf.match_1.eq_3	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.straightBinding_valid_shape	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.straightBinding_valid_shape._proof_1_3	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.straightBinding_valid_shape._proof_1_4	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.straightBinding_valid_shape._proof_1_8	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.toMemRead.eq_1	
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.toMemRead.eq_2	
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.toMemRead.eq_3	
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.toMemRead.match_1.eq_1	
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.toMemRead.match_1.eq_2	
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.toMemRead.match_1.eq_3	
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.tyToEarly._sparseCasesOn_1.else_eq	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.tyToEarly.eq_1	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.tyToEarly.eq_2	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.tyToEarly.match_1.eq_1	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.tyToEarly.match_1.eq_2	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.useAtom_preserves_ctxInv	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.useAtoms_preserves_ctxInv	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.uses_preserves_ctxInv	Quot.sound propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Core.LowerMIR.view_program_eq	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.IntegratedCore.Agreement.Observable.match_1.eq_1	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.IntegratedCore.Agreement.Observable.match_1.eq_2	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.IntegratedCore.Agreement.Observable.match_1.eq_3	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.IntegratedCore.Agreement.Observable.match_1.eq_4	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.IntegratedCore.Agreement.firstTrapSite.match_1.eq_1	
+_private.Concrete.Core.LowerMIR.0.Concrete.IntegratedCore.Agreement.firstTrapSite.match_1.eq_2	
+_private.Concrete.Core.LowerMIR.0.Concrete.IntegratedCore.Agreement.firstTrapSite.match_1.eq_3	
+_private.Concrete.Core.LowerMIR.0.Concrete.Interfaces.MIR.operations.match_1.eq_1	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Interfaces.MIR.operations.match_1.eq_2	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Interfaces.MIR.operations.match_1.eq_3	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Interfaces.Memory.InstructionStepWith.match_3.eq_1	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Interfaces.Memory.InstructionStepWith.match_3.eq_2	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Interfaces.Memory.InstructionStepWith.match_3.eq_3	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Interfaces.Memory.InstructionStepWith.match_3.eq_4	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Interfaces.Memory.InstructionStepWith.match_3.eq_5	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Interfaces.Memory.InstructionStepWith.match_3.eq_6	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Interfaces.Memory.InstructionStepWith.match_3.eq_7	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Interfaces.Memory.InstructionStepWith.match_3.eq_8	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Interfaces.Memory.SignatureMatches.match_1.eq_1	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Interfaces.Memory.SignatureMatches.match_1.eq_2	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Interfaces.Memory.SignatureMatches.match_1.eq_3	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Interfaces.Memory.StepOutcome.match_1.eq_1	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Interfaces.Memory.StepOutcome.match_1.eq_2	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Interfaces.Memory.instructionTrap.match_1.eq_1	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Interfaces.Memory.instructionTrap.match_1.eq_2	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Interfaces.Memory.instructionTrap.match_1.eq_3	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Interfaces.Memory.readArgs.match_1.eq_1	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Interfaces.Memory.readArgs.match_3.eq_1	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Interfaces.Memory.readArgs.match_5.eq_1	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Interfaces.Memory.readArgs.match_5.eq_2	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Interfaces.Memory.terminalObservation.match_1.eq_1	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Interfaces.Memory.terminalObservation.match_1.eq_2	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Interfaces.Memory.terminalObservation.match_10.eq_1	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Interfaces.Memory.terminalObservation.match_10.eq_2	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Interfaces.Memory.terminalObservation.match_4.eq_1	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Interfaces.Memory.terminalObservation.match_4.eq_2	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Interfaces.Memory.terminalObservation.match_7.eq_1	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Interfaces.Memory.terminalObservation.match_7.eq_2	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Interfaces.Memory.terminalObservation.match_7.eq_3	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Interfaces.Terminator.origins.match_1.eq_1	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Interfaces.Terminator.origins.match_1.eq_2	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Interfaces.hostedResultFor.match_1.eq_1	propext
+_private.Concrete.Core.LowerMIR.0.Concrete.Interfaces.hostedResultFor.match_1.eq_2	propext
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.Core.AList.lookup.match_1.eq_1	
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.Core.AList.lookup.match_1.eq_2	
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.Core.Exec.Config.final?.match_1.eq_1	propext
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.Core.Exec.Config.final?.match_1.eq_2	propext
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.Core.Exec.Config.final?.match_1.eq_3	propext
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.Core.Exec.Config.final?.match_1.eq_4	propext
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.Core.Exec.onRes.match_1.eq_1	
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.Core.Exec.onRes.match_1.eq_2	
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.Core.Exec.onRes.match_1.eq_3	
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.Core.Exec.stepExit.match_1.eq_1	
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.Core.Exec.stepExit.match_1.eq_2	
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.Core.Exec.stepExit.match_1.eq_3	
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.Core.Exec.stepExit.match_3.eq_1	propext
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.Core.Exec.stepExit.match_3.eq_2	propext
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.Core.Exec.stepExit.match_5.eq_1	
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.Core.Exec.stepExit.match_5.eq_2	
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.Core.Exec.stepExit.match_5.eq_3	
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.Core.Exec.stepExit.match_5.eq_4	
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.Core.Exec.stepExit.match_5.eq_5	
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.Core.Exec.stepExit.match_5.eq_6	
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.Core.Exec.stepExit.match_5.eq_7	
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.Core.Exec.stepExit.match_5.eq_8	
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.Core.Exec.stepExit.match_5.eq_9	
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.Core.Own.life.match_1.eq_1	
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.Core.Own.life.match_1.eq_2	
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.Core.Own.life.match_1.eq_3	
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.Core.Own.life.match_1.eq_4	
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.StageInterface.MachineProgram.operations.match_1.eq_1	propext
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.StageInterface.MachineProgram.operations.match_1.eq_2	propext
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.StageInterface.MachineProgram.operations.match_1.eq_3	propext
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.StageInterface.MachineProgram.operations.match_1.eq_4	propext
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.StageInterface.StraightBinding.toCore.match_1.eq_1	
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.StageInterface.StraightBinding.toCore.match_1.eq_2	
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.StageInterface.StraightBinding.toCore.match_1.eq_3	
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.StageInterface.StraightType.toCore.match_1.eq_1	
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.StageInterface.StraightType.toCore.match_1.eq_2	
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.StageInterface.sliceLanguage.match_16.eq_1	propext
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.StageInterface.sliceLanguage.match_16.eq_2	propext
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.StageInterface.sliceLanguage.match_20.eq_1	propext
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.StageInterface.sliceLanguage.match_20.eq_2	propext
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.Ty.isCopy.match_1.eq_1	
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.Ty.isCopy.match_1.eq_2	
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.evalAtom.match_1.eq_1	propext
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.evalAtom.match_1.eq_2	propext
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.evalAtom.match_1.eq_3	propext
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.evalAtom.match_1.eq_4	propext
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.execStmt.match_1.eq_1	
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.execStmt.match_1.eq_2	
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.execStmt.match_1.eq_3	
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.execStmt.match_3.eq_1	propext
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.execStmt.match_3.eq_2	propext
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.execStmt.match_3.eq_3	propext
+_private.Concrete.Core.LowerMIR.0.ConcreteSpec.execStmt.match_3.eq_4	propext
+_private.Concrete.Core.LowerMIR.0.List.filter.match_1.eq_1	
+_private.Concrete.Core.LowerMIR.0.List.filter.match_1.eq_2	
+_private.Concrete.Core.LowerMIR.0.List.filterMap.match_1.eq_1	
+_private.Concrete.Core.LowerMIR.0.List.filterMap.match_1.eq_2	
+_private.Concrete.Core.LowerMIR.0.Option.bind.match_1.eq_1	
+_private.Concrete.Core.LowerMIR.0.Option.bind.match_1.eq_2	
 _private.Concrete.Driver.Launcher.0.Concrete.Driver.Launcher.LLVMInputs.mk.inj	
 _private.Concrete.Driver.Launcher.0.Concrete.Driver.Launcher.LLVMInputs.mk.injEq	propext
 _private.Concrete.Driver.Launcher.0.Concrete.Driver.Launcher.LLVMInputs.mk.sizeOf_spec	
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.admissionInput_pending_prepare_eq	Quot.sound propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.bool_rec_const_false	
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.earlyProgram_coreInput_wf	Quot.sound propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.earlyProgram_coreInput_wf._proof_1_5	Quot.sound propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.earlyProgram_coreInput_wf._proof_1_6	Quot.sound propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.earlyProgram_coreInput_wf._proof_1_7	Quot.sound propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.earlyProgram_coreInput_wf._proof_1_8	Quot.sound propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.earlyProgram_coreInput_wf.match_1_1.eq_1	Quot.sound propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.earlyProgram_coreInput_wf.match_1_1.eq_2	Quot.sound propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.earlyProgram_coreInput_wf.match_1_1.eq_3	Quot.sound propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.earlyProgram_coreInput_wf.match_1_1.eq_4	Quot.sound propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.elaborate_corresponds	Quot.sound propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.emitOriginEntry.eq_1	
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.except_bind_congr	
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.exec_step_preserves_sitesBound	Quot.sound propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.exec_steps_preserves_sitesBound	Quot.sound propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.list_filterMap_reverse	propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.lookup_isSome_of_mem_keys	propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.machineBody_sitesBound	Quot.sound propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.machineBody_sitesBound._proof_1_1	Quot.sound propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.machineBody_sitesBound._proof_1_2	Quot.sound propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.machineBody_stmtOperations_spec	Quot.sound propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.mapSiblingKeys_keys_spec	propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.mapSiblingKeys_map_fst	propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.mapSiblingKeys_mem_spec	propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.mirrorBody._proof_1	
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.mirrorBody._sparseCasesOn_4.else_eq	propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.mirrorBody.eq_def	propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.mirrorBody.match_4.eq_1	propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.mirrorBody.match_4.eq_2	propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.mirrorBody.match_7.eq_1	
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.mirrorBody.match_7.eq_2	
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.mirrorBody.match_7.eq_3	
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.mirrorBody_inv	Quot.sound propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.mirrorBody_inv.match_1.eq_1	
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.mirrorBody_inv.match_1.eq_2	
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.mirrorExpr.eq_def	
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.mirrorExpr.match_11.eq_1	
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.mirrorExpr.match_13.eq_1	
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.mirrorExpr.match_13.eq_2	
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.mirrorExpr.match_13.eq_3	
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.mirrorExpr.match_3.eq_1	
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.mirrorExpr.match_3.eq_2	
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.mirrorExpr.match_5.eq_1	
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.mirrorExpr.match_7.eq_1	
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.mirrorExpr.match_7.eq_2	
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.mirrorExpr.match_7.eq_3	
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.mirrorExpr.match_9.eq_1	
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.mirrorExpr_inv	Quot.sound propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.mirrorExpr_inv.match_1.eq_1	
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.mirrorExpr_inv.match_1.eq_2	
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.mirrorRhsAsAtom.match_1.eq_1	
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.mirrorRhsAsAtom_inv	Quot.sound propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.mirrorRhsBind.match_3.eq_1	
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.mirrorRhsBind_named_inv	Quot.sound propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.mirrorRhsBind_unnamed_inv	Quot.sound propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.namedOf.eq_1	
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.namedOf.eq_2	
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.namedOf.match_1.eq_1	
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.namedOf.match_1.eq_2	
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.nodup_map_of_inj	Quot.sound propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.nodup_reverse	Quot.sound propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.nodup_singleton	Quot.sound propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.prepareSurface0_eq_mirror	propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.prepareSurface0_inv	Quot.sound propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.range'_append_single	Quot.sound propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.range'_append_single._proof_1_1	Quot.sound propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.range'_nodup	Quot.sound propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.range'_nodup._proof_1_1	Quot.sound propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.surfaceRefusal_binds	Quot.sound propext
+_private.Concrete.Frontend.Validate.0.Concrete.Frontend.Validate.zipIdx_map_snd	propext
+_private.Concrete.Frontend.Validate.0.Concrete.Interfaces.SliceElaboration.match_1.eq_1	propext
+_private.Concrete.Frontend.Validate.0.Concrete.Interfaces.SliceElaboration.match_1.eq_2	propext
+_private.Concrete.Frontend.Validate.0.ConcreteSpec.StageInterface.MachineProgram.operations.match_1.eq_1	propext
+_private.Concrete.Frontend.Validate.0.ConcreteSpec.StageInterface.MachineProgram.operations.match_1.eq_2	propext
+_private.Concrete.Frontend.Validate.0.ConcreteSpec.StageInterface.MachineProgram.operations.match_1.eq_3	propext
+_private.Concrete.Frontend.Validate.0.ConcreteSpec.StageInterface.MachineProgram.operations.match_1.eq_4	propext
+_private.Concrete.Frontend.Validate.0.ConcreteSpec.StageInterface.SurfacePreparation.body.match_4.eq_1	propext
+_private.Concrete.Frontend.Validate.0.ConcreteSpec.StageInterface.SurfacePreparation.body.match_4.eq_2	propext
+_private.Concrete.Frontend.Validate.0.Except.map.match_1.eq_1	
+_private.Concrete.Frontend.Validate.0.Except.map.match_1.eq_2	
+_private.Concrete.Frontend.Validate.0.List.filterMap.match_1.eq_1	
+_private.Concrete.Frontend.Validate.0.List.filterMap.match_1.eq_2	
 _private.Concrete.IntegratedCore.0.Concrete.IntegratedCore.fromTree_corresponds	Quot.sound propext
 _private.Concrete.IntegratedCore.0.Concrete.Interfaces.SliceElaboration.match_1.eq_1	propext
 _private.Concrete.IntegratedCore.0.Concrete.Interfaces.SliceElaboration.match_1.eq_2	propext
@@ -3963,8 +5115,7 @@ _private.Concrete.IntegratedCore.Agreement.0.Concrete.IntegratedCore.Agreement.f
 _private.Concrete.IntegratedCore.Agreement.0.Concrete.IntegratedCore.Agreement.firstTrapSite.match_3.eq_2	
 _private.Concrete.IntegratedCore.Agreement.0.Concrete.IntegratedCore.Agreement.life_ok	Quot.sound propext
 _private.Concrete.IntegratedCore.Agreement.0.Concrete.IntegratedCore.Agreement.locals.eq_1	
-_private.Concrete.IntegratedCore.Agreement.0.Concrete.IntegratedCore.Agreement.located_agreement	Classical.choice Quot.sound propext
-_private.Concrete.IntegratedCore.Agreement.0.Concrete.IntegratedCore.Agreement.located_agreement._proof_1_1	Classical.choice Quot.sound propext
+_private.Concrete.IntegratedCore.Agreement.0.Concrete.IntegratedCore.Agreement.located_agreement	Quot.sound propext
 _private.Concrete.IntegratedCore.Agreement.0.Concrete.IntegratedCore.Agreement.lookup_fresh	Quot.sound propext
 _private.Concrete.IntegratedCore.Agreement.0.Concrete.IntegratedCore.Agreement.mark.eq_1	
 _private.Concrete.IntegratedCore.Agreement.0.Concrete.IntegratedCore.Agreement.mark.eq_2	
@@ -4059,6 +5210,7 @@ _private.Concrete.IntegratedCore.Controls.0.Concrete.IntegratedCore.overflowLowe
 _private.Concrete.IntegratedCore.Controls.0.Concrete.IntegratedCore.overflowWF	Quot.sound propext
 _private.Concrete.IntegratedCore.Controls.0.Concrete.IntegratedCore.overflowWF._simp_1_1	propext
 _private.Concrete.IntegratedCore.Controls.0.Concrete.IntegratedCore.overflowWF._simp_1_2	propext
+_private.Concrete.IntegratedCore.Controls.0.Concrete.IntegratedCore.pendingSource_eq_sparse	Classical.choice Quot.sound propext
 _private.Concrete.IntegratedCore.Controls.0.Concrete.IntegratedCore.plusOrigin._proof_1	
 _private.Concrete.IntegratedCore.Controls.0.Concrete.IntegratedCore.refusedStatic	Classical.choice Quot.sound propext
 _private.Concrete.IntegratedCore.Controls.0.Concrete.IntegratedCore.returnTokens._proof_1	propext
@@ -4072,6 +5224,7 @@ _private.Concrete.IntegratedCore.Controls.0.Concrete.IntegratedCore.returnTokens
 _private.Concrete.IntegratedCore.Controls.0.Concrete.IntegratedCore.returnTokens._proof_9	propext
 _private.Concrete.IntegratedCore.Controls.0.Concrete.IntegratedCore.slice1._proof_1	
 _private.Concrete.IntegratedCore.Controls.0.Concrete.IntegratedCore.slice2._proof_1	
+_private.Concrete.IntegratedCore.Controls.0.Concrete.IntegratedCore.sourceKeys_eq_sparse	Classical.choice Quot.sound propext
 _private.Concrete.IntegratedCore.Controls.0.Concrete.IntegratedCore.tokenInput._proof_1	Quot.sound propext
 _private.Concrete.IntegratedCore.Controls.0.Concrete.IntegratedCore.tokenPattern	
 _private.Concrete.IntegratedCore.Controls.0.Concrete.IntegratedCore.typedTokenConstruct	
@@ -4217,7 +5370,6 @@ _private.Concrete.Interfaces.Carriers.0.Concrete.Interfaces.alist_lookup_of_mem	
 _private.Concrete.Interfaces.Carriers.0.Concrete.Interfaces.block_occurrences_block_eq	Quot.sound propext
 _private.Concrete.Interfaces.Carriers.0.Concrete.Interfaces.block_occurrences_block_eq._simp_1_1	propext
 _private.Concrete.Interfaces.Carriers.0.Concrete.Interfaces.composeEliminated_disjoint	Quot.sound propext
-_private.Concrete.Interfaces.Carriers.0.Concrete.Interfaces.ctrlFn._proof_1	
 _private.Concrete.Interfaces.Carriers.0.Concrete.Interfaces.eraseDups_eq_self	Quot.sound propext
 _private.Concrete.Interfaces.Carriers.0.Concrete.Interfaces.eraseDups_flatMap_assoc	Quot.sound propext
 _private.Concrete.Interfaces.Carriers.0.Concrete.Interfaces.eraseDups_flatMap_eraseDups_left	Quot.sound propext
@@ -4308,6 +5460,8 @@ _private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.SSAInst.slotCount.m
 _private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.alist_lookup_mem_local	
 _private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.alist_lookup_of_mem_local	Quot.sound propext
 _private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.coreHostedResult.eq_1	Quot.sound propext
+_private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.filterMap_flatMap_nil	propext
+_private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.filterMap_map_some	propext
 _private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.hostedExecution._proof_1	
 _private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.hostedExecution._proof_2	
 _private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.hostedExecution._proof_3	
@@ -4315,6 +5469,22 @@ _private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.hostedExecution._pr
 _private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.hostedResultFor.eq_1	Quot.sound propext
 _private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.hostedResultFor.match_1.eq_1	propext
 _private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.hostedResultFor.match_1.eq_2	propext
+_private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.llvmItemDefines.match_1.eq_1	
+_private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.llvmItemDefines.match_1.eq_2	
+_private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.llvmItemDefines.match_1.eq_3	
+_private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.llvmItemDefines.match_1.eq_4	
+_private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.llvmItemDefines.match_1.eq_5	
+_private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.llvmItemDefines.match_1.eq_6	
+_private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.llvmItemDefines.match_1.eq_7	
+_private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.llvmItemDefines.match_1.eq_8	
+_private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.llvmItemGlobal.match_1.eq_1	
+_private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.llvmItemGlobal.match_1.eq_2	
+_private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.llvmItemGlobal.match_1.eq_3	
+_private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.llvmItemGlobal.match_1.eq_4	
+_private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.llvmItemGlobal.match_1.eq_5	
+_private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.llvmItemGlobal.match_1.eq_6	
+_private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.llvmItemGlobal.match_1.eq_7	
+_private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.llvmItemGlobal.match_1.eq_8	
 _private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.pipelineAppend.match_1.eq_1	
 _private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.pipelineAppend.match_1.eq_2	
 _private.Concrete.Interfaces.Contracts.0.Concrete.Interfaces.silent_progress	Quot.sound propext
@@ -5155,8 +6325,11 @@ _private.Concrete.Memory.Lifetimes.0.Concrete.Memory.PlacedGraph.origins._simp_1
 _private.Concrete.Memory.Lifetimes.0.Concrete.Memory.PlacedGraph.signature	Quot.sound propext
 _private.Concrete.Memory.Lifetimes.0.Concrete.Memory.PlacedGraph.wf	propext
 _private.Concrete.Memory.Lifetimes.0.Concrete.Memory.entryLifetime.eq_1	propext
+_private.Concrete.Memory.Lifetimes.0.Concrete.Memory.entryLifetime_isSome_of_rootUnambiguousAt	Quot.sound propext
 _private.Concrete.Memory.Lifetimes.0.Concrete.Memory.length_erase_lt_of_mem	propext
+_private.Concrete.Memory.Lifetimes.0.Concrete.Memory.list_mapM_ok_of_forall	Quot.sound propext
 _private.Concrete.Memory.Lifetimes.0.Concrete.Memory.mem_erase_of_ne_constructive	propext
+_private.Concrete.Memory.Lifetimes.0.Concrete.Memory.mem_of_mem_erase_constructive	propext
 _private.Concrete.Memory.Lifetimes.0.Concrete.Memory.nextEntries.match_1.eq_1	
 _private.Concrete.Memory.Lifetimes.0.Concrete.Memory.nextEntries.match_1.eq_2	
 _private.Concrete.Memory.Lifetimes.0.Concrete.Memory.placeBody.eq_1	propext
@@ -5169,6 +6342,7 @@ _private.Concrete.Memory.Lifetimes.0.Concrete.Memory.placeBody.match_3.eq_1
 _private.Concrete.Memory.Lifetimes.0.Concrete.Memory.placeBody.match_3.eq_2	
 _private.Concrete.Memory.Lifetimes.0.Concrete.Memory.placeBody.match_5.eq_1	
 _private.Concrete.Memory.Lifetimes.0.Concrete.Memory.placeBody.match_5.eq_2	
+_private.Concrete.Memory.Lifetimes.0.Concrete.Memory.placeBody_ok_of_isSome	Quot.sound propext
 _private.Concrete.Memory.Lifetimes.0.Concrete.Memory.placeBody_placement	Quot.sound propext
 _private.Concrete.Memory.Lifetimes.0.Concrete.Memory.placeGraph_placed	Quot.sound propext
 _private.Concrete.Memory.Lifetimes.0.Concrete.Memory.reachableEntries._proof_1	propext
@@ -5187,6 +6361,7 @@ _private.Concrete.Memory.Lifetimes.0.Concrete.Memory.reachableEntries.match_1.co
 _private.Concrete.Memory.Lifetimes.0.Concrete.Memory.reachableEntries.match_1.eq_1	
 _private.Concrete.Memory.Lifetimes.0.Concrete.Memory.reachableEntries.match_1.eq_2	
 _private.Concrete.Memory.Lifetimes.0.Concrete.Memory.reachableEntries_closed	Quot.sound propext
+_private.Concrete.Memory.Lifetimes.0.Concrete.Memory.reachableEntries_sound	Quot.sound propext
 _private.Concrete.Memory.Lifetimes.0.Except.map.match_1.eq_1	
 _private.Concrete.Memory.Lifetimes.0.Except.map.match_1.eq_2	
 _private.Concrete.Memory.Lifetimes.0.PSigma.casesOn._arg_pusher	
@@ -5336,14 +6511,17 @@ _private.Concrete.Memory.Placement.0.ConcreteSpec.Core.Mem.Memory.load.match_1.e
 _private.Concrete.Memory.Placement.0.ConcreteSpec.Core.Mem.Memory.load.match_1.eq_3	
 _private.Concrete.Memory.Placement.0.Option.bind.match_1.eq_1	
 _private.Concrete.Memory.Placement.0.Option.bind.match_1.eq_2	
+_private.Concrete.Memory.Refinement.0.Concrete.Interfaces.Memory.loadBacking.match_1.eq_1	
+_private.Concrete.Memory.Refinement.0.Concrete.Interfaces.Memory.loadBacking.match_1.eq_2	
 _private.Concrete.Memory.Refinement.0.Concrete.Memory.Checkpoint.finite	Quot.sound propext
 _private.Concrete.Memory.Refinement.0.Concrete.Memory.Checkpoint.mk.inj	Quot.sound propext
 _private.Concrete.Memory.Refinement.0.Concrete.Memory.Checkpoint.mk.injEq	Quot.sound propext
 _private.Concrete.Memory.Refinement.0.Concrete.Memory.Checkpoint.mk.sizeOf_spec	Quot.sound propext
 _private.Concrete.Memory.Refinement.0.Concrete.Memory.Checkpoint.related	Quot.sound propext
-_private.Concrete.Memory.Refinement.0.Concrete.Memory.LocalCorrespondence.matchStep	Quot.sound propext
-_private.Concrete.Memory.Refinement.0.Concrete.Memory.LocalCorrespondence.matchStep._simp_1_2	propext
 _private.Concrete.Memory.Refinement.0.Concrete.Memory.LocalCorrespondence.reached	Quot.sound propext
+_private.Concrete.Memory.Refinement.0.Concrete.Memory.alist_erase_mem_iff_local	propext
+_private.Concrete.Memory.Refinement.0.Concrete.Memory.alist_erase_mem_iff_local._simp_1_8	propext
+_private.Concrete.Memory.Refinement.0.Concrete.Memory.alist_erase_sublist	
 _private.Concrete.Memory.Refinement.0.Concrete.Memory.begins_frame	Quot.sound propext
 _private.Concrete.Memory.Refinement.0.Concrete.Memory.decExistsLt._proof_1	
 _private.Concrete.Memory.Refinement.0.Concrete.Memory.decExistsLt._proof_2	
@@ -5353,12 +6531,42 @@ _private.Concrete.Memory.Refinement.0.Concrete.Memory.decExistsMem._proof_1
 _private.Concrete.Memory.Refinement.0.Concrete.Memory.decExistsMem._proof_2	
 _private.Concrete.Memory.Refinement.0.Concrete.Memory.decExistsMem._proof_3	
 _private.Concrete.Memory.Refinement.0.Concrete.Memory.decExistsMem._proof_4	propext
+_private.Concrete.Memory.Refinement.0.Concrete.Memory.endLocals_clears_materialized	Quot.sound propext
+_private.Concrete.Memory.Refinement.0.Concrete.Memory.erase_mem_iff_nodup	propext
+_private.Concrete.Memory.Refinement.0.Concrete.Memory.erase_mem_iff_nodup._simp_1_1	propext
+_private.Concrete.Memory.Refinement.0.Concrete.Memory.filterMap_sublist	
+_private.Concrete.Memory.Refinement.0.Concrete.Memory.frameResident_heap_congr	Quot.sound propext
+_private.Concrete.Memory.Refinement.0.Concrete.Memory.frameResident_id_lt_next	Quot.sound propext
+_private.Concrete.Memory.Refinement.0.Concrete.Memory.frameResident_of_same_fields	Quot.sound propext
 _private.Concrete.Memory.Refinement.0.Concrete.Memory.load_after_begin	Quot.sound propext
+_private.Concrete.Memory.Refinement.0.Concrete.Memory.mem_residentFrameProvIds	Quot.sound propext
+_private.Concrete.Memory.Refinement.0.Concrete.Memory.not_mem_filterMap_erase_of_nodup	Quot.sound propext
 _private.Concrete.Memory.Refinement.0.Concrete.Memory.prefix_trans	propext
+_private.Concrete.Memory.Refinement.0.Concrete.Memory.residentHandles_id_lt_next	Quot.sound propext
+_private.Concrete.Memory.Refinement.0.Concrete.Memory.residentHandles_of_begins	Quot.sound propext
+_private.Concrete.Memory.Refinement.0.Concrete.Memory.residentHandles_of_endLocals	Quot.sound propext
+_private.Concrete.Memory.Refinement.0.Concrete.Memory.residentHandles_of_ends	Quot.sound propext
+_private.Concrete.Memory.Refinement.0.Concrete.Memory.residentHandles_of_prepareAddresses	Quot.sound propext
+_private.Concrete.Memory.Refinement.0.Concrete.Memory.residentHandles_of_readArgs	Quot.sound propext
+_private.Concrete.Memory.Refinement.0.Concrete.Memory.residentHandles_of_readOperands	Quot.sound propext
+_private.Concrete.Memory.Refinement.0.Concrete.Memory.residentHandles_of_readValue	Quot.sound propext
+_private.Concrete.Memory.Refinement.0.Concrete.Memory.residentHandles_of_same_layout	Quot.sound propext
+_private.Concrete.Memory.Refinement.0.Concrete.Memory.residentHandles_of_stepOutcome	Quot.sound propext
+_private.Concrete.Memory.Refinement.0.Concrete.Memory.residentHandles_of_writeParams	Quot.sound propext
+_private.Concrete.Memory.Refinement.0.Concrete.Memory.residentHandles_of_writeValue	Quot.sound propext
 _private.Concrete.Memory.Refinement.0.Concrete.Memory.run_finite	
 _private.Concrete.Memory.Refinement.0.Concrete.Memory.run_trace_mono	propext
+_private.Concrete.Memory.Refinement.0.Concrete.Memory.storeRuns_preserves	Quot.sound propext
+_private.Concrete.Memory.Refinement.0.Concrete.Memory.store_preserves_live_blocks	Quot.sound propext
+_private.Concrete.Memory.Refinement.0.Concrete.Memory.target_null_eq_zero	
 _private.Concrete.Memory.Refinement.0.Concrete.Memory.trace_at_result	Quot.sound propext
 _private.Concrete.Memory.Refinement.0.Concrete.Memory.trace_on_run	Quot.sound propext
+_private.Concrete.Memory.Refinement.0.ConcreteSpec.Core.AList.lookup.match_1.eq_1	
+_private.Concrete.Memory.Refinement.0.ConcreteSpec.Core.AList.lookup.match_1.eq_2	
+_private.Concrete.Memory.Refinement.0.List.filterMap.match_1.eq_1	
+_private.Concrete.Memory.Refinement.0.List.filterMap.match_1.eq_2	
+_private.Concrete.Memory.Refinement.0.Option.bind.match_1.eq_1	
+_private.Concrete.Memory.Refinement.0.Option.bind.match_1.eq_2	
 _private.Concrete.Memory.StepSimulation.0.Concrete.Backend.LCB.instReprTarget.repr.match_1.eq_1	
 _private.Concrete.Memory.StepSimulation.0.Concrete.Backend.LCB.instReprTarget.repr.match_1.eq_2	
 _private.Concrete.Memory.StepSimulation.0.Concrete.Backend.LCB.instReprTarget.repr.match_1.eq_3	
@@ -5456,7 +6664,7 @@ _private.Concrete.Memory.StepSimulation.0.Concrete.Memory.advanceMatchingPoint.e
 _private.Concrete.Memory.StepSimulation.0.Concrete.Memory.advanceMatchingPoint.match_1.eq_1	
 _private.Concrete.Memory.StepSimulation.0.Concrete.Memory.advanceMatchingPoint.match_1.eq_2	
 _private.Concrete.Memory.StepSimulation.0.Concrete.Memory.alist_erase_mem_iff	propext
-_private.Concrete.Memory.StepSimulation.0.Concrete.Memory.alist_erase_mem_iff._simp_1_4	propext
+_private.Concrete.Memory.StepSimulation.0.Concrete.Memory.alist_erase_mem_iff._simp_1_1	propext
 _private.Concrete.Memory.StepSimulation.0.Concrete.Memory.alist_erase_nodup	Quot.sound propext
 _private.Concrete.Memory.StepSimulation.0.Concrete.Memory.alist_erase_of_not_mem	
 _private.Concrete.Memory.StepSimulation.0.Concrete.Memory.alist_lookup_eq_of_mem_nodup	Quot.sound propext
@@ -5834,8 +7042,6 @@ _private.Concrete.Memory.StepSimulation.0.Concrete.Memory.writes_source_to_targe
 _private.Concrete.Memory.StepSimulation.0.Concrete.Memory.writes_source_to_target_at_ceiling._simp_1_22	propext
 _private.Concrete.Memory.StepSimulation.0.Concrete.Memory.writes_target_to_source	Quot.sound propext
 _private.Concrete.Memory.StepSimulation.0.Concrete.Memory.writes_target_to_source._simp_1_13	Quot.sound propext
-_private.Concrete.Memory.StepSimulation.0.ConcreteSpec.Core.AList.lookup.match_1.eq_1	
-_private.Concrete.Memory.StepSimulation.0.ConcreteSpec.Core.AList.lookup.match_1.eq_2	
 _private.Concrete.Memory.StepSimulation.0.ConcreteSpec.Core.Mem.Memory.access.match_1.eq_1	
 _private.Concrete.Memory.StepSimulation.0.ConcreteSpec.Core.Mem.Memory.access.match_1.eq_2	
 _private.Concrete.Memory.StepSimulation.0.ConcreteSpec.Core.Mem.Memory.access.match_3.eq_1	
@@ -5903,30 +7109,353 @@ _private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.origi
 _private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.reach_jump	Classical.choice Quot.sound propext
 _private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.suffixRuns._proof_1	propext
 _private.Concrete.Memory.TransferControl.0.Concrete.Memory.TransferControl.write_byte	Classical.choice Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Interfaces.MIR.Step.match_1.eq_1	propext
+_private.Concrete.Memory.Validate.0.Concrete.Interfaces.MIR.Step.match_1.eq_2	propext
+_private.Concrete.Memory.Validate.0.Concrete.Interfaces.MIR.operations.match_1.eq_1	propext
+_private.Concrete.Memory.Validate.0.Concrete.Interfaces.MIR.operations.match_1.eq_2	propext
+_private.Concrete.Memory.Validate.0.Concrete.Interfaces.MIR.operations.match_1.eq_3	propext
+_private.Concrete.Memory.Validate.0.Concrete.Interfaces.Memory.SignatureMatches.match_4.eq_1	propext
+_private.Concrete.Memory.Validate.0.Concrete.Interfaces.Memory.SignatureMatches.match_4.eq_2	propext
+_private.Concrete.Memory.Validate.0.Concrete.Interfaces.Memory.loadBacking.match_1.eq_1	
+_private.Concrete.Memory.Validate.0.Concrete.Interfaces.Memory.loadBacking.match_1.eq_2	
+_private.Concrete.Memory.Validate.0.Concrete.Interfaces.Memory.terminalObservation.match_1.eq_1	propext
+_private.Concrete.Memory.Validate.0.Concrete.Interfaces.Memory.terminalObservation.match_1.eq_2	propext
+_private.Concrete.Memory.Validate.0.Concrete.Interfaces.Memory.terminalObservation.match_10.eq_1	propext
+_private.Concrete.Memory.Validate.0.Concrete.Interfaces.Memory.terminalObservation.match_10.eq_2	propext
+_private.Concrete.Memory.Validate.0.Concrete.Interfaces.Memory.terminalObservation.match_4.eq_1	propext
+_private.Concrete.Memory.Validate.0.Concrete.Interfaces.Memory.terminalObservation.match_4.eq_2	propext
+_private.Concrete.Memory.Validate.0.Concrete.Interfaces.Memory.terminalObservation.match_7.eq_1	propext
+_private.Concrete.Memory.Validate.0.Concrete.Interfaces.Memory.terminalObservation.match_7.eq_2	propext
+_private.Concrete.Memory.Validate.0.Concrete.Interfaces.Memory.terminalObservation.match_7.eq_3	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.GraphCovering.of_splitGraphForRoot	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.GraphCovering.of_splitGraphForRoot._simp_1_2	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.GraphCovering.of_splitGraphForRoot._simp_1_3	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.GraphCovering.of_splitGraphForRoot._simp_1_4	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.GraphCovering.of_splitGraphForRoot._simp_1_6	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.GraphCovering.of_splitGraphForRoots	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.GraphCovering.refl	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.GraphCovering.trans	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.block_correspond	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.call_backward	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.call_backward._simp_1_2	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.call_forward	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.call_forward._simp_1_2	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.compose_handoff	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.compose_lowersMemory	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.entryState_project	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.entryState_project._simp_1_2	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.escapes_iff	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.escapes_iff._simp_1_1	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.escapes_iff._simp_1_3	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.finite_project	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.hostedResult_eq	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.instructionAt_eq	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.inventories_eq	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.logicalView_blockAt_eq	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.logicalView_graphAt_eq	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.logicalView_handoffWF	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.logicalView_handoffWF._simp_1_1	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.logicalView_tablesAgree	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.lookup_fn	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.materializable	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.of_handoffWF	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.of_specializeMIR	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.of_specializeMIR.match_1_1.eq_1	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.of_specializeMIR.match_1_1.eq_2	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.origins_iff	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.origins_iff._simp_1_1	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.promotionSound_of_dst	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.retainsTypedRoots_of_dst	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.safe_preserved	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.step_backward	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.step_backward._simp_1_3	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.step_forward	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.step_forward._simp_1_1	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.terminalObservation_eq	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.trace_eq	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.transfer_backward	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.transfer_forward	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.MIRCovering.validBlocks_of_finite	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.StorageShapeEq.blockAt	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.StorageShapeEq.entry	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.StorageShapeEq.size	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.authorizeWrite_eq	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.begins	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.canEnd_eq	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.classAt_eq	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.declarations	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.discardRemainder_eq	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.endLocals	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.endOwnerView_eq	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.ends	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.entry	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.freshLayoutsFrom_eq	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.instructionTrap_eq	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.inventories	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.layoutAt_eq	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.layouts	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.loadBacking_eq	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.loadMaterialized_eq	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.loadValue_eq	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.mayInitialize_eq	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.mutableLocals	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.ownerView_eq	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.paramOutcome	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.paramSpaceFits_iff	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.project	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.rangeAt_eq	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.readArgs_eq	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.readOperands_eq	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.readValue_eq	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.resident_eq	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.resolveAddress_eq	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.rootType_eq	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.signatures	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.storage	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.storesValue_iff	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.symm	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.transferCeiling_eq	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.transferCheckpoint_iff	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.validPlace_eq	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.writeOwnerView_eq	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.writeParams	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.writeValue_eq	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.writes	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.TablesAgree.zeroRoot_eq	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.alist_lookup_of_mem_nodup	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.applyOperation_projectState	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.array_find?_of_mem_nodup	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.begins_preserves_ctx	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.bind_ok_of_ok	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.endLocals_preserves_ctx	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.ends_preserves_ctx	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.entryPath_splitGraphForRoot_proj	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.entryPath_splitGraphForRoot_proj._simp_1_3	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.entryPath_splitGraphForRoot_proj._simp_1_4	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.entryPath_splitGraphForRoot_proj._simp_1_7	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.entryPath_splitGraphForRoot_proj._simp_1_8	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.entryPath_splitGraphForRoot_self	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.entryPath_splitGraphForRoot_self._simp_1_3	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.entryPath_splitGraphForRoot_self._simp_1_4	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.entryPath_splitGraphForRoot_self._simp_1_5	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.entryPath_splitGraphForRoot_self._simp_1_6	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.filterMapM_ok_of_forall	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.foldl_toLogical_eq_mirBlockOut	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.hostedResultOf._sparseCasesOn_1.else_eq	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.hostedResultOf.match_1.eq_1	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.hostedResultOf.match_1.eq_2	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.hostedResultOf.match_4.eq_1	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.hostedResultOf.match_4.eq_2	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.list_any_eq_of_map_eq	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.list_foldl_eq_of_map_eq	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.mapM_ok_of_forall	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.mapTermTarget.match_1.eq_1	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.mapTermTarget.match_1.eq_2	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.mapTermTarget.match_1.eq_3	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.mapTermTarget.match_1.eq_4	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.mapTermTarget.match_1.eq_5	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.mapTermTarget_comp	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.mapTermTarget_id	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.mapTermTarget_origins	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.mapTermTarget_successors	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.memInstChange.eq_1	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.memInstChange.eq_2	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.memInstChange.eq_3	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.memInstChange.eq_4	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.memInstChange.eq_5	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.memInstChange.eq_6	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.memInstChange.eq_7	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.memInstChange.eq_8	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.memInstChange.match_1.eq_1	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.memInstChange.match_1.eq_2	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.memInstChange.match_1.eq_3	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.memInstChange.match_1.eq_4	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.memInstChange.match_1.eq_5	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.memInstChange.match_1.eq_6	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.memInstChange.match_1.eq_7	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.memInstChange.match_1.eq_8	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.mirBlock_id_of_find?	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.mirDefinedRoot._sparseCasesOn_1.else_eq	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.mirDefinedRoot.eq_1	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.mirDefinedRoot.eq_2	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.mirDefinedRoot.eq_3	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.mirDefinedRoot.match_1.eq_1	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.mirDefinedRoot.match_1.eq_2	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.mirDefinedRoot.match_1.eq_3	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.mirInstChange.match_1.eq_1	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.mirInstChange.match_1.eq_2	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.mirInstChange.match_1.eq_3	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.mirInstChange.match_1.eq_4	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.mirInstChange.match_1.eq_5	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.mirInstChange.match_1.eq_6	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.mirInstChange_eq_toLogical	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.mir_initial_iff	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.mir_raw_step_iff	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.mir_result_iff	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.mir_step_iff	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.nodup_flatMap_pair	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.nodup_flatMap_pair._simp_1_1	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.nodup_flatMap_pair._simp_1_2	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.nodup_map_inj	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.operationStore_projectState	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.paramOutcome_preserves_ctx	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.prepareAddresses_preserves_ctx	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.projectState_advance	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.projectState_swapCtx_of_ctx	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.readArgs_preserves_ctx	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.readOperands_preserves_ctx	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.readValue_preserves_ctx	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.representsCheckpoint_projectState	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.representsCheckpoint_projectState._simp_1_4	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.rootUnambiguousAt_splitGraphForRoot_preserve	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.rootUnambiguousAt_splitGraphForRoot_preserve._simp_1_3	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.rootUnambiguousAt_splitGraphForRoot_preserve._simp_1_4	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.rootUnambiguousAt_splitGraphForRoot_preserve._simp_1_7	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.rootUnambiguousAt_splitGraphForRoot_preserve._simp_1_8	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.rootUnambiguousAt_splitGraphForRoot_self	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.rootUnambiguousAt_splitGraphForRoots	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.splitGraphForRoot_wf	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.splitGraphForRoot_wf._simp_1_3	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.splitGraphForRoot_wf._simp_1_4	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.splitGraphForRoot_wf._simp_1_5	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.storageShapeEq_entryPath	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.storageShapeEq_find?	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.storageShapeEq_of_prepareGraph	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.storageShapeEq_of_prepareGraph._simp_1_37	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.storageShapeEq_of_prepareGraph.match_1_1.eq_1	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.storageShapeEq_of_prepareGraph.match_1_1.eq_2	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.storageShapeEq_of_prepareGraph.match_1_1.eq_3	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.storageShapeEq_of_prepareGraph.match_1_11.eq_1	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.storageShapeEq_of_prepareGraph.match_1_11.eq_2	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.storageShapeEq_of_prepareGraph.match_1_11.eq_3	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.storageShapeEq_of_prepareGraph.match_1_13.eq_1	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.storageShapeEq_of_prepareGraph.match_1_13.eq_2	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.storageShapeEq_of_prepareGraph.match_1_13.eq_3	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.storageShapeEq_of_prepareGraph.match_1_13.eq_4	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.storageShapeEq_of_prepareGraph.match_1_13.eq_5	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.storageShapeEq_of_prepareGraph.match_1_3.eq_1	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.storageShapeEq_of_prepareGraph.match_1_3.eq_2	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.storageShapeEq_of_prepareGraph.match_1_3.eq_3	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.storageShapeEq_of_prepareGraph.match_1_5.eq_1	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.storageShapeEq_of_prepareGraph.match_1_5.eq_2	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.storageShapeEq_of_prepareGraph.match_1_5.eq_3	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.storageShapeEq_of_prepareGraph.match_1_9.eq_1	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.storageShapeEq_of_prepareGraph.match_1_9.eq_2	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.storageShapeEq_of_prepareGraph.match_1_9.eq_3	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.storageShapeEq_of_prepareGraph.match_1_9.eq_4	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.storageShapeEq_of_prepareGraph.match_1_9.eq_5	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.storageShapeEq_of_prepareGraph.match_1_9.eq_6	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.storageShapeEq_of_prepareGraph.match_1_9.eq_7	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.storageShapeEq_of_prepareGraph.match_1_9.eq_8	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.storageShapeEq_rootUnambiguousAt	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.storageShapeEq_symm	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.swapCtx.eq_1	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.swapCtx_advance	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.swapCtx_inv	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.swapCtx_markWritten	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.swapCtx_prepareAddresses	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.swapCtx_projectState	propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.toList_toArray	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.toLogicalBlock.eq_1	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.toLogicalEdge.eq_1	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.toLogicalGraph_eq_logicalView	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.toLogicalGraph_wf	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.toLogicalGraph_wf._simp_1_2	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.toLogicalInst.eq_1	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.toLogicalInst.eq_2	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.toLogicalInst.eq_3	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.toLogicalInst.eq_4	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.toLogicalInst.eq_5	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.toLogicalInst.eq_6	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.toLogicalInst.match_3.eq_1	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.toLogicalInst.match_3.eq_2	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.toLogicalInst.match_3.eq_3	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.toLogicalInst.match_3.eq_4	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.toLogicalInst.match_3.eq_5	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.toLogicalInst.match_3.eq_6	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.toLogicalPlace.eq_1	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.toLogicalTerm.eq_1	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.toLogicalTerm.eq_2	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.toLogicalTerm.eq_3	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.toLogicalTerm.eq_4	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.toLogicalTerm.eq_5	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.toLogicalTerm.match_1.eq_1	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.toLogicalTerm.match_1.eq_2	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.toLogicalTerm.match_1.eq_3	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.toLogicalTerm.match_1.eq_4	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.toLogicalTerm.match_1.eq_5	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.toLogicalTerm_mapTarget	
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.writeParams_preserves_ctx	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Concrete.Memory.Validate.writeValue_preserves_ctx	Quot.sound propext
+_private.Concrete.Memory.Validate.0.Except.map.match_1.eq_1	
+_private.Concrete.Memory.Validate.0.Except.map.match_1.eq_2	
+_private.Concrete.Memory.Validate.0.List.filter.match_1.eq_1	
+_private.Concrete.Memory.Validate.0.List.filter.match_1.eq_2	
+_private.Concrete.Memory.Validate.0.Option.bind.match_1.eq_1	
+_private.Concrete.Memory.Validate.0.Option.bind.match_1.eq_2	
 _private.Concrete.Origins.0.Concrete.Origins.validateLocation.match_1.eq_1	Quot.sound propext
 _private.Concrete.Origins.0.Concrete.Origins.validateLocation.match_1.eq_2	Quot.sound propext
-_private.Concrete.Parse.0.Concrete.Parse.Task.read.inj	
-_private.Concrete.Parse.0.Concrete.Parse.Task.read.injEq	propext
-_private.Concrete.Parse.0.Concrete.Parse.Task.read.sizeOf_spec	
-_private.Concrete.Parse.0.Concrete.Parse.Task.reduce.inj	
-_private.Concrete.Parse.0.Concrete.Parse.Task.reduce.injEq	propext
-_private.Concrete.Parse.0.Concrete.Parse.Task.reduce.sizeOf_spec	
-_private.Concrete.Parse.0.Concrete.Parse.Value.body.inj	
-_private.Concrete.Parse.0.Concrete.Parse.Value.body.injEq	propext
-_private.Concrete.Parse.0.Concrete.Parse.Value.body.sizeOf_spec	
-_private.Concrete.Parse.0.Concrete.Parse.Value.expr.inj	
-_private.Concrete.Parse.0.Concrete.Parse.Value.expr.injEq	propext
-_private.Concrete.Parse.0.Concrete.Parse.Value.expr.sizeOf_spec	
-_private.Concrete.Parse.0.Concrete.Parse.Value.more.inj	
-_private.Concrete.Parse.0.Concrete.Parse.Value.more.injEq	propext
-_private.Concrete.Parse.0.Concrete.Parse.Value.more.sizeOf_spec	
-_private.Concrete.Parse.0.Concrete.Parse.Value.program.inj	
-_private.Concrete.Parse.0.Concrete.Parse.Value.program.injEq	propext
-_private.Concrete.Parse.0.Concrete.Parse.Value.program.sizeOf_spec	
-_private.Concrete.Parse.0.Concrete.Parse.Value.tok.inj	
-_private.Concrete.Parse.0.Concrete.Parse.Value.tok.injEq	propext
-_private.Concrete.Parse.0.Concrete.Parse.Value.tok.sizeOf_spec	
-_private.Concrete.Parse.0.Concrete.Parse.refusalTable._proof_1	
+_private.Concrete.Parse.0.Concrete.Lex.lexStream.match_3.eq_1	Classical.choice Quot.sound propext
+_private.Concrete.Parse.0.Concrete.Lex.lexStream.match_3.eq_2	Classical.choice Quot.sound propext
+_private.Concrete.Parse.0.Concrete.Lex.lexStream.match_5.eq_1	Quot.sound propext
+_private.Concrete.Parse.0.Concrete.Lex.lexStream.match_5.eq_2	Quot.sound propext
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.bindingEq_sound	Quot.sound propext
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.bindingEq_sound._simp_1_2	propext
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.exprEq.match_1.eq_1	propext
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.exprEq.match_1.eq_2	propext
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.exprEq.match_1.eq_3	propext
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.exprEq.match_1.eq_4	propext
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.exprEq_sound	Quot.sound propext
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.exprEq_sound._simp_1_8	propext
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.parseArgsSparse.match_1.eq_1	propext
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.parseArgsSparse.match_3.eq_1	propext
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.parseArgsSparse.match_3.eq_2	propext
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.parseArgsSparse.match_5.eq_1	propext
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.parseArgsSparse.match_5.eq_2	propext
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.parseArgsSparse.match_7.eq_1	
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.parseArgsSparse.match_7.eq_2	
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.parseArgsSparse.match_7.eq_3	
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.parseArgsSparse.match_7.eq_4	
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.parseSymbolSparse.match_1.eq_1	propext
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.parseSymbolSparse.match_3.eq_1	propext
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.parseSymbolSparse.match_3.eq_2	propext
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.parseSymbolSparse.match_5.eq_1	propext
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.parseSymbolSparse.match_5.eq_2	propext
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.parseSymbolSparse.match_7.eq_1	
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.parseSymbolSparse.match_7.eq_2	
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.parseSymbolSparse.match_9.eq_1	
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.parseSymbolSparse.match_9.eq_2	
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.parseSymbol_parseArgs_eq_sparse	propext
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.parserEngine_run_eq_sparse	Quot.sound propext
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.runEarlySparseWith.match_1.eq_1	
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.runEarlySparseWith.match_1.eq_2	
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.runEarlySparseWith.match_3.eq_1	
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.runEarlySparseWith.match_3.eq_2	
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.stmtEq.match_1.eq_1	propext
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.stmtEq.match_1.eq_2	propext
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.stmtEq.match_1.eq_3	propext
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.stmtEq_sound	Quot.sound propext
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.stmtEq_sound._simp_1_7	propext
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.stmtsEq.match_1.eq_1	propext
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.stmtsEq.match_1.eq_2	propext
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.stmtsEq.match_1.eq_3	propext
+_private.Concrete.Parse.0.Concrete.Parse.KernelEval.stmtsEq_sound	Quot.sound propext
+_private.Concrete.Parse.0.Concrete.Parse.filterMap_attach_eq	Quot.sound propext
+_private.Concrete.Parse.0.Concrete.Parse.group_tokens	propext
+_private.Concrete.Parse.0.Concrete.Parse.retainPiece_surfaceToken	Classical.choice Quot.sound propext
+_private.Concrete.Parse.0.Concrete.Parse.retain_surfaceTokens	Classical.choice Quot.sound propext
+_private.Concrete.Parse.0.Concrete.Parse.runs_prepend_tokens	propext
+_private.Concrete.Parse.0.ConcreteSpec.StageGrammar.ParserEngine.run.match_1.eq_1	
+_private.Concrete.Parse.0.ConcreteSpec.StageGrammar.ParserEngine.run.match_1.eq_2	
+_private.Concrete.Parse.0.ConcreteSpec.StageGrammar.ParserEngine.run.match_3.eq_1	
+_private.Concrete.Parse.0.ConcreteSpec.StageGrammar.ParserEngine.run.match_3.eq_2	
+_private.Concrete.Parse.0.ConcreteSpec.StageGrammar.parseSymbol.match_3.eq_1	propext
+_private.Concrete.Parse.0.ConcreteSpec.StageGrammar.parseSymbol.match_3.eq_2	propext
+_private.Concrete.Parse.0.ConcreteSpec.StageInterface.ParseRefusal.registeredRule.match_1.eq_1	
+_private.Concrete.Parse.0.ConcreteSpec.StageInterface.ParseRefusal.registeredRule.match_1.eq_2	
+_private.Concrete.Parse.0.ConcreteSpec.StageInterface.ParseRefusal.registeredRule.match_1.eq_3	
+_private.Concrete.Parse.0.List.filterMap.match_1.eq_1	
+_private.Concrete.Parse.0.List.filterMap.match_1.eq_2	
 _private.Concrete.Refusal.0.Concrete.Diagnostic.mk.inj	
 _private.Concrete.Refusal.0.Concrete.Diagnostic.mk.injEq	propext
 _private.Concrete.Refusal.0.Concrete.Diagnostic.mk.sizeOf_spec	
@@ -6054,7 +7583,8 @@ _private.Concrete.SSA.0.Concrete.SSA.transfer_correct._proof_1_8	Quot.sound prop
 _private.Concrete.SSA.0.Concrete.SSA.transfer_correct._proof_1_9	Quot.sound propext
 _private.Concrete.SSA.0.Except.map.match_1.eq_1	
 _private.Concrete.SSA.0.Except.map.match_1.eq_2	
-_private.Concrete.Stages.0.Concrete.Stages.Output.mk.congr_simp	Classical.choice Quot.sound propext
+_private.Concrete.Stages.0.Concrete.Stages.KernelEval.stagesSparse.eq_1	Classical.choice Quot.sound propext
+_private.Concrete.Stages.0.Concrete.Stages.KernelEval.stages_run_eq_sparse	Classical.choice Quot.sound propext
 _private.Concrete.Stages.0.Concrete.Stages.Output.mk.inj	Classical.choice Quot.sound propext
 _private.Concrete.Stages.0.Concrete.Stages.Output.mk.injEq	Classical.choice Quot.sound propext
 _private.Concrete.Stages.0.Concrete.Stages.Output.mk.sizeOf_spec	Classical.choice Quot.sound propext
@@ -6068,20 +7598,28 @@ _private.Concrete.Stages.0.Concrete.Stages.Pipeline.run.eq_2
 _private.Concrete.Stages.0.Concrete.Stages.Pipeline.run.eq_def	
 _private.Concrete.Stages.0.Concrete.Stages.Pipeline.run.match_1.eq_1	
 _private.Concrete.Stages.0.Concrete.Stages.Pipeline.run.match_1.eq_2	
-_private.Concrete.Stages.0.Concrete.Stages.compile.match_1.eq_1	Quot.sound propext
-_private.Concrete.Stages.0.Concrete.Stages.compile.match_1.eq_2	Quot.sound propext
 _private.Concrete.Stages.0.Concrete.Stages.edges_of_run	Classical.choice Quot.sound propext
-_private.Concrete.Stages.0.Concrete.Stages.lex.eq_1	Classical.choice Quot.sound propext
+_private.Concrete.Stages.0.Concrete.Stages.finishCompile._proof_1	Classical.choice Quot.sound propext
+_private.Concrete.Stages.0.Concrete.Stages.finishCompile._proof_2	Classical.choice Quot.sound propext
+_private.Concrete.Stages.0.Concrete.Stages.finishCompile._proof_3	Classical.choice Quot.sound propext
+_private.Concrete.Stages.0.Concrete.Stages.finishCompile_core_correct	Classical.choice Quot.sound propext
+_private.Concrete.Stages.0.Concrete.Stages.finishCompile_eq	Classical.choice Quot.sound propext
+_private.Concrete.Stages.0.Concrete.Stages.finishCompile_error	Classical.choice Quot.sound propext
+_private.Concrete.Stages.0.Concrete.Stages.finishCompile_isOk	Classical.choice Quot.sound propext
+_private.Concrete.Stages.0.Concrete.Stages.finishCompile_project	Classical.choice Quot.sound propext
+_private.Concrete.Stages.0.Concrete.Stages.finishCompile_ssa_correct	Classical.choice Quot.sound propext
+_private.Concrete.Stages.0.Concrete.Stages.lex_ok_iff	Classical.choice Quot.sound propext
 _private.Concrete.Stages.0.Concrete.Stages.memory.eq_1	Quot.sound propext
 _private.Concrete.Stages.0.Concrete.Stages.stages.eq_1	Classical.choice Quot.sound propext
 _private.Concrete.Stages.0.Except.map.match_1.eq_1	
 _private.Concrete.Stages.0.Except.map.match_1.eq_2	
-_private.Concrete.Theorem.0.Concrete.Backend.LCB.assemble.match_1.eq_1	
-_private.Concrete.Theorem.0.Concrete.Backend.LCB.assemble.match_3.eq_1	
-_private.Concrete.Theorem.0.Concrete.Backend.LCB.assemble.match_3.eq_2	
-_private.Concrete.Theorem.0.Concrete.Backend.LCB.assemble.match_3.eq_3	
+_private.Concrete.Theorem.0.Concrete.Backend.EmitLCB.assembleFunction.match_1.eq_1	
+_private.Concrete.Theorem.0.Concrete.Backend.EmitLCB.assembleFunction.match_3.eq_1	
+_private.Concrete.Theorem.0.Concrete.Backend.EmitLCB.assembleFunction.match_3.eq_2	
+_private.Concrete.Theorem.0.Concrete.Backend.EmitLCB.assembleFunction.match_3.eq_3	
 _private.Concrete.Theorem.0.Concrete.Backend.lcbTerminal.match_1.eq_1	propext
 _private.Concrete.Theorem.0.Concrete.Backend.lcbTerminal.match_1.eq_2	propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.answerAdmitted._proof_1	propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.answerBIRAssembly	Classical.choice Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.answerBIRAssembly._proof_1_1	Classical.choice Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.answerBIRAssembly._proof_1_2	Classical.choice Quot.sound propext
@@ -6089,11 +7627,19 @@ _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.answerBIRAssembly._proo
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.answerBIRAssembly._proof_1_4	Classical.choice Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.answerBIRJob	Classical.choice Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.answerBIRJob._proof_1_1	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.answerCoreVal._proof_1	propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.answerMir._proof_1	propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.answerParse	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.answerParse._proof_1_1	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.answerStream._proof_1	Classical.choice Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.assembleMacOS	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.bothEntriesRefuse_of_sparse	Classical.choice Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.coreTerminates	Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.effectModel._proof_1	
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.effectModel._proof_2	
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.effectModel._proof_3	
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.exactRefusal_of_sparse	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.exactRefusal_of_sparse._simp_1_1	propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.firstLLVMByte	Classical.choice Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.lcbSteps	Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.lcbToInstant	Quot.sound propext
@@ -6102,7 +7648,8 @@ _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.lcbWitness	Classical.ch
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.llvmUncheckedWitness	Classical.choice Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.llvmWitness	Classical.choice Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.overflowInput._proof_1	Quot.sound propext
-_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.refusesFirstBinder	propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.refusesDuplicatePair	propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.refusesFirstBinderName	propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.returnAtOne	Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.testImagePremises	Classical.choice Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.testLCBAnswerMarker	propext
@@ -6119,9 +7666,16 @@ _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapBIRAssembly._proof_
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapBIRAssembly._proof_1_4	Classical.choice Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapBIRJob	Classical.choice Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapBIRJob._proof_1_1	Classical.choice Quot.sound propext
-_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapCore._proof_1	Classical.choice Quot.sound propext
-_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapStatic	Classical.choice Quot.sound propext
-_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapTerminates	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapCore._proof_1	propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapLongerUnchecked	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapLongerUnchecked._proof_1_1	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapParse	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapParse._proof_1_1	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapStatic	propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapStream._proof_1	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapTerminates	Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapUnchecked	Classical.choice Quot.sound propext
+_private.Concrete.Theorem.0.Concrete.ImageTheorem.Sanity.trapUnchecked._proof_1_1	Classical.choice Quot.sound propext
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.additionBinders.match_1.eq_1	
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.additionBinders.match_1.eq_2	
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.additionBinders_append	propext
@@ -6129,3 +7683,5 @@ _private.Concrete.Theorem.0.Concrete.ImageTheorem.elaboratesBindings_origins	pro
 _private.Concrete.Theorem.0.Concrete.ImageTheorem.elaboratesExpr_origins	propext
 _private.Concrete.Theorem.0.Except.map.match_1.eq_1	
 _private.Concrete.Theorem.0.Except.map.match_1.eq_2	
+_private.ConcreteSpec.StageInterface.0.ConcreteSpec.StageInterface.earlyOperation._sparseCasesOn_3.else_eq	propext
+_private.ConcreteSpec.StageInterface.0.ConcreteSpec.StageInterface.earlyOperation._sparseCasesOn_4.else_eq	propext

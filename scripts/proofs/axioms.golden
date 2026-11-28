@@ -4547,7 +4547,7 @@ ConcreteSpec.GrammarData.word_spellings_unique
 ConcreteSpec.GrammarData.word_terminals_unique	
 ConcreteSpec.GrammarVerification.Clause.closedTest.eq_1	
 ConcreteSpec.GrammarVerification.Clause.justification.eq_1	
-ConcreteSpec.GrammarVerification.Compiled.accepts.eq_1	Classical.choice Quot.sound propext
+ConcreteSpec.GrammarVerification.Compiled.accepts.eq_1	
 ConcreteSpec.GrammarVerification.Compiled.mk.inj	
 ConcreteSpec.GrammarVerification.Compiled.mk.injEq	propext
 ConcreteSpec.GrammarVerification.Compiled.mk.sizeOf_spec	
@@ -4643,9 +4643,9 @@ ConcreteSpec.GrammarVerification.Rule.map.eq_1
 ConcreteSpec.GrammarVerification.Rule.mk.inj	
 ConcreteSpec.GrammarVerification.Rule.mk.injEq	propext
 ConcreteSpec.GrammarVerification.Rule.mk.sizeOf_spec	
-ConcreteSpec.GrammarVerification.SparseTree.bounded.eq_1	Classical.choice Quot.sound propext
-ConcreteSpec.GrammarVerification.SparseTree.bounded.eq_2	Classical.choice Quot.sound propext
-ConcreteSpec.GrammarVerification.SparseTree.bounded.eq_def	Classical.choice Quot.sound propext
+ConcreteSpec.GrammarVerification.SparseTree.bounded.eq_1	
+ConcreteSpec.GrammarVerification.SparseTree.bounded.eq_2	
+ConcreteSpec.GrammarVerification.SparseTree.bounded.eq_def	
 ConcreteSpec.GrammarVerification.SparseTree.brecOn.eq	
 ConcreteSpec.GrammarVerification.SparseTree.fill.eq_1	
 ConcreteSpec.GrammarVerification.SparseTree.fill.eq_2	
@@ -4675,13 +4675,13 @@ ConcreteSpec.GrammarVerification.Test.code.eq_def
 ConcreteSpec.GrammarVerification.Test.either.inj	
 ConcreteSpec.GrammarVerification.Test.either.injEq	propext
 ConcreteSpec.GrammarVerification.Test.either.sizeOf_spec	
-ConcreteSpec.GrammarVerification.Test.eval.eq_1	Classical.choice Quot.sound propext
-ConcreteSpec.GrammarVerification.Test.eval.eq_2	Classical.choice Quot.sound propext
-ConcreteSpec.GrammarVerification.Test.eval.eq_3	Classical.choice Quot.sound propext
-ConcreteSpec.GrammarVerification.Test.eval.eq_4	Classical.choice Quot.sound propext
-ConcreteSpec.GrammarVerification.Test.eval.eq_5	Classical.choice Quot.sound propext
-ConcreteSpec.GrammarVerification.Test.eval.eq_6	Classical.choice Quot.sound propext
-ConcreteSpec.GrammarVerification.Test.eval.eq_def	Classical.choice Quot.sound propext
+ConcreteSpec.GrammarVerification.Test.eval.eq_1	
+ConcreteSpec.GrammarVerification.Test.eval.eq_2	
+ConcreteSpec.GrammarVerification.Test.eval.eq_3	
+ConcreteSpec.GrammarVerification.Test.eval.eq_4	
+ConcreteSpec.GrammarVerification.Test.eval.eq_5	
+ConcreteSpec.GrammarVerification.Test.eval.eq_6	
+ConcreteSpec.GrammarVerification.Test.eval.eq_def	
 ConcreteSpec.GrammarVerification.Test.implies.eq_1	
 ConcreteSpec.GrammarVerification.Test.inBounds.eq_1	
 ConcreteSpec.GrammarVerification.Test.inBounds.eq_2	
@@ -4711,100 +4711,97 @@ ConcreteSpec.GrammarVerification.Test.word.inj
 ConcreteSpec.GrammarVerification.Test.word.injEq	propext
 ConcreteSpec.GrammarVerification.Test.word.sizeOf_spec	
 ConcreteSpec.GrammarVerification.ValidCertificate.eq_1	
-ConcreteSpec.GrammarVerification.accepted_facts_exact	Classical.choice Quot.sound propext
-ConcreteSpec.GrammarVerification.accepted_lookup_iff	Classical.choice Quot.sound propext
+ConcreteSpec.GrammarVerification.accepted_facts_exact	Quot.sound propext
+ConcreteSpec.GrammarVerification.accepted_lookup_iff	Quot.sound propext
 ConcreteSpec.GrammarVerification.accepted_lookup_iff._proof_1_3	Quot.sound propext
 ConcreteSpec.GrammarVerification.accepted_lookup_iff._proof_1_4	Quot.sound propext
-ConcreteSpec.GrammarVerification.accepted_productive	Classical.choice Quot.sound propext
-ConcreteSpec.GrammarVerification.accepted_rank_decreases	Classical.choice Quot.sound propext
+ConcreteSpec.GrammarVerification.accepted_productive	Quot.sound propext
+ConcreteSpec.GrammarVerification.accepted_rank_decreases	Quot.sound propext
 ConcreteSpec.GrammarVerification.accepted_rank_decreases._proof_1_1	Quot.sound propext
-ConcreteSpec.GrammarVerification.accepted_symbolic_exact	Classical.choice Quot.sound propext
-ConcreteSpec.GrammarVerification.accepted_work_covers_grammar	Classical.choice Quot.sound propext
+ConcreteSpec.GrammarVerification.accepted_symbolic_exact	Quot.sound propext
+ConcreteSpec.GrammarVerification.accepted_work_covers_grammar	Quot.sound propext
 ConcreteSpec.GrammarVerification.accepted_work_covers_grammar._proof_1_1	Quot.sound propext
 ConcreteSpec.GrammarVerification.accepted_work_covers_grammar._proof_1_2	Quot.sound propext
-ConcreteSpec.GrammarVerification.accepted_work_covers_grammar._proof_1_4	Classical.choice Quot.sound propext
+ConcreteSpec.GrammarVerification.accepted_work_covers_grammar._proof_1_4	Quot.sound propext
 ConcreteSpec.GrammarVerification.checks.eq_1	propext
-ConcreteSpec.GrammarVerification.checks_inBounds	Classical.choice Quot.sound propext
+ConcreteSpec.GrammarVerification.checks_inBounds	Quot.sound propext
 ConcreteSpec.GrammarVerification.checks_inBounds._proof_1_31	Quot.sound propext
-ConcreteSpec.GrammarVerification.checks_inBounds._proof_1_32	Quot.sound propext
-ConcreteSpec.GrammarVerification.checks_inBounds._proof_1_33	Classical.choice Quot.sound propext
-ConcreteSpec.GrammarVerification.checks_inBounds._proof_1_43	Quot.sound propext
+ConcreteSpec.GrammarVerification.checks_inBounds._proof_1_41	Quot.sound propext
 ConcreteSpec.GrammarVerification.checks_inBounds._proof_1_8	Quot.sound propext
 ConcreteSpec.GrammarVerification.checks_inBounds._simp_1_19	propext
 ConcreteSpec.GrammarVerification.checks_inBounds._simp_1_4	Quot.sound propext
 ConcreteSpec.GrammarVerification.checks_inBounds._simp_1_5	Quot.sound propext
 ConcreteSpec.GrammarVerification.checks_inBounds._simp_1_6	Quot.sound propext
 ConcreteSpec.GrammarVerification.checks_inBounds._simp_1_7	Quot.sound propext
-ConcreteSpec.GrammarVerification.checks_width_budget	Classical.choice Quot.sound propext
+ConcreteSpec.GrammarVerification.checks_width_budget	Quot.sound propext
 ConcreteSpec.GrammarVerification.checks_width_budget._proof_1_6	Quot.sound propext
 ConcreteSpec.GrammarVerification.clausesInBounds.eq_1	propext
-ConcreteSpec.GrammarVerification.clausesInBounds_of_valid	Classical.choice Quot.sound propext
+ConcreteSpec.GrammarVerification.clausesInBounds_of_valid	Quot.sound propext
 ConcreteSpec.GrammarVerification.clausesInBounds_of_valid._simp_1_2	Quot.sound propext
 ConcreteSpec.GrammarVerification.clausesInBounds_of_valid._simp_1_3	Quot.sound propext
 ConcreteSpec.GrammarVerification.compileTableVerifier.eq_1	propext
-ConcreteSpec.GrammarVerification.compileTableVerifier_accepts_iff	Classical.choice Quot.sound propext
+ConcreteSpec.GrammarVerification.compileTableVerifier_accepts_iff	Quot.sound propext
 ConcreteSpec.GrammarVerification.compileTableVerifier_accepts_iff._proof_1_4	Quot.sound propext
 ConcreteSpec.GrammarVerification.compileTableVerifier_accepts_iff._proof_1_5	Quot.sound propext
 ConcreteSpec.GrammarVerification.compileTableVerifier_accepts_iff._simp_1_3	propext
-ConcreteSpec.GrammarVerification.compileTableVerifier_complete	Classical.choice Quot.sound propext
-ConcreteSpec.GrammarVerification.compileTableVerifier_completes	Classical.choice Quot.sound propext
+ConcreteSpec.GrammarVerification.compileTableVerifier_complete	Quot.sound propext
+ConcreteSpec.GrammarVerification.compileTableVerifier_completes	Quot.sound propext
 ConcreteSpec.GrammarVerification.compileTableVerifier_completes._proof_1_2	Quot.sound propext
 ConcreteSpec.GrammarVerification.compileTableVerifier_completes._proof_1_3	Quot.sound propext
-ConcreteSpec.GrammarVerification.compileTableVerifier_correct	Classical.choice Quot.sound propext
+ConcreteSpec.GrammarVerification.compileTableVerifier_correct	Quot.sound propext
 ConcreteSpec.GrammarVerification.compileTableVerifier_correct._simp_1_1	propext
 ConcreteSpec.GrammarVerification.compileTableVerifier_correct._simp_1_10	propext
 ConcreteSpec.GrammarVerification.compileTableVerifier_correct._simp_1_2	Quot.sound propext
 ConcreteSpec.GrammarVerification.compileTableVerifier_correct._simp_1_3	Quot.sound propext
 ConcreteSpec.GrammarVerification.compileTableVerifier_correct._simp_1_4	Quot.sound propext
 ConcreteSpec.GrammarVerification.compileTableVerifier_correct._simp_1_5	Quot.sound propext
-ConcreteSpec.GrammarVerification.compileTableVerifier_correct._simp_1_6	Classical.choice Quot.sound propext
-ConcreteSpec.GrammarVerification.compileTableVerifier_correct._simp_1_7	Classical.choice Quot.sound propext
-ConcreteSpec.GrammarVerification.compileTableVerifier_correct._simp_1_8	Classical.choice Quot.sound propext
-ConcreteSpec.GrammarVerification.compileTableVerifier_instructionBound	Classical.choice Quot.sound propext
+ConcreteSpec.GrammarVerification.compileTableVerifier_correct._simp_1_6	Quot.sound propext
+ConcreteSpec.GrammarVerification.compileTableVerifier_correct._simp_1_7	Quot.sound propext
+ConcreteSpec.GrammarVerification.compileTableVerifier_correct._simp_1_8	propext
+ConcreteSpec.GrammarVerification.compileTableVerifier_instructionBound	Quot.sound propext
 ConcreteSpec.GrammarVerification.compileTableVerifier_instructionBound._proof_1_2	Quot.sound propext
-ConcreteSpec.GrammarVerification.compileTableVerifier_sound	Classical.choice Quot.sound propext
+ConcreteSpec.GrammarVerification.compileTableVerifier_sound	Quot.sound propext
 ConcreteSpec.GrammarVerification.compileTableVerifier_spaceBound	Quot.sound propext
 ConcreteSpec.GrammarVerification.compileTests.eq_1	
-ConcreteSpec.GrammarVerification.compileTests_run	Classical.choice Quot.sound propext
-ConcreteSpec.GrammarVerification.decodeCells.eq_1	Classical.choice Quot.sound propext
-ConcreteSpec.GrammarVerification.decodeCells_at	Classical.choice Quot.sound propext
+ConcreteSpec.GrammarVerification.compileTests_run	Quot.sound propext
+ConcreteSpec.GrammarVerification.decodeCells.eq_1	propext
+ConcreteSpec.GrammarVerification.decodeCells_at	Quot.sound propext
 ConcreteSpec.GrammarVerification.decodeCells_at._proof_1_1	Quot.sound propext
 ConcreteSpec.GrammarVerification.decodeCells_at._proof_1_2	Quot.sound propext
-ConcreteSpec.GrammarVerification.decodeCells_at._proof_1_3	Quot.sound propext
-ConcreteSpec.GrammarVerification.decodeCells_dimensions	Classical.choice Quot.sound propext
+ConcreteSpec.GrammarVerification.decodeCells_dimensions	Quot.sound propext
 ConcreteSpec.GrammarVerification.decodeCells_dimensions._proof_1_1	Quot.sound propext
 ConcreteSpec.GrammarVerification.decodeCells_dimensions._proof_1_4	Quot.sound propext
 ConcreteSpec.GrammarVerification.decodeRank.eq_1	
-ConcreteSpec.GrammarVerification.decodeRank_at	Classical.choice Quot.sound propext
+ConcreteSpec.GrammarVerification.decodeRank_at	Quot.sound propext
 ConcreteSpec.GrammarVerification.decodeRank_at._proof_1_1	Quot.sound propext
 ConcreteSpec.GrammarVerification.earlyProposal.eq_1	
-ConcreteSpec.GrammarVerification.earlyProposal_accepted	Classical.choice Quot.sound propext
-ConcreteSpec.GrammarVerification.earlyProposal_getD	Classical.choice Quot.sound propext
+ConcreteSpec.GrammarVerification.earlyProposal_accepted	Quot.sound propext
+ConcreteSpec.GrammarVerification.earlyProposal_getD	Quot.sound propext
 ConcreteSpec.GrammarVerification.earlyProposal_getElemBang	propext
 ConcreteSpec.GrammarVerification.earlyProposal_size	propext
-ConcreteSpec.GrammarVerification.earlyProposal_valid	Classical.choice Quot.sound propext
+ConcreteSpec.GrammarVerification.earlyProposal_valid	Quot.sound propext
 ConcreteSpec.GrammarVerification.earlyProposal_words	propext
 ConcreteSpec.GrammarVerification.earlyRawGrammar_representable	
 ConcreteSpec.GrammarVerification.emitChecks.eq_1	
 ConcreteSpec.GrammarVerification.factChecks.eq_1	propext
-ConcreteSpec.GrammarVerification.factChecks_iff	Classical.choice Quot.sound propext
+ConcreteSpec.GrammarVerification.factChecks_iff	Quot.sound propext
 ConcreteSpec.GrammarVerification.factChecks_iff._proof_1_8	Quot.sound propext
 ConcreteSpec.GrammarVerification.factChecks_iff._simp_1_1	Quot.sound propext
 ConcreteSpec.GrammarVerification.factChecks_iff._simp_1_2	Quot.sound propext
-ConcreteSpec.GrammarVerification.factChecks_iff._simp_1_3	Classical.choice Quot.sound propext
-ConcreteSpec.GrammarVerification.factChecks_iff._simp_1_4	Classical.choice Quot.sound propext
-ConcreteSpec.GrammarVerification.factChecks_iff._simp_1_5	Classical.choice Quot.sound propext
-ConcreteSpec.GrammarVerification.factChecks_iff._simp_1_6	Classical.choice Quot.sound propext
-ConcreteSpec.GrammarVerification.factChecks_iff._simp_1_7	Classical.choice Quot.sound propext
+ConcreteSpec.GrammarVerification.factChecks_iff._simp_1_3	Quot.sound propext
+ConcreteSpec.GrammarVerification.factChecks_iff._simp_1_4	propext
+ConcreteSpec.GrammarVerification.factChecks_iff._simp_1_5	propext
+ConcreteSpec.GrammarVerification.factChecks_iff._simp_1_6	Quot.sound propext
+ConcreteSpec.GrammarVerification.factChecks_iff._simp_1_7	Quot.sound propext
 ConcreteSpec.GrammarVerification.grammarClauses.eq_1	
-ConcreteSpec.GrammarVerification.grammarClauses_valid	Classical.choice Quot.sound propext
+ConcreteSpec.GrammarVerification.grammarClauses_valid	Quot.sound propext
 ConcreteSpec.GrammarVerification.grammarClauses_valid._simp_1_2	Quot.sound propext
 ConcreteSpec.GrammarVerification.grammarRules.eq_1	
-ConcreteSpec.GrammarVerification.grammarRules_valid	Classical.choice Quot.sound propext
+ConcreteSpec.GrammarVerification.grammarRules_valid	Quot.sound propext
 ConcreteSpec.GrammarVerification.grid_bound	Quot.sound propext
 ConcreteSpec.GrammarVerification.grid_bound._proof_1_1	Quot.sound propext
 ConcreteSpec.GrammarVerification.groupByAddress.eq_1	
-ConcreteSpec.GrammarVerification.group_mem	Classical.choice Quot.sound propext
+ConcreteSpec.GrammarVerification.group_mem	Quot.sound propext
 ConcreteSpec.GrammarVerification.indexRows.eq_1	
 ConcreteSpec.GrammarVerification.indexRows.eq_2	
 ConcreteSpec.GrammarVerification.indexRows.eq_def	
@@ -4906,7 +4903,7 @@ ConcreteSpec.GrammarVerification.rankedFacts_exact
 ConcreteSpec.GrammarVerification.representable.eq_1	
 ConcreteSpec.GrammarVerification.scratch_budget	Quot.sound propext
 ConcreteSpec.GrammarVerification.scratch_budget._proof_1_2	Quot.sound propext
-ConcreteSpec.GrammarVerification.symbolic_sound	Classical.choice Quot.sound propext
+ConcreteSpec.GrammarVerification.symbolic_sound	Quot.sound propext
 ConcreteSpec.GrammarVerification.symbolic_sound._simp_1_1	propext
 ConcreteSpec.GrammarVerification.symbolic_sound._simp_1_2	propext
 ConcreteSpec.GrammarVerification.symbolic_sound._simp_1_3	propext
@@ -5393,12 +5390,12 @@ ConcreteSpec.StageGrammar.ParseCursor.require.eq_1
 ConcreteSpec.StageGrammar.ParseCursor.require_firstUnsupportedHit_isSome	propext
 ConcreteSpec.StageGrammar.ParseStop.exhausted.sizeOf_spec	
 ConcreteSpec.StageGrammar.ParseStop.malformed.sizeOf_spec	
-ConcreteSpec.StageGrammar.Parser.exactTable	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.Parser.mk.inj	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.Parser.mk.injEq	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.Parser.mk.sizeOf_spec	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.Parser.proposalSize	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.Parser.verified	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.Parser.exactTable	propext
+ConcreteSpec.StageGrammar.Parser.mk.inj	propext
+ConcreteSpec.StageGrammar.Parser.mk.injEq	propext
+ConcreteSpec.StageGrammar.Parser.mk.sizeOf_spec	propext
+ConcreteSpec.StageGrammar.Parser.proposalSize	propext
+ConcreteSpec.StageGrammar.Parser.verified	propext
 ConcreteSpec.StageGrammar.ParserEngine.mk.inj	propext
 ConcreteSpec.StageGrammar.ParserEngine.mk.injEq	propext
 ConcreteSpec.StageGrammar.ParserEngine.mk.sizeOf_spec	propext
@@ -5424,21 +5421,21 @@ ConcreteSpec.StageGrammar.SharedGrammar.terminalSliceExact	propext
 ConcreteSpec.StageGrammar.SliceEvent.mk.inj	
 ConcreteSpec.StageGrammar.SliceEvent.mk.injEq	propext
 ConcreteSpec.StageGrammar.SliceEvent.mk.sizeOf_spec	
-ConcreteSpec.StageGrammar.TableVerifier.completes	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.TableVerifier.mk.inj	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.TableVerifier.mk.injEq	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.TableVerifier.mk.sizeOf_spec	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.TableVerifier.sound	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.TableVerifier.spaceBound	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.VerificationInputs.accepted	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.VerificationInputs.engineTableEq	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.VerificationInputs.exactTable	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.VerificationInputs.mk.inj	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.VerificationInputs.mk.injEq	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.VerificationInputs.mk.sizeOf_spec	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.VerificationInputs.proposalSize	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.VerificationInputs.spaceBound	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.VerificationInputs.verifierCompiled	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.TableVerifier.completes	propext
+ConcreteSpec.StageGrammar.TableVerifier.mk.inj	propext
+ConcreteSpec.StageGrammar.TableVerifier.mk.injEq	propext
+ConcreteSpec.StageGrammar.TableVerifier.mk.sizeOf_spec	propext
+ConcreteSpec.StageGrammar.TableVerifier.sound	propext
+ConcreteSpec.StageGrammar.TableVerifier.spaceBound	propext
+ConcreteSpec.StageGrammar.VerificationInputs.accepted	propext
+ConcreteSpec.StageGrammar.VerificationInputs.engineTableEq	propext
+ConcreteSpec.StageGrammar.VerificationInputs.exactTable	Quot.sound propext
+ConcreteSpec.StageGrammar.VerificationInputs.mk.inj	propext
+ConcreteSpec.StageGrammar.VerificationInputs.mk.injEq	propext
+ConcreteSpec.StageGrammar.VerificationInputs.mk.sizeOf_spec	propext
+ConcreteSpec.StageGrammar.VerificationInputs.proposalSize	propext
+ConcreteSpec.StageGrammar.VerificationInputs.spaceBound	propext
+ConcreteSpec.StageGrammar.VerificationInputs.verifierCompiled	propext
 ConcreteSpec.StageGrammar.VerifyInstruction.add.inj	
 ConcreteSpec.StageGrammar.VerifyInstruction.add.injEq	propext
 ConcreteSpec.StageGrammar.VerifyInstruction.add.sizeOf_spec	
@@ -5470,17 +5467,18 @@ ConcreteSpec.StageGrammar.VerifyState.advance.eq_1
 ConcreteSpec.StageGrammar.VerifyState.mk.inj	
 ConcreteSpec.StageGrammar.VerifyState.mk.injEq	propext
 ConcreteSpec.StageGrammar.VerifyState.mk.sizeOf_spec	
-ConcreteSpec.StageGrammar.VerifyState.step.eq_1	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.VerifyState.step.eq_2	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.VerifyState.step.eq_3	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.VerifyState.step.eq_4	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.VerifyState.step.eq_5	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.VerifyState.step.eq_6	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.VerifyState.step.eq_7	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.VerifyState.step.eq_8	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.VerifyState.step.eq_9	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.acceptedCells.eq_1	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.VerifyState.step.eq_1	
+ConcreteSpec.StageGrammar.VerifyState.step.eq_2	
+ConcreteSpec.StageGrammar.VerifyState.step.eq_3	
+ConcreteSpec.StageGrammar.VerifyState.step.eq_4	
+ConcreteSpec.StageGrammar.VerifyState.step.eq_5	
+ConcreteSpec.StageGrammar.VerifyState.step.eq_6	
+ConcreteSpec.StageGrammar.VerifyState.step.eq_7	
+ConcreteSpec.StageGrammar.VerifyState.step.eq_8	
+ConcreteSpec.StageGrammar.VerifyState.step.eq_9	
+ConcreteSpec.StageGrammar.acceptedCells.eq_1	propext
 ConcreteSpec.StageGrammar.acceptedRank.eq_1	propext
+ConcreteSpec.StageGrammar.array_getElem?_extract_zero	Quot.sound propext
 ConcreteSpec.StageGrammar.decodeAtom0._sparseCasesOn_1.else_eq	propext
 ConcreteSpec.StageGrammar.decodeAtom0._sparseCasesOn_10.else_eq	propext
 ConcreteSpec.StageGrammar.decodeAtom0._sparseCasesOn_11.else_eq	propext
@@ -5602,9 +5600,12 @@ ConcreteSpec.StageGrammar.earlyParser_slice0_decodes	Quot.sound propext
 ConcreteSpec.StageGrammar.earlyParser_two_unsupported_control	Quot.sound propext
 ConcreteSpec.StageGrammar.earlyParser_two_unsupported_control._proof_1_1	Quot.sound propext
 ConcreteSpec.StageGrammar.earlyParser_unsupported_ne_program	Quot.sound propext
-ConcreteSpec.StageGrammar.earlyParser_validated	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.earlyParser_validated	Quot.sound propext
 ConcreteSpec.StageGrammar.earlyProduction.eq_1	propext
-ConcreteSpec.StageGrammar.earlyProposal_accepts_shared	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.earlyProductionFirstSlice._sparseCasesOn_1.else_eq	propext
+ConcreteSpec.StageGrammar.earlyProductionFirstSlice.eq_1	propext
+ConcreteSpec.StageGrammar.earlyProductionFirstSlice.eq_2	propext
+ConcreteSpec.StageGrammar.earlyProposal_accepts_shared	Quot.sound propext
 ConcreteSpec.StageGrammar.earlyRhs.eq_1	
 ConcreteSpec.StageGrammar.earlySharedGrammar._proof_1	propext
 ConcreteSpec.StageGrammar.earlySharedGrammar._proof_2	propext
@@ -5615,26 +5616,26 @@ ConcreteSpec.StageGrammar.earlySharedGrammar_budget	Quot.sound propext
 ConcreteSpec.StageGrammar.earlySharedGrammar_derivesTrace_program_slice0	Quot.sound propext
 ConcreteSpec.StageGrammar.earlySharedGrammar_productionIds_eq	Quot.sound propext
 ConcreteSpec.StageGrammar.earlySharedGrammar_productionIds_nodup	Quot.sound propext
-ConcreteSpec.StageGrammar.earlySharedGrammar_productive	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.earlySharedGrammar_productive	Quot.sound propext
 ConcreteSpec.StageGrammar.earlySharedGrammar_program_id_index	propext
 ConcreteSpec.StageGrammar.earlySharedGrammar_program_id_unique	Quot.sound propext
 ConcreteSpec.StageGrammar.earlySharedGrammar_rawGrammar	Quot.sound propext
-ConcreteSpec.StageGrammar.earlyTable_acyclic	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.earlyTable_dimensions	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.earlyTable_lookup_eq	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.earlyTable_acyclic	Quot.sound propext
+ConcreteSpec.StageGrammar.earlyTable_dimensions	Quot.sound propext
+ConcreteSpec.StageGrammar.earlyTable_lookup_eq	Quot.sound propext
 ConcreteSpec.StageGrammar.earlyTable_lookup_eq._proof_1_1	Quot.sound propext
-ConcreteSpec.StageGrammar.earlyTable_predicts	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.earlyTable_rank_le_max	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.earlyTable_predicts	Quot.sound propext
+ConcreteSpec.StageGrammar.earlyTable_rank_le_max	Quot.sound propext
 ConcreteSpec.StageGrammar.earlyTerminalSlices._proof_1	
 ConcreteSpec.StageGrammar.earlyTerminalSlices.eq_1	propext
 ConcreteSpec.StageGrammar.earlyUnsupportedLiteralRule._proof_1	Quot.sound propext
 ConcreteSpec.StageGrammar.earlyUnsupportedProductionRule._proof_1	Quot.sound propext
-ConcreteSpec.StageGrammar.earlyVerification_accepted	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.earlyVerification_accepted	Quot.sound propext
 ConcreteSpec.StageGrammar.earlyVerification_accepted._simp_1_1	propext
 ConcreteSpec.StageGrammar.earlyVerification_proposalSize	Quot.sound propext
-ConcreteSpec.StageGrammar.earlyVerifier_completes	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.earlyVerifier_instructionBound	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.earlyVerifier_sound	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.earlyVerifier_completes	Quot.sound propext
+ConcreteSpec.StageGrammar.earlyVerifier_instructionBound	Quot.sound propext
+ConcreteSpec.StageGrammar.earlyVerifier_sound	Quot.sound propext
 ConcreteSpec.StageGrammar.earlyVerifier_spaceBound	Quot.sound propext
 ConcreteSpec.StageGrammar.firstOutOfSlice.eq_1	
 ConcreteSpec.StageGrammar.firstOutOfSlice_eq_some_iff	propext
@@ -5643,6 +5644,9 @@ ConcreteSpec.StageGrammar.instDecidableEqSliceEvent.decEq._proof_2
 ConcreteSpec.StageGrammar.instDecidableEqSliceEvent.decEq._proof_3	
 ConcreteSpec.StageGrammar.instDecidableEqSliceEvent.decEq._proof_4	
 ConcreteSpec.StageGrammar.instDecidableEqSliceEvent.decEq._proof_5	
+ConcreteSpec.StageGrammar.instEquivBEqUInt64Constructive	
+ConcreteSpec.StageGrammar.instLawfulBEqUInt64Constructive	
+ConcreteSpec.StageGrammar.instReflBEqUInt64Constructive	
 ConcreteSpec.StageGrammar.parseArgs.eq_def	propext
 ConcreteSpec.StageGrammar.parseSymbol.eq_def	propext
 ConcreteSpec.StageGrammar.parseSymbol_firstUnsupportedHit_isSome	propext
@@ -5677,15 +5681,15 @@ ConcreteSpec.StageGrammar.parserView_wf_token_binds._proof_1_16	Quot.sound prope
 ConcreteSpec.StageGrammar.predictive_mono	propext
 ConcreteSpec.StageGrammar.predictive_to_derives	propext
 ConcreteSpec.StageGrammar.sliceGrammarStartShape	propext
-ConcreteSpec.StageGrammar.sliceParser_malformed_iff	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.sliceParser_nonExhausted	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.sliceParser_ok_derives_iff	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.sliceParser_ok_iff	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.sliceParser_rank_le	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.sliceParser_stepsPerToken_ge	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.sliceParser_steps_le	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.sliceParser_unsupported_iff	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.sliceParser_unsupported_ne_program	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.sliceParser_malformed_iff	Quot.sound propext
+ConcreteSpec.StageGrammar.sliceParser_nonExhausted	Quot.sound propext
+ConcreteSpec.StageGrammar.sliceParser_ok_derives_iff	Quot.sound propext
+ConcreteSpec.StageGrammar.sliceParser_ok_iff	Quot.sound propext
+ConcreteSpec.StageGrammar.sliceParser_rank_le	Quot.sound propext
+ConcreteSpec.StageGrammar.sliceParser_stepsPerToken_ge	Quot.sound propext
+ConcreteSpec.StageGrammar.sliceParser_steps_le	Quot.sound propext
+ConcreteSpec.StageGrammar.sliceParser_unsupported_iff	Quot.sound propext
+ConcreteSpec.StageGrammar.sliceParser_unsupported_ne_program	Quot.sound propext
 ConcreteSpec.StageGrammar.toSurface0Token.eq_1	propext
 ConcreteSpec.StageGrammar.toSurface0TokenValue._proof_1	propext
 ConcreteSpec.StageGrammar.toSurface0TokenValue._proof_2	
@@ -5706,9 +5710,9 @@ ConcreteSpec.StageGrammar.twoUnsupportedControlInput._proof_6	propext
 ConcreteSpec.StageGrammar.twoUnsupportedControlInput._proof_7	propext
 ConcreteSpec.StageGrammar.twoUnsupportedControlInput_wf	Quot.sound propext
 ConcreteSpec.StageGrammar.twoUnsupportedControlSlice._proof_1	
-ConcreteSpec.StageGrammar.verifyRun.eq_1	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.verifyRun.eq_2	Classical.choice Quot.sound propext
-ConcreteSpec.StageGrammar.verifyRun.eq_def	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.verifyRun.eq_1	
+ConcreteSpec.StageGrammar.verifyRun.eq_2	
+ConcreteSpec.StageGrammar.verifyRun.eq_def	
 ConcreteSpec.StageGrammar.zeroTokenStepBound.eq_1	
 ConcreteSpec.StageGrammar.zeroTokenStepBound.eq_2	
 ConcreteSpec.StageGrammar.zeroTokenStepBound.eq_def	
@@ -7982,7 +7986,7 @@ _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.Sp
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.SparseTree.allNodes.match_1.eq_2	
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.SparseTree.fill.match_1.eq_1	
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.SparseTree.fill.match_1.eq_2	
-_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.SparseTree.fill_getD_general	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.SparseTree.fill_getD_general	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.SparseTree.fill_getD_general._proof_1_10	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.SparseTree.fill_getD_general._proof_1_11	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.SparseTree.fill_getD_general._proof_1_12	Quot.sound propext
@@ -7991,19 +7995,19 @@ _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.Sp
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.SparseTree.fill_getD_general._proof_1_15	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.SparseTree.fill_getD_general._proof_1_16	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.SparseTree.fill_getD_general._proof_1_17	Quot.sound propext
-_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.SparseTree.fill_getD_outside	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.SparseTree.fill_getD_outside	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.SparseTree.fill_getD_outside._proof_1_4	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.SparseTree.fill_getD_outside._proof_1_8	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.SparseTree.fill_getD_outside._proof_1_9	Quot.sound propext
-_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.SparseTree.fill_replicate_getD	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.SparseTree.fill_replicate_getD	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.SparseTree.fill_replicate_getD._simp_1_1	propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.SparseTree.fill_size	propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.SparseTree.lookup.match_1.eq_1	
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.SparseTree.lookup.match_1.eq_2	
-_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.SparseTree.lookup_pos_of_allNodes	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.SparseTree.lookup_pos_of_allNodes	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.SparseTree.lookup_pos_of_allNodes._proof_1_10	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.array_getElemBang_eq_getD	propext
-_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.cells_of_check	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.cells_of_check	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.cells_of_check._proof_1_10	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.cells_of_check._proof_1_13	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.cells_of_check._proof_1_14	Quot.sound propext
@@ -8013,21 +8017,21 @@ _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.ce
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.cells_of_check._proof_1_8	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.cells_of_check._proof_1_9	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.cells_of_check._simp_1_12	propext
-_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.cells_of_check._simp_1_5	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.checkCellNode.eq_1	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.cells_of_check._simp_1_5	propext
+_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.checkCellNode.eq_1	propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.checkCellNode.match_1.eq_1	
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.checkCellNode.match_1.eq_2	
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.checkClosedColNode._sparseCasesOn_3.else_eq	propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.checkClosedColNode._sparseCasesOn_4.else_eq	propext
-_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.checkClosedColNode.eq_1	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.checkClosedColNode.eq_1	propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.checkClosedColNode.match_1.eq_1	
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.checkClosedColNode.match_1.eq_2	
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.checkClosedColNode.match_3.eq_1	propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.checkClosedColNode.match_3.eq_2	propext
-_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.checkClosedNonCol.eq_1	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.checkClosedNonCol.eq_1	
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.checkDescent.match_1.eq_1	
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.checkDescent.match_1.eq_2	
-_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.checkJustifiedNode.eq_1	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.checkJustifiedNode.eq_1	propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.checkJustifiedNode.match_1.eq_1	
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.checkJustifiedNode.match_1.eq_2	
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.checkJustifiedNode.match_1.eq_3	
@@ -8040,9 +8044,9 @@ _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.ch
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.checkJustifiedNode.match_3.eq_7	
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.checkJustifiedNode.match_3.eq_8	
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.checkJustifiedNode.match_3.eq_9	
-_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.checkPredNode.eq_1	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.clause_justified_of_rule	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.closed_of_check	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.checkPredNode.eq_1	
+_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.clause_justified_of_rule	Quot.sound propext
+_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.closed_of_check	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.closed_of_check._proof_1_12	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.closed_of_check._proof_1_13	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.closed_of_check._proof_1_14	Quot.sound propext
@@ -8063,8 +8067,9 @@ _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.cl
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.closed_of_check._proof_1_32	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.closed_of_check._proof_1_33	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.closed_of_check._proof_1_34	Quot.sound propext
-_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.closed_of_check._proof_1_35	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.closed_of_check._proof_1_35	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.closed_of_check._proof_1_36	Quot.sound propext
+_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.closed_of_check._proof_1_37	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.closed_of_check._simp_1_1	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.closed_of_check._simp_1_10	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.closed_of_check._simp_1_11	Quot.sound propext
@@ -8072,7 +8077,7 @@ _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.cl
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.closed_of_check._simp_1_7	propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.closed_of_check._simp_1_8	propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.closed_of_check._simp_1_9	propext
-_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.decodeFact_sound	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.decodeFact_sound	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.decodeFact_sound._proof_1_1	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.decodeFact_sound._proof_1_10	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.decodeFact_sound._proof_1_11	Quot.sound propext
@@ -8096,16 +8101,16 @@ _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.de
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.decodeFact_sound._proof_1_7	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.decodeFact_sound._proof_1_8	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.decodeFact_sound._proof_1_9	Quot.sound propext
-_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.descent_of_check	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.descent_of_check	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.earlyLayout_eq	
-_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.earlyProposalTree_bounded	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.earlyProposal_cell_check	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.earlyProposal_closedCol_check	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.earlyProposal_closedNonCol_check	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.earlyProposal_descent_check	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.earlyProposal_justified_check	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.earlyProposal_pred_check	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.earlyProposal_productive_check	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.earlyProposalTree_bounded	
+_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.earlyProposal_cell_check	propext
+_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.earlyProposal_closedCol_check	propext
+_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.earlyProposal_closedNonCol_check	
+_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.earlyProposal_descent_check	
+_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.earlyProposal_justified_check	propext
+_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.earlyProposal_pred_check	
+_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.earlyProposal_productive_check	
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.earlyRows_eq	
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.earlyStart_eq	
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.getD_setIfInBounds_eq	propext
@@ -8114,7 +8119,7 @@ _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.gr
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.grid_div_mod._proof_1_1	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.instReprSparseTree.repr.match_1.eq_1	
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.instReprSparseTree.repr.match_1.eq_2	
-_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.justified_of_check	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.justified_of_check	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.justified_of_check._proof_1_13	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.justified_of_check._proof_1_15	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.justified_of_check._proof_1_16	Quot.sound propext
@@ -8126,14 +8131,17 @@ _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.ju
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.justified_of_check._simp_1_14	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.justified_of_check._simp_1_7	propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.justified_of_check._simp_1_8	propext
-_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.predictsB.eq_1	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.productive_of_check	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.nat_beq_self	
+_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.nat_div_lt_of_lt_mul	Quot.sound propext
+_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.nat_div_lt_of_lt_mul._proof_1_3	Quot.sound propext
+_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.predictsB.eq_1	
+_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.productive_of_check	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.rowRule_mem_grammar	Quot.sound propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.symRule_mem_grammar	Quot.sound propext
-_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.u64_bne_zero_iff	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.u64_bne_zero_iff	propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.u64_bne_zero_iff._simp_1_1	propext
 _private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.u64_bne_zero_iff._simp_1_2	propext
-_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.u64_lt_bounds	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.EarlyProposal.0.ConcreteSpec.GrammarVerification.u64_lt_bounds	propext
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.AList.lookup.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.AList.lookup.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Exec.0.ConcreteSpec.Core.Exec.CleanAct.call?.match_1.eq_1	
@@ -8394,11 +8402,10 @@ _private.ConcreteSpec.Proofs.GrammarPrediction.0.ConcreteSpec.GrammarVerificatio
 _private.ConcreteSpec.Proofs.GrammarPrediction.0.ConcreteSpec.GrammarVerification.null_cons	propext
 _private.ConcreteSpec.Proofs.GrammarPrediction.0.ConcreteSpec.GrammarVerification.null_nil	
 _private.ConcreteSpec.Proofs.GrammarPrediction.0.ConcreteSpec.GrammarVerification.null_seq_complete	Quot.sound propext
-_private.ConcreteSpec.Proofs.GrammarPrediction.0.ConcreteSpec.GrammarVerification.null_snoc	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.GrammarPrediction.0.ConcreteSpec.GrammarVerification.null_snoc._proof_1_1	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.GrammarPrediction.0.ConcreteSpec.GrammarVerification.null_snoc	propext
 _private.ConcreteSpec.Proofs.GrammarPrediction.0.ConcreteSpec.GrammarVerification.nullable_complete	Quot.sound propext
 _private.ConcreteSpec.Proofs.GrammarPrediction.0.ConcreteSpec.GrammarVerification.occurrence_rule	Quot.sound propext
-_private.ConcreteSpec.Proofs.GrammarPrediction.0.ConcreteSpec.GrammarVerification.predict_correspondence	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.GrammarPrediction.0.ConcreteSpec.GrammarVerification.predict_correspondence	Quot.sound propext
 _private.ConcreteSpec.Proofs.GrammarPrediction.0.ConcreteSpec.GrammarVerification.predict_correspondence._proof_1_1	Quot.sound propext
 _private.ConcreteSpec.Proofs.GrammarPrediction.0.ConcreteSpec.GrammarVerification.prefix_steps	Quot.sound propext
 _private.ConcreteSpec.Proofs.GrammarPrediction.0.ConcreteSpec.GrammarVerification.row_at	Quot.sound propext
@@ -8419,7 +8426,7 @@ _private.ConcreteSpec.Proofs.GrammarPrediction.0.ConcreteSpec.GrammarVerificatio
 _private.ConcreteSpec.Proofs.GrammarPrediction.0.ConcreteSpec.GrammarVerification.row_rule	Quot.sound propext
 _private.ConcreteSpec.Proofs.GrammarPrediction.0.ConcreteSpec.GrammarVerification.suffix_null	Quot.sound propext
 _private.ConcreteSpec.Proofs.GrammarPrediction.0.ConcreteSpec.GrammarVerification.suffix_null._proof_1_1	Quot.sound propext
-_private.ConcreteSpec.Proofs.GrammarPrediction.0.ConcreteSpec.GrammarVerification.symbolRules_sound	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.GrammarPrediction.0.ConcreteSpec.GrammarVerification.symbolRules_sound	Quot.sound propext
 _private.ConcreteSpec.Proofs.GrammarPrediction.0.ConcreteSpec.GrammarVerification.symbolRules_sound._proof_1_1	Quot.sound propext
 _private.ConcreteSpec.Proofs.GrammarPrediction.0.ConcreteSpec.GrammarVerification.symbolRules_sound._simp_1_14	propext
 _private.ConcreteSpec.Proofs.GrammarPrediction.0.ConcreteSpec.GrammarVerification.symbolRules_sound._simp_1_15	Quot.sound propext
@@ -9033,14 +9040,14 @@ _private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.Slice1Inv.
 _private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.Slice1Inv._proof_3	propext
 _private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.Slice1Inv._proof_4	propext
 _private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.Slice1Inv._proof_5	propext
-_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.acceptedCells_decodeCells	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.acceptedCells_dimensions	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.acceptedCells_predicts	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.acceptedRank_acyclic	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.acceptedCells_decodeCells	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.acceptedCells_dimensions	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.acceptedCells_predicts	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.acceptedRank_acyclic	Quot.sound propext
 _private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.array_getElemBang_eq_getD_u64	propext
-_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.compiledTableVerifier_sound	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.compiledTableVerifier_sound._proof_1_2	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.compiledTableVerifier_sound._proof_1_3	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.compiledTableVerifier_sound	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.compiledTableVerifier_sound._proof_1_2	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.compiledTableVerifier_sound._proof_1_3	Quot.sound propext
 _private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.compiledTableVerifier_sound._simp_1_1	propext
 _private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeAtom0.match_1.eq_1	propext
 _private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeAtom0.match_1.eq_2	propext
@@ -9121,6 +9128,7 @@ _private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDeriv
 _private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice0_inv._proof_1_64	Quot.sound propext
 _private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice0_inv._proof_1_70	Quot.sound propext
 _private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice0_inv._proof_1_71	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice0_inv._proof_1_77	Quot.sound propext
 _private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice1_inv	Quot.sound propext
 _private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice1_inv._proof_1_23	Quot.sound propext
 _private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice1_inv._proof_1_28	Quot.sound propext
@@ -9142,10 +9150,14 @@ _private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDeriv
 _private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice1_inv._proof_1_74	Quot.sound propext
 _private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice1_inv._proof_1_75	Quot.sound propext
 _private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice1_inv._proof_1_76	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice1_inv._proof_1_84	Quot.sound propext
 _private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice1_inv._proof_1_9	Quot.sound propext
 _private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyIntegerSlices_radix_val	propext
 _private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyProd_slice0_cases	Quot.sound propext
 _private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyProd_slice1_cases	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyProductionFirstSlice.match_1.eq_1	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyProductionFirstSlice.match_1.eq_2	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyProductionFirstSlice_le	Quot.sound propext
 _private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyProduction_mem	Quot.sound propext
 _private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyRequired_decimal	propext
 _private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyRequired_eq_slice0_of_kind	propext
@@ -9637,22 +9649,21 @@ _private.ConcreteSpec.Proofs.Surface1.0.ConcreteSpec.Surface1.Witness.validPiece
 _private.ConcreteSpec.Proofs.Surface1.0.ConcreteSpec.Surface1.processResult.match_3.eq_1	propext
 _private.ConcreteSpec.Proofs.Surface1.0.ConcreteSpec.Surface1.processResult.match_3.eq_2	propext
 _private.ConcreteSpec.Proofs.Surface1.0.ConcreteSpec.Surface1.processResult.match_3.eq_3	propext
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.LocatedCode.left	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.LocatedCode.left._proof_1_1	Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.LocatedCode.left	propext
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.LocatedCode.right	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.LocatedCode.right._proof_1_1	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.RawGrammar.valid.match_1.eq_1	
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.RawGrammar.valid.match_1.eq_2	
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.Steps.brecOn	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.Steps.run	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.Steps.trans	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.Steps.brecOn	
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.Steps.run	propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.Steps.trans	
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.Test.eval.match_1.eq_1	
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.Test.eval.match_1.eq_2	
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.Test.eval.match_1.eq_3	
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.Test.eval.match_1.eq_4	
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.Test.eval.match_1.eq_5	
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.Test.eval.match_1.eq_6	
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.Test.eval_agrees	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.Test.eval_agrees	propext
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.address_injective	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.address_injective._proof_1_1	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.address_injective._proof_1_10	Quot.sound propext
@@ -9723,65 +9734,67 @@ _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.bl
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.block.eq_def	
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.block.match_1.eq_1	
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.block.match_1.eq_2	
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.block_correct	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.block_correct	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.block_correct._proof_1_1	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.block_correct._proof_1_3	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.block_correct._proof_1_4	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.block_correct._simp_1_2	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.block_length	propext
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.cellChecks_iff	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.cellChecks_iff._proof_1_18	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.cellChecks_iff	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.cellChecks_iff._simp_1_1	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.cellChecks_iff._simp_1_16	propext
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.cellChecks_iff._simp_1_17	propext
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.cellChecks_iff._simp_1_2	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.cellChecks_iff._simp_1_3	propext
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.cellChecks_iff._simp_1_4	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.cellChecks_iff._simp_1_5	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.cellChecks_iff._simp_1_6	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.cellChecks_iff._simp_1_4	propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.cellChecks_iff._simp_1_5	propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.cellChecks_iff._simp_1_6	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.cellChecks_iff._simp_1_7	Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.cellChecks_iff._simp_1_8	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.cellChecks_iff._simp_1_8	propext
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.code_length	propext
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.compileTest_correct	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.compileTest_correct	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.compileTest_correct._proof_1_19	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.compileTest_correct._proof_1_20	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.compileTest_correct._proof_1_21	Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.compileTests_measured	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.compileTests_measured	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.compileTests_measured._proof_1_16	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.compileTests_measured._proof_1_17	Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.compileTests_measured._proof_1_18	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.compileTests_measured._proof_1_18	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.compileTests_measured._simp_1_2	propext
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.descentChecks_iff	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.descentChecks_iff	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.descentChecks_iff._simp_1_2	Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.descentChecks_iff._simp_1_4	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.descentChecks_iff._simp_1_5	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.descentChecks_iff._simp_1_4	propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.descentChecks_iff._simp_1_5	propext
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.emit_eq	Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.eval_all	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.eval_all	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.eval_all._simp_1_8	propext
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.eval_any	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.eval_any	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.eval_any._simp_1_8	propext
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.eval_any_map	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.eval_closed	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.eval_closed._simp_1_1	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.eval_closed._simp_1_2	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.eval_closed._simp_1_3	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.eval_explanations	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.eval_implies	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.eval_justification	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.eval_justification._proof_1_11	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.eval_any_map	Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.eval_closed	Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.eval_closed._simp_1_1	propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.eval_closed._simp_1_2	Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.eval_closed._simp_1_3	propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.eval_explanations	Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.eval_implies	propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.eval_justification	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.eval_justification._simp_1_10	propext
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.eval_justification._simp_1_8	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.eval_justification._simp_1_9	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.eval_positive	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.eval_justification._simp_1_11	propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.eval_justification._simp_1_8	Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.eval_justification._simp_1_9	Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.eval_positive	propext
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.eval_positive._simp_1_8	propext
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.eval_prediction	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.eval_prediction._simp_1_9	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.eval_prediction	propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.eval_prediction._simp_1_9	propext
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.grid_unique	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.grid_unique._proof_1_1	Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.mem_factAddresses	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.mem_factAddresses._proof_1_1	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.mem_factAddresses._proof_1_2	Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.mem_factAddresses	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.mem_factAddresses._proof_1_3	Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.mem_factAddresses._proof_1_4	Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.mem_factAddresses._proof_1_5	Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.mem_factAddresses._proof_1_6	Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.mem_factAddresses._simp_1_1	Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.mem_factAddresses._simp_1_2	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.provable_map	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.GrammarVerification.provable_unmap	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifier.0.ConcreteSpec.StageGrammar.VerifyState.step.match_1.eq_1	
@@ -9817,17 +9830,18 @@ _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerificat
 _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.Test.width.match_1.eq_5	
 _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.Test.width.match_1.eq_6	
 _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.clause_bounds	Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.clause_width	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.clause_width._proof_1_12	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.clause_width	Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.clause_width._proof_1_12	Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.clause_width._proof_1_13	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.combined_bounds	
-_private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.combined_width	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.combined_width._proof_1_7	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.combined_width	Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.combined_width._proof_1_7	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.cost.eq_1	
 _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.cost_fixed	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.cost_linear	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.cost_linear._proof_1_2	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.cost_mono	
-_private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.facts_width	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.facts_width	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.facts_width._proof_1_10	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.facts_width._proof_1_5	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.facts_width._proof_1_7	Quot.sound propext
@@ -9835,20 +9849,7 @@ _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerificat
 _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.facts_width._simp_1_4	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.flat_cost	propext
 _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.flat_count	propext
-_private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.fold_group_mem	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.fold_group_mem._proof_1_1	Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.fold_group_mem._proof_1_10	propext
-_private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.fold_group_mem._proof_1_11	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.fold_group_mem._proof_1_12	Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.fold_group_mem._proof_1_13	Classical.choice Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.fold_group_mem._proof_1_2	propext
-_private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.fold_group_mem._proof_1_3	propext
-_private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.fold_group_mem._proof_1_4	propext
-_private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.fold_group_mem._proof_1_5	propext
-_private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.fold_group_mem._proof_1_6	propext
-_private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.fold_group_mem._proof_1_7	propext
-_private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.fold_group_mem._proof_1_8	propext
-_private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.fold_group_mem._proof_1_9	propext
+_private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.fold_group_mem	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.group_count	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.group_count._proof_1_4	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.group_count._proof_1_5	Quot.sound propext
@@ -9865,9 +9866,12 @@ _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerificat
 _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.instReprFact.repr.match_1.eq_8	
 _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.isFact_lt	propext
 _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.mapped_width	propext
+_private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.nodup_range'_constructive	Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.nodup_range'_constructive._proof_1_1	Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.nodup_range_constructive	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.prediction_bounds	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.prediction_bounds._proof_1_1	Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.predictions_width	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.predictions_width	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.predictions_width._proof_1_1	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.predictions_width._proof_1_2	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.predictions_width._proof_1_3	Quot.sound propext
@@ -9881,12 +9885,10 @@ _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerificat
 _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.rule_count._proof_1_11	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.rule_count._proof_1_4	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.rule_count._proof_1_5	Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.rules_fit	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.rules_fit	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.rules_fit._proof_1_16	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.rules_fit._proof_1_22	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.rules_fit._proof_1_23	Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.rules_fit._proof_1_24	Quot.sound propext
-_private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.rules_fit._proof_1_25	Classical.choice Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.rules_fit._simp_1_18	Quot.sound propext
 _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.rules_fit._simp_1_19	propext
 _private.ConcreteSpec.Proofs.TableVerifierBounds.0.ConcreteSpec.GrammarVerification.rules_fit._simp_1_20	Quot.sound propext
@@ -10140,8 +10142,8 @@ _private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.Utf8.Encodes.match_1
 _private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.Utf8.Encodes.match_1.eq_4	propext
 _private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.Utf8.Encodes.match_1.eq_5	propext
 _private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.fixed.congr_simp	
-_private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.earlyVerification._proof_1	Classical.choice Quot.sound propext
-_private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.earlyVerification._proof_2	Classical.choice Quot.sound propext
+_private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.earlyVerification._proof_1	Quot.sound propext
+_private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.earlyVerification._proof_2	Quot.sound propext
 _private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.Action.cost.match_1.eq_1	propext
 _private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.Action.cost.match_1.eq_10	propext
 _private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.Action.cost.match_1.eq_11	propext
@@ -10172,6 +10174,12 @@ _private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.Action.eval.m
 _private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.Action.eval.match_9.eq_1	propext
 _private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.SharedGrammar.rawGrammar.match_1.eq_1	
 _private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.SharedGrammar.rawGrammar.match_1.eq_2	
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.array_extract_loop_getElem_zero	Quot.sound propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.array_extract_loop_getElem_zero._proof_1_3	Quot.sound propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.array_extract_loop_getElem_zero._proof_1_4	Quot.sound propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.array_extract_loop_getElem_zero._proof_1_5	Quot.sound propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.array_extract_loop_getElem_zero._proof_1_6	Quot.sound propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.array_extract_loop_getElem_zero._proof_1_7	Quot.sound propext
 _private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.foldl_production_size	Quot.sound propext
 _private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.foldl_production_size._proof_1_1	Quot.sound propext
 _private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.parseArgs.match_1.eq_1	propext

@@ -186,10 +186,12 @@ theorem lowerUnchecked_sound {slice : Slice} {profile : Profile} (passes : Passe
   Concrete.Core.LowerMIR.lowerUnchecked_sound passes implementation
 
 -- `RoutePipeline.mk` is private to `Concrete.Interfaces.Pipeline` and cannot be forged outside it.
-example (_p : Pipeline Source (BackendOutput ⟨.lcb, .x86_64Linux, 8, 4096⟩)) : True := by
-  fail_if_success
-    let _ : RoutePipeline slice0 ⟨.lcb, .x86_64Linux, 8, 4096⟩ .checked := RoutePipeline.mk _p
-  trivial
+/--
+error: Unknown constant `Concrete.Interfaces.RoutePipeline.mk`
+-/
+#guard_msgs (error, drop info) in
+#check fun (p : Pipeline Source (BackendOutput ⟨.lcb, .x86_64Linux, 8, 4096⟩)) =>
+  (RoutePipeline.mk p : RoutePipeline slice0 ⟨.lcb, .x86_64Linux, 8, 4096⟩ .checked)
 
 section LCB
 

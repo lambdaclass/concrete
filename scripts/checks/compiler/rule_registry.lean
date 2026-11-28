@@ -42,7 +42,7 @@ example : ((Refusal.manifest .schemaPending).diagnosticAt Manifest.sizeRule).isN
   by decide
 
 -- The changed judgments have new live revisions. Older diagnostics remain identifiable.
-example : Slice0Rules.AdmittedProduction (.decls, []) ∧
+example : Slice0Rules.AdmittedProduction .endDecls ∧
     ¬ Manifest.DepthAccepted "[a.b.c.d.e.f.g.h.i.j.k.l.m.n.o.p]\nx = \"oops" := by
   cbv <;> decide
 
