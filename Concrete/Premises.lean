@@ -27,17 +27,16 @@ theorem Backend.LLVM.Width.ofCore_bits (t : ConcreteSpec.Core.IntTy) :
     (Backend.LLVM.Width.ofCore t).bits = t.bits := by
   cases t <;> rfl
 
-open ConcreteSpec.Surface0 in
-structure FrontendPremises where
-  parse : ∀ (stream : ConcreteSpec.StageInterface.TokenStream) (ast : Program),
-    stream.source.slice = ConcreteSpec.StageInterface.slice0 →
-    Parse.parseStream stream = .ok ast → Derives (Parse.surfaceTokens stream) ast
+/-- Open frontend premise (`P_elab`). `P_parse` is retired and proved directly by
+`Parse.parseStream_derives` / `FrontendPremises.parse_discharged`. -/
+structure FrontendPremises : Prop where
   elaborate : ∀ purpose ast out, Admission.prepareParsed purpose ast = .ok out →
     let p := Core.toCore out.program
     Elab.eval ast = Core.run p (p.body.length + 1)
 
-/-- The Slice 0 parser premise is discharged by the certified `sliceParser slice0`
-and frozen `Elab.surfaceProgram` cutover (`Parse.parseStream_derives`). -/
+/-- The retired Slice 0 parser obligation (`P_parse`), proved directly from the
+certified `sliceParser slice0` and frozen `Elab.surfaceProgram` cutover
+(`Parse.parseStream_derives`). -/
 theorem FrontendPremises.parse_discharged
     (stream : ConcreteSpec.StageInterface.TokenStream)
     (ast : ConcreteSpec.Surface0.Program)
@@ -144,8 +143,6 @@ structure Premise where
 
 /-- The open premises for slice 0, in the README's order. -/
 def all : List Premise := [
-  ⟨"P_parse", .implementation, "the generic table-parser theorem",
-    "every tree the parser returns for a token stream is one the grammar derives from it (discharged for slice 0 by Parse.parseStream_derives and Parse.driver_registry_parse_parity via sliceParser slice0)"⟩,
   ⟨"P_elab", .implementation, "ANF and resolution preservation",
     "successful elaboration preserves the source AST evaluator's outcome in Core"⟩,
   ⟨"P_print", .implementation, "an LLVM-IR semantics; not planned for slice 0",
@@ -167,14 +164,25 @@ def all : List Premise := [
 /-- The headline theorems, whose axioms the golden records. -/
 def theorems : List Lean.Name := [
   ``ConcreteSpec.Surface0.grammar0_ll1,
+  -- Choice-free parser, refusal, and lexer-parametric frontend theorems.
   ``Concrete.Refusal.ofParseRefusal_diagnosticAt_iff,
   ``Concrete.Parse.parseStreamFor_derives,
   ``Concrete.Parse.parseStreamFor_parity,
+  ``Concrete.Parse.parseStreamFor_parity_wf,
   ``Concrete.Parse.parserEngine_run_error_of_wf,
-  ``Concrete.Parse.driver_registry_parse_parity,
+  ``Concrete.Parse.parseStreamWithRefusalFor_ne_error_none,
+  ``Concrete.Parse.parseStreamFor_exhaustive,
+  ``Concrete.Parse.parseWith_derives,
+  ``Concrete.Parse.parseWith_parity,
+  -- Registered `sliceParser slice0` stream theorems (sole choice dependency is `sliceParser`).
   ``Concrete.Parse.parseStream_derives,
-  ``Concrete.Parse.parseForDriver_derives,
+  ``Concrete.Parse.parseStream_parity,
+  ``Concrete.Parse.parseStreamWithRefusal_ne_error_none,
+  ``Concrete.Parse.parseStream_exhaustive,
   ``Concrete.FrontendPremises.parse_discharged,
+  -- Whole-driver lex+parse compositions (compose `Lex.lexStream` with `sliceParser slice0`).
+  ``Concrete.Parse.driver_registry_parse_parity,
+  ``Concrete.Parse.parseForDriver_derives,
   ``Concrete.Lex.lex_correct,
   ``Concrete.Lex.lexLossless_correct,
   ``Concrete.Lex.lexLossless_pieces,

@@ -68,11 +68,17 @@ and frozen `Elab.surfaceProgram`. -/
 def parseStream (stream : TokenStream) : Except Refusal Program :=
   parseStreamFor (sliceParser slice0) stream
 
+/-- Compose an arbitrary lexer and certified early parser engine into a front-end
+driver parser. -/
+def parseWith (lexFn : Source → Except Concrete.Interfaces.LexRefusal TokenStream)
+    (parser : ParserEngine earlySharedGrammar) (source : Source) : Except Refusal Program := do
+  let stream ← (lexFn source).mapError ofLexRefusal
+  parseStreamFor parser stream
+
 /-- Driver front-end parser: lexes `source` through `Lex.lexStream`, runs
 `sliceParser slice0`, and decodes through the frozen `Elab.surfaceProgram`. -/
-def parseForDriver (source : Source) : Except Refusal Program := do
-  let stream ← (Concrete.Lex.lexStream source).mapError ofLexRefusal
-  parseStream stream
+def parseForDriver (source : Source) : Except Refusal Program :=
+  parseWith Concrete.Lex.lexStream (sliceParser slice0) source
 
 /-- Build a single-file Slice 0 `Source` using the canonical `main.con` path. -/
 def sourceOfBytes (bytes : ByteArray) : Source :=
@@ -388,6 +394,198 @@ theorem parseStreamFor_parity (parser : ParserEngine earlySharedGrammar)
       rw [hraw]
     exact ⟨hraw, hdrv⟩
 
+/-- Whenever a certified early parser does not exhaust fuel on a Slice 0 token
+stream, `parseStreamWithRefusalFor` never takes its `.error none` fallback
+branch: every accepted tree decodes via `Elab.surfaceProgram`, and every other
+run returns a typed `ParseRefusal`. -/
+theorem parseStreamWithRefusalFor_ne_error_none (parser : ParserEngine earlySharedGrammar)
+    (stream : TokenStream) (hslice : stream.source.slice = slice0)
+    (hnonExh : (parser.run stream.parserView).2.isSome = true) :
+    parseStreamWithRefusalFor parser stream ≠ .error none := by
+  unfold parseStreamWithRefusalFor
+  cases hrun : (parser.run stream.parserView).2 with
+  | none => rw [hrun] at hnonExh; cases hnonExh
+  | some res =>
+    cases res with
+    | error refusal => intro h; cases h
+    | ok parsed =>
+      obtain ⟨_, _, tree, prog, htree, hdec, _, _, _, _⟩ :=
+        earlyParser_slice0_decodes parser stream.parserView parsed hslice hrun
+      dsimp only
+      rw [htree]
+      have hsurfDec : Concrete.Elab.surfaceProgram tree = some prog := hdec
+      dsimp only
+      rw [hsurfDec]
+      intro h; cases h
+
+/-- Every Slice 0 run of `parseStreamFor` on a non-exhausting certified early
+parser either decodes a `Surface0.Derives` program or transports a typed
+`ParseRefusal` (never taking the `.error none` branch). -/
+theorem parseStreamFor_exhaustive (parser : ParserEngine earlySharedGrammar)
+    (stream : TokenStream) (hslice : stream.source.slice = slice0)
+    (hnonExh : (parser.run stream.parserView).2.isSome = true) :
+    (∃ prog, parseStreamFor parser stream = .ok prog ∧ Derives (surfaceTokens stream) prog) ∨
+    (∃ refusal, (parser.run stream.parserView).2 = some (.error refusal) ∧
+      parseStreamFor parser stream = .error (Refusal.ofParseRefusal refusal)) := by
+  cases hrun : (parser.run stream.parserView).2 with
+  | none => rw [hrun] at hnonExh; cases hnonExh
+  | some res =>
+    cases res with
+    | ok parsed =>
+      obtain ⟨_, prog, _, _, _, hdrv, hsurf⟩ :=
+        (parseStreamFor_parity parser stream hslice).1 parsed hrun
+      exact .inl ⟨prog, hdrv, hsurf⟩
+    | error refusal =>
+      obtain ⟨_, hdrv⟩ := (parseStreamFor_parity parser stream hslice).2 refusal hrun
+      exact .inr ⟨refusal, rfl, hdrv⟩
+
+/-- Polymorphic stream-level parity on a coordinate-valid Slice 0 `TokenStream`,
+combining `parseStreamFor_parity` with `parserEngine_run_error_of_wf`. -/
+theorem parseStreamFor_parity_wf (parser : ParserEngine earlySharedGrammar)
+    (stream : TokenStream) (hslice : stream.source.slice = slice0)
+    (hwf : stream.parserView.WF)
+    (hmal : parser.malformedRule = earlyMalformedRule)
+    (hprod : parser.unsupportedProductionRule = earlyUnsupportedProductionRule)
+    (hlit : parser.unsupportedLiteralRule = earlyUnsupportedLiteralRule) :
+    (∀ parsed, (parser.run stream.parserView).2 = some (.ok parsed) →
+      ∃ tree prog, parsed.tree = .inl tree ∧
+        Concrete.Elab.surfaceProgram tree = some prog ∧
+        parseStreamWithRefusalFor parser stream = .ok prog ∧
+        parseStreamFor parser stream = .ok prog ∧
+        Derives (surfaceTokens stream) prog) ∧
+    (∀ refusal, (parser.run stream.parserView).2 = some (.error refusal) →
+      parseStreamWithRefusalFor parser stream = .error (some refusal) ∧
+      parseStreamFor parser stream = .error (Refusal.ofParseRefusal refusal) ∧
+      ∃ cause, RefusalCause.ofParseRefusal? refusal = some cause ∧
+        parseStreamFor parser stream = .error (.source cause) ∧
+        cause.citation = refusal.registeredRule ∧
+        cause.primary = refusal.span) := by
+  constructor
+  · exact (parseStreamFor_parity parser stream hslice).1
+  · intro refusal hrun
+    obtain ⟨hraw, hdrv⟩ := (parseStreamFor_parity parser stream hslice).2 refusal hrun
+    obtain ⟨cause, hcause, href, hcit, hspan⟩ :=
+      parserEngine_run_error_of_wf parser stream.parserView refusal hwf hrun hmal hprod hlit
+    exact ⟨hraw, hdrv, cause, hcause, by rw [hdrv, href], hcit, hspan⟩
+
+/-- Polymorphic lex+parse soundness for `parseWith`. -/
+theorem parseWith_derives
+    (lexFn : Source → Except Concrete.Interfaces.LexRefusal TokenStream)
+    (parser : ParserEngine earlySharedGrammar)
+    {source : Source} {ast : Program}
+    (hslice : source.slice = slice0)
+    (hsrc : ∀ stream, lexFn source = .ok stream → stream.source = source)
+    (hok : parseWith lexFn parser source = .ok ast) :
+    ∃ stream, lexFn source = .ok stream ∧
+      parseStreamFor parser stream = .ok ast ∧
+      Derives (surfaceTokens stream) ast := by
+  unfold parseWith at hok
+  cases hlex : lexFn source with
+  | error e => simp [hlex, Except.mapError, Bind.bind, Except.bind] at hok
+  | ok stream =>
+    simp only [hlex, Except.mapError, Bind.bind, Except.bind] at hok
+    have hstreamSlice : stream.source.slice = slice0 := by
+      rw [hsrc stream hlex, hslice]
+    exact ⟨stream, rfl, hok, parseStreamFor_derives parser hstreamSlice hok⟩
+
+/-- Polymorphic lex+parse parity for `parseWith`. -/
+theorem parseWith_parity
+    (lexFn : Source → Except Concrete.Interfaces.LexRefusal TokenStream)
+    (parser : ParserEngine earlySharedGrammar)
+    (source : Source) (hslice : source.slice = slice0)
+    (hsrc : ∀ stream, lexFn source = .ok stream → stream.source = source)
+    (hwf : ∀ stream, lexFn source = .ok stream → stream.parserView.WF)
+    (hmal : parser.malformedRule = earlyMalformedRule)
+    (hprod : parser.unsupportedProductionRule = earlyUnsupportedProductionRule)
+    (hlit : parser.unsupportedLiteralRule = earlyUnsupportedLiteralRule) :
+    (∀ lexErr, lexFn source = .error lexErr →
+      parseWith lexFn parser source = .error (ofLexRefusal lexErr)) ∧
+    (∀ stream parsed, lexFn source = .ok stream →
+      (parser.run stream.parserView).2 = some (.ok parsed) →
+      ∃ tree prog, parsed.tree = .inl tree ∧
+        Concrete.Elab.surfaceProgram tree = some prog ∧
+        parseStreamWithRefusalFor parser stream = .ok prog ∧
+        parseStreamFor parser stream = .ok prog ∧
+        parseWith lexFn parser source = .ok prog ∧
+        Derives (surfaceTokens stream) prog) ∧
+    (∀ stream refusal, lexFn source = .ok stream →
+      (parser.run stream.parserView).2 = some (.error refusal) →
+      parseStreamWithRefusalFor parser stream = .error (some refusal) ∧
+      parseStreamFor parser stream = .error (Refusal.ofParseRefusal refusal) ∧
+      parseWith lexFn parser source = .error (Refusal.ofParseRefusal refusal) ∧
+      ∃ cause, RefusalCause.ofParseRefusal? refusal = some cause ∧
+        parseWith lexFn parser source = .error (.source cause) ∧
+        cause.citation = refusal.registeredRule ∧
+        cause.primary = refusal.span) := by
+  refine ⟨?_, ?_, ?_⟩
+  · intro lexErr hlex
+    unfold parseWith
+    simp only [hlex, Except.mapError, Bind.bind, Except.bind]
+  · intro stream parsed hlex hrun
+    have hstreamSlice : stream.source.slice = slice0 := by
+      rw [hsrc stream hlex, hslice]
+    obtain ⟨tree, prog, htree, hdec, hraw, hdrv, hsurf⟩ :=
+      (parseStreamFor_parity_wf parser stream hstreamSlice (hwf stream hlex) hmal hprod hlit).1 parsed hrun
+    have hfor : parseWith lexFn parser source = .ok prog := by
+      unfold parseWith
+      simp only [hlex, Except.mapError, Bind.bind, Except.bind]
+      exact hdrv
+    exact ⟨tree, prog, htree, hdec, hraw, hdrv, hfor, hsurf⟩
+  · intro stream refusal hlex hrun
+    have hstreamSlice : stream.source.slice = slice0 := by
+      rw [hsrc stream hlex, hslice]
+    obtain ⟨hraw, hdrv, cause, hcause, hsrcErr, hcit, hspan⟩ :=
+      (parseStreamFor_parity_wf parser stream hstreamSlice (hwf stream hlex) hmal hprod hlit).2 refusal hrun
+    have hfor : parseWith lexFn parser source = .error (Refusal.ofParseRefusal refusal) := by
+      unfold parseWith
+      simp only [hlex, Except.mapError, Bind.bind, Except.bind]
+      exact hdrv
+    have hforSrc : parseWith lexFn parser source = .error (.source cause) := by
+      unfold parseWith
+      simp only [hlex, Except.mapError, Bind.bind, Except.bind]
+      exact hsrcErr
+    exact ⟨hraw, hdrv, hfor, cause, hcause, hforSrc, hcit, hspan⟩
+
+/-- The driver's `.error none` fallback branch (`parseStreamFor` / `parseStream`)
+is unreachable for `sliceParser slice0` on every Slice 0 token stream:
+`sliceParser_nonExhausted` rules out fuel exhaustion and
+`earlyParser_slice0_decodes` rules out CST decode failure. -/
+theorem parseStreamWithRefusal_ne_error_none (stream : TokenStream)
+    (hslice : stream.source.slice = slice0) :
+    parseStreamWithRefusal stream ≠ .error none :=
+  parseStreamWithRefusalFor_ne_error_none (sliceParser slice0) stream hslice
+    (sliceParser_nonExhausted slice0 stream.parserView)
+
+/-- Every Slice 0 run of `parseStream` either decodes a `Surface0.Derives`
+program or transports a typed `ParseRefusal`; the `.error none` fallback branch
+is unreachable for `sliceParser slice0`. -/
+theorem parseStream_exhaustive (stream : TokenStream)
+    (hslice : stream.source.slice = slice0) :
+    (∃ prog, parseStream stream = .ok prog ∧ Derives (surfaceTokens stream) prog) ∨
+    (∃ refusal, ((sliceParser slice0).run stream.parserView).2 = some (.error refusal) ∧
+      parseStream stream = .error (Refusal.ofParseRefusal refusal)) :=
+  parseStreamFor_exhaustive (sliceParser slice0) stream hslice
+    (sliceParser_nonExhausted slice0 stream.parserView)
+
+/-- Exact stream-level parity for `sliceParser slice0` on every coordinate-valid
+Slice 0 `TokenStream` (independent of lexer axioms). -/
+theorem parseStream_parity (stream : TokenStream)
+    (hslice : stream.source.slice = slice0) (hwf : stream.parserView.WF) :
+    (∀ parsed, ((sliceParser slice0).run stream.parserView).2 = some (.ok parsed) →
+      ∃ tree prog, parsed.tree = .inl tree ∧
+        Concrete.Elab.surfaceProgram tree = some prog ∧
+        parseStreamWithRefusal stream = .ok prog ∧
+        parseStream stream = .ok prog ∧
+        Derives (surfaceTokens stream) prog) ∧
+    (∀ refusal, ((sliceParser slice0).run stream.parserView).2 = some (.error refusal) →
+      parseStreamWithRefusal stream = .error (some refusal) ∧
+      parseStream stream = .error (Refusal.ofParseRefusal refusal) ∧
+      ∃ cause, RefusalCause.ofParseRefusal? refusal = some cause ∧
+        parseStream stream = .error (.source cause) ∧
+        cause.citation = refusal.registeredRule ∧
+        cause.primary = refusal.span) :=
+  parseStreamFor_parity_wf (sliceParser slice0) stream hslice hwf rfl rfl rfl
+
 /-- Exact driver-to-registry parser parity for Slice 0: `parseForDriver` and the
 registered front end (`Lex.lexStream` → `sliceParser slice0` → `Elab.surfaceProgram`)
 produce the identical `Surface0.Program` on success and the identical `ParseRefusal`
@@ -411,34 +609,11 @@ theorem driver_registry_parse_parity (source : Source) (hslice : source.slice = 
       ∃ cause, RefusalCause.ofParseRefusal? refusal = some cause ∧
         parseForDriver source = .error (.source cause) ∧
         cause.citation = refusal.registeredRule ∧
-        cause.primary = refusal.span) := by
-  refine ⟨?_, ?_, ?_⟩
-  · intro lexErr hlex
-    unfold parseForDriver
-    simp only [hlex, Except.mapError, Bind.bind, Except.bind]
-  · intro stream parsed hlex hrun
-    have hstreamSlice : stream.source.slice = slice0 := by
-      rw [lexStream_source_eq hlex, hslice]
-    obtain ⟨tree, prog, htree, hdec, hraw, hdrv, hsurf⟩ :=
-      (parseStreamFor_parity (sliceParser slice0) stream hstreamSlice).1 parsed hrun
-    have hfor : parseForDriver source = .ok prog := by
-      unfold parseForDriver
-      simp only [hlex, Except.mapError, Bind.bind, Except.bind]
-      exact hdrv
-    exact ⟨tree, prog, htree, hdec, hraw, hdrv, hfor, hsurf⟩
-  · intro stream refusal hlex hrun
-    have hstreamSlice : stream.source.slice = slice0 := by
-      rw [lexStream_source_eq hlex, hslice]
-    obtain ⟨hraw, hdrv⟩ :=
-      (parseStreamFor_parity (sliceParser slice0) stream hstreamSlice).2 refusal hrun
-    have hfor : parseForDriver source = .error (Refusal.ofParseRefusal refusal) := by
-      unfold parseForDriver
-      simp only [hlex, Except.mapError, Bind.bind, Except.bind]
-      exact hdrv
-    have hwf : stream.parserView.WF := (Concrete.Lex.Bridge.lexStream_lexes hlex).2.1
-    obtain ⟨cause, hcause, href, hcit, hspan⟩ :=
-      parserEngine_run_error_of_wf (sliceParser slice0) stream.parserView refusal hwf hrun rfl rfl rfl
-    exact ⟨hraw, hdrv, hfor, cause, hcause, by rw [hfor, href], hcit, hspan⟩
+        cause.primary = refusal.span) :=
+  parseWith_parity Concrete.Lex.lexStream (sliceParser slice0) source hslice
+    (fun _ hlex => lexStream_source_eq hlex)
+    (fun _ hlex => (Concrete.Lex.Bridge.lexStream_lexes hlex).2.1)
+    rfl rfl rfl
 
 /-- Every Slice 0 program returned by `parseStream` is derived by `Surface0.Derives`. -/
 theorem parseStream_derives {stream : TokenStream} {ast : Program}
@@ -452,15 +627,9 @@ theorem parseForDriver_derives {source : Source} {ast : Program}
     (hslice : source.slice = slice0) (hok : parseForDriver source = .ok ast) :
     ∃ stream, Concrete.Lex.lexStream source = .ok stream ∧
       parseStream stream = .ok ast ∧
-      Derives (surfaceTokens stream) ast := by
-  unfold parseForDriver at hok
-  cases hlex : Concrete.Lex.lexStream source with
-  | error e => simp [hlex, Except.mapError, Bind.bind, Except.bind] at hok
-  | ok stream =>
-    simp only [hlex, Except.mapError, Bind.bind, Except.bind] at hok
-    have hstreamSlice : stream.source.slice = slice0 := by
-      rw [lexStream_source_eq hlex, hslice]
-    exact ⟨stream, rfl, hok, parseStream_derives hstreamSlice hok⟩
+      Derives (surfaceTokens stream) ast :=
+  parseWith_derives Concrete.Lex.lexStream (sliceParser slice0) hslice
+    (fun _ hlex => lexStream_source_eq hlex) hok
 
 /-! ## Proof-only sparse-lookup evaluation equivalence
 
@@ -719,7 +888,7 @@ theorem parseStream_eq_sparse (stream : TokenStream) :
 
 theorem parseForDriver_eq_sparse (source : Source) :
     parseForDriver source = parseForDriverSparse source := by
-  unfold parseForDriver parseForDriverSparse
+  unfold parseForDriver parseWith parseForDriverSparse
   cases Concrete.Lex.lexStream source with
   | error _ => rfl
   | ok stream =>

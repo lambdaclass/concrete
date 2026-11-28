@@ -849,7 +849,7 @@ private def bindingSpan : Span := ⟨0, 1, 1, 1, ⟨0⟩⟩
 private def parseBinderExample (source : String) : Except Refusal Program :=
   Parse.parseBytes source.toUTF8
 
-private theorem refusesFirstBinderName {ast : Program} {name : String}
+private theorem refusesFirstBinderName (name : String) {ast : Program}
     (hhead : ((checkBody ast.body).toOption.bind fun p => p.1.head?.map Binding.name) = some name)
     (illegal : ¬ BinderLegal [] name) (core : Elab.Output) : ¬ Elaborates .admission ast core := by
   intro h
@@ -860,24 +860,24 @@ private theorem refusesFirstBinderName {ast : Program} {name : String}
   | atom hlegal _ _ => cases Option.some.inj hhead; exact illegal hlegal
   | operation hlegal _ _ _ => cases Option.some.inj hhead; exact illegal hlegal
 
-private theorem refusesDuplicatePair {ast : Program} {name : String}
+private theorem refusesDuplicatePair (name : String) {ast : Program}
     (hpair : ((checkBody ast.body).toOption.map fun p => p.1.map Binding.name) = some [name, name])
     (core : Elab.Output) : ¬ Elaborates .admission ast core := by
   intro h
   obtain ⟨_, _, bindings, _, _, _, _, _, _, checked, lowered, _⟩ := h
   rw [checked] at hpair
+  have hnames : bindings.map Binding.name = [name, name] := Option.some.inj hpair
   cases bindings with
-  | nil => cases hpair
+  | nil => cases hnames
   | cons first rest =>
     cases rest with
-    | nil => cases hpair
+    | nil => cases (List.cons.inj hnames).2
     | cons second tail =>
       cases tail with
-      | cons _ _ => cases Option.some.inj hpair
+      | cons _ _ => cases (List.cons.inj (List.cons.inj hnames).2).2
       | nil =>
-        have heq := Option.some.inj hpair
-        have h1 : first.name = name := (List.cons.inj heq).1
-        have h2 : second.name = name := (List.cons.inj (List.cons.inj heq).2).1
+        have h1 : first.name = name := (List.cons.inj hnames).1
+        have h2 : second.name = name := (List.cons.inj (List.cons.inj hnames).2).1
         have member : second.name ∈ [first.name] := by rw [h1, h2]; exact List.Mem.head _
         cases lowered with
         | atom _ _ restLowered => exact restLowered.headLegal.2.2 member
@@ -1123,21 +1123,17 @@ example (t : ConcreteSpec.Surface0.TokenValue) (integer : t.kind = .integer) : �
   | name => cases integer
   | integer => exact ⟨_, _, _, rfl⟩
 
--- Exhausting an explicitly supplied interpreter budget is a transition failure.
--- It retains the lookahead location even on a grammar proved predictive.
-open ConcreteSpec.Core ConcreteSpec.StageGrammar ConcreteSpec.StageInterface in
-example :
-    let pos : ConcreteSpec.Surface0.Span := ⟨12, 14, 2, 3, ⟨0⟩⟩
-    let eof : FileSpan := ⟨⟨0⟩, 20, 20, 2, 11⟩
-    let tok : SurfaceToken := ⟨surfaceFileSpan pos, .fixed .fn rfl⟩
-    let cause := ConcreteSpec.StageInterface.RefusalCause.parser (.internal (.advance 0)) pos
-    (parseSymbol (sliceParser slice0).table #[tok] slice0 eof earlySharedGrammar.start
-        ⟨0, slice0, none, 0⟩ 0).2 = .error .exhausted ∧
-      cause.rule = ⟨``Slice0Rules.ParserCanStep, 1⟩ ∧
-      cause.primary = surfaceFileSpan pos ∧
-      ∀ candidate, ((Refusal.source cause).diagnosticAt candidate).isSome = true ↔
-        candidate = ⟨``Slice0Rules.ParserCanStep, 1⟩ :=
-  ⟨rfl, rfl, rfl, Refusal.source_diagnosticAt_iff _⟩
+-- The certified `sliceParser slice0` never exhausts fuel (`sliceParser_nonExhausted`)
+-- and every accepted Slice 0 CST decodes (`earlyParser_slice0_decodes`), so the driver's
+-- `.error none` fallback branch (`Parse.lean:58-59`) is unreachable on every Slice 0 stream.
+open ConcreteSpec.StageGrammar ConcreteSpec.StageInterface in
+example (stream : TokenStream) (hslice : stream.source.slice = slice0) :
+    Parse.parseStreamWithRefusal stream ≠ .error none ∧
+    ((∃ prog, Parse.parseStream stream = .ok prog ∧ Derives (Parse.surfaceTokens stream) prog) ∨
+     (∃ refusal, ((sliceParser slice0).run stream.parserView).2 = some (.error refusal) ∧
+       Parse.parseStream stream = .error (Refusal.ofParseRefusal refusal))) :=
+  ⟨Parse.parseStreamWithRefusal_ne_error_none stream hslice,
+   Parse.parseStream_exhaustive stream hslice⟩
 
 example : ∃ ast, mainBinderParse = .ok ast ∧
     Admission.prepareParsed .admission ast = .error (.source (.surface (.reservedBinder "main" ⟨22, 26, 1, 23, ⟨0⟩⟩))) ∧
@@ -1146,7 +1142,7 @@ example : ∃ ast, mainBinderParse = .ok ast ∧
     r#"fn main() -> u8 { let main: u8 = 0; return main; }"#.toUTF8).trans
     (Parse.KernelEval.ok_of_isOk (by decide +kernel))
   refine ⟨_, hok, Parse.KernelEval.eq_error_of_exceptError (by decide +kernel),
-    refusesFirstBinderName (by decide +kernel) (by decide)⟩
+    refusesFirstBinderName "main" (by decide +kernel) (by decide)⟩
 
 example : ∃ ast, intrinsicBinderParse = .ok ast ∧
     Admission.prepareParsed .admission ast = .error (.source (.surface (.reservedBinder "discard" ⟨22, 29, 1, 23, ⟨0⟩⟩))) ∧
@@ -1155,7 +1151,7 @@ example : ∃ ast, intrinsicBinderParse = .ok ast ∧
     r#"fn main() -> u8 { let discard: u8 = 42; return discard; }"#.toUTF8).trans
     (Parse.KernelEval.ok_of_isOk (by decide +kernel))
   refine ⟨_, hok, Parse.KernelEval.eq_error_of_exceptError (by decide +kernel),
-    refusesFirstBinderName (by decide +kernel) (by decide)⟩
+    refusesFirstBinderName "discard" (by decide +kernel) (by decide)⟩
 
 example : ∃ ast, builtinTypeBinderParse = .ok ast ∧
     Admission.prepareParsed .admission ast = .error (.source (.surface (.reservedBinder "Option" ⟨22, 28, 1, 23, ⟨0⟩⟩))) ∧
@@ -1164,7 +1160,7 @@ example : ∃ ast, builtinTypeBinderParse = .ok ast ∧
     r#"fn main() -> u8 { let Option: u8 = 42; return Option; }"#.toUTF8).trans
     (Parse.KernelEval.ok_of_isOk (by decide +kernel))
   refine ⟨_, hok, Parse.KernelEval.eq_error_of_exceptError (by decide +kernel),
-    refusesFirstBinderName (by decide +kernel) (by decide)⟩
+    refusesFirstBinderName "Option" (by decide +kernel) (by decide)⟩
 
 example : ∃ ast, duplicateBinderParse = .ok ast ∧
     Admission.prepareParsed .admission ast = .error (.source (.surface (.duplicateBinder "x" ⟨37, 38, 1, 38, ⟨0⟩⟩))) ∧
@@ -1173,7 +1169,7 @@ example : ∃ ast, duplicateBinderParse = .ok ast ∧
     r#"fn main() -> u8 { let x: u8 = 1; let x: u8 = 20 + 22; return x; }"#.toUTF8).trans
     (Parse.KernelEval.ok_of_isOk (by decide +kernel))
   refine ⟨_, hok, Parse.KernelEval.eq_error_of_exceptError (by decide +kernel),
-    refusesDuplicatePair (by decide +kernel)⟩
+    refusesDuplicatePair "x" (by decide +kernel)⟩
 
 example :
     ElaboratesBindings .admission [] [⟨"x", bindingSpan, .integer 1 none bindingSpan⟩]
@@ -1261,6 +1257,13 @@ example : ∃ core bir,
   · with_unfolding_all exact returnAtOne rfl rfl
   · with_unfolding_all exact returnAtOne rfl rfl
 
+private def trapBIRLonger : BIR.Program :=
+  { trapBIR with sites := [⟨.arithmeticOverflow, ⟨0⟩, ⟨39, 40⟩, ⟨"src/a.con", 2, 30⟩⟩] }
+
+private theorem trapLongerUnchecked : Stages.unchecked (overflowInput "// longer") = .ok trapBIRLonger := by
+  rw [Stages.KernelEval.unchecked_eq_sparse]
+  decide +kernel
+
 /-- Changing the comment changes the origin byte offsets. Both LLVM artifacts, and the
 process observations projected from the two BIR runs, still agree. -/
 example : ∃ a b,
@@ -1268,11 +1271,8 @@ example : ∃ a b,
     Stages.unchecked (overflowInput "// longer") = .ok b ∧
     a.sites ≠ b.sites ∧ LLVM.module a = LLVM.module b ∧
     birObservation a.sites (BIR.run a 2) = some (overflowObservation "src/a.con") ∧
-    birObservation b.sites (BIR.run b 2) = some (overflowObservation "src/a.con") := by
-  have hb := (Stages.KernelEval.unchecked_eq_sparse (overflowInput "// longer")).trans
-    (Parse.KernelEval.ok_of_isOk (by decide +kernel))
-  refine ⟨trapBIR, _, trapUnchecked, hb, by decide +kernel, by decide +kernel,
-    by decide +kernel, by decide +kernel⟩
+    birObservation b.sites (BIR.run b 2) = some (overflowObservation "src/a.con") :=
+  ⟨trapBIR, trapBIRLonger, trapUnchecked, trapLongerUnchecked, by decide, rfl, rfl, rfl⟩
 
 example : (Observation.returned 134 ByteArray.empty) ≠ overflowObservation "src/a.con" := by
   with_unfolding_all

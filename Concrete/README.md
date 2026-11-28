@@ -107,7 +107,8 @@ The compiler imports `Slice0.Program` and `Slice0.toCore` through `Concrete/Core
 | Pass | Current evidence |
 |---|---|
 | Lexer | Successful lexing implies the lexical judgment (`Lex.lex_correct`). |
-| Parser and elaboration | The scalar frontend premise record still assumes parser soundness and preservation of evaluation by elaboration. |
+| Parser | Proved directly by the certified `sliceParser slice0` + frozen `Elab.surfaceProgram` cutover (`Parse.parseStream_derives`, `Parse.parseStream_parity`, `Parse.parseStreamWithRefusal_ne_error_none`, `FrontendPremises.parse_discharged`). `P_parse` is retired. |
+| Elaboration | The scalar frontend premise record (`FrontendPremises`) retains `P_elab` (preservation of evaluation by elaboration). |
 | Admission, MIR and Memory | `MIR.lower_correct` uses `Admission.admit_never_traps`. Successful compilation preserves the Core outcome through Memory (`Stages.compile_core_correct`). |
 | SSA | The SSA validator proves BIR well-formedness and the return value or trap kind on the recorded Memory/BIR pair. `SSA.lower_wf` and `Stages.compile_ssa_correct` give the two results. Exact source provenance is a separate obligation. |
 | BIR → LCB adapter | The LCB adapter theorem applies to well-formed BIR that the adapter accepts. |
@@ -196,8 +197,9 @@ The root inventory (`scripts/checks/root_inventory.txt`) lists each new root ent
   computed nullable, FIRST and FOLLOW sets and disjointness of the prediction sets.
   `ll1_sound` shows that at most one production of a nonterminal is predicted for any lookahead.
   The Slice 0, Slice 1 and shared recognition projections discharge the check by `decide`.
-  The parser starts at the grammar's start symbol and accepts only a `CheckedTable`, whose
-  entries must equal `makeTable` of that grammar. The parser uses the precomputed Slice 0 entries. `table0_checked` proves that they equal the generated table.
+  The driver parser runs the certified 78-production `ConcreteSpec.StageGrammar.sliceParser slice0`
+  paired with the frozen `Elab.surfaceProgram` decoder (`Parse.parseStream_derives`,
+  `Parse.parseStream_parity`, `Parse.parseStreamWithRefusal_ne_error_none`).
   Later slices extend the shared surface grammar and must pass the same LL(1) check.
 - **`Derives : List Token → Surface0.Program → Prop`** binds token payloads as well as token kinds.
 - **Elaboration.** `ConcreteSpec/Spec/Surface0.lean` defines `Lexes`, `Derives` and `checkBody`. The declarative `Elaborates` relation lives in `Concrete/Theorem.lean`. Preservation of evaluation by elaboration is the open premise `P_elab`.
@@ -209,7 +211,7 @@ Scalar Core, MIR and Memory are compared on outcomes. BIR's `behaviour` distingu
 
 ## Premises and target profile
 
-The live definitions in `Concrete/Premises.lean` are `FrontendPremises` (parse and elaborate) and, under `Concrete.Native`, `BackendModel`, `LLVMPremises`, `World` and `Premises`. The original Slice 0 design sketch below uses earlier names. The current theorems are `Native.lcb_emit_correct` and `Native.observed_behaviour`.
+The live definitions in `Concrete/Premises.lean` are `FrontendPremises` (`elaborate`; `P_parse` is retired and proved directly by `FrontendPremises.parse_discharged`) and, under `Concrete.Native`, `BackendModel`, `LLVMPremises`, `World` and `Premises`. The original Slice 0 design sketch below uses earlier names. The current theorems are `Native.lcb_emit_correct` and `Native.observed_behaviour`.
 
 ```lean
 /-- Claims about fixed frontend implementations, used only by the universal theorem.
@@ -300,7 +302,6 @@ The native helper recognizes x86-64 Linux, AArch64 Linux and AArch64 macOS. The 
 
 | Premise | Trust class | Retired by |
 |---|---|---|
-| P_parse | implementation | the generic table-parser theorem |
 | P_elab | implementation | ANF and resolution preservation |
 | P_print | implementation | an LLVM-IR semantics; not planned for slice 0 |
 | P_toolchain[llvm] | toolchain | not planned |
