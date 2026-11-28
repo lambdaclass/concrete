@@ -20,6 +20,14 @@
 #   - remote refusing direct SHA-1 fetch -> falls back to advertised refs;
 #   - stalled git fetch, slow primary+fallback exceeding one shared deadline, and slow
 #     checkout -> single per-attempt deadline kills and fails closed after bounded retries;
+#   - active Lake 4.35 package overrides (.lake/package-overrides.json and
+#     LAKE_PKG_URL_MAP) -> rejected fail-closed;
+#   - manifest subDir/configFile carrying and resolved-path containment inside the
+#     verified checkout (including symlink-escape refusal);
+#   - literal directory-entry pruning and exact final membership (catching newline-
+#     suffixed directory names);
+#   - failing git cleanliness queries (git exiting non-zero with empty stdout) ->
+#     detected through one git_ok helper and verified to fail the gate;
 #   - malformed/unsafe lake-manifest.json inputs -> refused before touching disk.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
@@ -50,6 +58,16 @@ FAIL=0
 ok() { echo "  ok   $1"; PASS=$((PASS + 1)); }
 no() { echo "  FAIL $1"; FAIL=$((FAIL + 1)); }
 
+# Single git query helper used everywhere in this gate: requires git to exit 0
+# before its stdout (GIT_OUT) is ever inspected.
+GIT_OUT=""
+git_ok() {
+  local out=""
+  GIT_OUT=""
+  out="$(git "$@")" || return 1
+  GIT_OUT="$out"
+}
+
 # Build a local bare dependency repository with three distinct commits (REV0 < REV1 < REV2)
 # so pinned REV1 is both non-root (has a parent commit, exercising shallow depth-1 handling)
 # and non-HEAD (REV2 is HEAD).
@@ -65,12 +83,14 @@ git -C "$DEP_SRC" commit -qm "rev0"
 printf 'def dummyVal : Nat := 1\n' >"$DEP_SRC/DummyDep.lean"
 git -C "$DEP_SRC" add DummyDep.lean
 git -C "$DEP_SRC" commit -qm "rev1"
-REV1="$(git -C "$DEP_SRC" rev-parse HEAD)"
+git_ok -C "$DEP_SRC" rev-parse HEAD
+REV1="$GIT_OUT"
 
 printf 'def dummyVal : Nat := 2\n' >"$DEP_SRC/DummyDep.lean"
 git -C "$DEP_SRC" add DummyDep.lean
 git -C "$DEP_SRC" commit -qm "rev2"
-REV2="$(git -C "$DEP_SRC" rev-parse HEAD)"
+git_ok -C "$DEP_SRC" rev-parse HEAD
+REV2="$GIT_OUT"
 
 git clone -q --bare "$DEP_SRC" "$DEP_BARE"
 
@@ -78,6 +98,8 @@ write_project() {
   local dir="$1"
   local url="$2"
   local rev="$3"
+  local sub_dir_json="${4:-null}"
+  local config_file_json="${5:-\"lakefile.toml\"}"
   rm -rf "$dir"
   mkdir -p "$dir"
   cp "$ROOT_DIR/lean-toolchain" "$dir/"
@@ -87,14 +109,14 @@ write_project() {
  "packages":
  [{"url": "$url",
    "type": "git",
-   "subDir": null,
+   "subDir": $sub_dir_json,
    "scope": "",
    "rev": "$rev",
    "name": "«dummy-dep»",
    "manifestFile": "lake-manifest.json",
    "inputRev": "$rev",
    "inherited": false,
-   "configFile": "lakefile.toml"}],
+   "configFile": $config_file_json}],
  "name": "control",
  "lakeDir": ".lake",
  "fixedToolchain": false}
@@ -166,6 +188,10 @@ if [ "\$is_fetch" = 1 ]; then
     echo "fatal: unable to access 'https://github.com/unbalancedparentheses/lean-compiler-backend/': The requested URL returned error: 403" >&2
     exit 128
   fi
+  if [ -n "\${STUB_PLANT_STRAY_DIR:-}" ]; then
+    mkdir -p "\$STUB_PLANT_STRAY_DIR"
+    printf 'planted-during-fetch\n' >"\$STUB_PLANT_STRAY_DIR/marker"
+  fi
 fi
 exec "\$REAL_GIT" "\$@"
 EOF
@@ -175,10 +201,13 @@ echo "=== cold fetch and offline cache hit ==="
 PROJ="$TMP/proj-cold"
 write_project "$PROJ" "$DEP_BARE" "$REV1"
 if (cd "$PROJ" && LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/cold.log" 2>&1 \
-   && [ "$(git -C "$PROJ/.lake/packages/dummy-dep" rev-parse HEAD)" = "$REV1" ] \
-   && [ -z "$(git -C "$PROJ/.lake/packages/dummy-dep" status --porcelain --untracked-files=all --ignored=matching)" ] \
+   && git_ok -C "$PROJ/.lake/packages/dummy-dep" rev-parse HEAD \
+   && [ "$GIT_OUT" = "$REV1" ] \
+   && git_ok -C "$PROJ/.lake/packages/dummy-dep" status --porcelain --untracked-files=all --ignored=matching \
+   && [ -z "$GIT_OUT" ] \
    && [ ! -e "$PROJ/.lake/packages/dummy-dep/.lake" ] \
-   && [ -z "$(git -C "$PROJ/.lake/packages/dummy-dep" config --get remote.origin.promisor || true)" ]; then
+   && git_ok -C "$PROJ/.lake/packages/dummy-dep" config --local --list \
+   && ! has_match -E '^(remote\.origin\.promisor|extensions\.partialclone)=' <<<"$GIT_OUT"; then
   ok "cold fetch materializes exact pinned non-HEAD revision ($REV1) cleanly"
 else
   cat "$TMP/cold.log" >&2
@@ -195,7 +224,8 @@ mv "$DEP_BARE" "$TMP/dep-offline.git"
 if (cd "$PROJ" && LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/hit.log" 2>&1 \
    && has_match -F "cache verified at $REV1" <"$TMP/hit.log" \
    && [ ! -e "$PROJ/.lake/packages/dummy-dep/.git/hooks/post-checkout" ] \
-   && [ -z "$(git -C "$PROJ/.lake/packages/dummy-dep" ls-files -v | grep '^[a-z]' || true)" ]; then
+   && git_ok -C "$PROJ/.lake/packages/dummy-dep" ls-files -v \
+   && ! has_match -E '^[a-z]' <<<"$GIT_OUT"; then
   ok "valid restored package passes verification offline and replaces restored .git metadata cleanly"
 else
   cat "$TMP/hit.log" >&2
@@ -207,10 +237,11 @@ echo "=== post-restore mismatch, tamper, build-output, traversal and stray-packa
 # 1. Wrong checked-out revision (REV2 instead of pinned REV1).
 git -C "$PROJ/.lake/packages/dummy-dep" fetch -q --no-tags origin
 git -C "$PROJ/.lake/packages/dummy-dep" checkout -q --detach "$REV2"
-[ "$(git -C "$PROJ/.lake/packages/dummy-dep" rev-parse HEAD)" = "$REV2" ]
+git_ok -C "$PROJ/.lake/packages/dummy-dep" rev-parse HEAD && [ "$GIT_OUT" = "$REV2" ]
 if (cd "$PROJ" && LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/mismatch.log" 2>&1 \
    && has_match -F "HEAD is $REV2, manifest pins $REV1" <"$TMP/mismatch.log" \
-   && [ "$(git -C "$PROJ/.lake/packages/dummy-dep" rev-parse HEAD)" = "$REV1" ]; then
+   && git_ok -C "$PROJ/.lake/packages/dummy-dep" rev-parse HEAD \
+   && [ "$GIT_OUT" = "$REV1" ]; then
   ok "revision mismatch after restore deletes package and refetches pinned revision"
 else
   cat "$TMP/mismatch.log" >&2
@@ -223,7 +254,8 @@ printf 'stale\n' >"$PROJ/.lake/packages/dummy-dep/.lake/build/lib/lean/DummyDep.
 if (cd "$PROJ" && LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/depbuild.log" 2>&1 \
    && has_match -F "unexpected .lake directory inside dependency" <"$TMP/depbuild.log" \
    && [ ! -e "$PROJ/.lake/packages/dummy-dep/.lake" ] \
-   && [ "$(git -C "$PROJ/.lake/packages/dummy-dep" rev-parse HEAD)" = "$REV1" ]; then
+   && git_ok -C "$PROJ/.lake/packages/dummy-dep" rev-parse HEAD \
+   && [ "$GIT_OUT" = "$REV1" ]; then
   ok "restored dependency containing .lake/build is deleted and refetched source-only"
 else
   cat "$TMP/depbuild.log" >&2
@@ -248,7 +280,9 @@ fi
 # 3a. Finding 1 attack: modified tracked Lean file hidden behind assume-unchanged (git status is empty!).
 printf '%s\n' 'def tampered : Nat := 999' >>"$PROJ/.lake/packages/dummy-dep/DummyDep.lean"
 git -C "$PROJ/.lake/packages/dummy-dep" update-index --assume-unchanged DummyDep.lean
-if [ -n "$(git -C "$PROJ/.lake/packages/dummy-dep" status --porcelain --untracked-files=all --ignored=matching)" ]; then
+if ! git_ok -C "$PROJ/.lake/packages/dummy-dep" status --porcelain --untracked-files=all --ignored=matching; then
+  no "assume-unchanged setup failed: git status exited non-zero"
+elif [ -n "$GIT_OUT" ]; then
   no "assume-unchanged setup failed: git status unexpectedly reported the edit"
 elif (cd "$PROJ" && LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/assume-unchanged.log" 2>&1 \
      && has_match -F "working tree differs from pinned commit (DummyDep.lean)" <"$TMP/assume-unchanged.log" \
@@ -262,7 +296,9 @@ fi
 # 3a2. Finding 1 variant: modified tracked Lean file hidden behind skip-worktree (git status is empty!).
 printf '%s\n' 'def tamperedSkip : Nat := 888' >>"$PROJ/.lake/packages/dummy-dep/DummyDep.lean"
 git -C "$PROJ/.lake/packages/dummy-dep" update-index --skip-worktree DummyDep.lean
-if [ -n "$(git -C "$PROJ/.lake/packages/dummy-dep" status --porcelain --untracked-files=all --ignored=matching)" ]; then
+if ! git_ok -C "$PROJ/.lake/packages/dummy-dep" status --porcelain --untracked-files=all --ignored=matching; then
+  no "skip-worktree setup failed: git status exited non-zero"
+elif [ -n "$GIT_OUT" ]; then
   no "skip-worktree setup failed: git status unexpectedly reported the edit"
 elif (cd "$PROJ" && LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/skip-worktree.log" 2>&1 \
      && has_match -F "working tree differs from pinned commit (DummyDep.lean)" <"$TMP/skip-worktree.log" \
@@ -274,7 +310,8 @@ else
 fi
 
 # 3a3. Corrupt object in restored .git/objects -> detected and refetched cleanly.
-BLOB_OID="$(git -C "$PROJ/.lake/packages/dummy-dep" rev-parse "${REV1}:DummyDep.lean")"
+git_ok -C "$PROJ/.lake/packages/dummy-dep" rev-parse "${REV1}:DummyDep.lean"
+BLOB_OID="$GIT_OUT"
 BLOB_PATH="$PROJ/.lake/packages/dummy-dep/.git/objects/${BLOB_OID:0:2}/${BLOB_OID:2}"
 chmod u+w "$BLOB_PATH"
 printf 'corrupted-blob-bytes' >"$BLOB_PATH"
@@ -291,8 +328,10 @@ fi
 git -C "$PROJ/.lake/packages/dummy-dep" remote set-url origin "https://example.invalid/wrong-repo"
 if (cd "$PROJ" && LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/origin.log" 2>&1 \
    && has_match -F "origin URL is https://example.invalid/wrong-repo, manifest pins $DEP_BARE" <"$TMP/origin.log" \
-   && [ "$(git -C "$PROJ/.lake/packages/dummy-dep" config --local --get remote.origin.url)" = "$DEP_BARE" ] \
-   && [ "$(git -C "$PROJ/.lake/packages/dummy-dep" rev-parse HEAD)" = "$REV1" ]; then
+   && git_ok -C "$PROJ/.lake/packages/dummy-dep" config --local --get remote.origin.url \
+   && [ "$GIT_OUT" = "$DEP_BARE" ] \
+   && git_ok -C "$PROJ/.lake/packages/dummy-dep" rev-parse HEAD \
+   && [ "$GIT_OUT" = "$REV1" ]; then
   ok "origin URL mismatch after restore deletes package and refetches from manifest URL"
 else
   cat "$TMP/origin.log" >&2
@@ -303,7 +342,8 @@ fi
 printf 'not-a-valid-ref\n' >"$PROJ/.lake/packages/dummy-dep/.git/HEAD"
 if (cd "$PROJ" && LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/corrupt.log" 2>&1 \
    && has_match -F "unreadable HEAD commit" <"$TMP/corrupt.log" \
-   && [ "$(git -C "$PROJ/.lake/packages/dummy-dep" rev-parse HEAD)" = "$REV1" ]; then
+   && git_ok -C "$PROJ/.lake/packages/dummy-dep" rev-parse HEAD \
+   && [ "$GIT_OUT" = "$REV1" ]; then
   ok "corrupt restored .git metadata is deleted and refetched cleanly"
 else
   cat "$TMP/corrupt.log" >&2
@@ -316,7 +356,8 @@ printf 'stale\n' >"$PROJ/.lake/packages/dummy-dep/subdir/.lake/build/x.olean"
 if (cd "$PROJ" && LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/nested-lake.log" 2>&1 \
    && has_match -F "unexpected nested .lake path" <"$TMP/nested-lake.log" \
    && [ ! -e "$PROJ/.lake/packages/dummy-dep/subdir" ] \
-   && [ "$(git -C "$PROJ/.lake/packages/dummy-dep" rev-parse HEAD)" = "$REV1" ]; then
+   && git_ok -C "$PROJ/.lake/packages/dummy-dep" rev-parse HEAD \
+   && [ "$GIT_OUT" = "$REV1" ]; then
   ok "nested .lake directory inside restored dependency is deleted and refetched clean"
 else
   cat "$TMP/nested-lake.log" >&2
@@ -334,7 +375,8 @@ chmod 000 "$PROJ/.lake/packages/dummy-dep/locked"
 if (cd "$PROJ" && LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/unreadable-dir.log" 2>&1 \
    && has_match -F "filesystem traversal error" <"$TMP/unreadable-dir.log" \
    && [ ! -e "$PROJ/.lake/packages/dummy-dep/locked" ] \
-   && [ "$(git -C "$PROJ/.lake/packages/dummy-dep" rev-parse HEAD)" = "$REV1" ]; then
+   && git_ok -C "$PROJ/.lake/packages/dummy-dep" rev-parse HEAD \
+   && [ "$GIT_OUT" = "$REV1" ]; then
   ok "unreadable directory with read-only files invalidates restored package and refetches clean"
 else
   chmod 700 "$PROJ/.lake/packages/dummy-dep/locked" 2>/dev/null || true
@@ -409,9 +451,11 @@ PROJ_MIRROR="$TMP/proj-mirror"
 MANIFEST_URL="https://example.invalid/upstream/dummy-dep.git"
 write_project "$PROJ_MIRROR" "$MANIFEST_URL" "$REV1"
 if (cd "$PROJ_MIRROR" && GIT_CONFIG_GLOBAL="$MIRROR_CFG" LAKE_FETCH_ATTEMPTS=1 LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/mirror-fetch.log" 2>&1 \
-   && [ "$(GIT_CONFIG_GLOBAL="$MIRROR_CFG" git -C "$PROJ_MIRROR/.lake/packages/dummy-dep" remote get-url origin)" = "$MIRROR_ROOT/dummy-dep.git" ] \
-   && [ "$(git config --file "$PROJ_MIRROR/.lake/packages/dummy-dep/.git/config" --get remote.origin.url)" = "$MANIFEST_URL" ] \
-   && [ "$(git -C "$PROJ_MIRROR/.lake/packages/dummy-dep" rev-parse HEAD)" = "$REV1" ]; then
+   && (GIT_CONFIG_GLOBAL="$MIRROR_CFG" git_ok -C "$PROJ_MIRROR/.lake/packages/dummy-dep" remote get-url origin && [ "$GIT_OUT" = "$MIRROR_ROOT/dummy-dep.git" ]) \
+   && git_ok config --file "$PROJ_MIRROR/.lake/packages/dummy-dep/.git/config" --get remote.origin.url \
+   && [ "$GIT_OUT" = "$MANIFEST_URL" ] \
+   && git_ok -C "$PROJ_MIRROR/.lake/packages/dummy-dep" rev-parse HEAD \
+   && [ "$GIT_OUT" = "$REV1" ]; then
   ok "configured Git mirror (insteadOf) fetches and verifies stored literal manifest URL"
 else
   cat "$TMP/mirror-fetch.log" >&2
@@ -447,7 +491,8 @@ mv "$DEP_BARE" "$TMP/dep-offline-seed.git"
 if (cd "$SCRATCH_WS" && LAKE_SEED_PACKAGES_DIR="$CALLER_WS/.lake/packages" LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/scratch-seed.log" 2>&1 \
    && [ ! -L "$SCRATCH_WS/.lake/packages" ] \
    && [ ! -L "$SCRATCH_WS/.lake/packages/dummy-dep" ] \
-   && [ "$(git -C "$SCRATCH_WS/.lake/packages/dummy-dep" rev-parse HEAD)" = "$REV1" ] \
+   && git_ok -C "$SCRATCH_WS/.lake/packages/dummy-dep" rev-parse HEAD \
+   && [ "$GIT_OUT" = "$REV1" ] \
    && [ ! -e "$SCRATCH_WS/.lake/packages/dummy-dep/.lake" ] \
    && ! has_match -F "localAddedLemma" <"$SCRATCH_WS/.lake/packages/dummy-dep/DummyDep.lean" \
    && [ "$(cat "$SCRATCH_WS/.lake/packages/dummy-dep/DummyDep.lean")" = "def dummyVal : Nat := 1" ]; then
@@ -466,7 +511,8 @@ SCRATCH_FB="$TMP/scratch-seed-fb"
 write_project "$SCRATCH_FB" "$DEP_BARE" "$REV1"
 if (cd "$SCRATCH_FB" && LAKE_SEED_PACKAGES_DIR="$CALLER_WRONG/.lake/packages" LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/scratch-seed-fb.log" 2>&1 \
    && has_match -F "seed object verification failed" <"$TMP/scratch-seed-fb.log" \
-   && [ "$(git -C "$SCRATCH_FB/.lake/packages/dummy-dep" rev-parse HEAD)" = "$REV1" ]; then
+   && git_ok -C "$SCRATCH_FB/.lake/packages/dummy-dep" rev-parse HEAD \
+   && [ "$GIT_OUT" = "$REV1" ]; then
   ok "scratch workspace falls back to verified remote fetch when caller seed lacks pinned commit"
 else
   cat "$TMP/scratch-seed-fb.log" >&2
@@ -494,7 +540,8 @@ if (cd "$PROJ_RETRY" && PATH="$STUB_BIN:$PATH" STUB_COUNT_FILE="$COUNT_FILE" STU
     LAKE_FETCH_ATTEMPTS=3 LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/retry.log" 2>&1 \
    && [ "$(cat "$COUNT_FILE")" = "3" ] \
    && has_match -F "attempt 3/3" <"$TMP/retry.log" \
-   && [ "$(git -C "$PROJ_RETRY/.lake/packages/dummy-dep" rev-parse HEAD)" = "$REV1" ]; then
+   && git_ok -C "$PROJ_RETRY/.lake/packages/dummy-dep" rev-parse HEAD \
+   && [ "$GIT_OUT" = "$REV1" ]; then
   ok "transient HTTP 403 failures recover within 3 bounded attempts"
 else
   cat "$TMP/retry.log" >&2
@@ -512,7 +559,8 @@ rc=0
 if [ "$rc" -ne 0 ] && [ "$(cat "$COUNT_FILE")" = "3" ] \
    && has_match -F "failed to fetch $REV1 from $DEP_BARE after 3 attempt(s)" <"$TMP/fail.log" \
    && [ ! -e "$PROJ_FAIL/.lake/packages/dummy-dep" ] \
-   && [ -z "$(find "$PROJ_FAIL/.lake/packages" -mindepth 1 -maxdepth 1 -print)" ]; then
+   && find "$PROJ_FAIL/.lake/packages" -mindepth 1 -maxdepth 1 -print0 >"$TMP/fail-entries.nul" \
+   && [ ! -s "$TMP/fail-entries.nul" ]; then
   ok "persistent HTTP 403 fails closed after 3 attempts with no leftover partial state"
 else
   cat "$TMP/fail.log" >&2
@@ -524,7 +572,8 @@ PROJ_FB="$TMP/proj-fallback"
 write_project "$PROJ_FB" "$DEP_BARE" "$REV1"
 if (cd "$PROJ_FB" && PATH="$STUB_BIN:$PATH" STUB_MODE=forbid-sha \
     LAKE_FETCH_ATTEMPTS=1 LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/fallback.log" 2>&1 \
-   && [ "$(git -C "$PROJ_FB/.lake/packages/dummy-dep" rev-parse HEAD)" = "$REV1" ]; then
+   && git_ok -C "$PROJ_FB/.lake/packages/dummy-dep" rev-parse HEAD \
+   && [ "$GIT_OUT" = "$REV1" ]; then
   ok "remote refusing direct SHA-1 fetch falls back to advertised refs cleanly"
 else
   cat "$TMP/fallback.log" >&2
@@ -628,6 +677,301 @@ expect_manifest_refusal "bad-packages-dir" "expected packagesDir" \
   '{"packagesDir":".lake/build","packages":[]}'
 expect_manifest_refusal "non-git-type" "unsupported type" \
   '{"packagesDir":".lake/packages","packages":[{"type":"path","name":"dep","url":"../dep","rev":"0123456789abcdef0123456789abcdef01234567"}]}'
+expect_manifest_refusal "bad-lake-dir" "expected lakeDir" \
+  '{"lakeDir":".other","packagesDir":".lake/packages","packages":[]}'
+expect_manifest_refusal "subdir-traversal" "unsafe subDir" \
+  '{"packagesDir":".lake/packages","packages":[{"type":"git","name":"dep","url":"https://example.invalid/dep","rev":"0123456789abcdef0123456789abcdef01234567","subDir":"../outside"}]}'
+expect_manifest_refusal "subdir-absolute" "unsafe subDir" \
+  '{"packagesDir":".lake/packages","packages":[{"type":"git","name":"dep","url":"https://example.invalid/dep","rev":"0123456789abcdef0123456789abcdef01234567","subDir":"/tmp/outside"}]}'
+expect_manifest_refusal "configfile-traversal" "unsafe configFile" \
+  '{"packagesDir":".lake/packages","packages":[{"type":"git","name":"dep","url":"https://example.invalid/dep","rev":"0123456789abcdef0123456789abcdef01234567","configFile":"../outside.toml"}]}'
+expect_manifest_refusal "configfile-absolute" "unsafe configFile" \
+  '{"packagesDir":".lake/packages","packages":[{"type":"git","name":"dep","url":"https://example.invalid/dep","rev":"0123456789abcdef0123456789abcdef01234567","configFile":"/tmp/outside.toml"}]}'
+expect_manifest_refusal "configfile-bad-ext" "unsupported configFile extension" \
+  '{"packagesDir":".lake/packages","packages":[{"type":"git","name":"dep","url":"https://example.invalid/dep","rev":"0123456789abcdef0123456789abcdef01234567","configFile":"lakefile.py"}]}'
+
+echo "=== Finding 2 (closing round): Lake 4.35 override rejection and subDir/configFile containment ==="
+# Active workspace override file (.lake/package-overrides.json) must be rejected even when
+# lake-manifest.json and .lake/packages/dummy-dep are otherwise clean.
+PROJ_OVR="$TMP/proj-overrides"
+write_project "$PROJ_OVR" "$DEP_BARE" "$REV1"
+(cd "$PROJ_OVR" && LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/ovr-init.log" 2>&1
+LOCAL_OVR_DEP="$TMP/local-override-dep"
+mkdir -p "$LOCAL_OVR_DEP"
+printf 'name = "dummy-dep"\n[[lean_lib]]\nname = "DummyDep"\n' >"$LOCAL_OVR_DEP/lakefile.toml"
+printf 'def dummyVal : Nat := 999\n' >"$LOCAL_OVR_DEP/DummyDep.lean"
+cat >"$PROJ_OVR/.lake/package-overrides.json" <<EOF
+{"schemaVersion": "1.3.0",
+ "packages":
+ [{"type": "path",
+   "name": "«dummy-dep»",
+   "dir": "$LOCAL_OVR_DEP",
+   "inherited": false,
+   "configFile": "lakefile.toml"}]}
+EOF
+rc=0
+(cd "$PROJ_OVR" && LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/ovr-file.log" 2>&1 || rc=$?
+if [ "$rc" -ne 0 ] && has_match -F "refusing active Lake package override file .lake/package-overrides.json" <"$TMP/ovr-file.log"; then
+  ok "active .lake/package-overrides.json is rejected fail-closed"
+else
+  cat "$TMP/ovr-file.log" >&2
+  no "active .lake/package-overrides.json was not rejected (rc=$rc)"
+fi
+
+# Symlink at .lake/package-overrides.json (even dangling) must also be rejected.
+rm -f "$PROJ_OVR/.lake/package-overrides.json"
+ln -s "$TMP/no-such-overrides.json" "$PROJ_OVR/.lake/package-overrides.json"
+rc=0
+(cd "$PROJ_OVR" && LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/ovr-symlink.log" 2>&1 || rc=$?
+if [ "$rc" -ne 0 ] && has_match -F "refusing active Lake package override file .lake/package-overrides.json" <"$TMP/ovr-symlink.log"; then
+  ok "symlink at .lake/package-overrides.json is rejected fail-closed"
+else
+  cat "$TMP/ovr-symlink.log" >&2
+  no "symlink at .lake/package-overrides.json was not rejected (rc=$rc)"
+fi
+
+# Removing .lake/package-overrides.json restores clean verification.
+rm -f "$PROJ_OVR/.lake/package-overrides.json"
+if (cd "$PROJ_OVR" && LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/ovr-clean.log" 2>&1 \
+   && has_match -F "cache verified at $REV1" <"$TMP/ovr-clean.log"; then
+  ok "removing .lake/package-overrides.json restores verified cache hit"
+else
+  cat "$TMP/ovr-clean.log" >&2
+  no "removing .lake/package-overrides.json did not restore clean verification"
+fi
+
+# Active LAKE_PKG_URL_MAP environment override (Lake/Config/Env.lean) must be rejected,
+# while empty `{}` (exported by `lake env` when unset) is allowed.
+rc=0
+(cd "$PROJ_OVR" && LAKE_PKG_URL_MAP='{"dummy-dep":"/tmp/evil-dep.git"}' LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/ovr-urlmap.log" 2>&1 || rc=$?
+if [ "$rc" -ne 0 ] && has_match -F "refusing active Lake package URL override via LAKE_PKG_URL_MAP" <"$TMP/ovr-urlmap.log"; then
+  ok "active LAKE_PKG_URL_MAP environment override is rejected fail-closed"
+else
+  cat "$TMP/ovr-urlmap.log" >&2
+  no "active LAKE_PKG_URL_MAP was not rejected (rc=$rc)"
+fi
+if (cd "$PROJ_OVR" && LAKE_PKG_URL_MAP='{}' LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/ovr-urlmap-empty.log" 2>&1 \
+   && has_match -F "cache verified at $REV1" <"$TMP/ovr-urlmap-empty.log"; then
+  ok "empty LAKE_PKG_URL_MAP={} (as exported by lake env) passes verification"
+else
+  cat "$TMP/ovr-urlmap-empty.log" >&2
+  no "empty LAKE_PKG_URL_MAP={} was unexpectedly rejected"
+fi
+
+# Build a dependency repository with a valid subDir + custom configFile, plus commits
+# with symlink escapes for subDir and configFile pointing to an outside target.
+OUTSIDE_PKG="$TMP/outside-pkg"
+mkdir -p "$OUTSIDE_PKG"
+printf 'name = "outside"\n[[lean_lib]]\nname = "Outside"\n' >"$OUTSIDE_PKG/lakefile.toml"
+printf 'def outsideVal : Nat := 777\n' >"$OUTSIDE_PKG/Outside.lean"
+
+SUB_SRC="$TMP/sub-src"
+SUB_BARE="$TMP/sub.git"
+git init -q "$SUB_SRC"
+mkdir -p "$SUB_SRC/pkgs/nested"
+printf 'name = "dummy-dep"\n[[lean_lib]]\nname = "NestedDep"\n' >"$SUB_SRC/pkgs/nested/custom.toml"
+printf 'name = "dummy-dep"\n[[lean_lib]]\nname = "NestedDep"\n' >"$SUB_SRC/pkgs/nested/lakefile.toml"
+printf 'def nestedVal : Nat := 1\n' >"$SUB_SRC/pkgs/nested/NestedDep.lean"
+cp "$ROOT_DIR/lean-toolchain" "$SUB_SRC/"
+git -C "$SUB_SRC" add lean-toolchain pkgs/nested/custom.toml pkgs/nested/lakefile.toml pkgs/nested/NestedDep.lean
+git -C "$SUB_SRC" commit -qm "valid-subdir"
+git_ok -C "$SUB_SRC" rev-parse HEAD
+REV_SUB_OK="$GIT_OUT"
+
+ln -s "$OUTSIDE_PKG" "$SUB_SRC/pkg-link"
+git -C "$SUB_SRC" add pkg-link
+git -C "$SUB_SRC" commit -qm "subdir-symlink-escape"
+git_ok -C "$SUB_SRC" rev-parse HEAD
+REV_SUB_ESCAPE="$GIT_OUT"
+
+mkdir -p "$SUB_SRC/cfg-escape"
+# Use a relative symlink so the escape resolves from inside .lake/packages/dummy-dep/cfg-escape/
+# out to $TMP/outside-pkg/lakefile.toml, matching real-world git repo symlink attacks.
+ln -s "../../../../../outside-pkg/lakefile.toml" "$SUB_SRC/cfg-escape/lakefile.toml"
+git -C "$SUB_SRC" add cfg-escape/lakefile.toml
+git -C "$SUB_SRC" commit -qm "config-symlink-escape"
+git_ok -C "$SUB_SRC" rev-parse HEAD
+REV_CFG_ESCAPE="$GIT_OUT"
+
+git clone -q --bare "$SUB_SRC" "$SUB_BARE"
+
+# Valid subDir + custom configFile passes cold fetch and offline cache hit.
+PROJ_SUB_OK="$TMP/proj-subdir-ok"
+write_project "$PROJ_SUB_OK" "$SUB_BARE" "$REV_SUB_OK" '"pkgs/nested"' '"custom.toml"'
+if (cd "$PROJ_SUB_OK" && LAKE_FETCH_ATTEMPTS=1 LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/sub-ok.log" 2>&1 \
+   && git_ok -C "$PROJ_SUB_OK/.lake/packages/dummy-dep" rev-parse HEAD \
+   && [ "$GIT_OUT" = "$REV_SUB_OK" ]; then
+  ok "valid manifest subDir and custom configFile pass verification"
+else
+  cat "$TMP/sub-ok.log" >&2
+  no "valid manifest subDir + custom configFile control failed"
+fi
+
+# Valid subDir + null configFile (Lake default "lakefile" -> lakefile.toml) passes.
+PROJ_SUB_DEF="$TMP/proj-subdir-default-cfg"
+write_project "$PROJ_SUB_DEF" "$SUB_BARE" "$REV_SUB_OK" '"pkgs/nested"' 'null'
+if (cd "$PROJ_SUB_DEF" && LAKE_FETCH_ATTEMPTS=1 LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/sub-def.log" 2>&1 \
+   && git_ok -C "$PROJ_SUB_DEF/.lake/packages/dummy-dep" rev-parse HEAD \
+   && [ "$GIT_OUT" = "$REV_SUB_OK" ]; then
+  ok "valid manifest subDir with default null configFile resolves lakefile.toml cleanly"
+else
+  cat "$TMP/sub-def.log" >&2
+  no "valid manifest subDir + default configFile control failed"
+fi
+
+# Symlink subDir escaping verified checkout must fail closed with no package left on disk.
+PROJ_SUB_ESC="$TMP/proj-subdir-escape"
+write_project "$PROJ_SUB_ESC" "$SUB_BARE" "$REV_SUB_ESCAPE" '"pkg-link"' '"lakefile.toml"'
+rc=0
+(cd "$PROJ_SUB_ESC" && LAKE_FETCH_ATTEMPTS=1 LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/sub-esc.log" 2>&1 || rc=$?
+if [ "$rc" -ne 0 ] \
+   && has_match -F "resolved package path for subDir 'pkg-link' escapes verified checkout" <"$TMP/sub-esc.log" \
+   && [ ! -e "$PROJ_SUB_ESC/.lake/packages/dummy-dep" ]; then
+  ok "subDir symlink escaping verified checkout fails closed with no package left on disk"
+else
+  cat "$TMP/sub-esc.log" >&2
+  no "subDir symlink escape control did not fail closed (rc=$rc)"
+fi
+
+# Symlink configFile escaping verified checkout must fail closed with no package left on disk.
+PROJ_CFG_ESC="$TMP/proj-cfg-escape"
+write_project "$PROJ_CFG_ESC" "$SUB_BARE" "$REV_CFG_ESCAPE" '"cfg-escape"' '"lakefile.toml"'
+rc=0
+(cd "$PROJ_CFG_ESC" && LAKE_FETCH_ATTEMPTS=1 LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/cfg-esc.log" 2>&1 || rc=$?
+if [ "$rc" -ne 0 ] \
+   && has_match -F "resolved config path for 'lakefile.toml' escapes verified checkout" <"$TMP/cfg-esc.log" \
+   && [ ! -e "$PROJ_CFG_ESC/.lake/packages/dummy-dep" ]; then
+  ok "configFile symlink escaping verified checkout fails closed with no package left on disk"
+else
+  cat "$TMP/cfg-esc.log" >&2
+  no "configFile symlink escape control did not fail closed (rc=$rc)"
+fi
+
+# Missing subDir and missing configFile inside verified checkout must fail closed.
+PROJ_SUB_MISS="$TMP/proj-subdir-missing"
+write_project "$PROJ_SUB_MISS" "$SUB_BARE" "$REV_SUB_OK" '"no-such-subdir"' '"lakefile.toml"'
+rc=0
+(cd "$PROJ_SUB_MISS" && LAKE_FETCH_ATTEMPTS=1 LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/sub-miss.log" 2>&1 || rc=$?
+if [ "$rc" -ne 0 ] \
+   && has_match -F "package subDir 'no-such-subdir' not found in verified checkout" <"$TMP/sub-miss.log" \
+   && [ ! -e "$PROJ_SUB_MISS/.lake/packages/dummy-dep" ]; then
+  ok "missing manifest subDir in verified checkout fails closed"
+else
+  cat "$TMP/sub-miss.log" >&2
+  no "missing manifest subDir control did not fail closed (rc=$rc)"
+fi
+
+PROJ_CFG_MISS="$TMP/proj-cfg-missing"
+write_project "$PROJ_CFG_MISS" "$SUB_BARE" "$REV_SUB_OK" '"pkgs/nested"' '"missing.toml"'
+rc=0
+(cd "$PROJ_CFG_MISS" && LAKE_FETCH_ATTEMPTS=1 LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/cfg-miss.log" 2>&1 || rc=$?
+if [ "$rc" -ne 0 ] \
+   && has_match -F "configFile 'missing.toml' not found in verified package directory" <"$TMP/cfg-miss.log" \
+   && [ ! -e "$PROJ_CFG_MISS/.lake/packages/dummy-dep" ]; then
+  ok "missing manifest configFile in verified checkout fails closed"
+else
+  cat "$TMP/cfg-miss.log" >&2
+  no "missing manifest configFile control did not fail closed (rc=$rc)"
+fi
+
+echo "=== Non-blocking (closing round): literal directory entries with trailing newline ==="
+# 1. Pre-existing directory named "dummy-dep\n" must be pruned (never matched as "dummy-dep").
+NL_STRAY="$PROJ/.lake/packages/"$'dummy-dep\n'
+mkdir -p "$NL_STRAY"
+printf 'sneaky\n' >"$NL_STRAY/file"
+if (cd "$PROJ" && LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/nl-prune.log" 2>&1 \
+   && has_match -F "pruning unexpected entry" <"$TMP/nl-prune.log" \
+   && [ ! -e "$NL_STRAY" ] \
+   && python3 -I - "$PROJ/.lake/packages" <<'PY'; then
+import os, sys
+actual = sorted(e.name for e in os.scandir(sys.argv[1]))
+sys.exit(0 if actual == ["dummy-dep"] else 1)
+PY
+  ok "unlisted directory named with trailing newline is pruned and exact literal membership holds"
+else
+  cat "$TMP/nl-prune.log" >&2
+  no "newline-suffixed directory pruning control failed"
+fi
+
+# 2. Final post-condition exact-membership control: if "dummy-dep\n" appears after initial
+# pruning (during fetch), verify_manifest_packages_present must fail closed.
+PROJ_NL_POST="$TMP/proj-nl-post"
+write_project "$PROJ_NL_POST" "$DEP_BARE" "$REV1"
+NL_POST_STRAY="$PROJ_NL_POST/.lake/packages/"$'dummy-dep\n'
+rc=0
+(cd "$PROJ_NL_POST" && PATH="$STUB_BIN:$PATH" STUB_PLANT_STRAY_DIR="$NL_POST_STRAY" \
+  LAKE_FETCH_ATTEMPTS=1 LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/nl-post.log" 2>&1 || rc=$?
+if [ "$rc" -ne 0 ] \
+   && has_match -F "post-condition failed: unexpected entries in .lake/packages" <"$TMP/nl-post.log" \
+   && has_match -F "dummy-dep\\n" <"$TMP/nl-post.log"; then
+  ok "post-condition exact membership check rejects newline-suffixed unlisted directory"
+else
+  cat "$TMP/nl-post.log" >&2
+  no "post-condition newline membership control did not fail closed (rc=$rc)"
+fi
+
+if [ "${LAKE_PACKAGES_NO_SELF_CONTROL:-0}" != "1" ]; then
+  echo "=== Finding 1 (closing round): non-zero git cleanliness query fails the gate ==="
+  FAIL_STATUS_BIN="$TMP/fail-status-bin"
+  mkdir -p "$FAIL_STATUS_BIN"
+  cat >"$FAIL_STATUS_BIN/git" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+REAL_GIT="$REAL_GIT"
+args=("\$@")
+i=0
+subcmd=""
+while [ "\$i" -lt "\${#args[@]}" ]; do
+  tok="\${args[\$i]}"
+  case "\$tok" in
+    -C|-c|--git-dir|--work-tree|--namespace|--config-env)
+      i=\$((i + 2))
+      continue
+      ;;
+    --*)
+      i=\$((i + 1))
+      continue
+      ;;
+    -*)
+      i=\$((i + 1))
+      continue
+      ;;
+    *)
+      subcmd="\$tok"
+      break
+      ;;
+  esac
+done
+if [ "\$subcmd" = "status" ]; then
+  exit 2
+fi
+exec "\$REAL_GIT" "\$@"
+EOF
+  chmod +x "$FAIL_STATUS_BIN/git"
+
+  # Direct unit control on git_ok itself.
+  if (PATH="$FAIL_STATUS_BIN:$PATH" git_ok -C "$DEP_SRC" status --porcelain); then
+    no "git_ok unexpectedly succeeded when git status exited 2 with empty stdout"
+  else
+    ok "git_ok returns non-zero when git status exits 2 with empty stdout"
+  fi
+
+  # End-to-end gate control reproducing Codex's attack: only git status exits 2 with empty stdout;
+  # the gate MUST fail all three git-status controls and exit non-zero.
+  rc=0
+  PATH="$FAIL_STATUS_BIN:$PATH" LAKE_PACKAGES_NO_SELF_CONTROL=1 \
+    bash "$ROOT_DIR/scripts/checks/lake_packages.sh" >"$TMP/git-status-fail.log" 2>&1 || rc=$?
+  if [ "$rc" -ne 0 ] \
+     && has_match -F "FAIL cold fetch failed" <"$TMP/git-status-fail.log" \
+     && has_match -F "FAIL assume-unchanged setup failed: git status exited non-zero" <"$TMP/git-status-fail.log" \
+     && has_match -F "FAIL skip-worktree setup failed: git status exited non-zero" <"$TMP/git-status-fail.log" \
+     && has_match -E '^lake_packages: PASS=[0-9]+ FAIL=3$' <"$TMP/git-status-fail.log"; then
+    ok "gate fails closed (FAIL=3, rc=$rc) when git status exits 2 with empty stdout"
+  else
+    tail -30 "$TMP/git-status-fail.log" >&2
+    no "failing git status did not fail all three gate controls as expected (rc=$rc)"
+  fi
+fi
 
 echo
 echo "lake_packages: PASS=$PASS FAIL=$FAIL"

@@ -4,6 +4,12 @@
 # Reads lake-manifest.json and lean-toolchain from the current working directory.
 # Never trusts restored .git metadata, .git/index flags (such as assume-unchanged
 # or skip-worktree), git status, or rewritten remote URLs:
+#   - rejects active Lake 4.35 package overrides (.lake/package-overrides.json and
+#     non-empty/invalid LAKE_PKG_URL_MAP) and verifies manifest lakeDir/packagesDir;
+#   - carries each manifest entry's subDir and configFile and requires resolved
+#     package and configuration paths to stay inside the verified checkout;
+#   - prunes unexpected .lake/packages entries and verifies final membership by
+#     literal directory names (never stripping trailing newlines);
 #   - verifies stored remote.origin.url in .git/config directly (ignoring url.*.insteadOf
 #     rewrites so configured mirrors work) and refuses partial-clone promisor configs;
 #   - scans the restored tree for .lake directories without suppressing traversal errors;
@@ -281,15 +287,221 @@ sys.exit(1)
 PY
 }
 
+# Reject any active Lake 4.35 package override mechanism in the workspace or environment:
+#   - Lake/Config/Workspace.lean: packageOverridesFile := self.lakeDir / "package-overrides.json"
+#     (loaded automatically by Lake/Load/Resolve.lean Workspace.materializeDeps);
+#   - Lake/Config/Env.lean: LAKE_PKG_URL_MAP overrides Git remote URLs during materialization
+#     (note: `lake env` exports LAKE_PKG_URL_MAP={} when empty, so only unset or `{}` is allowed).
+check_no_lake_overrides() {
+  python3 -I - <<'PY'
+import json
+import os
+import stat
+import sys
+
+try:
+    st = os.lstat(".lake")
+except FileNotFoundError:
+    st = None
+except OSError as exc:
+    sys.exit(f"error: lake-packages: cannot inspect .lake: {exc}")
+
+if st is not None:
+    if stat.S_ISLNK(st.st_mode) or not stat.S_ISDIR(st.st_mode):
+        sys.exit("error: lake-packages: refusing symlink or non-directory at .lake")
+
+override_path = os.path.join(".lake", "package-overrides.json")
+try:
+    os.lstat(override_path)
+    sys.exit(
+        "error: lake-packages: refusing active Lake package override file .lake/package-overrides.json"
+    )
+except FileNotFoundError:
+    pass
+except OSError as exc:
+    sys.exit(f"error: lake-packages: cannot inspect {override_path}: {exc}")
+
+url_map_raw = os.environ.get("LAKE_PKG_URL_MAP")
+if url_map_raw is not None:
+    try:
+        parsed = json.loads(url_map_raw)
+    except json.JSONDecodeError as exc:
+        sys.exit(f"error: lake-packages: refusing invalid LAKE_PKG_URL_MAP override: {exc}")
+    if not isinstance(parsed, dict) or len(parsed) > 0:
+        sys.exit(
+            f"error: lake-packages: refusing active Lake package URL override via LAKE_PKG_URL_MAP ({url_map_raw!r})"
+        )
+PY
+}
+
+# Verify that a materialized checkout's manifest subDir, configFile (and optional
+# manifestFile when present) resolve strictly inside the verified checkout directory
+# and never traverse outside it (including via symlinks) or enter .git.
+verify_package_layout() {
+  local checkout_dir="$1"
+  local sub_dir="$2"
+  local config_file="$3"
+  local manifest_file="${4:-}"
+  python3 -I - "$checkout_dir" "$sub_dir" "$config_file" "$manifest_file" <<'PY'
+import os
+import stat
+import sys
+
+checkout_dir = sys.argv[1]
+sub_dir = sys.argv[2]
+config_file = sys.argv[3]
+manifest_file = sys.argv[4]
+
+try:
+    st = os.lstat(checkout_dir)
+except OSError as exc:
+    print(f"cannot inspect package checkout: {exc}")
+    sys.exit(1)
+if stat.S_ISLNK(st.st_mode) or not stat.S_ISDIR(st.st_mode):
+    print("package checkout is not a real directory")
+    sys.exit(1)
+
+root_real = os.path.realpath(checkout_dir)
+git_real = os.path.join(root_real, ".git")
+
+def is_within(child_real, parent_real):
+    try:
+        return os.path.commonpath([parent_real, child_real]) == parent_real
+    except ValueError:
+        return False
+
+def validate_rel(raw, label, allow_dot=False):
+    if not raw or any(ord(ch) < 32 or ord(ch) == 127 for ch in raw):
+        print(f"unsafe {label}: {raw!r}")
+        sys.exit(1)
+    if raw.startswith("/") or "\\" in raw or (len(raw) >= 2 and raw[1] == ":"):
+        print(f"unsafe {label}: must be a relative POSIX path ({raw!r})")
+        sys.exit(1)
+    parts = [p for p in raw.split("/") if p]
+    if ".." in parts or ".git" in parts or ".lake" in parts:
+        print(f"unsafe {label}: disallowed path component in {raw!r}")
+        sys.exit(1)
+    if not allow_dot and all(p == "." for p in parts):
+        print(f"unsafe {label}: degenerate path {raw!r}")
+        sys.exit(1)
+    return parts
+
+def resolve_within(base_real, rel_path, label, boundary_real):
+    cur = base_real
+    for part in [p for p in rel_path.split("/") if p and p != "."]:
+        cur = os.path.join(cur, part)
+        if not os.path.lexists(cur):
+            return None, "missing"
+        if not os.path.exists(cur):
+            return None, "broken"
+        cur_real = os.path.realpath(cur)
+        if not is_within(cur_real, root_real) or not is_within(cur_real, boundary_real) or is_within(cur_real, git_real):
+            return None, "escape"
+        cur = cur_real
+    return cur, "ok"
+
+if sub_dir:
+    validate_rel(sub_dir, "subDir", allow_dot=True)
+    pkg_real, status = resolve_within(root_real, sub_dir, "subDir", root_real)
+    if status == "missing":
+        print(f"package subDir {sub_dir!r} not found in verified checkout")
+        sys.exit(1)
+    if status == "broken":
+        print(f"package subDir {sub_dir!r} is a broken symlink")
+        sys.exit(1)
+    if status == "escape":
+        print(f"resolved package path for subDir {sub_dir!r} escapes verified checkout")
+        sys.exit(1)
+    if not os.path.isdir(pkg_real):
+        print(f"resolved package path for subDir {sub_dir!r} is not a directory")
+        sys.exit(1)
+else:
+    pkg_real = root_real
+
+cfg_spec = config_file or "lakefile"
+validate_rel(cfg_spec, "configFile", allow_dot=False)
+if cfg_spec.endswith("/"):
+    print(f"unsafe configFile: directory path {cfg_spec!r}")
+    sys.exit(1)
+base = cfg_spec.rsplit("/", 1)[-1]
+if base in {"", ".", ".."}:
+    print(f"unsafe configFile: invalid basename in {cfg_spec!r}")
+    sys.exit(1)
+
+# Match Lake/Load/Package.lean resolveConfigFile extension handling.
+dot_idx = base.rfind(".")
+if dot_idx > 0:
+    ext = base[dot_idx + 1:]
+    if ext not in {"lean", "toml"}:
+        print(f"unsupported configFile extension in {cfg_spec!r}")
+        sys.exit(1)
+    candidates = [cfg_spec]
+else:
+    candidates = [f"{cfg_spec}.lean", f"{cfg_spec}.toml"]
+
+resolved_cfg = None
+for rel_cand in candidates:
+    cand_real, status = resolve_within(pkg_real, rel_cand, "configFile", pkg_real)
+    if status == "missing":
+        continue
+    if status == "broken":
+        print(f"configFile {rel_cand!r} is a broken symlink")
+        sys.exit(1)
+    if status == "escape":
+        print(f"resolved config path for {rel_cand!r} escapes verified checkout")
+        sys.exit(1)
+    try:
+        cst = os.stat(cand_real)
+    except OSError as exc:
+        print(f"cannot inspect resolved configFile {rel_cand!r}: {exc}")
+        sys.exit(1)
+    if not stat.S_ISREG(cst.st_mode):
+        print(f"resolved config path for {rel_cand!r} is not a regular file")
+        sys.exit(1)
+    resolved_cfg = cand_real
+    break
+
+if resolved_cfg is None:
+    print(f"configFile {cfg_spec!r} not found in verified package directory")
+    sys.exit(1)
+
+if manifest_file:
+    validate_rel(manifest_file, "manifestFile", allow_dot=False)
+    if manifest_file.endswith("/"):
+        print(f"unsafe manifestFile: directory path {manifest_file!r}")
+        sys.exit(1)
+    man_real, status = resolve_within(pkg_real, manifest_file, "manifestFile", pkg_real)
+    if status == "broken":
+        print(f"manifestFile {manifest_file!r} is a broken symlink")
+        sys.exit(1)
+    if status == "escape":
+        print(f"resolved manifestFile path for {manifest_file!r} escapes verified checkout")
+        sys.exit(1)
+    if status == "ok":
+        try:
+            mst = os.stat(man_real)
+        except OSError as exc:
+            print(f"cannot inspect resolved manifestFile {manifest_file!r}: {exc}")
+            sys.exit(1)
+        if not stat.S_ISREG(mst.st_mode):
+            print(f"resolved manifestFile path for {manifest_file!r} is not a regular file")
+            sys.exit(1)
+PY
+}
+
 # Materialize a completely fresh, self-contained git repository at FRESH_DIR from verified
 # commit REV objects located in SRC_OBJECTS_DIR, configure literal manifest origin URL,
 # check out REV into a fresh index, and verify that the materialized working tree hashes
-# to REV^{tree} in an independent index and contains no .lake directory.
+# to REV^{tree} in an independent index, contains no .lake directory, and satisfies
+# the manifest entry's subDir/configFile containment checks.
 materialize_verified_checkout() {
   local src_objects_dir="$1"
   local fresh_dir="$2"
   local url="$3"
   local rev="$4"
+  local sub_dir="$5"
+  local config_file="$6"
+  local manifest_file="${7:-}"
   local src_objects_abs=""
   local obj_list="$TMP_DIR/objects.list"
   local pack_file="$TMP_DIR/objects.pack"
@@ -300,6 +512,7 @@ materialize_verified_checkout() {
   local actual_tree=""
   local scan_err=""
   local cfg_err=""
+  local layout_err=""
 
   if [ ! -d "$src_objects_dir" ] || [ -L "$src_objects_dir" ]; then
     echo "missing or symlink .git/objects"
@@ -430,6 +643,10 @@ materialize_verified_checkout() {
     echo "$cfg_err"
     return 1
   fi
+  if ! layout_err="$(verify_package_layout "$fresh_dir" "$sub_dir" "$config_file" "$manifest_file")"; then
+    echo "$layout_err"
+    return 1
+  fi
   return 0
 }
 
@@ -521,7 +738,10 @@ verify_restored_package() {
   local dir="$1"
   local url="$2"
   local rev="$3"
-  local fresh_dir="$4"
+  local sub_dir="$4"
+  local config_file="$5"
+  local manifest_file="$6"
+  local fresh_dir="$7"
   local reason=""
   local head_rev=""
 
@@ -541,7 +761,7 @@ verify_restored_package() {
     echo "HEAD is $head_rev, manifest pins $rev"
     return 1
   fi
-  if ! reason="$(materialize_verified_checkout "$dir/.git/objects" "$fresh_dir" "$url" "$rev")"; then
+  if ! reason="$(materialize_verified_checkout "$dir/.git/objects" "$fresh_dir" "$url" "$rev" "$sub_dir" "$config_file" "$manifest_file")"; then
     echo "$reason"
     return 1
   fi
@@ -556,7 +776,7 @@ verify_restored_package() {
 # deadline governs init, remote add, primary fetch, optional raw-SHA fallback fetch,
 # stored-config verification, strict object unpack/fsck, and final checkout materialization.
 if [ "${1:-}" = "--internal-fetch-attempt" ]; then
-  if [ "$#" -ne 6 ]; then
+  if [ "$#" -ne 9 ]; then
     echo "error: lake-packages: invalid internal attempt arguments" >&2
     exit 2
   fi
@@ -564,7 +784,10 @@ if [ "${1:-}" = "--internal-fetch-attempt" ]; then
   fresh_stage="$3"
   url="$4"
   rev="$5"
-  TMP_DIR="$6"
+  sub_dir="$6"
+  config_file="$7"
+  manifest_file="$8"
+  TMP_DIR="$9"
   primary_err="$TMP_DIR/primary-fetch.err"
   rm -f "$primary_err"
   git init -q --template="" "$raw_stage"
@@ -581,7 +804,7 @@ if [ "${1:-}" = "--internal-fetch-attempt" ]; then
     echo "fetched checkout failed verification ($cfg_err)" >&2
     exit 1
   fi
-  if ! mat_err="$(materialize_verified_checkout "$raw_stage/.git/objects" "$fresh_stage" "$url" "$rev")"; then
+  if ! mat_err="$(materialize_verified_checkout "$raw_stage/.git/objects" "$fresh_stage" "$url" "$rev" "$sub_dir" "$config_file" "$manifest_file")"; then
     echo "fetched checkout failed verification ($mat_err)" >&2
     exit 1
   fi
@@ -628,10 +851,7 @@ if [ ! -f "$MANIFEST" ] || [ -L "$MANIFEST" ]; then
   echo "error: lake-packages: $MANIFEST must exist as a regular file" >&2
   exit 2
 fi
-if [ -L ".lake" ]; then
-  echo "error: lake-packages: refusing symlink at .lake" >&2
-  exit 1
-fi
+check_no_lake_overrides || exit 1
 
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/lake-packages.XXXXXX")"
 CURRENT_STAGE=""
@@ -643,14 +863,18 @@ cleanup() {
 }
 trap cleanup EXIT
 
-MANIFEST_ROWS="$TMP_DIR/manifest.tsv"
-python3 -I - "$MANIFEST" >"$MANIFEST_ROWS" <<'PY'
+MANIFEST_JSON="$TMP_DIR/manifest.json"
+MANIFEST_RECORDS="$TMP_DIR/manifest.nul"
+python3 -I - "$MANIFEST" "$MANIFEST_JSON" "$MANIFEST_RECORDS" <<'PY'
 import json
 import re
 import sys
 from pathlib import Path
 
 manifest_path = Path(sys.argv[1])
+json_out = Path(sys.argv[2])
+nul_out = Path(sys.argv[3])
+
 try:
     data = json.loads(manifest_path.read_text(encoding="utf-8"))
 except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -658,6 +882,11 @@ except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
 
 if not isinstance(data, dict):
     sys.exit(f"error: lake-packages: {manifest_path} must be a JSON object")
+
+if "lakeDir" in data and data["lakeDir"] is not None:
+    lake_dir = data["lakeDir"]
+    if lake_dir != ".lake":
+        sys.exit(f"error: lake-packages: expected lakeDir '.lake', got {lake_dir!r}")
 
 packages_dir = data.get("packagesDir")
 if packages_dir != ".lake/packages":
@@ -669,7 +898,24 @@ packages = data.get("packages")
 if not isinstance(packages, list):
     sys.exit(f"error: lake-packages: {manifest_path} packages field must be a list")
 
+def validate_rel_subpath(raw, field_name, pkg_name, *, allow_dot=False):
+    if not isinstance(raw, str) or not raw:
+        sys.exit(f"error: lake-packages: package {pkg_name} has unsafe {field_name} {raw!r}")
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in raw):
+        sys.exit(f"error: lake-packages: package {pkg_name} has unsafe {field_name} {raw!r}")
+    if raw.startswith("/") or "\\" in raw or (len(raw) >= 2 and raw[1] == ":"):
+        sys.exit(
+            f"error: lake-packages: package {pkg_name} has unsafe {field_name} {raw!r} (must be relative POSIX path)"
+        )
+    parts = [p for p in raw.split("/") if p]
+    if ".." in parts or ".git" in parts or ".lake" in parts:
+        sys.exit(f"error: lake-packages: package {pkg_name} has unsafe {field_name} {raw!r}")
+    if not allow_dot and all(p == "." for p in parts):
+        sys.exit(f"error: lake-packages: package {pkg_name} has unsafe {field_name} {raw!r}")
+    return raw
+
 seen = set()
+parsed_entries = []
 for index, entry in enumerate(packages):
     if not isinstance(entry, dict):
         sys.exit(f"error: lake-packages: package entry {index} must be an object")
@@ -706,7 +952,53 @@ for index, entry in enumerate(packages):
             f"error: lake-packages: package {name} rev must be a 40-char hex commit (got {rev!r})"
         )
 
-    print(f"{name}\t{url}\t{rev}")
+    raw_sub = entry.get("subDir")
+    if raw_sub is None:
+        sub_dir = ""
+    else:
+        sub_dir = validate_rel_subpath(raw_sub, "subDir", name, allow_dot=True)
+
+    raw_cfg = entry.get("configFile")
+    if raw_cfg is None:
+        config_file = "lakefile"
+    else:
+        config_file = validate_rel_subpath(raw_cfg, "configFile", name, allow_dot=False)
+        if config_file.endswith("/"):
+            sys.exit(f"error: lake-packages: package {name} has unsafe configFile {raw_cfg!r}")
+        base = config_file.rsplit("/", 1)[-1]
+        if base in {"", ".", ".."}:
+            sys.exit(f"error: lake-packages: package {name} has unsafe configFile {raw_cfg!r}")
+        dot_idx = base.rfind(".")
+        if dot_idx > 0:
+            ext = base[dot_idx + 1:]
+            if ext not in {"lean", "toml"}:
+                sys.exit(
+                    f"error: lake-packages: package {name} has unsupported configFile extension ({raw_cfg!r})"
+                )
+
+    raw_man = entry.get("manifestFile")
+    if raw_man is None:
+        manifest_file = ""
+    else:
+        manifest_file = validate_rel_subpath(raw_man, "manifestFile", name, allow_dot=False)
+        if manifest_file.endswith("/"):
+            sys.exit(f"error: lake-packages: package {name} has unsafe manifestFile {raw_man!r}")
+
+    parsed_entries.append({
+        "name": name,
+        "url": url,
+        "rev": rev,
+        "subDir": sub_dir,
+        "configFile": config_file,
+        "manifestFile": manifest_file,
+    })
+
+json_out.write_text(json.dumps(parsed_entries), encoding="utf-8")
+with open(nul_out, "wb") as fh:
+    for item in parsed_entries:
+        for field in ("name", "url", "rev", "subDir", "configFile", "manifestFile"):
+            fh.write(item[field].encode("utf-8"))
+            fh.write(b"\0")
 PY
 
 PACKAGES_DIR=".lake/packages"
@@ -716,22 +1008,45 @@ if [ -L "$PACKAGES_DIR" ] || { [ -e "$PACKAGES_DIR" ] && [ ! -d "$PACKAGES_DIR" 
 fi
 mkdir -p "$PACKAGES_DIR"
 
-# Prune any unexpected or leftover entries under .lake/packages not listed in lake-manifest.json.
-declare -A EXPECTED_PKGS=()
-while IFS=$'\t' read -r name _url _rev; do
-  [ -n "$name" ] || continue
-  EXPECTED_PKGS["$name"]=1
-done <"$MANIFEST_ROWS"
-
-shopt -s nullglob dotglob
-for entry in "$PACKAGES_DIR"/*; do
-  base="$(basename "$entry")"
-  if [ -z "${EXPECTED_PKGS[$base]+x}" ]; then
-    echo "warn lake-packages: pruning unexpected entry $entry" >&2
-    safe_rm_rf "$entry"
+# Prune any unexpected or leftover entries under .lake/packages by literal directory
+# entry name (via find -print0 / exact comparison, never stripping trailing newlines).
+prune_unexpected_entries() {
+  local packages_dir="$1"
+  local manifest_json="$2"
+  local entries_file="$TMP_DIR/pkg-entries.nul"
+  local entry=""
+  local base=""
+  local display=""
+  if ! find "$packages_dir" -mindepth 1 -maxdepth 1 -print0 >"$entries_file"; then
+    echo "error: lake-packages: cannot enumerate $packages_dir" >&2
+    return 1
   fi
-done
-shopt -u nullglob dotglob
+  while IFS= read -r -d '' entry; do
+    base="${entry#"$packages_dir"/}"
+    if ! python3 -I - "$manifest_json" "$base" <<'PY'; then
+import json
+import sys
+from pathlib import Path
+
+expected = {item["name"] for item in json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))}
+sys.exit(0 if sys.argv[2] in expected else 1)
+PY
+      display="$(python3 -I - "$packages_dir" "$base" <<'PY'
+import sys
+pkg_dir, name = sys.argv[1], sys.argv[2]
+if any(ord(ch) < 32 or ord(ch) == 127 for ch in name):
+    print(f"{pkg_dir}/{name!r}")
+else:
+    print(f"{pkg_dir}/{name}")
+PY
+)"
+      echo "warn lake-packages: pruning unexpected entry $display" >&2
+      safe_rm_rf "$entry"
+    fi
+  done <"$entries_file"
+  rm -f "$entries_file"
+}
+prune_unexpected_entries "$PACKAGES_DIR" "$MANIFEST_JSON" || exit 1
 
 run_bounded_attempt() {
   local err_file="$1"
@@ -752,14 +1067,17 @@ fetch_once() {
   local fresh_stage="$2"
   local url="$3"
   local rev="$4"
-  local attempt_tmp="$5"
-  local err_file="$6"
-  local status_file="$7"
+  local sub_dir="$5"
+  local config_file="$6"
+  local manifest_file="$7"
+  local attempt_tmp="$8"
+  local err_file="$9"
+  local status_file="${10}"
   local outcome=""
 
   run_bounded_attempt "$err_file" "$status_file" \
     bash --noprofile --norc "$HELPER_SCRIPT" \
-    --internal-fetch-attempt "$raw_stage" "$fresh_stage" "$url" "$rev" "$attempt_tmp"
+    --internal-fetch-attempt "$raw_stage" "$fresh_stage" "$url" "$rev" "$sub_dir" "$config_file" "$manifest_file" "$attempt_tmp"
 
   outcome="$(cat "$status_file" 2>/dev/null || true)"
   if [ "$outcome" != "exit 0" ]; then
@@ -775,6 +1093,9 @@ fetch_package_with_retry() {
   local name="$1"
   local url="$2"
   local rev="$3"
+  local sub_dir="$4"
+  local config_file="$5"
+  local manifest_file="$6"
   local dest="$PACKAGES_DIR/$name"
   local err_file="$TMP_DIR/fetch-$name.err"
   local status_file="$TMP_DIR/fetch-$name.status"
@@ -804,7 +1125,7 @@ fetch_package_with_retry() {
     CURRENT_FRESH="$fresh_stage"
     attempt_tmp="$(mktemp -d "$TMP_DIR/attempt-$name.XXXXXX")"
 
-    if fetch_once "$raw_stage" "$fresh_stage" "$url" "$rev" "$attempt_tmp" "$err_file" "$status_file"; then
+    if fetch_once "$raw_stage" "$fresh_stage" "$url" "$rev" "$sub_dir" "$config_file" "$manifest_file" "$attempt_tmp" "$err_file" "$status_file"; then
       safe_rm_rf "$dest"
       mv "$fresh_stage" "$dest"
       CURRENT_FRESH=""
@@ -833,6 +1154,9 @@ try_seed_package() {
   local name="$1"
   local url="$2"
   local rev="$3"
+  local sub_dir="$4"
+  local config_file="$5"
+  local manifest_file="$6"
   local dest="$PACKAGES_DIR/$name"
   local seed_pkg=""
   local seed_real=""
@@ -853,7 +1177,7 @@ try_seed_package() {
 
   fresh_stage="$(mktemp -d "$PACKAGES_DIR/.seed-$name.XXXXXX")"
   CURRENT_FRESH="$fresh_stage"
-  if reason="$(materialize_verified_checkout "$seed_pkg/.git/objects" "$fresh_stage" "$url" "$rev")"; then
+  if reason="$(materialize_verified_checkout "$seed_pkg/.git/objects" "$fresh_stage" "$url" "$rev" "$sub_dir" "$config_file" "$manifest_file")"; then
     safe_rm_rf "$dest"
     mv "$fresh_stage" "$dest"
     CURRENT_FRESH=""
@@ -866,16 +1190,24 @@ try_seed_package() {
   return 1
 }
 
-# Final fail-closed post-condition: assert .lake/packages and every manifest package
-# materialized on disk at its exact pinned revision with no .lake subdirectory.
+# Final fail-closed post-condition: assert no active Lake overrides, exact literal
+# membership in .lake/packages matching lake-manifest.json, and every manifest package
+# materialized on disk at its exact pinned revision with no .lake subdirectory and with
+# resolved subDir/configFile paths staying inside the verified checkout.
 verify_manifest_packages_present() {
-  local rows_file="$1"
+  local manifest_json="$1"
+  local records_file="$2"
   local pkg_name=""
   local pkg_url=""
   local pkg_rev=""
+  local pkg_sub=""
+  local pkg_cfg=""
+  local pkg_man=""
   local pkg_dir=""
   local head_rev=""
+  local err_msg=""
 
+  check_no_lake_overrides || return 1
   if [ ! -d ".lake" ] || [ -L ".lake" ]; then
     echo "error: lake-packages: post-condition failed: missing or symlinked .lake" >&2
     return 1
@@ -884,15 +1216,48 @@ verify_manifest_packages_present() {
     echo "error: lake-packages: post-condition failed: missing or symlinked $PACKAGES_DIR" >&2
     return 1
   fi
-  while IFS=$'\t' read -r pkg_name pkg_url pkg_rev; do
+
+  # Verify exact literal membership of .lake/packages against manifest entries.
+  python3 -I - "$PACKAGES_DIR" "$manifest_json" <<'PY' || return 1
+import json
+import os
+import sys
+from pathlib import Path
+
+packages_dir = sys.argv[1]
+manifest_entries = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+expected = {item["name"] for item in manifest_entries}
+try:
+    actual = {item.name for item in os.scandir(packages_dir)}
+except OSError as exc:
+    sys.exit(f"error: lake-packages: post-condition failed: cannot list {packages_dir}: {exc}")
+
+extra = sorted(actual - expected)
+if extra:
+    sys.exit(
+        f"error: lake-packages: post-condition failed: unexpected entries in {packages_dir}: {extra!r}"
+    )
+missing = sorted(expected - actual)
+if missing:
+    sys.exit(
+        f"error: lake-packages: post-condition failed: missing packages in {packages_dir}: {missing!r}"
+    )
+PY
+
+  while IFS= read -r -d '' pkg_name \
+     && IFS= read -r -d '' pkg_url \
+     && IFS= read -r -d '' pkg_rev \
+     && IFS= read -r -d '' pkg_sub \
+     && IFS= read -r -d '' pkg_cfg \
+     && IFS= read -r -d '' pkg_man; do
     [ -n "$pkg_name" ] || continue
     pkg_dir="$PACKAGES_DIR/$pkg_name"
     if [ ! -d "$pkg_dir" ] || [ -L "$pkg_dir" ] || [ ! -d "$pkg_dir/.git" ] || [ -L "$pkg_dir/.git" ]; then
       echo "error: lake-packages: post-condition failed: missing verified checkout at $pkg_dir" >&2
       return 1
     fi
-    if [ -e "$pkg_dir/.lake" ] || [ -L "$pkg_dir/.lake" ]; then
-      echo "error: lake-packages: post-condition failed: unexpected .lake in $pkg_dir" >&2
+    if ! err_msg="$(scan_no_lake_dirs "$pkg_dir")"; then
+      echo "error: lake-packages: post-condition failed: $pkg_dir: $err_msg" >&2
       return 1
     fi
     head_rev="$(resolve_stored_head "$pkg_dir")" || {
@@ -903,17 +1268,26 @@ verify_manifest_packages_present() {
       echo "error: lake-packages: post-condition failed: $pkg_dir HEAD is $head_rev, expected $pkg_rev" >&2
       return 1
     fi
-  done <"$rows_file"
+    if ! err_msg="$(verify_package_layout "$pkg_dir" "$pkg_sub" "$pkg_cfg" "$pkg_man")"; then
+      echo "error: lake-packages: post-condition failed: $pkg_dir: $err_msg" >&2
+      return 1
+    fi
+  done <"$records_file"
   return 0
 }
 
-while IFS=$'\t' read -r name url rev; do
+while IFS= read -r -d '' name \
+   && IFS= read -r -d '' url \
+   && IFS= read -r -d '' rev \
+   && IFS= read -r -d '' sub_dir \
+   && IFS= read -r -d '' config_file \
+   && IFS= read -r -d '' manifest_file; do
   [ -n "$name" ] || continue
   pkg_dir="$PACKAGES_DIR/$name"
   if [ -e "$pkg_dir" ] || [ -L "$pkg_dir" ]; then
     fresh_stage="$(mktemp -d "$PACKAGES_DIR/.verify-$name.XXXXXX")"
     CURRENT_FRESH="$fresh_stage"
-    if reason="$(verify_restored_package "$pkg_dir" "$url" "$rev" "$fresh_stage")"; then
+    if reason="$(verify_restored_package "$pkg_dir" "$url" "$rev" "$sub_dir" "$config_file" "$manifest_file" "$fresh_stage")"; then
       safe_rm_rf "$pkg_dir"
       mv "$fresh_stage" "$pkg_dir"
       CURRENT_FRESH=""
@@ -925,12 +1299,12 @@ while IFS=$'\t' read -r name url rev; do
     echo "warn lake-packages: $name: restored package failed verification ($reason); deleting and refetching" >&2
     safe_rm_rf "$pkg_dir"
   else
-    if try_seed_package "$name" "$url" "$rev"; then
+    if try_seed_package "$name" "$url" "$rev" "$sub_dir" "$config_file" "$manifest_file"; then
       continue
     fi
     echo "info lake-packages: $name: not in cache; fetching $rev"
   fi
-  fetch_package_with_retry "$name" "$url" "$rev"
-done <"$MANIFEST_ROWS"
+  fetch_package_with_retry "$name" "$url" "$rev" "$sub_dir" "$config_file" "$manifest_file"
+done <"$MANIFEST_RECORDS"
 
-verify_manifest_packages_present "$MANIFEST_ROWS" || exit 1
+verify_manifest_packages_present "$MANIFEST_JSON" "$MANIFEST_RECORDS" || exit 1
