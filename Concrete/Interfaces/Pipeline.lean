@@ -39,7 +39,7 @@ def PassFunctions.lexer (passes : PassFunctions grammar language lang profile) :
 def parserEntry (parser : ParserEngine grammar) :
     Stage TokenStream ParseRefusal (Parsed (grammar.value grammar.start)) where
   run stream := (parser.run stream.parserView).2.getD
-    (.error (.malformed parser.malformedRule ⟨stream.source.entryFile, 0, 0, 1, 1⟩))
+    (.error (.malformed ⟨⟨``ConcreteSpec.Core.Slice0Rules.Parsed, 1⟩, by decide⟩ .unexpectedEnd ⟨stream.source.entryFile, 0, 0, 1, 1⟩))
   kind := .directProof
   inputInvariant stream := stream.parserView.WF
   outputInvariant ast := Source.WF ast.source

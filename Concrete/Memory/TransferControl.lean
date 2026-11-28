@@ -8,29 +8,32 @@ open Concrete.Interfaces ConcreteSpec.Core ConcreteSpec.StageInterface
 -- its layout through the language interface so the fixture fits in two steps.
 private def backingSize := 2^64 - 5
 private def aggregateId : DeclId := ⟨(bindReturnControl slice0).entry.module, ⟨"suffix"⟩⟩
+private def backingId : DeclId := ⟨(bindReturnControl slice0).entry.module, ⟨"backing"⟩⟩
+private abbrev backingTy : (sliceLanguage slice0).operands.Ty := .nominal backingId
+private abbrev suffixTyVal : (sliceLanguage slice0).operands.Ty := .nominal aggregateId
 private def suffixRuns : List (Nat × List Mem.MByte) := [(0, [.init 42 none]), (4, [])]
 private abbrev Language : CoreLanguage := {sliceLanguage slice0 with
-  layout := fun env target ty => match ty with
-    | .inr false => some ⟨backingSize, 1, .nil⟩
-    | .inr true => some ⟨4, 1, .nil⟩
-    | _ => (sliceLanguage slice0).layout env target ty
-  literal := fun ty bytes => match ty with
-    | .inr true => if bytes == [42] then some (.other aggregateId) else none
-    | _ => (sliceLanguage slice0).literal ty bytes
-  encodeOther := fun _ ty (v : DeclId) => match ty with
-    | .inr true => if v == aggregateId then some suffixRuns else none
-    | _ => none
-  decodeOther := fun _ ty bytes => match ty with
-    | .inr true => if bytes.head? == some (.init 42 none) then some aggregateId else none
-    | _ => none}
+  layout := fun env target (ty : EarlyTy) =>
+    if ty == backingTy then some ⟨backingSize, 1, .nil⟩
+    else if ty == suffixTyVal then some ⟨4, 1, .nil⟩
+    else (sliceLanguage slice0).layout env target ty
+  literal := fun (ty : EarlyTy) bytes =>
+    if ty == suffixTyVal then if bytes == [42] then some (.other aggregateId) else none
+    else (sliceLanguage slice0).literal ty bytes
+  encodeOther := fun _ (ty : EarlyTy) (v : DeclId) =>
+    if ty == suffixTyVal then if v == aggregateId then some suffixRuns else none
+    else none
+  decodeOther := fun _ (ty : EarlyTy) (bytes : List Mem.MByte) =>
+    if ty == suffixTyVal then if bytes.head? == some (.init 42 none) then some aggregateId else none
+    else none}
 private abbrev Lowering := sliceLoweringLanguage slice0
 private abbrev profile : Profile := ⟨.lcb, .x86_64Linux, 4, 4096⟩
 private abbrev State := MemoryRegisters Language profile
 private abbrev M := Interfaces.Memory Lowering profile
 private abbrev exec := Interfaces.Memory.Execution (language := Language) (lang := Lowering) (profile := profile)
 private abbrev mir := bindReturnControl slice0
-private abbrev u8Ty : Language.operands.Ty := .inl (.scalar (.int .u8))
-private abbrev u16Ty : Language.operands.Ty := .inl (.scalar (.int .u16))
+private abbrev u8Ty : Language.operands.Ty := .scalar (.int .u8)
+private abbrev u16Ty : Language.operands.Ty := .scalar (.int .u16)
 private def byte : MemoryPlace _ u8Ty := ⟨⟨⟨0⟩, []⟩, .materialized⟩
 private def word : MemoryPlace _ u16Ty := ⟨⟨⟨1⟩, []⟩, .materialized⟩
 private def byteValue : Language.operands.Val := .scalar (.int .u8 42)
@@ -38,7 +41,7 @@ private def wordValue : Language.operands.Val := .scalar (.int .u16 42)
 private def backing : PlaceId := ⟨2⟩
 private def origin := mir.functions[0].2.2.blocks[0].body[0].origin
 private def locals : LocalTypes Language.operands.Ty :=
-  [(byte.logical.root, u8Ty), (word.logical.root, u16Ty), (backing, .inr false)]
+  [(byte.logical.root, u8Ty), (word.logical.root, u16Ty), (backing, backingTy)]
 private def layouts : AList FnId (AList PlaceId Layout) :=
   [(mir.entry, [(byte.logical.root, ⟨1, 1, .nil⟩), (word.logical.root, ⟨2, 2, .nil⟩), (backing, ⟨backingSize, 1, .nil⟩)])]
 private def params : List (Sigma (MemoryPlace Language.operands.Ty)) := [⟨u8Ty, byte⟩, ⟨u16Ty, word⟩]
@@ -667,7 +670,7 @@ private theorem stuck_at_jump {language : CoreLanguage} {lang : LoweringLanguage
 
 -- Byte 2 is already occupied. The u16 and a four-byte aggregate both need
 -- widened placement. The two graphs differ only in the last parameter's tag.
-private abbrev suffixTy : Language.operands.Ty := .inr true
+private abbrev suffixTy : Language.operands.Ty := suffixTyVal
 private def lastPlace (tag : StorageClass) : MemoryPlace _ suffixTy := ⟨⟨⟨3⟩, []⟩, tag⟩
 private def suffixEdge : CFGEdge (Sigma (MemoryRead _ Lowering.literal)) :=
   {edge with arguments := edge.arguments ++ [⟨suffixTy, .literal ⟨[42]⟩⟩]}
@@ -788,7 +791,7 @@ private theorem invalid_root {language : CoreLanguage} {lang : LoweringLanguage 
     rw [frame, invalid] at valid
     contradiction
 
-private abbrev u32Ty : Language.operands.Ty := .inl (.scalar (.int .u32))
+private abbrev u32Ty : Language.operands.Ty := .scalar (.int .u32)
 private def wrong : MemoryPlace _ u8Ty := ⟨⟨⟨3⟩, []⟩, .materialized⟩
 private def opening : List (LocatedOp (MemoryInst Lowering)) := [⟨origin, MemoryInst.beginLifetime (lang := Lowering) backing⟩]
 private def threeBytes (p : MemoryPlace _ u8Ty) : M :=
@@ -870,15 +873,17 @@ theorem alignment_ceiling_refused : ¬ (misaligned (2^64)).HandoffWF := by
 -- The unused local has a legal layout that cannot be placed in empty target
 -- memory. Both source and healthy target return 42 from a one-byte parameter.
 -- In the corrupted target only the parameter's root changes.
+private def hugeId : DeclId := ⟨mir.entry.module, ⟨"huge"⟩⟩
+private abbrev hugeTy : (sliceLanguage slice0).operands.Ty := .nominal hugeId
 private abbrev Huge : CoreLanguage := {sliceLanguage slice0 with
-  layout := fun env target ty => match ty with
-    | .inr false => some ⟨2^64 - 1, 1, .nil⟩
-    | _ => (sliceLanguage slice0).layout env target ty}
+  layout := fun env target (ty : EarlyTy) =>
+    if ty == hugeTy then some ⟨2^64 - 1, 1, .nil⟩
+    else (sliceLanguage slice0).layout env target ty}
 private abbrev source := Interfaces.MIR.Execution (language := Huge) (lang := Lowering) (profile := profile)
 private abbrev target := Interfaces.Memory.Execution (language := Huge) (lang := Lowering) (profile := profile)
 private abbrev registers := MemoryRegisters Huge profile
 private def unused : MemoryPlace _ u8Ty := ⟨⟨⟨1⟩, []⟩, .materialized⟩
-private def decls : LocalTypes Huge.operands.Ty := [(byte.logical.root, u8Ty), (unused.logical.root, .inr false)]
+private def decls : LocalTypes Huge.operands.Ty := [(byte.logical.root, u8Ty), (unused.logical.root, hugeTy)]
 private def addressByte : MIRInst Lowering := .op (opcode := .read) byte.logical ()
   (.cons (.literal (ty := u8Ty) ⟨[42]⟩) .nil) [] [⟨u8Ty, byte.logical⟩]
 private def sourceMir : MIR Lowering profile :=

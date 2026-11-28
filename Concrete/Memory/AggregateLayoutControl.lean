@@ -16,17 +16,18 @@ private def Scenario.backingBase : Scenario → Nat
 private def Scenario.backingSize (s : Scenario) := C - 1 - s.backingBase
 private abbrev baseLang := sliceLanguage slice0
 local instance : DecidableEq baseLang.operands.Ty := baseLang.typeDecidableEq
-private abbrev aggregateTy : baseLang.operands.Ty := .inr true
-private abbrev backingTy : baseLang.operands.Ty := .inr false
 private abbrev lowering := sliceLoweringLanguage slice0
 private abbrev profile : Profile := ⟨.lcb, .x86_64Linux, 4, 4096⟩
 private abbrev mir := bindReturnControl slice0
 private abbrev origin := mir.functions[0].2.2.blocks[0].body[0].origin
 private abbrev decl : DeclId := ⟨mir.entry.module, ⟨"T"⟩⟩
+private abbrev backingDecl : DeclId := ⟨mir.entry.module, ⟨"Backing"⟩⟩
+private abbrev aggregateTy : baseLang.operands.Ty := .nominal decl
+private abbrev backingTy : baseLang.operands.Ty := .nominal backingDecl
 private abbrev aggregateValue : baseLang.operands.Val := .other decl
 private def fld : FieldId := ⟨.struct decl, ⟨"word"⟩⟩
-private abbrev u32 : baseLang.operands.Ty := .inl (.scalar (.int .u32))
-private abbrev u8 : baseLang.operands.Ty := .inl (.scalar (.int .u8))
+private abbrev u32 : baseLang.operands.Ty := .scalar (.int .u32)
+private abbrev u8 : baseLang.operands.Ty := .scalar (.int .u8)
 private def word : baseLang.operands.Val := .scalar (.int .u32 42)
 private def Scenario.offset (s : Scenario) (fixed : Bool) : Nat :=
   match s with | .full => if fixed then 4 else 2 | _ => 0
@@ -237,5 +238,25 @@ theorem padded_completes :
 
 -- A valid outer edge cannot hide a malformed grandchild.
 example : ¬ (⟨16, 8, .cons fld 8 (description .full false) .nil⟩ : Layout).WellFormed profile.memoryTarget := by decide
+
+-- ISS-0125 sibling-field disjointness: overlapping siblings fail `Layout.WellFormed`,
+-- `lowerGraph`, and `HandoffWF`; adjacent siblings are accepted.
+example :
+    let fld2 : FieldId := ⟨.struct decl, ⟨"word2"⟩⟩
+    let overlap : Layout := ⟨8, 4, .cons fld 0 (.scalar 4 4) (.cons fld2 2 (.scalar 4 2) .nil)⟩
+    let adjacent : Layout := ⟨8, 4, .cons fld 0 (.scalar 4 4) (.cons fld2 4 (.scalar 4 4) .nil)⟩
+    let overlapLang : CoreLanguage := {language .full true with
+      layout := fun env target ty =>
+        if ty == aggregateTy then some overlap else (language .full true).layout env target ty}
+    let overlapMem : Interfaces.Memory lowering profile := {memory .full true with
+      layouts := [(mir.entry, [(dst.logical.root, overlap), (backing, .scalar (Scenario.full.backingSize) 1)])]}
+    overlap.WellFormed profile.memoryTarget = false ∧
+    adjacent.WellFormed profile.memoryTarget = true ∧
+    lowerGraph (language := overlapLang) source = .error (.layout ⟨mir.entry, dst.logical.root, aggregateTy⟩) ∧
+    ¬ overlapMem.HandoffWF := by
+  refine ⟨by decide, by decide, by with_unfolding_all rfl, ?_⟩
+  intro h
+  exact (by decide : ¬ (Layout.mk 8 4 (.cons fld 0 (.scalar 4 4) (.cons ⟨.struct decl, ⟨"word2"⟩⟩ 2 (.scalar 4 2) .nil))).WellFormed profile.memoryTarget)
+    (geometry_required h.2.2.2 (.head _) (.head _))
 
 end Concrete.Memory.AggregateLayoutControl

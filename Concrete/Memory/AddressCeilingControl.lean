@@ -8,9 +8,10 @@ open Concrete.Interfaces ConcreteSpec.Core ConcreteSpec.StageInterface
 The backing object occupies every physically allocatable byte. -/
 private abbrev baseLang := sliceLanguage slice0
 local instance : DecidableEq baseLang.operands.Ty := baseLang.typeDecidableEq
-private abbrev aggregateTy : baseLang.operands.Ty := .inr true
-private abbrev blockTy : baseLang.operands.Ty := .inr false
 private abbrev decl : DeclId := ⟨(bindReturnControl slice0).entry.module, ⟨"T"⟩⟩
+private abbrev backingDecl : DeclId := ⟨(bindReturnControl slice0).entry.module, ⟨"Backing"⟩⟩
+private abbrev aggregateTy : baseLang.operands.Ty := .nominal decl
+private abbrev blockTy : baseLang.operands.Ty := .nominal backingDecl
 private abbrev aggregateValue : baseLang.operands.Val := .other decl
 private def runs : List (Nat × List Mem.MByte) := [(0, [.init 42 none]), (1, [])]
 private abbrev full := 2^64 - 2
@@ -48,7 +49,7 @@ private def edge : CFGEdge (Sigma (MemoryRead _ lowering.literal)) := ⟨⟨1⟩
 private def backingPlace : MemoryPlace _ blockTy := ⟨⟨backing, []⟩, .materialized⟩
 private def entry : MemoryBlock lowering :=
   ⟨⟨0⟩, [], [⟨origin, .beginLifetime backing⟩, ⟨origin, .bind backingPlace (.literal ⟨[42]⟩)⟩], .jump edge, []⟩
-private def dest : MemoryBlock lowering := ⟨⟨1⟩, params, [], .ret (some ⟨.inl (.scalar (.int .u8)), .literal ⟨[42]⟩⟩), []⟩
+private def dest : MemoryBlock lowering := ⟨⟨1⟩, params, [], .ret (some ⟨.scalar (.int .u8), .literal ⟨[42]⟩⟩), []⟩
 private def physical : M :=
   {project := mir.project, entry := mir.entry, signatures := mir.signatures
    functions := [(mir.entry, [(dst.logical.root, aggregateTy), (backing, blockTy)], ⟨⟨0⟩, #[entry, dest]⟩)]
@@ -116,7 +117,7 @@ private theorem exhausts : exec.step physical atJump halted ∧ exec.result phys
 private def sourceMir : MIR lowering profile := {mir with
   functions := [(mir.entry, [(dst.logical.root, aggregateTy), (backing, blockTy)], ⟨⟨0⟩, #[
     ⟨⟨0⟩, [], [⟨origin, .bind backingPlace.logical (.literal ⟨[42]⟩)⟩], .jump ⟨⟨1⟩, [⟨aggregateTy, .literal ⟨[42]⟩⟩]⟩, []⟩,
-    ⟨⟨1⟩, [⟨aggregateTy, dst.logical⟩], [], .ret (some ⟨.inl (.scalar (.int .u8)), .literal ⟨[42]⟩⟩), []⟩]⟩)]}
+    ⟨⟨1⟩, [⟨aggregateTy, dst.logical⟩], [], .ret (some ⟨.scalar (.int .u8), .literal ⟨[42]⟩⟩), []⟩]⟩)]}
 private theorem lowered : lowerGraph (language := Language) sourceMir = .ok physical := by with_unfolding_all rfl
 
 private abbrev source := Interfaces.MIR.Execution (language := Language) (lang := lowering) (profile := profile)

@@ -471,14 +471,14 @@ private def nominalRootControl : MIR (sliceLoweringLanguage slice1) profileContr
   project := Project.singleton mainSourcePath (SourceText.ofBytes [52, 50])
   entry := controlFn
   signatures := [(controlFn, ⟨[], none⟩)]
-  functions := [(controlFn, [(⟨0⟩, .inl (.nominal controlDecl))],
+  functions := [(controlFn, [(⟨0⟩, .nominal controlDecl)],
     ⟨⟨0⟩, #[⟨⟨0⟩, [], [], .ret none, []⟩]⟩)]
 
 example : (sliceLanguage slice1).layout [] profileControl.memoryTarget
-    (.inl (.nominal controlDecl)) = none := rfl
+    (.nominal controlDecl) = none := rfl
 
 example : prepareGraph (language := sliceLanguage slice1) nominalRootControl =
-    .error ⟨controlFn, ⟨0⟩, .inl (.nominal controlDecl)⟩ := by with_unfolding_all rfl
+    .error ⟨controlFn, ⟨0⟩, .nominal controlDecl⟩ := by with_unfolding_all rfl
 
 private def declaredEmpty : Declarations := [(controlDecl, ⟨controlDecl.name, false, []⟩)]
 
@@ -487,7 +487,7 @@ example : (prepareGraph (language := sliceLanguage slice1) (profile := profileCo
       some [(controlFn, [(⟨0⟩, .scalar 0 1)])] := by with_unfolding_all rfl
 
 private abbrev controlLang := sliceLoweringLanguage slice1
-private abbrev u8Ty : (sliceLanguage slice1).operands.Ty := .inl (.scalar (.int .u8))
+private abbrev u8Ty : (sliceLanguage slice1).operands.Ty := .scalar (.int .u8)
 
 private def controlOrigin : Origin :=
   ⟨⟨0⟩, ⟨⟨0⟩, 0, 2, 1, 1⟩, ⟨.function controlFn, ⟨[]⟩⟩⟩
@@ -553,7 +553,7 @@ theorem nominal_root_blocks_layout
     (memory : Interfaces.Memory (sliceLoweringLanguage slice1) profileControl)
     (lowered : LowersMemory (language := sliceLanguage slice1) nominalRootControl memory)
     (graph : MemoryGraph (sliceLoweringLanguage slice1))
-    (retained : (controlFn, [(⟨0⟩, .inl (.nominal controlDecl))], graph) ∈ memory.functions) :
+    (retained : (controlFn, [(⟨0⟩, .nominal controlDecl)], graph) ∈ memory.functions) :
     False := by
   obtain ⟨classes, storage, table, classification, eligible⟩ :=
     lowered.2.2.2.2.2.1.1 controlFn _ _ (by exact List.Mem.head _) ⟨0⟩ _ (List.Mem.head _)

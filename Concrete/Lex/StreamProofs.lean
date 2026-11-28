@@ -280,7 +280,7 @@ private theorem retained_wf {source : Source} {file : File} {ref : LosslessStrea
     change t.decoded.span = fileSpan p.val.span at eqn
     rw [eqn]
     simpa only [List.toList_toArray] using ok
-  unfold ParserView.WF ParserView.invalidSpan ParserView.validateCoordinates
+  unfold ParserView.WF ParserView.invalidLocation ParserView.validateCoordinates
   simp only [retain, TokenStream.parserView, Runs.stream, List.getElem?_toArray, List.getElem?_map,
     fileAt, Option.map_some, Function.comp_apply, Bind.bind, Except.bind, Pure.pure, Except.pure,
     throw, throwThe, MonadExceptOf.throw]
@@ -288,27 +288,45 @@ private theorem retained_wf {source : Source} {file : File} {ref : LosslessStrea
   have hback : positions.back?.isSome = true := by
     simp [Array.back?, positions]
   split
-  · rename_i span heq
+  · rename_i bad heq
     split at heq
     · split at heq
-      · rename_i token hsome
-        rw [Array.find?_eq_none.mpr (by
+      · rename_i badPair hsome
+        rw [Array.findSome?_eq_none_iff.mpr (by
           intro tok member
           simp only [List.mem_toArray, List.mem_map] at member
           obtain ⟨t, ⟨e, he, rfl⟩, rfl⟩ := member
           have ⟨fileId, ordered, within, coordinates⟩ := valid e.2 (List.mem_map.mpr ⟨e, he, rfl⟩)
           have castBytes := congrArg SourceText.bytes (SourceText.ofBytes_toBytes file.source)
           change file.source.toBytes.map UInt8.toNat = file.source.bytes at castBytes
-          simp only [fileId, fileAt, Option.map_some, Function.comp_apply]
-          change ¬ (!(decide (e.2.decoded.span.startOffset ≤ e.2.decoded.span.endOffset) &&
-              decide (e.2.decoded.span.endOffset < positions.size) &&
-              positions[e.2.decoded.span.startOffset]? == some (e.2.decoded.span.line,e.2.decoded.span.col))) = true
-          simp only [positions, List.size_toArray, List.length_map, List.length_scanl, List.getElem?_toArray,
-            List.getElem?_map, List.getElem?_scanl, ← castBytes, List.length_map]
-          have bound := Nat.le_trans ordered within
-          simp [ordered, coordinates]
-          simpa only [SourceText.length, SourceText.toBytes, List.length_map] using
-            And.intro (Nat.lt_succ_of_le within) bound)] at hsome
+          have hpos : positions[e.2.decoded.span.startOffset]? = some (e.2.decoded.span.line, e.2.decoded.span.col) := by
+            have bound := Nat.le_trans ordered within
+            simp only [positions, List.getElem?_toArray, List.getElem?_map, List.getElem?_scanl,
+              ← castBytes, List.length_map]
+            have hlt : e.2.decoded.span.startOffset ≤ file.source.toBytes.length := bound
+            simpa [coordinates, hlt] using (show e.2.decoded.span.startOffset ≤ file.source.toBytes.length from bound)
+          have hend : e.2.decoded.span.endOffset < positions.size := by
+            simp only [positions, List.size_toArray, List.length_map, List.length_scanl,
+              ← castBytes, List.length_map]
+            exact Nat.lt_succ_of_le within
+          let files := (source.project.files.map (fun f =>
+              ((f.source.bytes.scanl Position.advanceByte {}).map fun p => (p.line, p.column)).toArray)).toArray
+          have hfile : files[e.2.decoded.span.file.index]? = some positions := by
+            simp [files, fileId, fileAt, positions]
+          change Option.map (fun reason => (e.2.decoded.span, reason))
+            (match files[e.2.decoded.span.file.index]? with
+            | none => some LocationRefusal.unknownFile
+            | some table =>
+              if !(e.2.decoded.span.startOffset ≤ e.2.decoded.span.endOffset) then some .reversedRange
+              else if !(e.2.decoded.span.endOffset < table.size) then some (.pastEnd (table.size - 1))
+              else
+                match table[e.2.decoded.span.startOffset]? with
+                | none => some (.pastEnd (table.size - 1))
+                | some (line, col) =>
+                  if e.2.decoded.span.line != line then some (.wrongLine line)
+                  else if e.2.decoded.span.col != col then some (.wrongColumn col)
+                  else none) = none
+          simp [hfile, ordered, hend, hpos])] at hsome
         contradiction
       · contradiction
     · rename_i hnone

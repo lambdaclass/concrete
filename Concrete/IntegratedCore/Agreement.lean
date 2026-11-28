@@ -581,7 +581,7 @@ inductive Matches (first : Option SiteId) : Outcome â†’ Exec.Final EarlyValue â†
 private theorem eval_ok {slice owners ds cs e v mid}
     (value : earlyEval ds (locals cs) e = .ok v)
     (permit : earlyPermit (own cs) e = some (own mid)) :
-    (Machine slice owners ds).eval (locals cs) (store cs) (.inl e) = .ok (v, store mid) := by
+    (Machine slice owners ds).eval (locals cs) (store cs) e = .ok (v, store mid) := by
   change (match earlyPermit (own cs) e with | none => _ | some _ => _) = _
   rw [permit]
   simp [sliceLanguage, earlyEvaluate, value, store, Res.map, Res.bind]
@@ -589,7 +589,7 @@ private theorem eval_ok {slice owners ds cs e v mid}
 private theorem eval_overflow {slice owners ds cs e permission}
     (trap : earlyEval ds (locals cs) e = .trap .overflow)
     (permit : earlyPermit (own cs) e = some permission) :
-    (Machine slice owners ds).eval (locals cs) (store cs) (.inl e) = .trap .overflow := by
+    (Machine slice owners ds).eval (locals cs) (store cs) e = .trap .overflow := by
   change (match earlyPermit (own cs) e with | none => _ | some _ => _) = _
   rw [permit]
   simp [sliceLanguage, earlyEvaluate, trap, store, Res.map, Res.bind]

@@ -1320,6 +1320,8 @@ ConcreteSpec.Core.Slice0Rules.parseRefused
 ConcreteSpec.Core.Slice0Rules.parserStepAccepted	
 ConcreteSpec.Core.Slice0Rules.parserStepRefused	
 ConcreteSpec.Core.Slice0Rules.productionAccepted	
+ConcreteSpec.Core.Slice0Rules.productionDestructureRefused	
+ConcreteSpec.Core.Slice0Rules.productionEmptyDeclsAccepted	
 ConcreteSpec.Core.Slice0Rules.productionRefused	
 ConcreteSpec.Core.Slice0Rules.radixAccepted	
 ConcreteSpec.Core.Slice0Rules.radixRefused	
@@ -1345,6 +1347,8 @@ ConcreteSpec.Core.Slice1Registry.liveReturn
 ConcreteSpec.Core.Slice1Registry.moveLinear	
 ConcreteSpec.Core.Slice1Registry.overflow	propext
 ConcreteSpec.Core.Slice1Registry.reusedPattern	
+ConcreteSpec.Core.Slice1Registry.structDeclaredAccepted	
+ConcreteSpec.Core.Slice1Registry.structDeclaredRefused	
 ConcreteSpec.Core.Slice1Registry.unusedAbort	
 ConcreteSpec.Core.Slice1Registry.useAfterMove	propext
 ConcreteSpec.Core.Slice1Registry.usedAbort	

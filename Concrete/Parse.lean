@@ -90,8 +90,8 @@ private inductive Value where
   | program (ast : Program)
 
 private def reduce (start : Span) : Nonterminal → List Value → Except RefusalCause Value
-  | .program, [_, .tok ⟨.name name, span⟩, _, _, _, _, _, .body statements, _] =>
-    .ok (.program ⟨name, span, statements⟩)
+  | .program, [_, .tok ⟨.name name, span⟩, _, _, _, _, _, .body statements, .tok close] =>
+    .ok (.program ⟨name, span, statements, close.span⟩)
   | .body, [.tok keyword, .tok ⟨.name name, span⟩, _, _, _, .expr rhs, .tok semi, .body rest] =>
     .ok (.body (.bind ⟨name, span, rhs⟩ (statementSpan keyword.span semi.span) :: rest))
   | .body, [.tok keyword, .expr result, .tok semi, .body rest] =>

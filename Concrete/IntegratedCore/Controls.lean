@@ -98,8 +98,10 @@ example : parseAndElaborate returnTokens = some expected := by
 example :
     let bad := {returnTokens with tokens := returnTokens.tokens.modify 8 (
       fun token => {token with span := {token.span with endOffset := 31}})}
-    ((sliceParser slice0).run bad).2 = some (.error (.invalidStream ⟨⟨0⟩, 25, 31, 1, 26⟩)) := by
-  with_unfolding_all rfl
+    let refusal := ParseRefusal.invalidStream ⟨⟨0⟩, 25, 31, 1, 26⟩ (.pastEnd 30)
+    ((sliceParser slice0).run bad).2 = some (.error refusal) ∧
+    refusal.ruleId = ⟨``SourcePathSpan.EndInSource, 2⟩ := by
+  with_unfolding_all exact ⟨rfl, rfl⟩
 
 example :
     elaborate slice0 ⟨source, .inl (.node .body [])⟩ =
@@ -213,7 +215,7 @@ private def wildByte : LocatedStraightBinding :=
 -- candidate whose only executable operation returns the chosen byte.
 private def wildcardMIR (status : UInt8) : MIR (sliceLoweringLanguage sliceOne) profile :=
   let core := tokenInput [wildToken]
-  let u8 : (sliceLanguage sliceOne).operands.Ty := .inl (.scalar (.int .u8))
+  let u8 : (sliceLanguage sliceOne).operands.Ty := .scalar (.int .u8)
   let block : Block _ _ _ := ⟨⟨0⟩, [], [], .ret (some ⟨u8, .literal ⟨[status]⟩⟩),
     List.map Prod.snd core.machineProgram.origins⟩
   ⟨core.project, earlyEntry, [(earlyEntry, ⟨[], some u8⟩)],
@@ -365,8 +367,10 @@ example :
     let later : Slice := ⟨⟨2, by decide⟩⟩
     ({tokenInput [introToken] with slice := later}).decode = .error (.unsupportedSlice later) := rfl
 
+private def closeBraceSpan : ConcreteSpec.Surface0.Span := ⟨29, 30, 1, 30, ⟨0⟩⟩
+
 private def sourceReturn (e : ConcreteSpec.Surface0.Expr) : AdmissionInput (sliceLanguage slice0) :=
-  .pending source.project (.zero ⟨"main", binderSpan, [.ret e useSpan]⟩) rfl
+  .pending source.project (.zero ⟨"main", binderSpan, [.ret e useSpan], closeBraceSpan⟩) rfl
 
 example :
     let valid := sourceReturn (.integer 42 none useSpan)
@@ -392,7 +396,7 @@ private def binding (name : String) : ConcreteSpec.Surface0.Statement :=
   .bind ⟨name, binderSpan, .integer 42 none useSpan⟩ useSpan
 
 private def sourceBody (body : List ConcreteSpec.Surface0.Statement) : AdmissionInput (sliceLanguage slice0) :=
-  .pending source.project (.zero ⟨"main", binderSpan, body⟩) rfl
+  .pending source.project (.zero ⟨"main", binderSpan, body, closeBraceSpan⟩) rfl
 
 /-- Both routes preserve the same cause. Substituting any other rule, revision
 or primary range fails the registered eligibility contract. -/
@@ -415,10 +419,10 @@ example :
     | (rintro rfl; exact ⟨_, rfl, rfl⟩)
 
 -- The same located syntax crosses elaboration in every case. Each visited
--- statement retains its own source rule and span.
+-- statement retains its own source rule and span; fallthrough cites the closing brace.
 example :
     let ret := ConcreteSpec.Surface0.Statement.ret (.integer 42 none useSpan) useSpan
-    (sourceBody [binding "x"]).prepare = .error (.surface (.fallthrough useSpan)) ∧
+    (sourceBody [binding "x"]).prepare = .error (.surface (.fallthrough closeBraceSpan)) ∧
     (sourceBody [ret, .ret (.local "missing" binderSpan) binderSpan]).prepare =
       .error (.surface (.unreachable binderSpan)) ∧
     (sourceReturn (.integer 42 (some .u8) useSpan)).prepare =
@@ -443,7 +447,7 @@ example :
       .error (.refused failure) := rfl
 
 private abbrev nominalLang := sliceLanguage sliceOne
-private abbrev nominalTy : nominalLang.operands.Ty := .inl (.nominal tokenId)
+private abbrev nominalTy : nominalLang.operands.Ty := .nominal tokenId
 private def root : MemoryPlace _ nominalTy := ⟨⟨⟨0⟩, []⟩, .materialized⟩
 private def memory : Memory (sliceLoweringLanguage sliceOne) profile :=
   { project := source.project, entry := earlyEntry, signatures := []
@@ -521,7 +525,7 @@ example (p : EarlyProgram) : (AdmissionView.zero p).program = ConcreteSpec.Slice
 
 example :
     let badEntry : AdmissionInput (sliceLanguage slice0) :=
-      .pending source.project (.zero ⟨"other", binderSpan, []⟩) rfl
+      .pending source.project (.zero ⟨"other", binderSpan, [], closeBraceSpan⟩) rfl
     let ret := ConcreteSpec.Surface0.Statement.ret (.integer 42 none useSpan) useSpan
     badEntry.prepare = .error (.surface (.unexpectedEntry binderSpan) : RefusalCause) ∧
     (sourceBody [binding "_", ret]).prepare = .error (.surface (.wildcard binderSpan) : RefusalCause) :=
@@ -600,16 +604,16 @@ example :
     let env := (tokenId, ⟨tokenName, false, []⟩) :: [(other, ⟨otherName, false, []⟩)]
     nominalLang.activeFields env nominalTy (.other other) = none ∧
     nominalLang.evalIn env [] ⟨[], Mem.Memory.empty⟩
-      (.inl (.consumeEmpty tokenId (.constructEmpty other))) = .stuck ∧
+      (.consumeEmpty tokenId (.constructEmpty other)) = .stuck ∧
     nominalLang.activeFields env nominalTy (.other tokenId) = some [] ∧
     nominalLang.evalIn env [] ⟨[], Mem.Memory.empty⟩
-      (.inl (.consumeEmpty other (.constructEmpty other))) = .ok (.scalar .unit, ⟨[], Mem.Memory.empty⟩) :=
+      (.consumeEmpty other (.constructEmpty other)) = .ok (.scalar .unit, ⟨[], Mem.Memory.empty⟩) :=
   ⟨rfl, rfl, rfl, rfl⟩
 
 -- The same two initialized octets go through the materialized byte-range load.
 example :
     let big := {linuxX8664 with byteOrder := .big}
-    let ty : nominalLang.operands.Ty := .inl (.scalar (.int .i16))
+    let ty : nominalLang.operands.Ty := .scalar (.int .i16)
     let place : MemoryPlace _ ty := ⟨⟨⟨0⟩, []⟩, .materialized⟩
     let mem : Memory (sliceLoweringLanguage sliceOne) profile := {memory with
       functions := [(earlyEntry, [(⟨0⟩, ty)], ⟨⟨0⟩, #[]⟩)],
@@ -636,7 +640,7 @@ private def overflowView : AdmissionView := .zero
 private def overflowCore : CoreInput (sliceLanguage slice0) := ⟨overflowProject, slice0, .straightLine overflowView rfl⟩
 private def plusOrigin : Origin := overflowView.located.bindingOrigins[0].2
 private def returnOrigin := overflowView.located.endingOrigin.2
-private abbrev byteTy : (sliceLanguage slice0).operands.Ty := .inl (.scalar (.int .u8))
+private abbrev byteTy : (sliceLanguage slice0).operands.Ty := .scalar (.int .u8)
 private abbrev overflowMachine := overflowCore.machineProgram
 private def nextConfig (q : Exec.Config overflowMachine.machine) :=
   match Exec.step overflowMachine.body q with
@@ -666,8 +670,8 @@ example :
   with_unfolding_all exact ⟨rfl, _, rfl, fun h => by cases h⟩
 
 private def addOp : CoreOperation (sliceLanguage slice0).operands :=
-  .expression (.inl (.add .u8 (.literal (.int .u8 255)) (.literal (.int .u8 1))))
-private def retOp : CoreOperation (sliceLanguage slice0).operands := .expression (.inl (.read (.copy ⟨0⟩)))
+  .expression (.add .u8 (.literal (.int .u8 255)) (.literal (.int .u8 1)))
+private def retOp : CoreOperation (sliceLanguage slice0).operands := .expression (.read (.copy ⟨0⟩))
 
 private theorem overflowWF : overflowCore.WF := by
   have plusBinds : ∃ span, plusOrigin.lexical.Binds overflowProject span :=
@@ -816,5 +820,39 @@ example :
     r.lowerUnchecked.outputInvariant overflowMIR ∧
     r.lowerUnchecked.success overflowCore overflowMIR ∧ overflowSem.observes overflowMIR overflowAnswer := by
   exact ⟨rfl, rfl, rfl, rfl, overflowHandoff, overflowLowers, _, ⟨_, rfl, .nil _⟩, by with_unfolding_all rfl⟩
+
+-- F1a binds an atomic left operand before lowering a nested right addition.
+-- Compiled addition sites, trap order, and `SiteId` keys agree with the spec.
+example :
+    let src := r"fn main() -> u8 { return 1 + (255 + 1); }"
+    let temp : KeyConstruct := ⟨.binding, .unnamed none, []⟩
+    let innerPlus : ConcreteSpec.Surface0.Span := ⟨34, 35, 1, 35, ⟨0⟩⟩
+    let outerPlus : ConcreteSpec.Surface0.Span := ⟨27, 28, 1, 28, ⟨0⟩⟩
+    sourceKeys src = some (KeyConstruct.assignFunctionTable earlyEntry 0
+      [temp, temp, temp, ⟨.return, .unnamed none, []⟩]) ∧
+    (do
+      let ast ← (parseSource src).toOption
+      let core ← (Admission.prepareParsed .eligibility ast).toOption
+      let view := AdmissionView.zero core.located
+      let firstSite ← Agreement.firstTrapSite view.program.decls [] 0 view.program.body
+      let specOrigin ← view.originAt firstSite.id
+      let compilerSites := core.sites.map (fun s => (s.binding, s.operator))
+      return (firstSite, specOrigin.lexical, compilerSites)) =
+      some (⟨1⟩, surfaceFileSpan innerPlus, [(⟨1⟩, innerPlus), (⟨2⟩, outerPlus)]) ∧
+    ((parseSource r"fn main() -> u8 { }").bind (Admission.prepareParsed .admission)) =
+      .error (.source (.surface (.fallthrough ⟨18, 19, 1, 19, ⟨0⟩⟩))) := by
+  with_unfolding_all exact ⟨by decide, rfl, rfl⟩
+
+-- Stage-order surface preparation on the driver/registry boundary: surface rules run
+-- before Core checking, while valid surface right-nested additions check `256` first.
+example :
+    let litReason := ConcreteSpec.Admission.Refusal.atPosition 0 (.literalOutOfRange .u8 256)
+    sourceDiagnostic r"fn main() -> u8 { let x: u8 = 256; let Option: u8 = 1; return x; }" =
+      some (.surface (.reservedBinder "Option" ⟨39, 45, 1, 40, ⟨0⟩⟩)) ∧
+    sourceDiagnostic r"fn main() -> u8 { return (256 + missing); }" =
+      some (.surface (.unknownLocal "missing" ⟨32, 39, 1, 33, ⟨0⟩⟩)) ∧
+    sourceDiagnostic r"fn main() -> u8 { return 256 + (255 + 1); }" =
+      some (.core .slice0 ⟨⟨0⟩, 25, 28, 1, 26⟩ [] litReason) := by
+  with_unfolding_all exact ⟨rfl, rfl, rfl⟩
 
 end Concrete.IntegratedCore

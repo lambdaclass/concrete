@@ -19,9 +19,15 @@ inductive ElaboratesExpr (purpose : Purpose) (scope : Scope) :
   | local {name span x} : scope.lookup name = some x →
       ElaboratesExpr purpose scope (.local name span) (.var x) [] []
   | add {lhs rhs site x a b left right ls rs} :
+      (match rhs with | .add .. => left ≠ [] | _ => True) →
       ElaboratesExpr purpose scope lhs a left ls → ElaboratesExpr purpose scope rhs b right rs →
       ElaboratesExpr purpose scope (.add lhs rhs site) (.var x)
         (left ++ right ++ [⟨x, .add a b⟩]) (ls ++ rs ++ [⟨x, site⟩])
+  | addBindLeft {lhs r₁ r₂ rsite site xl x a b right rs} :
+      ElaboratesExpr purpose scope lhs a [] [] →
+      ElaboratesExpr purpose scope (.add r₁ r₂ rsite) b right rs →
+      ElaboratesExpr purpose scope (.add lhs (.add r₁ r₂ rsite) site) (.var x)
+        (⟨xl, .atom a⟩ :: right ++ [⟨x, .add (.var xl) b⟩]) (rs ++ [⟨x, site⟩])
 
 inductive ElaboratesBindings (purpose : Purpose) :
     Scope → List Binding → Scope → List Core.Stmt → List Elab.SourceSite → Prop where
@@ -63,7 +69,8 @@ private theorem elaboratesExpr_origins {purpose} {scope : Scope} {expr : Expr} {
     sites.map (·.binding) = additionBinders body := by
   induction h with
   | integer | «local» => rfl
-  | add _ _ ih₁ ih₂ => simp [List.map_append, additionBinders_append, ih₁, ih₂]; rfl
+  | add _ _ _ ih₁ ih₂ => simp [List.map_append, additionBinders_append, ih₁, ih₂]; rfl
+  | addBindLeft _ _ _ ih₂ => simp [additionBinders, List.map_append, ih₂]
 
 private theorem elaboratesBindings_origins {purpose} {scope final : Scope} {bindings : List Binding}
     {body : List Core.Stmt} {sites : List Elab.SourceSite}
@@ -894,14 +901,15 @@ example : ExactRefusal r"fn main() -> u8 { let x: u8 = 1; let x: u8 = 2; return 
     ⟨``Slice0Rules.FreshLocal, 1⟩ ⟨37, 38, 1, 38, ⟨0⟩⟩ := by
   with_unfolding_all exact ⟨_, rfl, rfl, Refusal.source_diagnosticAt_iff _⟩
 
+-- Stage-order surface preparation checks surface rules left-to-right before Core runs.
 open ConcreteSpec.Core in
 example : ExactRefusal r"fn main() -> u8 { let x: u8 = 256; let Option: u8 = 1; return x; }"
-    ⟨``Slice0Rules.LiteralTyped, 1⟩ ⟨30, 33, 1, 31, ⟨0⟩⟩ := by
+    ⟨``Slice0Rules.UnreservedLocal, 2⟩ ⟨39, 45, 1, 40, ⟨0⟩⟩ := by
   with_unfolding_all exact ⟨_, rfl, rfl, Refusal.source_diagnosticAt_iff _⟩
 
 open ConcreteSpec.Core in
 example : ExactRefusal r"fn main() -> u8 { return (256 + missing); }"
-    ⟨``Slice0Rules.LiteralTyped, 1⟩ ⟨26, 29, 1, 27, ⟨0⟩⟩ := by
+    ⟨``Slice0Rules.LocalBound, 1⟩ ⟨32, 39, 1, 33, ⟨0⟩⟩ := by
   with_unfolding_all exact ⟨_, rfl, rfl, Refusal.source_diagnosticAt_iff _⟩
 
 open ConcreteSpec.Core in
@@ -1030,7 +1038,7 @@ example : ∃ ast, duplicateBinderParse = .ok ast ∧
   intro core h
   obtain ⟨_, _, _, _, _, _, _, _, _, checked, lowered, _⟩ := h
   have shape : ∃ first second result,
-      checkBody (duplicateBinderParse.toOption.getD ⟨"", bindingSpan, []⟩).body =
+      checkBody (duplicateBinderParse.toOption.getD ⟨"", bindingSpan, [], bindingSpan⟩).body =
         .ok ([first, second], result) ∧ first.name = "x" ∧ second.name = "x" :=
     ⟨_, _, _, rfl, rfl, rfl⟩
   obtain ⟨first, second, _, shape, firstName, secondName⟩ := shape
@@ -1348,7 +1356,7 @@ theorem answerFrontend : Frontend answerInput answerOutput := by
     · exact .main _ _ _ _ _ _ _ _
         (.ret _ _ (.expr (.integer 20 none _) (.more (.integer 22 none _) (.nil _))) .nil)
     · refine ⟨rfl, by decide, [], _, [], [], _, [], _, rfl, .nil [], ?_, rfl, rfl⟩
-      exact .add (.integer (purpose := .admission) 20 _ (suffix := none) rfl)
+      exact .add trivial (.integer (purpose := .admission) 20 _ (suffix := none) rfl)
         (.integer (purpose := .admission) 22 _ (suffix := none) rfl)
     · have admitted : ∃ a, Admission.check answerOutput.core = .ok a := ⟨_, rfl⟩
       obtain ⟨a, h⟩ := admitted

@@ -8,6 +8,11 @@ def prepareParsed (purpose : ConcreteSpec.StageInterface.SurfacePreparation.Purp
   let prepared ← (ConcreteSpec.StageInterface.SurfacePreparation.prepareSurface0 ast purpose).mapError Refusal.source
   return Elab.LocatedOutput.erase prepared
 
+theorem prepareParsed_purpose_indep
+    (p₁ p₂ : ConcreteSpec.StageInterface.SurfacePreparation.Purpose)
+    (ast : ConcreteSpec.Surface0.Program) :
+    prepareParsed p₁ ast = prepareParsed p₂ ast := rfl
+
 /-- The statically known result of an addition, indexed by the Core binder for that operation. -/
 structure Token where
   binding : ConcreteSpec.Var

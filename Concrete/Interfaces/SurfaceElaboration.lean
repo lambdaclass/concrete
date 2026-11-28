@@ -31,7 +31,7 @@ private def SyntaxTree.statement : SyntaxTree → Option Statement
 read directly from its leaves. -/
 def surfaceProgram : SyntaxTree → Option Program
   | .node .program [.leaf ⟨span, .name name⟩, .node .body statements] =>
-    return ⟨name, surfaceSpan span, ← statements.mapM SyntaxTree.statement⟩
+    return ⟨name, surfaceSpan span, ← statements.mapM SyntaxTree.statement, surfaceSpan span⟩
   | _ => none
 
 end Concrete.Elab

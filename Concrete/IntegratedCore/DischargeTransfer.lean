@@ -266,7 +266,7 @@ private theorem machineBody_stmtOperations_lookup {slice owners decls fresh endi
     AList.lookup (stmtOperations (StraightProgram.machineBody (slice := slice)
       (owners := owners) (decls := decls) fresh ending rows start)) ⟨start + pos⟩ =
       some (CoreOperation.expression (O := (sliceLanguage slice).instrumented owners decls)
-        (Sum.inl row.statement.expression)) := by
+        row.statement.expression) := by
   induction rows generalizing start pos with
   | nil => cases atPos
   | cons b rest ih =>
@@ -277,7 +277,7 @@ private theorem machineBody_stmtOperations_lookup {slice owners decls fresh endi
         by have h' : start = start + (pos' + 1) := congrArg SiteId.id h; omega
       change AList.lookup ((⟨start⟩,
         CoreOperation.expression (O := (sliceLanguage slice).instrumented owners decls)
-          (Sum.inl b.statement.expression)) :: _) (⟨start + (pos' + 1)⟩ : SiteId) = _
+          b.statement.expression) :: _) (⟨start + (pos' + 1)⟩ : SiteId) = _
       rw [AList.lookup_cons, ite_eq_right hne, show start + (pos' + 1) = (start + 1) + pos' by omega]
       exact ih (start + 1) pos' atPos
 
@@ -302,7 +302,7 @@ private def eraseOp {language : CoreLanguage} {owners : AList Var Own.Descriptor
 private theorem execution_operations_lookup (v : AdmissionView) {pos : Nat}
     {row : LocatedStraightBinding} (atPos : v.located.bindings[pos]? = some row) :
     AList.lookup v.execution.operations ⟨pos⟩ =
-      some (CoreOperation.expression (O := (sliceLanguage v.slice).operands) (Sum.inl row.statement.expression)) := by
+      some (CoreOperation.expression (O := (sliceLanguage v.slice).operands) row.statement.expression) := by
   have h := machineBody_stmtOperations_lookup (slice := v.slice)
     (owners := v.execution.ownership) (decls := v.execution.declarations) (fresh := v.located.freshBase)
     (ending := v.located.ending.machine (slice := v.slice)
@@ -377,7 +377,7 @@ private theorem straightBinding_add_expression {b : StraightBinding} {binder : B
   | destructure _ _ => cases h
 
 private theorem earlyAdd_safety_singleton (slice : Slice) (a₁ a₂ : Slice0.Atom) :
-    ∃ cond, (sliceLanguage slice).safety (.expression (.inl (.add .u8 (earlyOperand a₁) (earlyOperand a₂)))) = [cond] ∧
+    ∃ cond, (sliceLanguage slice).safety (.expression (.add .u8 (earlyOperand a₁) (earlyOperand a₂))) = [cond] ∧
       cond.trap = .overflow := by
   cases a₁ <;> cases a₂ <;> exact ⟨_, rfl, rfl⟩
 
@@ -411,7 +411,7 @@ theorem encode_validated_isSome {language : CoreLanguage} {input : CoreInput lan
     obtain ⟨origin, horigin⟩ := originAt_isSome v (Nat.le_of_lt (lt_of_getElem?_eq_some hrow))
     obtain ⟨hop, _⟩ := originAt_spec v horigin
     have hlookup : AList.lookup v.execution.operations origin.operation =
-        some (.expression (.inl row.statement.expression)) := by
+        some (.expression row.statement.expression) := by
       rw [hop]; exact execution_operations_lookup v hrow
     obtain ⟨a₁, a₂, hexpr⟩ := straightBinding_add_expression hcore
     obtain ⟨cond, hsafety, htrap⟩ := earlyAdd_safety_singleton v.slice a₁ a₂

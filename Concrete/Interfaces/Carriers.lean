@@ -133,7 +133,7 @@ structure LoweringLanguage (Ty : Type) where
 /-- Operation annotations are erased. Their complete signatures are indices,
 and their meaning is given by the selected Core instance. -/
 def sliceLoweringLanguage (slice : Slice) : LoweringLanguage (sliceLanguage slice).operands.Ty :=
-  ⟨fun _ _ _ => Unit, .inl (.scalar .bool)⟩
+  ⟨fun _ _ _ => Unit, .scalar .bool⟩
 
 abbrev LoweringLanguage.literal {Ty : Type} (_lang : LoweringLanguage Ty) := Literal Ty
 

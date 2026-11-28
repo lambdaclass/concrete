@@ -15,7 +15,7 @@ private abbrev M := Interfaces.Memory Lowering profile
 private abbrev target := Interfaces.Memory.Execution (language := Language) (lang := Lowering) (profile := profile)
 private abbrev source := Interfaces.MIR.Execution (language := Language) (lang := Lowering) (profile := profile)
 
-private abbrev u8Ty : Language.operands.Ty := .inl (.scalar (.int .u8))
+private abbrev u8Ty : Language.operands.Ty := .scalar (.int .u8)
 private def root : MemoryPlace _ u8Ty := ⟨⟨⟨0⟩, []⟩, .virtual⟩
 
 private def originalOp := mir.functions[0].2.2.blocks[0].body[0]
