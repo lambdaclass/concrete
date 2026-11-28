@@ -8,10 +8,11 @@
 #   1. Exit-42 execution on checked (CLI + bound/verify) and unchecked routes,
 #      verifying that the checked CLI publication contains no unchecked lowering
 #      (derived from Admission.check's own output) and matches checked inputs.
-#   2. Two-site overflow fixtures: checked-route refusal and unchecked-route
-#      normal exit-134 execution with exact manifest stderr bytes at site 0 and
-#      site 1, resolving every source path and project root from the selected
-#      manifest row.
+#   2. Two-site overflow fixtures: checked-route refusal, fixed 2-site stage
+#      verification, BIR/Core/LCB observation verification (trap kind, BIR index,
+#      and stderr), and unchecked-route normal exit-134 execution with exact
+#      manifest stderr bytes at site 0 and site 1, resolving every source path,
+#      manifest filename, and project root from the selected manifest row.
 #   3. Link-order reversal controls (LLVM and LCB, exit 42 and trap 134),
 #      asserting distinct executable bytes and rejection by pinned replay.
 #   4. Object-substitution (silent link-time, on-disk during bound, post-bound),
@@ -20,8 +21,12 @@
 #      executable and an abort()-mutated trap launcher).
 #   6. Checked-publication negative controls (reviewer's mutation: unchecked
 #      lowering behind checked admission, both combined and per-backend).
-#   7. Manifest source-resolution negative controls (20 + 21 copied manifest,
-#      and outside-manifest / symlink / traversal / non-con refusals).
+#   7. Manifest, observation, and fixed-site-count negative controls (20 + 21
+#      copied manifest carrying the selected filename through and asserting all
+#      six status mismatches, renamed-manifest control with manifest.tsv absent,
+#      trap BIR-index and trap-kind mismatch controls, fixed 2-site count
+#      1-site and 3-site controls, and outside-manifest / symlink / traversal /
+#      non-con refusals).
 #
 # Run inside `nix develop` from the repository root (with LEAN_NUM_THREADS=2).
 set -euo pipefail
@@ -77,20 +82,24 @@ answer_rel=$(cat "$work/expect/source_answer/rel_path")
 answer_src=$(cat "$work/expect/source_answer/source_path")
 answer_root=$(cat "$work/expect/source_answer/project_root")
 manifest_tests_dir=$(cat "$work/expect/source_answer/tests_dir")
+manifest_name=$(cat "$work/expect/source_answer/manifest_name")
 
 first_rel=$(cat "$work/expect/source_two_site_first_trap/rel_path")
 first_src=$(cat "$work/expect/source_two_site_first_trap/source_path")
 first_root=$(cat "$work/expect/source_two_site_first_trap/project_root")
+first_manifest_name=$(cat "$work/expect/source_two_site_first_trap/manifest_name")
 
 second_rel=$(cat "$work/expect/source_two_site_second_trap/rel_path")
 second_src=$(cat "$work/expect/source_two_site_second_trap/source_path")
 second_root=$(cat "$work/expect/source_two_site_second_trap/project_root")
+second_manifest_name=$(cat "$work/expect/source_two_site_second_trap/manifest_name")
 
-if [ "$first_root" != "$answer_root" ] || [ "$second_root" != "$answer_root" ]; then
-  echo "dual_route_harness: selected manifest rows resolved to inconsistent project roots" >&2
+if [ "$first_root" != "$answer_root" ] || [ "$second_root" != "$answer_root" ] ||
+    [ "$first_manifest_name" != "$manifest_name" ] || [ "$second_manifest_name" != "$manifest_name" ]; then
+  echo "dual_route_harness: selected manifest rows resolved to inconsistent project roots or filenames" >&2
   exit 1
 fi
-ok "manifest rows: resolved con: sources and expectations inside $manifest_tests_dir"
+ok "manifest rows: resolved con: sources and expectations inside $manifest_tests_dir/$manifest_name"
 
 # Ensure the Lean library, public CLI, and LCB tool are built.
 dual_route_bounded 1800 lake build Concrete concrete lean-compiler-backend/lcb \
@@ -190,25 +199,86 @@ else
   no "CLI checked answer: concrete build failed"
 fi
 
-# Verify what the public CLI actually published (and the checked/unchecked stages)
-# directly from Admission.check's output, plus derive the two-site trap line and
-# SIGABRT control LLVM module in a single Lean startup.
+# Verify what the public CLI actually published, the fixed two-site expectations
+# on both designated two-site fixtures, and the BIR/Core/LCB observations against
+# every manifest expectation (including trap kind and BIR index) in a single Lean
+# startup, plus derive control inputs when controls are enabled.
 ops_spec="$work/verify-ops.tsv"
-cat >"$ops_spec" <<EOF
-verify-separation	$answer_rel	$answer_src	$cli_answer	$work/stage/answer-unchecked	$DUAL_ROUTE_TARGET
-verify-checked	$answer_rel	$answer_src	$work/stage/answer-checked	$DUAL_ROUTE_TARGET	both
-verify-unchecked	$first_rel	$first_src	$work/stage/first-unchecked	$DUAL_ROUTE_TARGET	both
-verify-unchecked	$second_rel	$second_src	$work/stage/second-unchecked	$DUAL_ROUTE_TARGET	both
-site-line	$second_rel	$second_src	0	$work/second-site0.line
-emit-sigabrt	$work/expect/source_two_site_first_trap/stderr	$work/ctl/sigabrt-exe
+ops_results="$work/verify-ops.results"
+: >"$ops_spec"
+if [ -d "$cli_answer" ]; then
+  printf 'sep-answer\tverify-separation\t%s\t%s\t%s\t%s\t%s\n' \
+    "$answer_rel" "$answer_src" "$cli_answer" "$work/stage/answer-unchecked" "$DUAL_ROUTE_TARGET" >>"$ops_spec"
+fi
+cat >>"$ops_spec" <<EOF
+chk-answer	verify-checked	$answer_rel	$answer_src	$work/stage/answer-checked	$DUAL_ROUTE_TARGET	both
+unchk-first	verify-unchecked	$first_rel	$first_src	$work/stage/first-unchecked	$DUAL_ROUTE_TARGET	both	2
+unchk-second	verify-unchecked	$second_rel	$second_src	$work/stage/second-unchecked	$DUAL_ROUTE_TARGET	both	2
+obs-checked-answer	verify-observation	checked	$answer_rel	$answer_src	$work/expect/source_answer
+obs-unchecked-answer	verify-observation	unchecked	$answer_rel	$answer_src	$work/expect/source_answer
+obs-unchecked-first	verify-observation	unchecked	$first_rel	$first_src	$work/expect/source_two_site_first_trap
+obs-unchecked-second	verify-observation	unchecked	$second_rel	$second_src	$work/expect/source_two_site_second_trap
 EOF
-if [ -d "$cli_answer" ] &&
-    dual_route_ops_batch "$ops_spec" >"$work/verify-ops.stdout" 2>"$work/verify-ops.stderr"; then
-  ok "CLI checked publication: admitted discharge verified on all four published inputs (no unchecked lowering) and separated from unchecked route"
-  ok "two-site unchecked stages: both LLVM and LCB carry exact admission-derived trap-site tables"
-else
+if [ "${CONCRETE_DUAL_ROUTE_SKIP_CONTROLS:-0}" = 0 ]; then
+  cat >>"$ops_spec" <<EOF
+site-line-second0	site-line	$second_rel	$second_src	0	$work/second-site0.line
+emit-sigabrt	emit-sigabrt	$work/expect/source_two_site_first_trap/stderr	$work/ctl/sigabrt-exe
+EOF
+fi
+
+ops_rc=0
+dual_route_ops_batch "$ops_spec" "$ops_results" >"$work/verify-ops.stdout" 2>"$work/verify-ops.stderr" || ops_rc=$?
+if [ "$ops_rc" -ne 0 ] && [ -s "$work/verify-ops.stderr" ]; then
   cat "$work/verify-ops.stderr" >&2 || true
+fi
+
+op_rc() {
+  local tag=$1
+  local val=""
+  if [ ! -f "$ops_results" ] || bounded_is_incomplete "$ops_rc"; then
+    printf '%s\n' missing
+    return 0
+  fi
+  val=$(awk -F '\t' -v t="$tag" '$1 == t { print $2; found=1; exit } END { if (!found) print "missing" }' "$ops_results")
+  printf '%s\n' "$val"
+}
+
+if [ "$(op_rc sep-answer)" = 0 ] && [ "$(op_rc chk-answer)" = 0 ]; then
+  ok "CLI checked publication: admitted discharge verified on all four published inputs (no unchecked lowering) and separated from unchecked route"
+else
   no "CLI checked publication or stage discharge verification failed"
+fi
+
+for site_spec in \
+    "unchk-first|source_two_site_first_trap" \
+    "unchk-second|source_two_site_second_trap"; do
+  IFS='|' read -r op_tag test_id <<<"$site_spec"
+  rc_val=$(op_rc "$op_tag")
+  if [ "$rc_val" = 0 ]; then
+    ok "two-site unchecked stage ($test_id): fixed 2-site table verified on BIR, LLVM, and LCB"
+  else
+    no "two-site unchecked stage ($test_id): fixed 2-site verification failed (rc=$rc_val)"
+  fi
+done
+
+for obs_spec in \
+    "obs-checked-answer|checked source_answer" \
+    "obs-unchecked-answer|unchecked source_answer" \
+    "obs-unchecked-first|unchecked source_two_site_first_trap" \
+    "obs-unchecked-second|unchecked source_two_site_second_trap"; do
+  IFS='|' read -r op_tag obs_label <<<"$obs_spec"
+  rc_val=$(op_rc "$op_tag")
+  if [ "$rc_val" = 0 ]; then
+    ok "BIR observation ($obs_label): matches manifest expectation (kind, index, status, stderr)"
+  else
+    no "BIR observation ($obs_label): expectation mismatch (rc=$rc_val)"
+  fi
+done
+
+if [ "${CONCRETE_DUAL_ROUTE_SKIP_CONTROLS:-0}" = 0 ]; then
+  if [ "$(op_rc site-line-second0)" != 0 ] || [ "$(op_rc emit-sigabrt)" != 0 ]; then
+    no "control helper ops (site-line / emit-sigabrt) failed"
+  fi
 fi
 
 run_and_check_stage "checked answer" "$work/stage/answer-checked" \
@@ -258,6 +328,75 @@ else
 fi
 
 if [ "${CONCRETE_DUAL_ROUTE_SKIP_CONTROLS:-0}" = 1 ]; then
+  echo "dual_route_harness: PASS=$pass FAIL=$fail"
+  [ "$fail" -eq 0 ]
+  exit $?
+fi
+
+answer_expect_status=$(cat "$work/expect/source_answer/status")
+
+check_six_status_mismatches() {
+  local stdout_file=$1
+  local expected_status=$2
+  local actual_status=$3
+  local label
+  for label in \
+      "CLI checked answer [llvm]" \
+      "CLI checked answer [lcb]" \
+      "checked answer [llvm]" \
+      "checked answer [lcb]" \
+      "unchecked answer [llvm]" \
+      "unchecked answer [lcb]"; do
+    has_match -F "FAIL $label: got reason=exit status=$actual_status signal=none, expected reason=exit status=$expected_status signal=none" <"$stdout_file" || return 1
+  done
+}
+
+run_copied_manifest_20_21_control() {
+  local ctl_20_21="$work/ctl/manifest-20-plus-21"
+  local rc_20_21=0
+  local omission_ok=1
+  local omitted
+  mkdir -p "$ctl_20_21/project"
+  cp -R -- "$manifest_tests_dir" "$ctl_20_21/project/tests"
+  printf 'fn main() -> u8 { return 20 + 21; }\n' >"$ctl_20_21/project/$answer_rel"
+  if ! cmp -s "$answer_src" "$ctl_20_21/project/$answer_rel"; then
+    CONCRETE_TEST_MANIFEST="$ctl_20_21/project/tests/$manifest_name" \
+      CONCRETE_DUAL_ROUTE_SKIP_CONTROLS=1 \
+      dual_route_bounded "$DUAL_ROUTE_NATIVE_SECS" \
+      bash "$root/scripts/checks/compiler/dual_route_harness.sh" \
+      >"$ctl_20_21/harness.stdout" 2>"$ctl_20_21/harness.stderr" || rc_20_21=$?
+    if [ "$rc_20_21" -ne 0 ] &&
+        check_six_status_mismatches "$ctl_20_21/harness.stdout" "$answer_expect_status" 41 &&
+        has_match -F 'FAIL BIR observation (checked source_answer): expectation mismatch (rc=10)' <"$ctl_20_21/harness.stdout" &&
+        has_match -F 'FAIL BIR observation (unchecked source_answer): expectation mismatch (rc=10)' <"$ctl_20_21/harness.stdout"; then
+      for omitted in \
+          "CLI checked answer [llvm]" \
+          "CLI checked answer [lcb]" \
+          "checked answer [llvm]" \
+          "checked answer [lcb]" \
+          "unchecked answer [llvm]" \
+          "unchecked answer [lcb]"; do
+        grep -Fv -- "FAIL $omitted:" "$ctl_20_21/harness.stdout" >"$ctl_20_21/omitted.stdout" || true
+        if check_six_status_mismatches "$ctl_20_21/omitted.stdout" "$answer_expect_status" 41; then
+          no "manifest control (20 + 21 in copied manifest '$manifest_name'): status-mismatch checker accepted omission of '$omitted'"
+          omission_ok=0
+        fi
+      done
+      if [ "$omission_ok" = 1 ]; then
+        ok "manifest control (20 + 21 in copied manifest '$manifest_name'): full harness runs copied source (status 41) and fails expectation $answer_expect_status across all six CLI/stage executions"
+      fi
+    else
+      cat "$ctl_20_21/harness.stdout" >&2 || true
+      cat "$ctl_20_21/harness.stderr" >&2 || true
+      no "manifest control (20 + 21 in copied manifest '$manifest_name'): unexpected result (rc=$rc_20_21)"
+    fi
+  else
+    no "manifest control (20 + 21): mutation did not change $answer_rel"
+  fi
+}
+
+if [ "${CONCRETE_DUAL_ROUTE_SKIP_CONTROLS:-0}" = only-copied-manifest ]; then
+  run_copied_manifest_20_21_control
   echo "dual_route_harness: PASS=$pass FAIL=$fail"
   [ "$fail" -eq 0 ]
   exit $?
@@ -652,7 +791,6 @@ MUTCLI
 } >"$mut_cli"
 chmod +x "$mut_cli"
 
-answer_expect_status=$(cat "$work/expect/source_answer/status")
 mut_rc=0
 CONCRETE_DUAL_ROUTE_CLI="$mut_cli" \
   CONCRETE_TEST_MANIFEST="$manifest" \
@@ -701,36 +839,207 @@ for mode_spec in \
   fi
 done
 
-# --- 7. Manifest source-resolution and outside-source negative controls ---
-# 7a. 20 + 21 control: copy the manifest's tests/, edit answer.con to 20 + 21
-#     while keeping expectation exit 42 -, and confirm the full harness FAILS.
-ctl_20_21="$work/ctl/manifest-20-plus-21"
-mkdir -p "$ctl_20_21/project"
-cp -R -- "$manifest_tests_dir" "$ctl_20_21/project/tests"
-printf 'fn main() -> u8 { return 20 + 21; }\n' >"$ctl_20_21/project/$answer_rel"
-if ! cmp -s "$answer_src" "$ctl_20_21/project/$answer_rel"; then
-  rc_20_21=0
-  CONCRETE_TEST_MANIFEST="$ctl_20_21/project/tests/manifest.tsv" \
+# --- 7. Manifest, observation, and fixed-site-count negative controls ---
+# 7a. 20 + 21 control: copy the manifest's tests/, carry the selected filename
+#     through, edit answer.con to 20 + 21 while keeping expectation exit 42 -,
+#     and assert all six CLI/stage status mismatches (plus omission controls).
+run_copied_manifest_20_21_control
+
+# 7b. Renamed-manifest control: copy tests/, rename the selected manifest to a
+#     non-default filename, delete manifest.tsv, and confirm both (i) the outer
+#     copied-manifest control carries the renamed filename through without
+#     reopening manifest.tsv, and (ii) mutating answer.con to 20 + 21 fails all
+#     six status checks while the absent default filename fails to open.
+ctl_renamed="$work/ctl/manifest-renamed"
+mkdir -p "$ctl_renamed/project"
+cp -R -- "$manifest_tests_dir" "$ctl_renamed/project/tests"
+renamed_name=renamed_manifest.tsv
+if [ "$manifest_name" = "$renamed_name" ]; then
+  renamed_name=alt_manifest.tsv
+fi
+mv -- "$ctl_renamed/project/tests/$manifest_name" "$ctl_renamed/project/tests/$renamed_name"
+rm -f -- "$ctl_renamed/project/tests/manifest.tsv"
+if [ ! -e "$ctl_renamed/project/tests/manifest.tsv" ] && [ -f "$ctl_renamed/project/tests/$renamed_name" ]; then
+  rc_renamed_ok=0
+  CONCRETE_TEST_MANIFEST="$ctl_renamed/project/tests/$renamed_name" \
+    CONCRETE_DUAL_ROUTE_SKIP_CONTROLS=only-copied-manifest \
+    dual_route_bounded "$DUAL_ROUTE_NATIVE_SECS" \
+    bash "$root/scripts/checks/compiler/dual_route_harness.sh" \
+    >"$ctl_renamed/carry.stdout" 2>"$ctl_renamed/carry.stderr" || rc_renamed_ok=$?
+  rc_missing_default=0
+  CONCRETE_TEST_MANIFEST="$ctl_renamed/project/tests/manifest.tsv" \
+    CONCRETE_DUAL_ROUTE_SKIP_CONTROLS=1 \
+    dual_route_bounded 60 \
+    bash "$root/scripts/checks/compiler/dual_route_harness.sh" \
+    >"$ctl_renamed/default.stdout" 2>"$ctl_renamed/default.stderr" || rc_missing_default=$?
+  printf 'fn main() -> u8 { return 20 + 21; }\n' >"$ctl_renamed/project/$answer_rel"
+  rc_renamed_fail=0
+  CONCRETE_TEST_MANIFEST="$ctl_renamed/project/tests/$renamed_name" \
     CONCRETE_DUAL_ROUTE_SKIP_CONTROLS=1 \
     dual_route_bounded "$DUAL_ROUTE_NATIVE_SECS" \
     bash "$root/scripts/checks/compiler/dual_route_harness.sh" \
-    >"$ctl_20_21/harness.stdout" 2>"$ctl_20_21/harness.stderr" || rc_20_21=$?
-  if [ "$rc_20_21" -ne 0 ] &&
-      has_match -F "FAIL CLI checked answer [llvm]: got reason=exit status=41 signal=none, expected reason=exit status=$answer_expect_status signal=none" <"$ctl_20_21/harness.stdout" &&
-      has_match -F "FAIL CLI checked answer [lcb]: got reason=exit status=41 signal=none, expected reason=exit status=$answer_expect_status signal=none" <"$ctl_20_21/harness.stdout" &&
-      has_match -F "FAIL checked answer [llvm]: got reason=exit status=41 signal=none, expected reason=exit status=$answer_expect_status signal=none" <"$ctl_20_21/harness.stdout" &&
-      has_match -F "FAIL unchecked answer [lcb]: got reason=exit status=41 signal=none, expected reason=exit status=$answer_expect_status signal=none" <"$ctl_20_21/harness.stdout"; then
-    ok "manifest control (20 + 21 in copied manifest): full harness runs copied source (status 41) and fails expectation $answer_expect_status on both backends"
+    >"$ctl_renamed/fail.stdout" 2>"$ctl_renamed/fail.stderr" || rc_renamed_fail=$?
+  if [ "$rc_renamed_ok" -eq 0 ] &&
+      has_match -F "ok   manifest control (20 + 21 in copied manifest '$renamed_name'): full harness runs copied source (status 41) and fails expectation $answer_expect_status across all six CLI/stage executions" <"$ctl_renamed/carry.stdout" &&
+      [ "$rc_missing_default" -ne 0 ] &&
+      has_match -F 'cannot read manifest' <"$ctl_renamed/default.stderr" &&
+      [ "$rc_renamed_fail" -ne 0 ] &&
+      check_six_status_mismatches "$ctl_renamed/fail.stdout" "$answer_expect_status" 41; then
+    ok "renamed-manifest control ($renamed_name, manifest.tsv absent): copied-manifest control carries filename through and fails all six status checks on 20 + 21"
   else
-    cat "$ctl_20_21/harness.stdout" >&2 || true
-    cat "$ctl_20_21/harness.stderr" >&2 || true
-    no "manifest control (20 + 21 in copied manifest): unexpected result (rc=$rc_20_21)"
+    cat "$ctl_renamed/carry.stdout" >&2 || true
+    cat "$ctl_renamed/carry.stderr" >&2 || true
+    cat "$ctl_renamed/default.stderr" >&2 || true
+    cat "$ctl_renamed/fail.stdout" >&2 || true
+    cat "$ctl_renamed/fail.stderr" >&2 || true
+    no "renamed-manifest control ($renamed_name): carry_rc=$rc_renamed_ok default_rc=$rc_missing_default fail_rc=$rc_renamed_fail"
   fi
 else
-  no "manifest control (20 + 21): mutation did not change $answer_rel"
+  no "renamed-manifest control: failed to prepare copy without manifest.tsv"
 fi
 
-# 7b-7f. Refuse any manifest row whose source is outside the selected manifest.
+# 7c. Wrong BIR trap index negative control: mutate only row 2's expected BIR
+#     index from 1 to 0 (keeping trap kind and exact site-1 stderr unchanged)
+#     and confirm the harness FAILS with BIR trap index mismatch (exit 11).
+ctl_trap_idx="$work/ctl/manifest-wrong-trap-index"
+mkdir -p "$ctl_trap_idx/project"
+cp -R -- "$manifest_tests_dir" "$ctl_trap_idx/project/tests"
+awk -F '\t' -v OFS='\t' \
+  '$1 == "source_two_site_second_trap" { sub(/^trap arithmeticOverflow 1 /, "trap arithmeticOverflow 0 ", $3) } { print }' \
+  "$ctl_trap_idx/project/tests/$manifest_name" >"$ctl_trap_idx/project/tests/$manifest_name.new"
+mv -- "$ctl_trap_idx/project/tests/$manifest_name.new" "$ctl_trap_idx/project/tests/$manifest_name"
+if ! cmp -s "$manifest_tests_dir/$manifest_name" "$ctl_trap_idx/project/tests/$manifest_name"; then
+  rc_trap_idx=0
+  CONCRETE_TEST_MANIFEST="$ctl_trap_idx/project/tests/$manifest_name" \
+    CONCRETE_DUAL_ROUTE_SKIP_CONTROLS=1 \
+    dual_route_bounded "$DUAL_ROUTE_NATIVE_SECS" \
+    bash "$root/scripts/checks/compiler/dual_route_harness.sh" \
+    >"$ctl_trap_idx/harness.stdout" 2>"$ctl_trap_idx/harness.stderr" || rc_trap_idx=$?
+  if [ "$rc_trap_idx" -ne 0 ] &&
+      has_match -F 'ok   unchecked two-site second trap (site 1) [llvm]: verified replay and normal exit 134' <"$ctl_trap_idx/harness.stdout" &&
+      has_match -F 'ok   unchecked two-site second trap (site 1) [lcb]: verified replay and normal exit 134' <"$ctl_trap_idx/harness.stdout" &&
+      has_match -F 'FAIL BIR observation (unchecked source_two_site_second_trap): expectation mismatch (rc=11)' <"$ctl_trap_idx/harness.stdout" &&
+      has_match -F "verify-observation: $second_rel: BIR trap index mismatch: expected 0, observed 1" <"$ctl_trap_idx/harness.stderr"; then
+    ok "trap-index control (row 2 BIR index 1 -> 0): rejected with rc=11 despite matching native site-1 stderr"
+  else
+    cat "$ctl_trap_idx/harness.stdout" >&2 || true
+    cat "$ctl_trap_idx/harness.stderr" >&2 || true
+    no "trap-index control (row 2 BIR index 1 -> 0): unexpected result (rc=$rc_trap_idx)"
+  fi
+else
+  no "trap-index control: mutation did not change $manifest_name"
+fi
+
+# 7d. Wrong trap kind negative control: mutate only row 2's expected trap kind
+#     from arithmeticOverflow to abort (keeping BIR index 1 and exact stderr)
+#     and confirm the harness FAILS with BIR trap kind mismatch (exit 12).
+ctl_trap_kind="$work/ctl/manifest-wrong-trap-kind"
+mkdir -p "$ctl_trap_kind/project"
+cp -R -- "$manifest_tests_dir" "$ctl_trap_kind/project/tests"
+awk -F '\t' -v OFS='\t' \
+  '$1 == "source_two_site_second_trap" { sub(/^trap arithmeticOverflow 1 /, "trap abort 1 ", $3) } { print }' \
+  "$ctl_trap_kind/project/tests/$manifest_name" >"$ctl_trap_kind/project/tests/$manifest_name.new"
+mv -- "$ctl_trap_kind/project/tests/$manifest_name.new" "$ctl_trap_kind/project/tests/$manifest_name"
+if ! cmp -s "$manifest_tests_dir/$manifest_name" "$ctl_trap_kind/project/tests/$manifest_name"; then
+  rc_trap_kind=0
+  CONCRETE_TEST_MANIFEST="$ctl_trap_kind/project/tests/$manifest_name" \
+    CONCRETE_DUAL_ROUTE_SKIP_CONTROLS=1 \
+    dual_route_bounded "$DUAL_ROUTE_NATIVE_SECS" \
+    bash "$root/scripts/checks/compiler/dual_route_harness.sh" \
+    >"$ctl_trap_kind/harness.stdout" 2>"$ctl_trap_kind/harness.stderr" || rc_trap_kind=$?
+  if [ "$rc_trap_kind" -ne 0 ] &&
+      has_match -F 'ok   unchecked two-site second trap (site 1) [llvm]: verified replay and normal exit 134' <"$ctl_trap_kind/harness.stdout" &&
+      has_match -F 'ok   unchecked two-site second trap (site 1) [lcb]: verified replay and normal exit 134' <"$ctl_trap_kind/harness.stdout" &&
+      has_match -F 'FAIL BIR observation (unchecked source_two_site_second_trap): expectation mismatch (rc=12)' <"$ctl_trap_kind/harness.stdout" &&
+      has_match -F "verify-observation: $second_rel: BIR trap kind mismatch at index 1: expected abort, observed arithmeticOverflow" <"$ctl_trap_kind/harness.stderr"; then
+    ok "trap-kind control (row 2 trap kind arithmeticOverflow -> abort): rejected with rc=12 despite matching index 1 and native stderr"
+  else
+    cat "$ctl_trap_kind/harness.stdout" >&2 || true
+    cat "$ctl_trap_kind/harness.stderr" >&2 || true
+    no "trap-kind control (row 2 trap kind arithmeticOverflow -> abort): unexpected result (rc=$rc_trap_kind)"
+  fi
+else
+  no "trap-kind control: mutation did not change $manifest_name"
+fi
+
+# 7e. Fixed two-site count negative control (first fixture -> 1 site): remove
+#     the second addition from two_site_first_trap.con while keeping site-0
+#     trap index, kind, and stderr intact; fixed 2-site verification must FAIL.
+ctl_one_site="$work/ctl/two-site-first-reduced-to-one"
+mkdir -p "$ctl_one_site/project"
+cp -R -- "$manifest_tests_dir" "$ctl_one_site/project/tests"
+cat >"$ctl_one_site/project/$first_rel" <<'CON'
+fn main() -> u8 {
+    let a: u8 = 150 + 106;
+    return a;
+}
+CON
+if ! cmp -s "$first_src" "$ctl_one_site/project/$first_rel"; then
+  rc_one_site=0
+  CONCRETE_TEST_MANIFEST="$ctl_one_site/project/tests/$manifest_name" \
+    CONCRETE_DUAL_ROUTE_SKIP_CONTROLS=1 \
+    dual_route_bounded "$DUAL_ROUTE_NATIVE_SECS" \
+    bash "$root/scripts/checks/compiler/dual_route_harness.sh" \
+    >"$ctl_one_site/harness.stdout" 2>"$ctl_one_site/harness.stderr" || rc_one_site=$?
+  if [ "$rc_one_site" -ne 0 ] &&
+      has_match -F 'ok   BIR observation (unchecked source_two_site_first_trap): matches manifest expectation (kind, index, status, stderr)' <"$ctl_one_site/harness.stdout" &&
+      has_match -F 'ok   unchecked two-site first trap (site 0) [llvm]: verified replay and normal exit 134' <"$ctl_one_site/harness.stdout" &&
+      has_match -F 'ok   unchecked two-site first trap (site 0) [lcb]: verified replay and normal exit 134' <"$ctl_one_site/harness.stdout" &&
+      has_match -F 'FAIL two-site unchecked stage (source_two_site_first_trap): fixed 2-site verification failed (rc=1)' <"$ctl_one_site/harness.stdout" &&
+      has_match -F "verify-unchecked: $first_rel: elaborated 1 site(s), expected fixed site count 2" <"$ctl_one_site/harness.stderr"; then
+    ok "two-site count control (first fixture reduced to 1 site): rejected by fixed 2-site expectation despite matching site-0 trap"
+  else
+    cat "$ctl_one_site/harness.stdout" >&2 || true
+    cat "$ctl_one_site/harness.stderr" >&2 || true
+    no "two-site count control (first fixture reduced to 1 site): unexpected result (rc=$rc_one_site)"
+  fi
+else
+  no "two-site count control (first fixture): mutation did not change $first_rel"
+fi
+
+# 7f. Fixed two-site count negative control (second fixture -> 3 sites): add a
+#     third addition to two_site_second_trap.con and update its manifest stderr
+#     to site 1's new line/col so trap kind, BIR index 1, and native stderr all
+#     match; fixed 2-site verification must still FAIL.
+ctl_three_sites="$work/ctl/two-site-second-expanded-to-three"
+mkdir -p "$ctl_three_sites/project"
+cp -R -- "$manifest_tests_dir" "$ctl_three_sites/project/tests"
+cat >"$ctl_three_sites/project/$second_rel" <<'CON'
+fn main() -> u8 {
+    let a: u8 = 150 + 105;
+    let b: u8 = a + 1;
+    return b + 0;
+}
+CON
+three_site_hex=$(python3 -I -c 'import sys; print(f"concrete: trap: overflow at {sys.argv[1]}:3:19 (site 1)\n".encode("utf-8").hex())' "$second_rel")
+awk -F '\t' -v OFS='\t' -v hex="$three_site_hex" \
+  '$1 == "source_two_site_second_trap" { $3 = "trap arithmeticOverflow 1 " hex } { print }' \
+  "$ctl_three_sites/project/tests/$manifest_name" >"$ctl_three_sites/project/tests/$manifest_name.new"
+mv -- "$ctl_three_sites/project/tests/$manifest_name.new" "$ctl_three_sites/project/tests/$manifest_name"
+if ! cmp -s "$second_src" "$ctl_three_sites/project/$second_rel"; then
+  rc_three_sites=0
+  CONCRETE_TEST_MANIFEST="$ctl_three_sites/project/tests/$manifest_name" \
+    CONCRETE_DUAL_ROUTE_SKIP_CONTROLS=1 \
+    dual_route_bounded "$DUAL_ROUTE_NATIVE_SECS" \
+    bash "$root/scripts/checks/compiler/dual_route_harness.sh" \
+    >"$ctl_three_sites/harness.stdout" 2>"$ctl_three_sites/harness.stderr" || rc_three_sites=$?
+  if [ "$rc_three_sites" -ne 0 ] &&
+      has_match -F 'ok   BIR observation (unchecked source_two_site_second_trap): matches manifest expectation (kind, index, status, stderr)' <"$ctl_three_sites/harness.stdout" &&
+      has_match -F 'ok   unchecked two-site second trap (site 1) [llvm]: verified replay and normal exit 134' <"$ctl_three_sites/harness.stdout" &&
+      has_match -F 'ok   unchecked two-site second trap (site 1) [lcb]: verified replay and normal exit 134' <"$ctl_three_sites/harness.stdout" &&
+      has_match -F 'FAIL two-site unchecked stage (source_two_site_second_trap): fixed 2-site verification failed (rc=1)' <"$ctl_three_sites/harness.stdout" &&
+      has_match -F "verify-unchecked: $second_rel: elaborated 3 site(s), expected fixed site count 2" <"$ctl_three_sites/harness.stderr"; then
+    ok "two-site count control (second fixture expanded to 3 sites): rejected by fixed 2-site expectation despite matching site-1 trap"
+  else
+    cat "$ctl_three_sites/harness.stdout" >&2 || true
+    cat "$ctl_three_sites/harness.stderr" >&2 || true
+    no "two-site count control (second fixture expanded to 3 sites): unexpected result (rc=$rc_three_sites)"
+  fi
+else
+  no "two-site count control (second fixture): mutation did not change $second_rel"
+fi
+
+# 7g-7k. Refuse any manifest row whose source is outside the selected manifest.
 manifest_refusal_control() {
   local label=$1
   local target_manifest=$2
@@ -752,48 +1061,48 @@ manifest_refusal_control() {
   fi
 }
 
-# 7b. Symlinked source file pointing outside copied manifest to original checkout.
+# 7g. Symlinked source file pointing outside copied manifest to original checkout.
 ctl_sym_src="$work/ctl/manifest-symlink-src"
 mkdir -p "$ctl_sym_src/project"
 cp -R -- "$manifest_tests_dir" "$ctl_sym_src/project/tests"
 rm -f -- "$ctl_sym_src/project/$answer_rel"
 ln -s -- "$answer_src" "$ctl_sym_src/project/$answer_rel"
-manifest_refusal_control symlink-source-outside "$ctl_sym_src/project/tests/manifest.tsv" \
+manifest_refusal_control symlink-source-outside "$ctl_sym_src/project/tests/$manifest_name" \
   'must not be or traverse a symlink'
 
-# 7c. Path traversal (`..`) escaping tests/ to an outside .con file.
+# 7h. Path traversal (`..`) escaping tests/ to an outside .con file.
 ctl_trav="$work/ctl/manifest-traversal"
 mkdir -p "$ctl_trav/project"
 cp -R -- "$manifest_tests_dir" "$ctl_trav/project/tests"
 cp -- "$answer_src" "$ctl_trav/project/outside.con"
 awk -F '\t' -v OFS='\t' '$1 == "source_answer" { $2 = "con:tests/../outside.con" } { print }' \
-  "$ctl_trav/project/tests/manifest.tsv" >"$ctl_trav/project/tests/manifest.tsv.new"
-mv -- "$ctl_trav/project/tests/manifest.tsv.new" "$ctl_trav/project/tests/manifest.tsv"
-manifest_refusal_control traversal-outside "$ctl_trav/project/tests/manifest.tsv" \
+  "$ctl_trav/project/tests/$manifest_name" >"$ctl_trav/project/tests/$manifest_name.new"
+mv -- "$ctl_trav/project/tests/$manifest_name.new" "$ctl_trav/project/tests/$manifest_name"
+manifest_refusal_control traversal-outside "$ctl_trav/project/tests/$manifest_name" \
   'must be a normalized tests/*.con path'
 
-# 7d. Symlinked tests/ directory pointing to original checkout's tests/.
+# 7i. Symlinked tests/ directory pointing to original checkout's tests/.
 ctl_sym_dir="$work/ctl/manifest-symlink-dir"
 mkdir -p "$ctl_sym_dir/project"
 ln -s -- "$manifest_tests_dir" "$ctl_sym_dir/project/tests"
-manifest_refusal_control symlink-tests-dir "$ctl_sym_dir/project/tests/manifest.tsv" \
+manifest_refusal_control symlink-tests-dir "$ctl_sym_dir/project/tests/$manifest_name" \
   'must not be a symlink'
 
-# 7e. Manifest residing in a directory not named tests/.
+# 7j. Manifest residing in a directory not named tests/.
 ctl_wrong_dir="$work/ctl/manifest-wrong-dir"
 mkdir -p "$ctl_wrong_dir/project"
 cp -R -- "$manifest_tests_dir" "$ctl_wrong_dir/project/not_tests"
-manifest_refusal_control non-tests-dir "$ctl_wrong_dir/project/not_tests/manifest.tsv" \
+manifest_refusal_control non-tests-dir "$ctl_wrong_dir/project/not_tests/$manifest_name" \
   "must be named 'tests'"
 
-# 7f. Non-con: row (bir:) substituted for source_answer.
+# 7k. Non-con: row (bir:) substituted for source_answer.
 ctl_non_con="$work/ctl/manifest-non-con"
 mkdir -p "$ctl_non_con/project"
 cp -R -- "$manifest_tests_dir" "$ctl_non_con/project/tests"
 awk -F '\t' -v OFS='\t' '$1 == "answer" { next } $1 == "source_answer" { $2 = "bir:answer" } { print }' \
-  "$ctl_non_con/project/tests/manifest.tsv" >"$ctl_non_con/project/tests/manifest.tsv.new"
-mv -- "$ctl_non_con/project/tests/manifest.tsv.new" "$ctl_non_con/project/tests/manifest.tsv"
-manifest_refusal_control non-con-row "$ctl_non_con/project/tests/manifest.tsv" \
+  "$ctl_non_con/project/tests/$manifest_name" >"$ctl_non_con/project/tests/$manifest_name.new"
+mv -- "$ctl_non_con/project/tests/$manifest_name.new" "$ctl_non_con/project/tests/$manifest_name"
+manifest_refusal_control non-con-row "$ctl_non_con/project/tests/$manifest_name" \
   "must be a con: source"
 
 echo "dual_route_harness: PASS=$pass FAIL=$fail"

@@ -276,14 +276,18 @@ def materialize_expect(manifest, ident, out_dir):
     if row is None:
         fail(manifest, None, f"unknown test id {ident!r}")
     parts = row.expect.split(" ")
+    trap_kind = None
+    trap_index = None
     match parts:
         case ["exit", status, stderr]:
             expect_kind = "exit"
             exit_status = int(status)
             stderr_bytes = decode_stderr_bytes(stderr)
-        case ["trap", _, _, stderr]:
+        case ["trap", kind, site, stderr]:
             expect_kind = "trap"
             exit_status = 134
+            trap_kind = kind
+            trap_index = int(site)
             stderr_bytes = decode_stderr_bytes(stderr)
         case _:
             fail(manifest, None, f"row {ident!r} has non-executable expect {row.expect!r}")
@@ -295,6 +299,13 @@ def materialize_expect(manifest, ident, out_dir):
     (dest / "stderr").write_bytes(stderr_bytes)
     (dest / "expect_kind").write_text(f"{expect_kind}\n", encoding="utf-8")
     (dest / "program").write_text(f"{row.program}\n", encoding="utf-8")
+    (dest / "manifest_name").write_text(f"{path.name}\n", encoding="utf-8")
+    if trap_kind is not None and trap_index is not None:
+        (dest / "trap_kind").write_text(f"{trap_kind}\n", encoding="utf-8")
+        (dest / "trap_index").write_text(f"{trap_index}\n", encoding="utf-8")
+    else:
+        for stale in ("trap_kind", "trap_index"):
+            (dest / stale).unlink(missing_ok=True)
     if row.program.startswith("con:"):
         rel_path, source_path, project_root, tests_dir = resolve_con_source(path, None, row.program)
         (dest / "rel_path").write_text(f"{rel_path}\n", encoding="utf-8")
@@ -343,6 +354,9 @@ def self_test():
         assert (root / "out-a" / "signal").read_text(encoding="utf-8") == "none\n"
         assert (root / "out-a" / "stderr").read_bytes() == b""
         assert (root / "out-a" / "expect_kind").read_text(encoding="utf-8") == "exit\n"
+        assert (root / "out-a" / "manifest_name").read_text(encoding="utf-8") == "manifest.tsv\n"
+        assert not (root / "out-a" / "trap_kind").exists()
+        assert not (root / "out-a" / "trap_index").exists()
         assert not (root / "out-a" / "source_path").exists()
         row_t, status_t = materialize_expect(manifest_file, "t", root / "out-t")
         assert row_t.program == "con:tests/slice0/trap.con" and status_t == 134
@@ -351,9 +365,28 @@ def self_test():
         assert (root / "out-t" / "signal").read_text(encoding="utf-8") == "none\n"
         assert (root / "out-t" / "stderr").read_bytes() == trap_line
         assert (root / "out-t" / "expect_kind").read_text(encoding="utf-8") == "trap\n"
+        assert (root / "out-t" / "manifest_name").read_text(encoding="utf-8") == "manifest.tsv\n"
+        assert (root / "out-t" / "trap_kind").read_text(encoding="utf-8") == "arithmeticOverflow\n"
+        assert (root / "out-t" / "trap_index").read_text(encoding="utf-8") == "1\n"
         assert (root / "out-t" / "rel_path").read_text(encoding="utf-8") == "tests/slice0/trap.con\n"
         assert (root / "out-t" / "source_path").read_text(encoding="utf-8") == f"{(tests / 'slice0' / 'trap.con').resolve()}\n"
         assert (root / "out-t" / "project_root").read_text(encoding="utf-8") == f"{root.resolve()}\n"
+        materialize_expect(manifest_file, "t", root / "out-reuse")
+        assert (root / "out-reuse" / "trap_kind").exists() and (root / "out-reuse" / "trap_index").exists()
+        materialize_expect(manifest_file, "a", root / "out-reuse")
+        assert not (root / "out-reuse" / "trap_kind").exists()
+        assert not (root / "out-reuse" / "trap_index").exists()
+        assert not (root / "out-reuse" / "source_path").exists()
+        renamed_manifest = tests / "custom_manifest.tsv"
+        renamed_manifest.write_text(
+            "id\tprogram\texpect\tslice\n"
+            f"t0\tcon:tests/slice0/trap.con\ttrap abort 0 {trap_line.hex()}\tslice0\n",
+            encoding="utf-8",
+        )
+        materialize_expect(renamed_manifest, "t0", root / "out-renamed")
+        assert (root / "out-renamed" / "manifest_name").read_text(encoding="utf-8") == "custom_manifest.tsv\n"
+        assert (root / "out-renamed" / "trap_kind").read_text(encoding="utf-8") == "abort\n"
+        assert (root / "out-renamed" / "trap_index").read_text(encoding="utf-8") == "0\n"
         row_e, status_e = materialize_expect(manifest_file, "e", root / "out-e")
         assert row_e.program == "bir:msg" and status_e == 7
         assert (root / "out-e" / "reason").read_text(encoding="utf-8") == "exit\n"

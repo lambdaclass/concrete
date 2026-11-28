@@ -320,6 +320,23 @@ private def readRequiredFile (context : String) (path : System.FilePath) : IO (O
     IO.eprintln s!"{context}: cannot read {path}: {e}"
     return none
 
+private def readSingleLineFile (context : String) (path : System.FilePath) : IO (Option String) := do
+  match ← readRequiredFile context path with
+  | none => return none
+  | some text =>
+    match text.splitOn "\n" with
+    | [line, ""] => return some line
+    | _ =>
+      IO.eprintln s!"{context}: expected single newline-terminated line in {path}"
+      return none
+
+private def fixtureTrapKind : ConcreteSpec.Trap → String
+  | .arithmeticOverflow => "arithmeticOverflow"
+
+private def parseExpectedSites (spec : String) : Option (Option Nat) :=
+  if spec == "-" then some none
+  else spec.toNat?.map some
+
 /-- Verify a checked publication directory against admission's own discharged set
 and the independently emitted checked backend inputs. -/
 private def verifyChecked (relPath srcPath pubDir targetName backend : String) : IO UInt32 := do
@@ -435,8 +452,10 @@ private def verifyChecked (relPath srcPath pubDir targetName backend : String) :
     | _, _ => passed := false
   return if passed then 0 else 1
 
-private def verifyUnchecked (relPath srcPath stageDir targetName backend : String) : IO UInt32 := do
+private def verifyUnchecked (relPath srcPath stageDir targetName backend expectedSitesSpec : String) : IO UInt32 := do
   unless ← checkDerivedMarkers do return 4
+  let some fixedSites := parseExpectedSites expectedSitesSpec
+    | IO.eprintln s!"verify-unchecked: invalid expected site count {expectedSitesSpec}"; return 2
   let bytes ← IO.FS.readBinFile srcPath
   let .ok input := Stages.Input.load relPath bytes
     | IO.eprintln s!"verify-unchecked: invalid project path: {relPath}"; return 1
@@ -449,13 +468,20 @@ private def verifyUnchecked (relPath srcPath stageDir targetName backend : Strin
   let core ← match Admission.prepareParsed .eligibility ast with
     | .ok c => pure c
     | .error r => IO.eprintln s!"verify-unchecked: elab failed: {r.render}"; return 1
-  let expectedSites := core.sites.length
+  let elaboratedSites := core.sites.length
+  let expectedSites ← match fixedSites with
+    | some n =>
+      if elaboratedSites != n then
+        IO.eprintln s!"verify-unchecked: {relPath}: elaborated {elaboratedSites} site(s), expected fixed site count {n}"
+        return 1
+      pure n
+    | none => pure elaboratedSites
   let bir ← match Stages.unchecked input with
     | .ok b => pure b
     | .error r => IO.eprintln s!"verify-unchecked: unchecked compile failed: {r.render}"; return 1
   unless BIR.wf bir && bir.sites.length == expectedSites &&
       birOvfCount bir == expectedSites && birTrapCount bir == expectedSites do
-    IO.eprintln s!"verify-unchecked: unchecked BIR site/check counts do not match {expectedSites} elaborated addition site(s)"
+    IO.eprintln s!"verify-unchecked: {relPath}: unchecked BIR has sites={bir.sites.length}, binOvf={birOvfCount bir}, trap={birTrapCount bir}, expected {expectedSites}"
     return 1
   let dir := System.FilePath.mk stageDir
   if backend != "lcb" then
@@ -491,10 +517,126 @@ private def verifyUnchecked (relPath srcPath stageDir targetName backend : Strin
       return 1
   return 0
 
+private def verifyObservation (route relPath srcPath expectDir : String) : IO UInt32 := do
+  let dir := System.FilePath.mk expectDir
+  let some expectKind ← readSingleLineFile "verify-observation" (dir / "expect_kind") | return 2
+  let some statusStr ← readSingleLineFile "verify-observation" (dir / "status") | return 2
+  let some expectedStatus := statusStr.toNat?
+    | IO.eprintln s!"verify-observation: invalid expected status {statusStr}"; return 2
+  if expectedStatus > 255 then
+    IO.eprintln s!"verify-observation: expected status {expectedStatus} out of range"
+    return 2
+  let expectedStderr ← IO.FS.readBinFile (dir / "stderr")
+  let bytes ← IO.FS.readBinFile srcPath
+  let .ok input := Stages.Input.load relPath bytes
+    | IO.eprintln s!"verify-observation: invalid project path: {relPath}"; return 1
+  let (coreProg, bir) ← match route with
+    | "checked" =>
+      match Stages.compile input with
+      | .ok out => pure (Core.toCore out.core.program, out.bir)
+      | .error r =>
+        IO.eprintln s!"verify-observation: checked compilation failed for {relPath}: {r.render}"
+        return 1
+    | "unchecked" =>
+      let tokens ← match Lex.lex input.source input.fileId with
+        | .ok t => pure t
+        | .error r => IO.eprintln s!"verify-observation: lex failed for {relPath}: {r.render}"; return 1
+      let ast ← match Parse.parseForDriver input.eof tokens with
+        | .ok a => pure a
+        | .error r => IO.eprintln s!"verify-observation: parse failed for {relPath}: {r.render}"; return 1
+      let core ← match Admission.prepareParsed .eligibility ast with
+        | .ok c => pure c
+        | .error r => IO.eprintln s!"verify-observation: elab failed for {relPath}: {r.render}"; return 1
+      let b ← match Stages.unchecked input with
+        | .ok b => pure b
+        | .error r => IO.eprintln s!"verify-observation: unchecked compilation failed for {relPath}: {r.render}"; return 1
+      pure (Core.toCore core.program, b)
+    | _ =>
+      IO.eprintln s!"verify-observation: unknown route {route}"
+      return 2
+  unless BIR.wf bir do
+    IO.eprintln s!"verify-observation: {relPath}: BIR is not well formed"
+    return 1
+  let coreGot := Core.run coreProg (coreProg.body.length + 1)
+  let birGot := BIR.run bir (Nat.max 1000 (bir.blocks.length + 1))
+  let some word := BIR.encode birGot
+    | IO.eprintln s!"verify-observation: {relPath}: BIR outcome {repr birGot} has no result word"; return 1
+  let (lcbFn, _) ← match LCB.emit bir with
+    | .ok emitted => pure emitted
+    | .error r => IO.eprintln s!"verify-observation: {relPath}: LCB emit failed: {r.render}"; return 1
+  match LCB.evalBody lcbFn 100000 with
+  | some w =>
+    unless w == word do
+      IO.eprintln s!"verify-observation: {relPath}: LCB evaluator returned {w}, BIR result word is {word}"
+      return 1
+  | none =>
+    IO.eprintln s!"verify-observation: {relPath}: LCB evaluator did not return"
+    return 1
+  match expectKind with
+  | "exit" =>
+    if (← (dir / "trap_kind").pathExists) || (← (dir / "trap_index").pathExists) then
+      IO.eprintln s!"verify-observation: {relPath}: exit expectation unexpectedly contains trap metadata"
+      return 2
+    unless expectedStderr.isEmpty do
+      IO.eprintln s!"verify-observation: {relPath}: exit expectation has nonempty stderr"
+      return 16
+    match birGot with
+    | .exited actual =>
+      if actual != expectedStatus then
+        IO.eprintln s!"verify-observation: {relPath}: BIR exit status mismatch: expected {expectedStatus}, observed {actual}"
+        return 10
+    | _ =>
+      IO.eprintln s!"verify-observation: {relPath}: expected BIR exit {expectedStatus}, observed {repr birGot}"
+      return 10
+    unless coreGot == .exit expectedStatus do
+      IO.eprintln s!"verify-observation: {relPath}: Core outcome mismatch: expected exit {expectedStatus}, observed {repr coreGot}"
+      return 10
+    return 0
+  | "trap" =>
+    if route == "checked" then
+      IO.eprintln s!"verify-observation: {relPath}: trap expectation cannot succeed on checked route"
+      return 10
+    if expectedStatus != 134 then
+      IO.eprintln s!"verify-observation: {relPath}: trap expectation must have status 134, got {expectedStatus}"
+      return 2
+    let some expectedTrapKind ← readSingleLineFile "verify-observation" (dir / "trap_kind") | return 2
+    let some expectedIndexStr ← readSingleLineFile "verify-observation" (dir / "trap_index") | return 2
+    let some expectedIndex := expectedIndexStr.toNat?
+      | IO.eprintln s!"verify-observation: {relPath}: invalid expected trap_index {expectedIndexStr}"; return 2
+    match birGot with
+    | .trapped actualIndex =>
+      if actualIndex != expectedIndex then
+        IO.eprintln s!"verify-observation: {relPath}: BIR trap index mismatch: expected {expectedIndex}, observed {actualIndex}"
+        return 11
+      let some entry := bir.sites[actualIndex]?
+        | IO.eprintln s!"verify-observation: {relPath}: BIR trapped at out-of-bounds index {actualIndex} (sites={bir.sites.length})"; return 10
+      if fixtureTrapKind entry.kind != expectedTrapKind then
+        IO.eprintln s!"verify-observation: {relPath}: BIR trap kind mismatch at index {actualIndex}: expected {expectedTrapKind}, observed {fixtureTrapKind entry.kind}"
+        return 12
+      match coreGot with
+      | .trap coreKind =>
+        if fixtureTrapKind coreKind != expectedTrapKind then
+          IO.eprintln s!"verify-observation: {relPath}: Core trap kind mismatch: expected {expectedTrapKind}, observed {fixtureTrapKind coreKind}"
+          return 12
+      | _ =>
+        IO.eprintln s!"verify-observation: {relPath}: expected Core trap {expectedTrapKind}, observed {repr coreGot}"
+        return 10
+      let observedStderr := (Runtime.trapLine entry ++ "\n").toUTF8
+      if observedStderr.data != expectedStderr.data then
+        IO.eprintln s!"verify-observation: {relPath}: BIR trap stderr mismatch at index {actualIndex}"
+        return 16
+      return 0
+    | _ =>
+      IO.eprintln s!"verify-observation: {relPath}: expected BIR trap {expectedTrapKind} at index {expectedIndex}, observed {repr birGot}"
+      return 10
+  | _ =>
+    IO.eprintln s!"verify-observation: {relPath}: unknown expect_kind {expectKind}"
+    return 2
+
 private def verifyRouteSeparation (relPath srcPath checkedDir uncheckedDir targetName : String) : IO UInt32 := do
   let rc1 ← verifyChecked relPath srcPath checkedDir targetName "both"
   if rc1 != 0 then return rc1
-  let rc2 ← verifyUnchecked relPath srcPath uncheckedDir targetName "both"
+  let rc2 ← verifyUnchecked relPath srcPath uncheckedDir targetName "both" "-"
   if rc2 != 0 then return rc2
   let bytes ← IO.FS.readBinFile srcPath
   let .ok input := Stages.Input.load relPath bytes | return 1
@@ -584,8 +726,10 @@ def main (args : List String) : IO UInt32 := do
     emitUncheckedAfterAdmission mode relPath srcPath outDir targetName
   | ["verify-checked", relPath, srcPath, pubDir, targetName, backend] =>
     verifyChecked relPath srcPath pubDir targetName backend
-  | ["verify-unchecked", relPath, srcPath, stageDir, targetName, backend] =>
-    verifyUnchecked relPath srcPath stageDir targetName backend
+  | ["verify-unchecked", relPath, srcPath, stageDir, targetName, backend, expectedSitesSpec] =>
+    verifyUnchecked relPath srcPath stageDir targetName backend expectedSitesSpec
+  | ["verify-observation", route, relPath, srcPath, expectDir] =>
+    verifyObservation route relPath srcPath expectDir
   | ["verify-separation", relPath, srcPath, checkedDir, uncheckedDir, targetName] =>
     verifyRouteSeparation relPath srcPath checkedDir uncheckedDir targetName
   | ["site-line", relPath, srcPath, idxStr, outPath] =>
@@ -606,28 +750,39 @@ def main (args : List String) : IO UInt32 := do
         IO.eprintln s!"malformed batch spec line: {line}"
         return 2
     return 0
-  | ["ops-batch", specPath] =>
+  | ["ops-batch", specPath, resultsPath] =>
     let text ← IO.FS.readFile specPath
+    let mut results := ""
+    let mut failed := false
     for line in text.splitOn "\n" do
       if line.isEmpty then continue
-      let rc ← match line.splitOn "\t" with
-        | ["verify-checked", relPath, srcPath, pubDir, targetName, backend] =>
-          verifyChecked relPath srcPath pubDir targetName backend
-        | ["verify-unchecked", relPath, srcPath, stageDir, targetName, backend] =>
-          verifyUnchecked relPath srcPath stageDir targetName backend
-        | ["verify-separation", relPath, srcPath, checkedDir, uncheckedDir, targetName] =>
-          verifyRouteSeparation relPath srcPath checkedDir uncheckedDir targetName
-        | ["site-line", relPath, srcPath, idxStr, outPath] =>
-          siteLine relPath srcPath idxStr outPath
-        | ["emit-sigabrt", stderrPath, outDir] =>
-          emitSigabrtControl stderrPath outDir
-        | _ =>
-          IO.eprintln s!"malformed ops-batch spec line: {line}"
-          pure 2
-      if rc != 0 then return rc
-    return 0
+      match line.splitOn "\t" with
+      | tag :: opArgs =>
+        let rc ← match opArgs with
+          | ["verify-checked", relPath, srcPath, pubDir, targetName, backend] =>
+            verifyChecked relPath srcPath pubDir targetName backend
+          | ["verify-unchecked", relPath, srcPath, stageDir, targetName, backend, expectedSitesSpec] =>
+            verifyUnchecked relPath srcPath stageDir targetName backend expectedSitesSpec
+          | ["verify-observation", route, relPath, srcPath, expectDir] =>
+            verifyObservation route relPath srcPath expectDir
+          | ["verify-separation", relPath, srcPath, checkedDir, uncheckedDir, targetName] =>
+            verifyRouteSeparation relPath srcPath checkedDir uncheckedDir targetName
+          | ["site-line", relPath, srcPath, idxStr, outPath] =>
+            siteLine relPath srcPath idxStr outPath
+          | ["emit-sigabrt", stderrPath, outDir] =>
+            emitSigabrtControl stderrPath outDir
+          | _ =>
+            IO.eprintln s!"malformed ops-batch spec line: {line}"
+            pure 2
+        results := results ++ s!"{tag}\t{rc}\n"
+        if rc != 0 then failed := true
+      | [] =>
+        IO.eprintln s!"malformed ops-batch spec line: {line}"
+        failed := true
+    IO.FS.writeFile resultsPath results
+    return if failed then 1 else 0
   | _ =>
-    IO.eprintln "usage: dual_route_emit.lean emit|emit-unchecked-after-admission|verify-checked|verify-unchecked|verify-separation|site-line|emit-sigabrt|batch|ops-batch ..."
+    IO.eprintln "usage: dual_route_emit.lean emit|emit-unchecked-after-admission|verify-checked|verify-unchecked|verify-observation|verify-separation|site-line|emit-sigabrt|batch|ops-batch ..."
     return 2
 LEAN
 }
@@ -670,13 +825,14 @@ dual_route_emit_batch() {
   )
 }
 
-# dual_route_ops_batch SPEC_FILE
+# dual_route_ops_batch SPEC_FILE RESULTS_FILE
 dual_route_ops_batch() {
   local spec_file=$1
+  local results_file=$2
   (
     cd -- "$DUAL_ROUTE_ROOT"
     dual_route_bounded "$DUAL_ROUTE_EMIT_SECS" lake env lean --run "$DUAL_ROUTE_EMITTER_LEAN" \
-      ops-batch "$spec_file"
+      ops-batch "$spec_file" "$results_file"
   )
 }
 
@@ -693,16 +849,30 @@ dual_route_verify_checked() {
   )
 }
 
-# dual_route_verify_unchecked REL_PATH SRC_PATH STAGE_DIR [BACKEND]
+# dual_route_verify_unchecked REL_PATH SRC_PATH STAGE_DIR [BACKEND [EXPECTED_SITES]]
 dual_route_verify_unchecked() {
   local rel_path=$1
   local src_path=$2
   local stage_dir=$3
   local backend=${4:-both}
+  local expected_sites=${5:--}
   (
     cd -- "$DUAL_ROUTE_ROOT"
     dual_route_bounded "$DUAL_ROUTE_EMIT_SECS" lake env lean --run "$DUAL_ROUTE_EMITTER_LEAN" \
-      verify-unchecked "$rel_path" "$src_path" "$stage_dir" "$DUAL_ROUTE_TARGET" "$backend"
+      verify-unchecked "$rel_path" "$src_path" "$stage_dir" "$DUAL_ROUTE_TARGET" "$backend" "$expected_sites"
+  )
+}
+
+# dual_route_verify_observation ROUTE REL_PATH SRC_PATH EXPECT_DIR
+dual_route_verify_observation() {
+  local route=$1
+  local rel_path=$2
+  local src_path=$3
+  local expect_dir=$4
+  (
+    cd -- "$DUAL_ROUTE_ROOT"
+    dual_route_bounded "$DUAL_ROUTE_EMIT_SECS" lake env lean --run "$DUAL_ROUTE_EMITTER_LEAN" \
+      verify-observation "$route" "$rel_path" "$src_path" "$expect_dir"
   )
 }
 
@@ -750,6 +920,9 @@ dual_route_load_con_row() {
   local expected_kind=$4
   local program=""
   local expect_kind=""
+  local trap_kind=""
+  local trap_index=""
+  local manifest_name=""
   local rel_path=""
   local source_path=""
   local project_root=""
@@ -768,6 +941,26 @@ dual_route_load_con_row() {
     echo "slice0_dual_route: manifest row '$test_id' must have '$expected_kind' expectation, got '$expect_kind'" >&2
     return 1
   fi
+  if [ "$expect_kind" = trap ]; then
+    if [ ! -f "$out_dir/trap_kind" ] || [ ! -f "$out_dir/trap_index" ]; then
+      echo "slice0_dual_route: manifest row '$test_id' did not materialize trap_kind and trap_index" >&2
+      return 1
+    fi
+    trap_kind=$(cat "$out_dir/trap_kind") || return 1
+    trap_index=$(cat "$out_dir/trap_index") || return 1
+    if [ -z "$trap_kind" ] || ! [[ "$trap_index" =~ ^[0-9]+$ ]]; then
+      echo "slice0_dual_route: manifest row '$test_id' has invalid trap metadata (kind='$trap_kind', index='$trap_index')" >&2
+      return 1
+    fi
+  elif [ -e "$out_dir/trap_kind" ] || [ -e "$out_dir/trap_index" ]; then
+    echo "slice0_dual_route: manifest row '$test_id' has unexpected trap metadata for '$expect_kind' row" >&2
+    return 1
+  fi
+  manifest_name=$(cat "$out_dir/manifest_name") || return 1
+  if [ -z "$manifest_name" ] || [ "$manifest_name" = "." ] || [ "$manifest_name" = ".." ] || [[ "$manifest_name" == */* ]]; then
+    echo "slice0_dual_route: manifest row '$test_id' has invalid manifest_name '$manifest_name'" >&2
+    return 1
+  fi
   rel_path=$(cat "$out_dir/rel_path") || return 1
   source_path=$(cat "$out_dir/source_path") || return 1
   project_root=$(cat "$out_dir/project_root") || return 1
@@ -778,6 +971,10 @@ dual_route_load_con_row() {
   fi
   if [ -L "$tests_dir" ] || [ ! -d "$tests_dir" ] || [ "$(basename -- "$tests_dir")" != tests ]; then
     echo "slice0_dual_route: manifest directory '$tests_dir' must be a real tests/ directory" >&2
+    return 1
+  fi
+  if [ -L "$tests_dir/$manifest_name" ] || [ ! -f "$tests_dir/$manifest_name" ]; then
+    echo "slice0_dual_route: selected manifest '$tests_dir/$manifest_name' is not a regular file" >&2
     return 1
   fi
   if [ "$source_path" != "$project_root/$rel_path" ] || [[ "$source_path" != "$tests_dir/"* ]]; then
