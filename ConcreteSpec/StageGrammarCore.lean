@@ -607,6 +607,70 @@ theorem VerificationInputs.spaceBound {count : Nat} {grammar : SharedGrammar cou
     inputs.proposal.size ≤ grammar.verificationBudget :=
   inputs.proposalSize ▸ inputs.verifier.spaceBound
 
+private theorem array_extract_loop_getElem_zero {α : Type} (as : Array α) :
+    ∀ (i : Nat) (bs : Array α) (hle : bs.size + i ≤ as.size),
+      (∀ k (hk : k < bs.size), bs[k] = as[k]'(Nat.lt_of_lt_of_le hk (Nat.le_trans (Nat.le_add_right _ _) hle))) →
+      ∃ hsz : (Array.extract.loop as i bs.size bs).size = bs.size + i,
+        ∀ k (hk : k < bs.size + i),
+          (Array.extract.loop as i bs.size bs)[k]'(hsz ▸ hk) = as[k]'(Nat.lt_of_lt_of_le hk hle)
+  | 0, bs, _, hbs => by
+    have hloop : Array.extract.loop as 0 bs.size bs = bs := by
+      unfold Array.extract.loop
+      split <;> rfl
+    rw [hloop]
+    exact ⟨rfl, hbs⟩
+  | i + 1, bs, hle, hbs => by
+    have hj : bs.size < as.size := by omega
+    have hstep : Array.extract.loop as (i + 1) bs.size bs =
+        Array.extract.loop as i (bs.push as[bs.size]).size (bs.push as[bs.size]) := by
+      rw [Array.size_push]
+      conv => lhs; unfold Array.extract.loop
+      simp only [hj, ↓reduceDIte]
+      rfl
+    have hle' : (bs.push as[bs.size]).size + i ≤ as.size := by rw [Array.size_push]; omega
+    have hbs' : ∀ k (hk : k < (bs.push as[bs.size]).size),
+        (bs.push as[bs.size])[k] = as[k]'(Nat.lt_of_lt_of_le hk (Nat.le_trans (Nat.le_add_right _ _) hle')) := by
+      intro k hk
+      rw [Array.size_push] at hk
+      by_cases hlt : k < bs.size
+      · rw [Array.getElem_push_lt hlt, hbs k hlt]
+      · have hkEq : k = bs.size := by omega
+        subst hkEq
+        exact Array.getElem_push_eq
+    obtain ⟨hsz, hget⟩ := array_extract_loop_getElem_zero as i (bs.push as[bs.size]) hle' hbs'
+    have hszFinal : (Array.extract.loop as (i + 1) bs.size bs).size = bs.size + (i + 1) := by
+      rw [hstep, hsz, Array.size_push]; omega
+    refine ⟨hszFinal, fun k hk => ?_⟩
+    have hk' : k < (bs.push as[bs.size]).size + i := by rw [Array.size_push]; omega
+    have h1 : (Array.extract.loop as (i + 1) bs.size bs)[k]'(hszFinal ▸ hk) =
+        (Array.extract.loop as i (bs.push as[bs.size]).size (bs.push as[bs.size]))[k]'(hsz ▸ hk') := by
+      simp only [hstep]
+    rw [h1]
+    exact hget k hk'
+
+private theorem array_getElem?_extract_zero {α : Type} (as : Array α) (stop k : Nat)
+    (hk : k < min stop as.size) :
+    (as.extract 0 stop)[k]? = some (as[k]'(Nat.lt_of_lt_of_le hk (Nat.min_le_right _ _))) := by
+  let n := min stop as.size
+  have hn : n ≤ as.size := Nat.min_le_right stop as.size
+  have hmin : (min stop as.size).sub 0 = n := Nat.sub_zero _
+  unfold Array.extract
+  dsimp only
+  rw [hmin]
+  let emp : Array α := Array.emptyWithCapacity n
+  have hle : emp.size + n ≤ as.size := by
+    change 0 + n ≤ as.size
+    rw [Nat.zero_add]; exact hn
+  obtain ⟨hsz, hget⟩ := array_extract_loop_getElem_zero as n emp hle
+    (fun _ hj => absurd hj (Nat.not_lt_zero _))
+  have hsz' : (Array.extract.loop as n 0 emp).size = n := by
+    change (Array.extract.loop as n emp.size emp).size = n
+    rw [hsz]; exact Nat.zero_add n
+  have hlt : k < (Array.extract.loop as n 0 emp).size := by
+    rw [hsz']; exact hk
+  rw [Array.getElem?_eq_getElem hlt]
+  exact congrArg some (hget k (by change k < 0 + n; rw [Nat.zero_add]; exact hk))
+
 theorem VerificationInputs.exactTable {count : Nat} {grammar : SharedGrammar count}
     (inputs : VerificationInputs grammar) :
     ∀ i : Fin inputs.engine.table.cells.size, ∃ word,
@@ -616,17 +680,15 @@ theorem VerificationInputs.exactTable {count : Nat} {grammar : SharedGrammar cou
   have hlen : inputs.engine.table.cells.size =
       min (count * grammar.terminalColumns) inputs.proposal.size := by
     have h := congrArg Array.size inputs.engineTableEq
-    simpa [acceptedCells, Array.size_map, Array.size_extract] using h
+    simpa only [acceptedCells, Array.size_map, Array.size_extract, Nat.sub_zero] using h
   have hiMin : i.val < min (count * grammar.terminalColumns) inputs.proposal.size :=
     hlen ▸ i.isLt
-  have hiDim : i.val < count * grammar.terminalColumns := Nat.lt_of_lt_of_le hiMin (Nat.min_le_left _ _)
   have hiProp : i.val < inputs.proposal.size := Nat.lt_of_lt_of_le hiMin (Nat.min_le_right _ _)
   refine ⟨inputs.proposal[i.val]'(hiProp), Array.getElem?_eq_getElem hiProp, ?_⟩
   have hcell := congrArg (fun a => a[i.val]?) inputs.engineTableEq
   rw [hcell]
-  simp only [acceptedCells, Array.getElem?_map, Array.getElem?_extract]
-  have hlt : i.val < min (count * grammar.terminalColumns) inputs.proposal.size - 0 := by
-    simpa using hiMin
-  simp only [hlt, ↓reduceIte, Nat.zero_add, Array.getElem?_eq_getElem hiProp, Option.map_some]
+  simp only [acceptedCells, Array.getElem?_map,
+    array_getElem?_extract_zero inputs.proposal (count * grammar.terminalColumns) i.val hiMin,
+    Option.map_some]
 
 end ConcreteSpec.StageGrammar

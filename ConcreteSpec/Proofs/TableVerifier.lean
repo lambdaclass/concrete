@@ -32,11 +32,7 @@ private theorem LocatedCode.left {program pc} {a b : List VerifyInstruction}
     (h : LocatedCode program pc (a ++ b)) : LocatedCode program pc a := by
   intro i op hi
   apply h
-  have lt : i < a.length := by
-    apply Classical.byContradiction
-    intro hn
-    have hn : a.length ≤ i := by omega
-    simp [List.getElem?_eq_none hn] at hi
+  have lt : i < a.length := (List.getElem?_eq_some_iff.mp hi).1
   rwa [List.getElem?_append_left lt]
 
 private theorem LocatedCode.right {program pc} {a b : List VerifyInstruction}
@@ -306,15 +302,20 @@ theorem accepted_work_covers_grammar {g : RawGrammar} {mem : Array UInt64}
 theorem decodeCells_dimensions (l : Layout) (mem : Array UInt64) {cells : Array (Option Nat)}
     (h : decodeCells l mem = some cells) : cells.size = l.n * l.c := by
   have bounds : l.n*l.c ≤ l.scratch := by
-    simp [Layout.scratch, Layout.suffixFirst, Layout.suffixProductive, Layout.suffixNull,
+    simp only [Layout.scratch, Layout.suffixFirst, Layout.suffixProductive, Layout.suffixNull,
       Layout.prefixNull, Layout.follow, Layout.firstNt, Layout.productive, Layout.nullNt,
       Layout.ntBase, Layout.rank]
     omega
   by_cases hs : mem.size = l.scratch + 1
-  · simp [decodeCells, hs, guard] at h
+  · have hbeq : (mem.size == l.scratch + 1) = true := beq_iff_eq.mpr hs
+    simp only [decodeCells, guard, hbeq, ↓reduceIte, pure, Bind.bind, Option.bind_some,
+      Option.some.injEq] at h
     subst cells
-    simp [Array.size_extract, Nat.min_eq_left (by omega : l.n*l.c ≤ mem.size)]
-  · simp [decodeCells, hs, guard] at h
+    rw [Array.size_map, Array.size_extract, Nat.sub_zero,
+      Nat.min_eq_left (by omega : l.n * l.c ≤ mem.size)]
+  · have hbeq : (mem.size == l.scratch + 1) = false := beq_false_of_ne hs
+    simp only [decodeCells, guard, hbeq, Bool.false_eq_true, ↓reduceIte,
+      failure, Alternative.failure, Bind.bind, Option.bind_none] at h
     contradiction
 
 private theorem eval_all (read : Nat → UInt64) (ts : List Test) :
@@ -354,15 +355,18 @@ private theorem eval_closed (read : Nat → UInt64) (r : Clause) :
 private theorem eval_justification (read : Nat → UInt64) (r : Clause) :
     r.justification.eval read = true ↔
     ∀ a ∈ r.premises, 0 < (read a).toNat ∧ (read a).toNat < (read r.head).toNat := by
-  simp [Clause.justification, Test.eval, eval_all, eval_positive, UInt64.lt_iff_toNat_lt]
-  grind
+  simp only [Clause.justification, Test.eval, Bool.and_eq_true, eval_all, List.forall_mem_map,
+    eval_positive, decide_eq_true_eq, UInt64.lt_iff_toNat_lt]
+  exact ⟨fun ⟨h1, h2⟩ a ha => ⟨h1 a ha, h2 a ha⟩,
+    fun h => ⟨fun a ha => (h a ha).1, fun a ha => (h a ha).2⟩⟩
 
 private theorem mem_factAddresses (l : Layout) (a : Nat) :
     a ∈ l.factAddresses ↔ l.isFact a = true := by
-  simp [Layout.factAddresses, Layout.isFact]
+  simp only [Layout.factAddresses, Layout.isFact, List.mem_map, List.mem_range,
+    Bool.and_eq_true, decide_eq_true_eq]
   constructor
   · rintro ⟨k, hk, rfl⟩
-    omega
+    constructor <;> omega
   · rintro ⟨lo, hi⟩
     exact ⟨a-l.ntBase, by omega, by omega⟩
 
@@ -449,7 +453,15 @@ private theorem cellChecks_iff (l : Layout) (rows : List Row) (read : Nat → UI
   apply forall_congr'; intro c
   apply forall_congr'; intro _
   simp only [group_mem Row.lhs _ _ n hn, Test.eval, beq_iff_eq, and_imp]
-  grind
+  constructor
+  · rintro ⟨h1, h2⟩
+    refine ⟨fun hpos => ?_, fun r hr hlhs hpred => h2 r hr hlhs hpred⟩
+    obtain ⟨r, ⟨hr, hlhs⟩, hpred⟩ := h1 hpos
+    exact ⟨r, hr, hlhs, hpred⟩
+  · rintro ⟨h1, h2⟩
+    refine ⟨fun hpos => ?_, fun r hr hlhs hpred => h2 r hr hlhs hpred⟩
+    obtain ⟨r, hr, hlhs, hpred⟩ := h1 hpos
+    exact ⟨r, ⟨hr, hlhs⟩, hpred⟩
 
 private theorem descentChecks_iff (l : Layout) (r : Row) (read : Nat → UInt64) :
     (∀ t ∈ l.descentChecks r, t.eval read = true) ↔
@@ -564,6 +576,8 @@ theorem decodeRank_at (l : Layout) (mem : Array UInt64) (n : Fin l.n)
       Layout.ntBase,Layout.rank]
     omega
   rw [getElem!_pos mem (l.rank n.val) bound]
-  simp [decodeRank,guard,size,Array.getElem?_eq_getElem bound]
+  have hbeq : (mem.size == l.scratch + 1) = true := beq_iff_eq.mpr size
+  simp only [decodeRank, guard, hbeq, ↓reduceIte, pure, Bind.bind, Option.bind_some,
+    Array.getElem?_eq_getElem bound]
 
 end ConcreteSpec.GrammarVerification
