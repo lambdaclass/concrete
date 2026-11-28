@@ -98,3 +98,21 @@ example : pathWitness "a b.con" ⟨``SourcePath.NoSpaces, 1⟩ = some (1, 7, tru
     pathWitness "con.con" ⟨``SourcePath.NoReservedStem, 1⟩ = some (0, 7, true) ∧
     pathWitness "" ⟨``SourcePath.Nonempty, 1⟩ = some (0, 0, true) := by
   with_unfolding_all exact ⟨rfl, rfl, rfl, rfl⟩
+
+-- Backend policy rules are registered at revision 1 and distinguish LLVM and LCB profiles.
+open BackendPolicy in
+example :
+    (validateRule intWidthRule).isSome ∧ (validateRule { intWidthRule with rev := 2 }).isNone ∧
+    (validateRule operationRule).isSome ∧ (validateRule { operationRule with rev := 2 }).isNone ∧
+    (validateRule storageFormRule).isSome ∧ (validateRule { storageFormRule with rev := 2 }).isNone ∧
+    (validateRule callRule).isSome ∧ (validateRule { callRule with rev := 2 }).isNone ∧
+    checkFeature (Profile.lcb .x86_64Linux) (.intWidth .u8) = .ok () ∧
+    checkFeature (Profile.llvm .x86_64Linux) (.intWidth .u32) = .ok () ∧
+    checkFeature (Profile.lcb .x86_64Linux) (.intWidth .u32) = .error intWidthRule ∧
+    checkFeature (Profile.lcb .x86_64Linux) (.operation .addWithOverflow) = .ok () ∧
+    checkFeature (Profile.lcb .x86_64Linux) (.operation (.arithmetic (.plain .div))) = .error operationRule ∧
+    checkFeature (Profile.lcb .x86_64Linux) (.storage .registerOnly) = .ok () ∧
+    checkFeature (Profile.llvm .x86_64Linux) (.storage .load) = .error storageFormRule ∧
+    checkFeature (Profile.lcb .aarch64Macos) (.call .unreachableCall) = .ok () ∧
+    checkFeature (Profile.lcb .aarch64Macos) (.call .reachableInternalCall) = .error callRule := by
+  decide

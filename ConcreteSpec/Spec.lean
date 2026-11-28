@@ -28,6 +28,7 @@ import ConcreteSpec.Spec.Authority
 import ConcreteSpec.Spec.Observation
 import ConcreteSpec.Spec.ProjectPolicy
 import ConcreteSpec.Spec.Manifest
+import ConcreteSpec.Spec.BackendPolicy
 
 /-!
 # The Concrete specification

@@ -1,5 +1,6 @@
 import ConcreteSpec.Spec.Manifest
 import ConcreteSpec.Spec.ProjectPolicy
+import ConcreteSpec.Spec.BackendPolicy
 import ConcreteSpec.Spec.Accounting
 import ConcreteSpec.Spec.Const
 import ConcreteSpec.Spec.Ident
@@ -87,7 +88,7 @@ def registeredRules : List RuleId :=
    ⟨``SourcePathSpan.EndInSource, 2⟩, ⟨``SourcePathSpan.LineMatches, 2⟩,
    ⟨``SourcePathSpan.ColumnMatches, 2⟩, Project.languagePinRule, Project.clauseRule,
    Project.tableVersionRule, Project.Manifest.sizeRule, Project.Manifest.encodingRule,
-   Project.Manifest.depthRule, Project.Manifest.syntaxRule] ++ slice0Rules
+   Project.Manifest.depthRule, Project.Manifest.syntaxRule] ++ slice0Rules ++ BackendPolicy.rules
 
 /-- Historical diagnostic IDs retained when a dependency changed the judgment.
 DepthAccepted@2 checks path depth in source order, including before later malformed text.
@@ -111,7 +112,7 @@ An unregistered slice has no coverage claim. -/
 def rulesForSlice (slice : SliceId) : Option (List RegisteredRule) :=
   if slice.n.val = 0 then
     some (slice0Rules.attach.map fun entry =>
-      ⟨entry.val, List.mem_append_right _ entry.property⟩)
+      ⟨entry.val, List.mem_append_left _ (List.mem_append_right _ entry.property)⟩)
   else none
 
 /-- Missing conformance coverage in registry order. Coverage is revision-specific. -/
