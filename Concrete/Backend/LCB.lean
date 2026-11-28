@@ -1,6 +1,7 @@
 import Concrete.Interfaces.Carriers
 import ConcreteSpec.Proofs.Basics
 import Concrete.Backend.Runtime
+import Concrete.Backend.LCBJob
 import Concrete.BIR.Progress
 import Concrete.Refusal
 import LeanCompilerBackend.Verified.Job
@@ -206,12 +207,15 @@ def emit (p : Program) : Except Refusal (Source.Function × SiteTable) := do
 /-! ## Assembly, in process (inside `P_toolchain[lcb]`) -/
 
 /-- The body's symbol: the runtime entry calls `concrete_body`. -/
-def bodySymbol : LeanCompilerBackend.Verified.Symbol := { namespaceName := "concrete", name := "concrete_body", exported := true }
+abbrev bodySymbol : LeanCompilerBackend.Verified.Symbol := LCBJob.bodySymbol
 
 /-- The adapter's body with the canonical ABI and frame plans. -/
-def job (f : Source.Function) : LeanCompilerBackend.Verified.FunctionJob :=
-  { code := { symbol := bodySymbol, body := f, abi := LeanCompilerBackend.Verified.planAbi f,
-              layout := LeanCompilerBackend.Verified.planFrame f } }
+abbrev lcbFunctionJob : Source.Function → LeanCompilerBackend.Verified.FunctionJob :=
+  LCBJob.lcbFunctionJob
+
+/-- Compatibility alias for existing callers; definitionally equal to `lcbFunctionJob`. -/
+abbrev job (f : Source.Function) : LeanCompilerBackend.Verified.FunctionJob :=
+  LCBJob.lcbFunctionJob f
 
 /-- The compiler constructs the job and its plans. A failed structural check signals
 an invariant violation. Valid input can exceed the admission profile or its resource limits. -/

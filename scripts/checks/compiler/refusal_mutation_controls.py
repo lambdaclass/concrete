@@ -138,6 +138,67 @@ def check_unreachable_fixture():
             print(f"unreachable fixture ({label}): {result.returncode} {result.stderr.strip()}")
 
 
+def check_backend_policy_revision_controls():
+    policy = Path("ConcreteSpec/Spec/BackendPolicy.lean")
+    rules = Path("ConcreteSpec/Spec/Rules.lean")
+    policy_source = policy.read_text()
+    rules_source = rules.read_text()
+    targets = [
+        (Path("ConcreteChecks/StageInterfaces/BackendPolicyAndLCBJob.lean"), 2),
+        (Path("scripts/checks/compiler/rule_registry.lean"), 1),
+    ]
+    mutations = [
+        ("pristine", None, None, None),
+        ("intWidthRule-rev-3", "def intWidthRule : RuleId := ⟨``IntWidthSupported, 1⟩",
+         "def intWidthRule : RuleId := ⟨``IntWidthSupported, 3⟩", "BackendPolicy.IntWidthSupported"),
+        ("operationRule-rev-3", "def operationRule : RuleId := ⟨``OperationSupported, 1⟩",
+         "def operationRule : RuleId := ⟨``OperationSupported, 3⟩", "BackendPolicy.OperationSupported"),
+        ("storageFormRule-rev-3", "def storageFormRule : RuleId := ⟨``StorageFormSupported, 1⟩",
+         "def storageFormRule : RuleId := ⟨``StorageFormSupported, 3⟩", "BackendPolicy.StorageFormSupported"),
+        ("callRule-rev-3", "def callRule : RuleId := ⟨``CallSupported, 1⟩",
+         "def callRule : RuleId := ⟨``CallSupported, 3⟩", "BackendPolicy.CallSupported"),
+    ]
+    with shadow_module(policy) as (policy_mod, env):
+        shadow = Path(env["LEAN_PATH"].split(os.pathsep)[0])
+        rules_mod = shadow / rules
+        rules_olean = rules_mod.with_suffix(".olean")
+        if rules_olean.is_symlink() or rules_olean.exists():
+            rules_olean.unlink()
+        rules_mod.write_text(rules_source)
+        for label, old, new, expected_rule in mutations:
+            if old is None:
+                policy_mod.write_text(policy_source)
+                subprocess.run(["lean", f"--root={shadow}", "-DautoImplicit=false",
+                                "-o", policy_mod.with_suffix(".olean"), policy_mod],
+                               env=env, check=True)
+            else:
+                compile_variant(policy_mod, env, policy_source, old, new)
+            subprocess.run(["lean", f"--root={shadow}", "-DautoImplicit=false",
+                            "-o", rules_olean, rules_mod],
+                           env=env, check=True)
+            for target, min_errors in targets:
+                result = subprocess.run(
+                    ["lean", "--json", "-DautoImplicit=false", "-DwarningAsError=true", target],
+                    env=env, capture_output=True, text=True)
+                if old is None:
+                    if result.returncode != 0:
+                        raise SystemExit(f"{label} ({target}): pristine check failed\n"
+                                         f"{result.stdout}{result.stderr}")
+                    print(f"backend policy revision ({label}, {target.name}): accepted", flush=True)
+                else:
+                    diagnostics = [json.loads(line) for line in result.stdout.splitlines()
+                                   if line.startswith("{")]
+                    errors = [row["data"] for row in diagnostics if row.get("severity") == "error"]
+                    if (result.returncode != 1 or len(errors) < min_errors
+                            or not all("Tactic `decide` proved that the proposition" in error
+                                       and expected_rule in error for error in errors)):
+                        raise SystemExit(f"{label} ({target}): expected {min_errors}+ decide failures "
+                                         f"(rc={result.returncode})\n{result.stdout}{result.stderr}")
+                    print(f"backend policy revision ({label}, {target.name}): rejected ({len(errors)} controls)",
+                          flush=True)
+
+
 if __name__ == "__main__":
     compare_audits([Path(path).resolve() for path in sys.argv[1:]] + [AUDIT.resolve()])
     check_unreachable_fixture()
+    check_backend_policy_revision_controls()
