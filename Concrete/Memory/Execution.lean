@@ -31,13 +31,20 @@ theorem Step.exists_outcome {memory : Memory lang profile} {q next : MemoryRegis
     exact ⟨s, true, failed⟩
   · exact ⟨next, false, tick⟩
 
+theorem StepOutcome.instructionAtWith {memory : Memory lang profile} {q next : MemoryRegisters language profile}
+    {startDefinitions exhausting block op} (tick : memory.StepOutcome q next exhausting startDefinitions)
+    (found : memory.blockAt q = some block) (pc : block.body[q.instruction]? = some op) :
+    memory.InstructionStepWith q next false startDefinitions op.instruction exhausting := by
+  obtain ⟨_, lookup, body⟩ := tick
+  cases Option.some.inj (lookup.symm.trans found)
+  rw [pc] at body
+  exact body
+
 theorem StepOutcome.instructionAt {memory : Memory lang profile} {q next : MemoryRegisters language profile}
     {exhausting block op} (tick : memory.StepOutcome q next exhausting)
     (found : memory.blockAt q = some block) (pc : block.body[q.instruction]? = some op) :
-    memory.InstructionStep q next false op.instruction exhausting := by
-  obtain ⟨_, lookup, body⟩ := tick
-  cases Option.some.inj (lookup.symm.trans found)
-  simpa only [pc, InstructionStep] using body
+    memory.InstructionStep q next false op.instruction exhausting :=
+  tick.instructionAtWith found pc
 
 theorem StepOutcome.terminatorAt {memory : Memory lang profile} {q next : MemoryRegisters language profile}
     {startDefinitions exhausting block} (tick : memory.StepOutcome q next exhausting startDefinitions)
@@ -86,39 +93,207 @@ structure JumpAt (memory : Memory lang profile) (q read : MemoryRegisters langua
   target : memory.blockAt {q with block := edge.target} = some dst
   types : edge.arguments.map Sigma.fst = dst.params.map Sigma.fst
 
-private theorem read_frame {memory : Memory lang profile} {q read : MemoryRegisters language profile}
+/-- Reading an operand leaves control, backing ranges, callers, effects and the
+exhaustion flag unchanged. -/
+structure ReadFrame (q read : MemoryRegisters language profile) : Prop where
+  frame : read.frame = q.frame
+  block : read.block = q.block
+  instruction : read.instruction = q.instruction
+  materialized : read.materialized = q.materialized
+  callers : read.callers = q.callers
+  effects : read.effects = q.effects
+  resourceExhausted : read.resourceExhausted = q.resourceExhausted
+
+theorem ReadFrame.refl (q : MemoryRegisters language profile) : ReadFrame q q :=
+  ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+
+theorem ReadFrame.trans {a b c : MemoryRegisters language profile}
+    (ab : ReadFrame a b) (bc : ReadFrame b c) : ReadFrame a c :=
+  ⟨bc.frame.trans ab.frame, bc.block.trans ab.block, bc.instruction.trans ab.instruction,
+   bc.materialized.trans ab.materialized, bc.callers.trans ab.callers,
+   bc.effects.trans ab.effects, bc.resourceExhausted.trans ab.resourceExhausted⟩
+
+theorem readValue_frame {memory : Memory lang profile} {q read : MemoryRegisters language profile}
     {ty} {op : MemoryRead _ lang.literal ty} {v} (args : memory.readValue q op = some (v, read)) :
-    read.effects = q.effects ∧ read.resourceExhausted = q.resourceExhausted := by
+    ReadFrame q read := by
   cases op with
   | literal =>
     simp only [readValue] at args
     obtain ⟨_, _, eq⟩ := Option.bind_eq_some_iff.mp args
     cases eq
-    exact ⟨rfl, rfl⟩
+    exact .refl _
   | copy p =>
     obtain rfl := ((memory.copyRead_iff q p v read).mp args).2.2.2
-    exact ⟨rfl, rfl⟩
+    exact .refl _
   | move p =>
     simp only [readValue] at args
     generalize memory.ownerView q p.logical.root ty .owned = view at args
     obtain ⟨owners, id⟩ := view
     obtain ⟨_, _, body⟩ := Option.bind_eq_some_iff.mp args
     obtain ⟨_, _, body⟩ := Option.bind_eq_some_iff.mp body
-    split at body <;> cases body <;> exact ⟨rfl, rfl⟩
+    split at body <;> cases body <;> exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
-private theorem reads_frame {memory : Memory lang profile} {q read : MemoryRegisters language profile}
+theorem readOperands_frame {memory : Memory lang profile} {q read : MemoryRegisters language profile}
     {ops vs} (args : memory.readOperands ops q = some (vs, read)) :
-    read.effects = q.effects ∧ read.resourceExhausted = q.resourceExhausted := by
+    ReadFrame q read := by
   induction ops generalizing q vs with
-  | nil => cases args; exact ⟨rfl, rfl⟩
+  | nil => cases args; exact .refl _
   | cons op rest ih =>
     obtain ⟨ty, op⟩ := op
     obtain ⟨⟨_, after⟩, head, tail⟩ := Option.bind_eq_some_iff.mp args
     obtain ⟨⟨_, final⟩, more, eq⟩ := Option.bind_eq_some_iff.mp tail
     cases eq
-    have one := read_frame head
-    have allReads := ih more
-    exact ⟨allReads.1.trans one.1, allReads.2.trans one.2⟩
+    exact (readValue_frame head).trans (ih more)
+
+/-- Zero-sized materialized locals never carry a byte-backing range.
+This rules out ambiguous `Ends` transitions when releasing a callee frame. -/
+def ZeroUnbacked (memory : Memory lang profile) (q : MemoryRegisters language profile) : Prop :=
+  ∀ place layout, memory.layoutAt q.frame place = some layout → layout.size = 0 →
+    AList.lookup q.materialized place = none
+
+theorem Represents.zeroUnbacked {memory : Memory lang profile} {logical}
+    {q : MemoryRegisters language profile} {ranges}
+    (rep : memory.Represents logical q ranges) : memory.ZeroUnbacked q := by
+  intro place layout hlayout hz
+  cases hlook : AList.lookup q.materialized place with
+  | none => rfl
+  | some range =>
+    have ⟨live, cls, _⟩ := rep.2.2.2.2.2.2.2.2.2.2.2.1 place range (AList.lookup_mem hlook)
+    have ⟨_, _, _, storage, _, _, hcls, hmat, _⟩ := rep.2.2.2.2.2.2.2.2.2.2.2.2 place live
+    cases Option.some.inj (cls.symm.trans hcls)
+    obtain ⟨layout', hlayout', hzero⟩ := hmat rfl
+    cases Option.some.inj (hlayout.symm.trans hlayout')
+    have isNone := hzero.mp hz
+    rw [hlook] at isNone
+    contradiction
+
+theorem RepresentsCheckpoint.zeroUnbacked {memory : Memory lang profile}
+    {p q : MemoryRegisters language profile} (rep : memory.RepresentsCheckpoint p q) :
+    memory.ZeroUnbacked q :=
+  rep.1.zeroUnbacked
+
+theorem Ends.frame {memory : Memory lang profile} {q next : MemoryRegisters language profile}
+    {place} (h : memory.Ends q place next) :
+    next.frame = q.frame ∧ next.block = q.block ∧ next.instruction = q.instruction ∧
+    next.callers = q.callers ∧ next.effects = q.effects ∧ next.resourceExhausted = q.resourceExhausted := by
+  rcases h.2 with ⟨_, rfl⟩ | ⟨_, ⟨_, _, _, rfl⟩ | ⟨_, _, _, _, _, _, rfl⟩⟩ <;>
+    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+
+theorem EndLocals.frame {memory : Memory lang profile} {places} {q next : MemoryRegisters language profile}
+    (h : memory.EndLocals places q next) :
+    next.frame = q.frame ∧ next.block = q.block ∧ next.instruction = q.instruction ∧
+    next.callers = q.callers ∧ next.effects = q.effects ∧ next.resourceExhausted = q.resourceExhausted := by
+  induction h with
+  | nil => exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+  | cons step _ ih =>
+    have one := step.frame
+    exact ⟨ih.1.trans one.1, ih.2.1.trans one.2.1, ih.2.2.1.trans one.2.2.1,
+      ih.2.2.2.1.trans one.2.2.2.1, ih.2.2.2.2.1.trans one.2.2.2.2.1,
+      ih.2.2.2.2.2.trans one.2.2.2.2.2⟩
+
+theorem Ends.zeroUnbacked {memory : Memory lang profile} {q next : MemoryRegisters language profile}
+    {place} (unbacked : memory.ZeroUnbacked q) (h : memory.Ends q place next) :
+    memory.ZeroUnbacked next := by
+  have eqMat : next.frame = q.frame ∧ next.materialized = AList.erase q.materialized place := by
+    rcases h.2 with ⟨_, rfl⟩ | ⟨_, ⟨_, _, _, rfl⟩ | ⟨_, _, _, _, _, _, rfl⟩⟩ <;> exact ⟨rfl, rfl⟩
+  intro p layout hlayout hz
+  rw [eqMat.1] at hlayout
+  rw [eqMat.2, AList.lookup_erase]
+  split
+  · rfl
+  · exact unbacked p layout hlayout hz
+
+theorem Ends.unique {memory : Memory lang profile} {q a b : MemoryRegisters language profile}
+    {place} (unbacked : memory.ZeroUnbacked q) (ha : memory.Ends q place a) (hb : memory.Ends q place b) :
+    a = b := by
+  rcases ha.2 with ⟨va, rfl⟩ | ⟨ma, ⟨la, hla, hza, rfl⟩ | ⟨ra, ba, byta, hma, hpa, hfa, rfl⟩⟩ <;>
+    rcases hb.2 with ⟨vb, rfl⟩ | ⟨mb, ⟨lb, hlb, hzb, rfl⟩ | ⟨rb, bb, bytb, hmb, hpb, hfb, rfl⟩⟩
+  · rfl
+  · cases va.symm.trans mb
+  · cases va.symm.trans mb
+  · cases ma.symm.trans vb
+  · rfl
+  · cases (unbacked place la hla hza).symm.trans hmb
+  · cases ma.symm.trans vb
+  · cases (unbacked place lb hlb hzb).symm.trans hma
+  · cases Option.some.inj (hma.symm.trans hmb)
+    cases Option.some.inj (hpa.symm.trans hpb)
+    cases Option.some.inj (hfa.symm.trans hfb)
+    rfl
+
+theorem EndLocals.unique {memory : Memory lang profile} {places} {q a b : MemoryRegisters language profile}
+    (unbacked : memory.ZeroUnbacked q) (ha : memory.EndLocals places q a) (hb : memory.EndLocals places q b) :
+    a = b := by
+  induction ha generalizing b with
+  | nil => cases hb; rfl
+  | cons stepA _ ih =>
+    cases hb with
+    | cons stepB restB =>
+      obtain rfl := stepA.unique unbacked stepB
+      exact ih (stepA.zeroUnbacked unbacked) restB
+
+private theorem writeValue_live {memory : Memory lang profile} {q next : MemoryRegisters language profile}
+    {ty} {p : MemoryPlace _ ty} {v c} (h : memory.writeValue q p v c = some next) :
+    q.live.contains p.logical.root = true := by
+  unfold writeValue at h
+  cases hlive : q.live.contains p.logical.root
+  · simp only [hlive, Bool.not_false, Bool.true_or, ite_true] at h
+    cases h
+  · rfl
+
+theorem StepOutcome.startDefinitions_of_false {memory : Memory lang profile}
+    {q next : MemoryRegisters language profile} {exhausting}
+    (h : memory.StepOutcome q next exhausting false) :
+    memory.StepOutcome q next exhausting true := by
+  obtain ⟨block, lookup, body⟩ := h
+  refine ⟨block, lookup, ?_⟩
+  cases pc : block.body[q.instruction]? with
+  | none =>
+    rw [pc] at body
+    exact body
+  | some op =>
+    rw [pc] at body
+    dsimp only at body ⊢
+    obtain ⟨_, inst⟩ := op
+    cases inst with
+    | bind dst src =>
+      obtain ⟨value, afterRead, stored, read, write, eq⟩ := body
+      cases exhausting
+      · refine ⟨value, afterRead, stored, read, ?_, eq⟩
+        exact .cons (ite_eq_left (writeValue_live write.2.2.1) ▸ rfl) write (.nil _)
+      · exact write.elim
+    | assign dst src => exact body
+    | op dst opcode args checks addresses =>
+      obtain ⟨values, afterReads, operands, result, effects, changed, stored,
+        hargs, htrap, haddr, hop, hkeys, write, eq⟩ := body
+      cases exhausting
+      · refine ⟨values, afterReads, operands, result, effects, changed, stored,
+          hargs, htrap, haddr, hop, hkeys, ?_, eq⟩
+        exact .cons (ite_eq_left (writeValue_live write.2.2.1) ▸ rfl) write (.nil _)
+      · exact write.elim
+    | beginLifetime place => exact body
+    | endLifetime place => exact body
+    | destructure src bindings => exact body
+    | call callee dst args checks => exact body
+
+theorem Step.startDefinitions_of_false {memory : Memory lang profile}
+    {q next : MemoryRegisters language profile}
+    (h : memory.Step q next false) : memory.Step q next true := by
+  cases hq : q.resourceExhausted <;> cases hn : next.resourceExhausted <;>
+    simp only [Step, hq, hn, Bool.false_eq_true, ite_false, ite_true] at h ⊢
+  · exact h.startDefinitions_of_false
+  · obtain ⟨eq, s, raw⟩ := h
+    exact ⟨eq, s, raw.startDefinitions_of_false⟩
+
+theorem ssa_step_of_memory {ssa : SSA lang profile} {q next : MemoryRegisters language profile}
+    (h : Memory.Execution.step (ssa.memoryView (language := language)) q next) :
+    SSA.Execution.step ssa q next :=
+  ⟨h.1, h.2.1.startDefinitions_of_false, h.2.2⟩
+
+theorem bir_step_of_memory {bir : BIR lang profile} {q next : MemoryRegisters language profile}
+    (h : Memory.Execution.step (bir.memoryView (language := language)) q next) :
+    BIR.Execution.step bir q next :=
+  ⟨h.1, h.2.1.startDefinitions_of_false, h.2.2⟩
 
 /-- Exhaustion at the parameter checkpoint characterizes unlimited validity
 together with the absence of a physical placement. -/
@@ -161,9 +336,9 @@ theorem JumpAt.normal_of_fit {memory : Memory lang profile} (wf : memory.Layouts
     ∃ next, Execution.step memory q next ∧ next.resourceExhausted = false := by
   obtain ⟨running, ⟨entry, lookup, pc, ending⟩, args, target, types⟩ := jump
   obtain ⟨next, writes, effects, flag⟩ := valid.physical wf fits
-  have before := reads_frame args
-  have normal := (flag.trans before.2).trans running
-  refine ⟨next, silent_step ?_ ?_ (effects.trans before.1), normal⟩
+  have before := readOperands_frame args
+  have normal := (flag.trans before.resourceExhausted).trans running
+  refine ⟨next, silent_step ?_ ?_ (effects.trans before.effects), normal⟩
   · simp [terminalObservation, running, lookup, pc, ending]
   · simp only [Step, running, normal, Bool.false_eq_true, ite_false]
     refine ⟨entry, lookup, ?_⟩
