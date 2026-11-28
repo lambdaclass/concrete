@@ -3,6 +3,7 @@
 
 Usage: test_manifest.py [validate] [MANIFEST]
        test_manifest.py rows [MANIFEST]
+       test_manifest.py expect ID OUT_DIR [MANIFEST]
        test_manifest.py self-test
 
 The manifest's directory is the tests/ directory. Source paths are written as
@@ -239,6 +240,32 @@ def load(manifest):
     return parse(path, text)
 
 
+def decode_stderr_bytes(data):
+    return b"" if data == "-" else bytes.fromhex(data)
+
+
+def materialize_expect(manifest, ident, out_dir):
+    rows = load(manifest)
+    row = next((item for item in rows if item.id == ident), None)
+    if row is None:
+        fail(manifest, None, f"unknown test id {ident!r}")
+    parts = row.expect.split(" ")
+    match parts:
+        case ["exit", status, stderr]:
+            exit_status = int(status)
+            stderr_bytes = decode_stderr_bytes(stderr)
+        case ["trap", _, _, stderr]:
+            exit_status = 134
+            stderr_bytes = decode_stderr_bytes(stderr)
+        case _:
+            fail(manifest, None, f"row {ident!r} has non-executable expect {row.expect!r}")
+    dest = Path(out_dir)
+    dest.mkdir(parents=True, exist_ok=True)
+    (dest / "status").write_text(f"{exit_status}\n", encoding="utf-8")
+    (dest / "stderr").write_bytes(stderr_bytes)
+    return row, exit_status
+
+
 def self_test():
     with tempfile.TemporaryDirectory(prefix="concrete-manifest-") as tmp:
         root = Path(tmp)
@@ -246,6 +273,8 @@ def self_test():
         tests.mkdir()
         (tests / "slice0").mkdir()
         (tests / "slice0" / "ok.con").write_text("return 0;\n", encoding="utf-8")
+        (tests / "slice0" / "trap.con").write_text("return 0;\n", encoding="utf-8")
+        (tests / "slice0" / "limit.con").write_text("return 0;\n", encoding="utf-8")
         (tests / "slice0" / "link.con").symlink_to(tests / "slice0" / "ok.con")
         (tests / "slice0" / "dangling.con").symlink_to(tests / "slice0" / "missing.con")
         valid = ("id\tprogram\texpect\tslice\n"
@@ -257,6 +286,34 @@ def self_test():
         assert len(parse(tests / "manifest.tsv", llvm)) == 2
         cli = "c\tcli:invalid-backend\tdiagnostic 3 USAGE\tslice0\n"
         assert len(parse(tests / "manifest.tsv", valid + cli)) == 3
+        trap_line = b"concrete: trap: overflow at tests/slice0/trap.con:1:1 (site 1)\n"
+        manifest_file = tests / "manifest.tsv"
+        manifest_file.write_text(
+            valid + cli +
+            f"t\tcon:tests/slice0/trap.con\ttrap arithmeticOverflow 1 {trap_line.hex()}\tslice0\n"
+            "e\tbir:msg\texit 7 6f6b0a\tslice0\n"
+            "l\tcon:tests/slice0/limit.con\tllvm exit 42 lcb resource values 488 1924\tslice0\n",
+            encoding="utf-8",
+        )
+        row_a, status_a = materialize_expect(manifest_file, "a", root / "out-a")
+        assert row_a.program == "bir:answer" and status_a == 42
+        assert (root / "out-a" / "status").read_text(encoding="utf-8") == "42\n"
+        assert (root / "out-a" / "stderr").read_bytes() == b""
+        row_t, status_t = materialize_expect(manifest_file, "t", root / "out-t")
+        assert row_t.program == "con:tests/slice0/trap.con" and status_t == 134
+        assert (root / "out-t" / "status").read_text(encoding="utf-8") == "134\n"
+        assert (root / "out-t" / "stderr").read_bytes() == trap_line
+        row_e, status_e = materialize_expect(manifest_file, "e", root / "out-e")
+        assert row_e.program == "bir:msg" and status_e == 7
+        assert (root / "out-e" / "status").read_text(encoding="utf-8") == "7\n"
+        assert (root / "out-e" / "stderr").read_bytes() == b"ok\n"
+        for bad_id in ("missing", "b", "c", "l"):
+            try:
+                materialize_expect(manifest_file, bad_id, root / f"out-{bad_id}")
+            except ManifestError:
+                pass
+            else:
+                raise AssertionError(f"materialize_expect accepted non-executable id {bad_id!r}")
         bad = [
             valid + cli.replace("diagnostic 3", "diagnostic 0"),
             valid + cli.replace("diagnostic 3 USAGE", "exit 3 -"),
@@ -297,6 +354,15 @@ def main(argv):
     command = argv[1] if len(argv) > 1 else "validate"
     if command == "self-test" and len(argv) == 2:
         self_test()
+        return
+    if command == "expect":
+        args = argv[2:]
+        if len(args) not in (2, 3):
+            raise ManifestError(__doc__)
+        ident, out_dir = args[0], args[1]
+        manifest = args[2] if len(args) == 3 else "tests/manifest.tsv"
+        row, exit_status = materialize_expect(manifest, ident, out_dir)
+        print(f"{row.id}\t{row.program}\t{exit_status}\t{row.expect}")
         return
     args = argv[2:] if len(argv) > 1 else []
     if command not in ("validate", "rows") or len(args) > 1:
