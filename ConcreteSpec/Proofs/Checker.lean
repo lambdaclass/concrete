@@ -35,7 +35,21 @@ private theorem firstRepeated_eq_none {α : Type} [DecidableEq α] (xs : List α
   | nil => simp [firstRepeated?]
   | cons x rest ih =>
     intro seen
-    by_cases h : x ∈ seen <;> simp [firstRepeated?, h, List.nodup_cons, ih] <;> grind
+    by_cases h : x ∈ seen
+    · simp only [firstRepeated?, h, ↓reduceIte, List.mem_cons]
+      exact ⟨(fun hnone => nomatch hnone), fun ⟨_, hseen⟩ => False.elim (hseen x (Or.inl rfl) h)⟩
+    · simp only [firstRepeated?, h, ↓reduceIte, ih, List.nodup_cons, List.mem_cons]
+      constructor
+      · rintro ⟨hnodup, hseen⟩
+        refine ⟨⟨fun hx => hseen x hx (Or.inl rfl), hnodup⟩, ?_⟩
+        rintro y (rfl | hy)
+        · exact h
+        · exact fun hys => hseen y hy (Or.inr hys)
+      · rintro ⟨⟨hx, hnodup⟩, hseen⟩
+        refine ⟨hnodup, fun y hy => ?_⟩
+        rintro (rfl | hys)
+        · exact hx hy
+        · exact hseen y (Or.inr hy) hys
 
 private theorem rejectFound_ok_iff {α ε : Type} (found : Option α) (reason : α → ε) :
     rejectFound found reason = .ok () ↔ found = none := by
@@ -403,10 +417,33 @@ private theorem checkDeclsFrom_iff (Δ : Decls) (seen : List Name) (index : Nat)
   induction Δ generalizing seen index with
   | nil => simp [checkDeclsFrom, DeclsOk]
   | cons d rest ih =>
-    by_cases dup : d.name ∈ seen <;> by_cases reserved : d.name = ⟨"main"⟩ <;>
-      simp only [checkDeclsFrom, dup, reserved, ↓reduceIte] <;>
-      simp_all [DeclsOk, bind_unit_ok_iff, rejectFound_ok_iff,
-        firstRepeated_eq_none, List.mem_map] <;> grind
+    by_cases dup : d.name ∈ seen
+    · simp only [checkDeclsFrom, dup, ↓reduceIte, List.mem_cons]
+      exact ⟨(fun h => nomatch h), fun ⟨_, hseen⟩ => False.elim (hseen d (Or.inl rfl) dup)⟩
+    · by_cases reserved : d.name = ⟨"main"⟩
+      · simp only [checkDeclsFrom, dup, ↓reduceIte]
+        simp only [reserved, ↓reduceIte]
+        exact ⟨(fun h => nomatch h), fun ⟨⟨_, hok⟩, _⟩ => False.elim ((hok d List.mem_cons_self).1 reserved)⟩
+      · simp only [checkDeclsFrom, dup, reserved, ↓reduceIte, bind_unit_ok_iff,
+          rejectFound_ok_iff, firstRepeated_eq_none, ih, DeclsOk, List.map_cons,
+          List.nodup_cons, List.mem_map, List.mem_cons]
+        constructor
+        · rintro ⟨hfields, ⟨hrest_nodup, hrest_ok⟩, hrest_seen⟩
+          refine ⟨⟨⟨?_, hrest_nodup⟩, ?_⟩, ?_⟩
+          · rintro ⟨d', hd', heq⟩
+            exact hrest_seen d' hd' (Or.inl heq)
+          · rintro d' (rfl | hd')
+            · exact ⟨reserved, hfields⟩
+            · exact hrest_ok d' hd'
+          · rintro d' (rfl | hd')
+            · exact dup
+            · exact fun hmem => hrest_seen d' hd' (Or.inr hmem)
+        · rintro ⟨⟨⟨hfresh, hrest_nodup⟩, hok⟩, hseen⟩
+          refine ⟨(hok d (Or.inl rfl)).2, ⟨hrest_nodup, fun d' hd' => hok d' (Or.inr hd')⟩,
+            fun d' hd' => ?_⟩
+          rintro (heq | hmem)
+          · exact hfresh ⟨d', hd', heq⟩
+          · exact hseen d' (Or.inr hd') hmem
 
 theorem checkDecls_iff (Δ : Decls) : checkDecls Δ = .ok () ↔ DeclsOk Δ := by
   simp [checkDecls, checkDeclsFrom_iff]

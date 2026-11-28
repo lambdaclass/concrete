@@ -3,8 +3,8 @@
 Concrete.Admission.Token.mk.inj	
 Concrete.Admission.Token.mk.injEq	propext
 Concrete.Admission.Token.mk.sizeOf_spec	
-Concrete.Admission.admit_checked	Classical.choice Quot.sound propext
-Concrete.Admission.admit_never_traps	Classical.choice Quot.sound propext
+Concrete.Admission.admit_checked	Quot.sound propext
+Concrete.Admission.admit_never_traps	Quot.sound propext
 Concrete.Admission.check.eq_1	propext
 Concrete.Admission.checkWith.eq_1	propext
 Concrete.Admission.check_evidence	propext
@@ -1830,7 +1830,7 @@ Concrete.Interfaces.instDecidableEqTrapIndex.decEq._proof_1
 Concrete.Interfaces.instDecidableEqTrapIndex.decEq._proof_2	
 Concrete.Interfaces.registeredLCBEndToEnd	Classical.choice Quot.sound propext
 Concrete.Interfaces.trapDiagnostic.eq_1	Quot.sound propext
-Concrete.Interfaces.typingEntry_validated	Classical.choice Quot.sound propext
+Concrete.Interfaces.typingEntry_validated	Quot.sound propext
 Concrete.Lex.Allowed.eq_1	
 Concrete.Lex.Bridge.Runs.mk.inj	propext
 Concrete.Lex.Bridge.Runs.mk.injEq	propext
@@ -2158,7 +2158,7 @@ Concrete.MIR.evalOp._sparseCasesOn_4.else_eq	propext
 Concrete.MIR.evalOp.eq_1	propext
 Concrete.MIR.evalOp.eq_2	propext
 Concrete.MIR.lowerUnchecked_correct	Quot.sound propext
-Concrete.MIR.lower_correct	Classical.choice Quot.sound propext
+Concrete.MIR.lower_correct	Quot.sound propext
 Concrete.MIR.run.eq_1	propext
 Concrete.MIR.runFrom.eq_1	propext
 Concrete.MIR.value.eq_1	
@@ -2292,7 +2292,7 @@ Concrete.Memory.lower.eq_1	Quot.sound propext
 Concrete.Memory.lowerGraph_handoff	Classical.choice Quot.sound propext
 Concrete.Memory.lowerGraph_handoff._simp_1_1	Quot.sound propext
 Concrete.Memory.lowerGraph_refines	Classical.choice Quot.sound propext
-Concrete.Memory.lower_admitted_correct	Classical.choice Quot.sound propext
+Concrete.Memory.lower_admitted_correct	Quot.sound propext
 Concrete.Memory.lower_correct	Quot.sound propext
 Concrete.Memory.lower_unchecked_correct	Quot.sound propext
 Concrete.Memory.move_root_consumes	Classical.choice Quot.sound propext
@@ -3107,7 +3107,7 @@ _private.Concrete.IntegratedCore.Controls.0.Concrete.IntegratedCore.inputOf._pro
 _private.Concrete.IntegratedCore.Controls.0.Concrete.IntegratedCore.inputOf.eq_1	Quot.sound propext
 _private.Concrete.IntegratedCore.Controls.0.Concrete.IntegratedCore.overflowConsumes	Quot.sound propext
 _private.Concrete.IntegratedCore.Controls.0.Concrete.IntegratedCore.overflowHandoff	Quot.sound propext
-_private.Concrete.IntegratedCore.Controls.0.Concrete.IntegratedCore.overflowLowers	Classical.choice Quot.sound propext
+_private.Concrete.IntegratedCore.Controls.0.Concrete.IntegratedCore.overflowLowers	Quot.sound propext
 _private.Concrete.IntegratedCore.Controls.0.Concrete.IntegratedCore.overflowWF	Quot.sound propext
 _private.Concrete.IntegratedCore.Controls.0.Concrete.IntegratedCore.overflowWF._simp_1_1	propext
 _private.Concrete.IntegratedCore.Controls.0.Concrete.IntegratedCore.overflowWF._simp_1_2	propext
