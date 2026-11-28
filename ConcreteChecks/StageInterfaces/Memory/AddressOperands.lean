@@ -10,7 +10,11 @@ private abbrev nonzeroAddressLanguage : CoreLanguage :=
   {erasureLanguage with
     operation := fun _ _ _ _ _ _ operands before result effects after =>
       (∃ address, operands = [address] ∧ address.root = shadowRoot) ∧
-      result = .scalar (.int .u8 17) ∧ effects = [] ∧ after = before}
+      result = .scalar (.int .u8 17) ∧ effects = [] ∧ after = before
+    preservesResidentHandles := by
+      intro _ _ _ _ _ _ _ before _ _ after h hwf
+      obtain ⟨_, _, _, rfl⟩ := h
+      exact ⟨hwf, Nat.le_refl _, fun _ _ hb hl => ⟨_, hb, hl, rfl, rfl, rfl, rfl⟩⟩}
 
 private def nonzeroAddressBIR (project : Project) : BIR testLowering testProfile :=
   let block := {birReturnBlock false with

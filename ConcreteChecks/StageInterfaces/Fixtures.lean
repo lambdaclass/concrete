@@ -13,7 +13,7 @@ def early : Slice := ⟨0, by decide⟩
 def later : Slice := ⟨2, by decide⟩
 
 def production : Production (fun (_ : Fin 1) => SyntaxTree ⊕ Bool) :=
-  ⟨0, [.t .integer], early, .constant (.inr true)⟩
+  ⟨0, [.t .integer], early, .constant (.inr true), .program⟩
 
 def grammar : SharedGrammar 1 :=
   { terminalSlices := Array.replicate Surface0.Terminal.count early
@@ -117,13 +117,14 @@ abbrev testLanguage : CoreLanguage where
   valueShape := rfl
   layout := fun _ _ _ => some ⟨1, 1, .nil⟩
   scalarType := fun _ => some (.int .u8)
-  literal := fun _ bytes => (sliceLanguage slice0).literal (.inl (.scalar (.int .u8))) bytes |>.bind fun
+  literal := fun _ bytes => (sliceLanguage slice0).literal (.scalar (.int .u8)) bytes |>.bind fun
     | .scalar v => some (.scalar v)
     | .other _ => none
   typeDecidableEq := inferInstance
   fieldType := fun _ _ => none
   activeFields := fun _ _ _ => none
   operation := fun _ _ _ _ _ _ _ _ _ _ _ => False
+  preservesResidentHandles := by intro _ _ _ _ _ _ _ _ _ _ _ h; cases h
   checkTrap := fun _ _ _ => false
   field := fun _ _ => none
   replaceField := fun _ _ _ => none
@@ -137,7 +138,7 @@ abbrev testLanguage : CoreLanguage where
   permit := fun _ _ _ own => some own
 
 def testLowering : LoweringLanguage Unit :=
-  ⟨fun _ _ _ => Unit, ()⟩
+  ⟨fun _ _ _ => Unit, (), fun _ => ()⟩
 
 def testProfile : Profile := ⟨.lcb, .x86_64Linux, 3, 4096⟩
 
@@ -186,25 +187,123 @@ def testPasses {profile : Profile} (checks : List OperationCheck) :
   lowerMemory _ := .error (.invalidInput rule)
   buildSSA _ := .error (.invalidInput rule)
   buildBIR _ := .error (.invalidInput rule)
-  emitLLVM bir := .ok ⟨testProfile.llvmTriple, testProfile.llvmDataLayout, [], bir.sites⟩
-  emitLCB _ := .ok testOutput
+  emit := match profile with
+    | ⟨.llvm, _, _, _⟩ => fun bir => .ok ⟨⟨[]⟩, ⟨[]⟩, bir.sites⟩
+    | ⟨.lcb, _, _, _⟩ => fun _ => .ok testOutput
 
 structure FixtureEntries (profile : Profile) where
   lexer : Stage Source LexRefusal TokenStream
   parser : Stage TokenStream ParseRefusal (Parsed (grammar.value grammar.start))
   admission : Stage (AdmissionInput testLanguage) AdmissionFailure (Admitted testLanguage)
   lowerUnchecked : Stage (CoreInput testLanguage) StageFailure (MIR testLowering profile)
-  emitLLVM : Stage (BIR testLowering profile) StageFailure (LLVMInput profile)
-  emitLCB : Stage (BIR testLowering profile) StageFailure (LCBInput profile)
+  emit : Stage (BIR testLowering profile) StageFailure (BackendOutput profile)
+
+private theorem parseArgs_integer_ne_exhausted (tbl : CheckedTable grammar)
+    (tokens : Array SurfaceToken) (targetSlice : Slice) (eof : FileSpan) (c : ParseCursor)
+    (f : Nat) (hf : tokens.size = 0 ∨ 1 ≤ f) :
+    (parseArgs tbl tokens targetSlice eof .program (f + 1) [.t .integer] c).2 ≠ .error .exhausted := by
+  unfold parseArgs
+  dsimp only
+  cases htok : tokens[c.offset]? with
+  | none => exact nofun
+  | some tok =>
+    dsimp only
+    split
+    · exact nofun
+    · have hpos : 1 ≤ f := by
+        rcases hf with h0 | h1
+        · have : tokens[c.offset]? = none := Array.getElem?_eq_none (by omega)
+          rw [this] at htok; cases htok
+        · exact h1
+      obtain ⟨f', rfl⟩ : ∃ f', f = f' + 1 := ⟨f - 1, by omega⟩
+      unfold parseArgs
+      exact nofun
+
+theorem grammarParser_nonExhausted (parser : Parser grammar) (hsteps : 2 ≤ parser.stepsPerToken)
+    (input : ParserView) : (parser.engine.run input).2.isSome = true := by
+  unfold ParserEngine.run
+  cases input.invalidLocation with
+  | some _ => rfl
+  | none =>
+    dsimp only
+    have hfuel0 : 2 ≤ parser.engine.stepsPerToken * (input.tokens.size + 1) := by
+      have : 2 ≤ parser.stepsPerToken * 1 := by omega
+      exact Nat.le_trans this (Nat.mul_le_mul_left _ (Nat.succ_le_succ (Nat.zero_le _)))
+    obtain ⟨f₁, hf₁⟩ : ∃ f₁, parser.engine.stepsPerToken * (input.tokens.size + 1) = (f₁ + 1) + 1 :=
+      ⟨parser.engine.stepsPerToken * (input.tokens.size + 1) - 2, by omega⟩
+    have hf₁cond : input.tokens.size = 0 ∨ 1 ≤ f₁ := by
+      cases hsz : input.tokens.size with
+      | zero => exact Or.inl rfl
+      | succ k =>
+        right
+        have h4 : 4 ≤ parser.engine.stepsPerToken * (input.tokens.size + 1) := by
+          have hk : 2 ≤ input.tokens.size + 1 := by omega
+          exact Nat.mul_le_mul hsteps hk
+        omega
+    have hsym : (parseSymbol parser.engine.table input.tokens input.source.slice (eofFileSpan input.source)
+        grammar.start ⟨0, slice0, none, 0⟩ (parser.engine.stepsPerToken * (input.tokens.size + 1))).2 ≠
+        .error .exhausted := by
+      rw [hf₁]
+      unfold parseSymbol
+      dsimp only
+      cases parser.engine.table.lookup grammar.start (input.tokens[0]?.map fun t => t.value.kind) with
+      | none => exact nofun
+      | some index =>
+        dsimp only
+        cases hprod : grammar.productions[index]? with
+        | none => exact nofun
+        | some p =>
+          have hp : p = production := by
+            have hmem : p ∈ grammar.productions.toList := by
+              rw [← Array.getElem?_toList] at hprod
+              exact List.mem_of_getElem? hprod
+            exact List.mem_singleton.mp hmem
+          subst hp
+          dsimp only [production]
+          have hne := parseArgs_integer_ne_exhausted parser.engine.table input.tokens input.source.slice
+            (eofFileSpan input.source)
+            (({ offset := 0, required := slice0, firstUnsupportedHit := none, steps := 1 } : ParseCursor).require
+              input.source.slice early (.production .program)
+              ((input.tokens[0]?.map Located.span).getD (eofFileSpan input.source)))
+            f₁ hf₁cond
+          cases hpa : parseArgs parser.engine.table input.tokens input.source.slice
+              (eofFileSpan input.source) .program (f₁ + 1) [.t .integer]
+              (({ offset := 0, required := slice0, firstUnsupportedHit := none, steps := 1 } : ParseCursor).require
+                input.source.slice early (.production .program)
+                ((input.tokens[0]?.map Located.span).getD (eofFileSpan input.source))) with
+          | mk c' res =>
+            rw [hpa] at hne
+            cases res with
+            | error stop =>
+              cases stop with
+              | exhausted => exact (hne rfl).elim
+              | malformed => exact nofun
+            | ok args => exact nofun
+    cases hrun : parseSymbol parser.engine.table input.tokens input.source.slice (eofFileSpan input.source)
+        grammar.start ⟨0, slice0, none, 0⟩ (parser.engine.stepsPerToken * (input.tokens.size + 1)) with
+    | mk c val =>
+      rw [hrun] at hsym
+      cases val with
+      | error stop =>
+        cases stop with
+        | exhausted => exact (hsym rfl).elim
+        | malformed => rfl
+      | ok ast =>
+        dsimp only
+        split
+        · rfl
+        · cases c.firstUnsupportedHit <;> rfl
 
 def fixtureEntries {profile : Profile} (parser : Parser grammar)
-    (passes : PassFunctions grammar testLanguage testLowering profile) : FixtureEntries profile :=
-  ⟨passes.lexer, parserEntry parser.engine, (passes.admissionEntry early).toStage, passes.lowerUncheckedEntry,
-    passes.emitLLVMEntry, passes.emitLCBEntry⟩
+    (passes : PassFunctions grammar testLanguage testLowering profile)
+    (hsteps : 2 ≤ parser.stepsPerToken := by dsimp only [testParser]; decide) : FixtureEntries profile :=
+  ⟨passes.lexer, parserEntry parser.engine (grammarParser_nonExhausted parser hsteps),
+    (passes.admissionEntry early).toStage, passes.lowerUncheckedEntry, passes.emitEntry⟩
 
 abbrev r {profile : Profile} (_m : LoweringModels testLanguage testLowering profile)
-    (parser : Parser grammar) (checks : List OperationCheck := []) :=
-  fixtureEntries parser (testPasses (profile := profile) checks)
+    (parser : Parser grammar) (checks : List OperationCheck := [])
+    (hsteps : 2 ≤ parser.stepsPerToken := by dsimp only [testParser]; decide) :=
+  fixtureEntries parser (testPasses (profile := profile) checks) hsteps
 
 def tokenStream (radix : Surface0.Radix)
     (slice : Slice := early) : TokenStream :=
@@ -220,7 +319,8 @@ def testParser (verifier : TableVerifier grammar) (size : proposal.size = verifi
     change ∃ word, proposal[i.val]? = some word ∧ cells[i.val]? = _
     simp only [proposal, cells, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds,
       Array.getElem?_replicate, Array.size_replicate, fits, hi, ↓reduceIte]
-    split <;> first | exact ⟨1, rfl, rfl⟩ | exact ⟨0, rfl, rfl⟩, stepsPerToken, rule, rule⟩
+    split <;> first | exact ⟨1, rfl, rfl⟩ | exact ⟨0, rfl, rfl⟩,
+    stepsPerToken, earlyMalformedRule, earlyUnsupportedProductionRule, earlyUnsupportedLiteralRule⟩
 
 def callee : FnId := {Exec.Demo.mainF with name := ⟨"callee"⟩}
 def callSite : SiteId := ⟨5⟩

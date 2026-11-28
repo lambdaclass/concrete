@@ -18,6 +18,10 @@ abbrev twoFieldLanguage : CoreLanguage :=
       opcode = .named ⟨"sumFields"⟩ ∧
       values = [.scalar (.int .u8 17), .scalar (.int .u8 25)] ∧ addresses = [] ∧
       result = .scalar (.int .u8 42) ∧ effects = [] ∧ after = before
+    preservesResidentHandles := by
+      intro _ _ _ _ _ _ _ before _ _ after h hwf
+      obtain ⟨_, _, _, _, _, rfl⟩ := h
+      exact ⟨hwf, Nat.le_refl _, fun _ _ hb hl => ⟨_, hb, hl, rfl, rfl, rfl, rfl⟩⟩
     fieldType := fun _ _ => some ()
     activeFields := fun _ _ _ => some [splitField, secondSplitField]
     field := fun _ path =>
@@ -105,11 +109,15 @@ example :
     obtain ⟨_, _, _, _, read, _, _⟩ := tick
     with_unfolding_all contradiction
 
+private def linearLoanDecl : DeclId := ⟨Exec.Demo.mainF.module, ⟨"Linear"⟩⟩
+private abbrev linearLoanTy : EarlyTy := .nominal linearLoanDecl
+private abbrev copyLoanTy : EarlyTy := .scalar (.int .u8)
+
 private abbrev loanFieldLanguage : CoreLanguage :=
   {earlyFixtureLanguage with
     fieldType := fun _ field =>
-      if field = splitField then some (.inr false)
-      else if field = secondSplitField then some (.inl (.scalar (.int .u8))) else none
+      if field = splitField then some linearLoanTy
+      else if field = secondSplitField then some copyLoanTy else none
     activeFields := fun _ _ _ => some [splitField, secondSplitField]
     replaceField := fun _ path value => if path = [secondSplitField] then some value else none
     field := fun _ path =>
@@ -117,11 +125,11 @@ private abbrev loanFieldLanguage : CoreLanguage :=
       else if path = [secondSplitField] then some (.scalar (.int .u8 25)) else none}
 
 private def loanLowering : LoweringLanguage loanFieldLanguage.operands.Ty :=
-  ⟨fun _ _ _ => Unit, .inr false⟩
+  ⟨fun _ _ _ => Unit, .scalar .bool, fun t => .scalar (.int t)⟩
 
 private def loanMemory : Memory loanLowering testProfile :=
   ⟨tabProject, Exec.Demo.mainF, [],
-    [(Exec.Demo.mainF, [(storeRoot, .inr false)], ⟨⟨0⟩, #[]⟩)],
+    [(Exec.Demo.mainF, [(storeRoot, linearLoanTy)], ⟨⟨0⟩, #[]⟩)],
     [], [(Exec.Demo.mainF, [(storeRoot, .virtual)])], [], []⟩
 
 private def loanRoot : Hybrid.Place := ⟨0⟩
@@ -146,9 +154,9 @@ private def moveBeforeBorrow : MemoryRegisters loanFieldLanguage testProfile :=
 private def liveFieldLoan (mode : Own.Mode := .shared) :
     Option (MemoryRegisters loanFieldLanguage testProfile × MemoryRegisters loanFieldLanguage testProfile) := do
   let (_, moved) ← loanMemory.readValue moveBeforeBorrow
-    (.move (ty := .inr false) ⟨⟨storeRoot, [splitField]⟩, .virtual⟩)
+    (.move (ty := linearLoanTy) ⟨⟨storeRoot, [splitField]⟩, .virtual⟩)
   let address ← loanMemory.resolveAddress moved true
-    ⟨.inl (.scalar (.int .u8)), ⟨⟨storeRoot, [secondSplitField]⟩, .virtual⟩⟩
+    ⟨copyLoanTy, ⟨⟨storeRoot, [secondSplitField]⟩, .virtual⟩⟩
   let borrowed ← Own.borrow moved.ownership address.provenance
     (address.fields.map Own.Projection.field) mode
   let released ← Own.endLoan borrowed ⟨0⟩
@@ -170,7 +178,7 @@ example : ∃ borrowed released, liveFieldLoan = some (borrowed, released) ∧
 -- Both modes exclude owner writes. Only a mutable loan excludes owner copies.
 private def ownerFieldAccess (mode : Own.Mode) : Option (Bool × Bool × Bool × Bool) := do
   let (borrowed, released) ← liveFieldLoan mode
-  let place : MemoryPlace loanFieldLanguage.operands.Ty (.inl (.scalar (.int .u8))) :=
+  let place : MemoryPlace loanFieldLanguage.operands.Ty copyLoanTy :=
     ⟨⟨storeRoot, [secondSplitField]⟩, .virtual⟩
   let write state := (loanMemory.writeValue state place (.scalar (.int .u8 25))).isSome
   let copy state := (loanMemory.readValue state (.copy place)).isSome
@@ -185,10 +193,10 @@ private def partialOwnerOverwrite (mutable : Bool) : Option (Bool × Bool × Boo
   let initial := {moveBeforeBorrow with ownership := {moveBeforeBorrow.ownership with
     slots := [⟨loanRoot, 0, ⟨.int .u8, false, mutable⟩, .owned⟩]}}
   let (_, moved) ← loanMemory.readValue initial
-    (.move (ty := .inr false) ⟨⟨storeRoot, [splitField]⟩, .virtual⟩)
-  let field : MemoryPlace loanFieldLanguage.operands.Ty (.inl (.scalar (.int .u8))) :=
+    (.move (ty := linearLoanTy) ⟨⟨storeRoot, [splitField]⟩, .virtual⟩)
+  let field : MemoryPlace loanFieldLanguage.operands.Ty copyLoanTy :=
     ⟨⟨storeRoot, [secondSplitField]⟩, .virtual⟩
-  let root : MemoryPlace loanFieldLanguage.operands.Ty (.inr false) :=
+  let root : MemoryPlace loanFieldLanguage.operands.Ty linearLoanTy :=
     ⟨⟨storeRoot, []⟩, .virtual⟩
   let surviving := (loanMemory.readValue moved (.copy field)).isSome
   let direct := (loanMemory.writeValue moved field (.scalar (.int .u8 42))).isSome
@@ -218,8 +226,8 @@ private def enumInactive : FieldId := ⟨.variant ⟨enumDecl, ⟨"right"⟩⟩,
 private abbrev enumFieldLanguage : CoreLanguage :=
   {loanFieldLanguage with
     fieldType := fun _ field =>
-      if field = enumMoved then some (.inr false)
-      else if field == enumSurviving || field == enumInactive then some (.inl (.scalar (.int .u8))) else none
+      if field = enumMoved then some linearLoanTy
+      else if field == enumSurviving || field == enumInactive then some copyLoanTy else none
     activeFields := fun _ _ _ => some [enumMoved, enumSurviving]
     field := fun value path =>
       if path = [enumMoved] then some (.scalar (.int .u8 17))
@@ -235,7 +243,7 @@ private def enumLogical : LogicalFrame enumFieldLanguage.operands.Val :=
 
 -- The old range of the representation obligation included this initialized
 -- type-valid path, although the selected variant cannot supply a value there.
-example : (enumFieldLanguage.fieldType (.inr false) enumInactive).isSome = true ∧
+example : (enumFieldLanguage.fieldType linearLoanTy enumInactive).isSome = true ∧
     Memory.initializedAt (enumState 25) storeRoot [enumInactive] = true ∧
     enumFieldLanguage.field (.scalar (.int .u8 25)) [enumInactive] = none :=
   ⟨rfl, rfl, rfl⟩
@@ -276,7 +284,7 @@ example : loanMemory.Represents (language := enumFieldLanguage) enumLogical (enu
       exact ⟨List.mem_cons_self .., rfl⟩
     · intro place member
       obtain rfl := List.mem_singleton.mp member
-      refine ⟨_, _, .inr false, .virtual, List.mem_cons_self .., rfl, rfl, nofun, ?_⟩
+      refine ⟨_, _, linearLoanTy, .virtual, List.mem_cons_self .., rfl, rfl, nofun, ?_⟩
       intro value found
       have eq : CoreValue.scalar (.int .u8 25) = value := Option.some.inj found
       cases eq
@@ -292,7 +300,7 @@ example : loanMemory.Represents (language := enumFieldLanguage) enumLogical (enu
       · split at active
         · rename_i surviving
           subst path
-          have same : some (.inl (.scalar (.int .u8))) = some ty := typed
+          have same : some copyLoanTy = some ty := typed
           obtain rfl := Option.some.inj same
           obtain rfl := Option.some.inj active
           exact ⟨_, rfl, rfl, nofun⟩
@@ -305,7 +313,7 @@ example : loanMemory.Represents (language := enumFieldLanguage) enumLogical (enu
     obtain rfl := Option.some.inj lookup
     obtain rfl := Option.some.inj storageClass
     obtain ⟨physical, rfl, loaded, _⟩ := related (.scalar (.int .u8 25)) rfl
-      [enumSurviving] (.inl (.scalar (.int .u8))) (.scalar (.int .u8 25)) rfl rfl rfl
+      [enumSurviving] copyLoanTy (.scalar (.int .u8 25)) rfl rfl rfl
     cases loaded
 
 def pairLayout : Layout :=

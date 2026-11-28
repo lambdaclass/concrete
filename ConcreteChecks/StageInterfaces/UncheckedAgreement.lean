@@ -19,42 +19,107 @@ example :
   refine ⟨⟨rfl, returnedCoreWF 256, _, representsReturn 256⟩, _, rfl, rfl, ?_, _, reason, representsReturn 256, rfl, rfl⟩
   exact fun accepted => return256IllTyped accepted.1.2.1
 
+private theorem parserEntry_run_of_eq {count : Nat} {grammar : SharedGrammar count}
+    (parser : ParserEngine grammar)
+    (nonExhausted : ∀ input : ParserView, (parser.run input).2.isSome = true)
+    {stream : TokenStream} {res : Except ParseRefusal (Parsed (grammar.value grammar.start))}
+    (h : (parser.run stream.parserView).2 = some res) :
+    (parserEntry parser nonExhausted).run stream = res := by
+  change (parser.run stream.parserView).2.get _ = res
+  simp only [h, Option.get_some]
+
+private theorem literalParserRun (passes : Passes slice0 testProfile) :
+    (registry passes).parser.run returnStream = .ok parsedReturn := by
+  rw [registry_parser_run]
+  exact parserEntry_run_of_eq (sliceParser slice0) (sliceParser_nonExhausted slice0)
+    (by rw [returnStream_parserView]; exact returnParserRun42)
+
+private theorem pipeline_run_next {A R B C : Type}
+    (s : Stage A R B) (rest : Pipeline B C) (x : A) {y : B}
+    (h : s.run x = .ok y) :
+    (Pipeline.next s rest).run x = rest.run y := by
+  simp only [Pipeline.run, h]
+
+private theorem registry_pipeline_run_after_parser {slice : Slice} {profile : Profile}
+    (passes : Passes slice profile) (route : Route) (src : Source)
+    {stream : TokenStream}
+    {ast : Parsed ((sliceGrammar slice).value (sliceGrammar slice).start)}
+    (hlex : (registry passes).lexer.run src = .ok stream)
+    (hparse : (registry passes).parser.run stream = .ok ast) :
+    (Registry.pipeline passes route).run src =
+      match route with
+      | .checked =>
+        (Pipeline.next (registry passes).elaborator
+          (.next (registry passes).admission.toStage
+            (.next (registry passes).lowerCore
+              (pipelineAppend (registry passes).mirPasses
+                (.next (registry passes).lowerMemory
+                  (pipelineAppend (registry passes).memoryPasses
+                    (.next (registry passes).buildSSA
+                      (pipelineAppend (registry passes).ssaPasses
+                        (.next (registry passes).buildBIR
+                          (pipelineAppend (registry passes).birPasses
+                            (.next (registry passes).emit .done))))))))))).run ast
+      | .unchecked =>
+        (Pipeline.next (registry passes).elaborator
+          (.next (registry passes).eligibility
+            (.next (registry passes).typing
+              (.next (registry passes).lowerUnchecked
+                (pipelineAppend (registry passes).mirPasses
+                  (.next (registry passes).lowerMemory
+                    (pipelineAppend (registry passes).memoryPasses
+                      (.next (registry passes).buildSSA
+                        (pipelineAppend (registry passes).ssaPasses
+                          (.next (registry passes).buildBIR
+                            (pipelineAppend (registry passes).birPasses
+                              (.next (registry passes).emit .done)))))))))))).run ast := by
+  cases route <;>
+    (change (Pipeline.next (registry passes).lexer
+       (.next (registry passes).parser _)).run src = _;
+     rw [pipeline_run_next _ _ _ hlex, pipeline_run_next _ _ _ hparse];
+     rfl)
+
 -- Compose both registered routes through LCB job validation, then observe the exact
 -- emitted body with the fixed LCB semantics. This control exercises a single source.
 set_option maxRecDepth 4096 in
-example (unchecked : Bool) :
-    (Registry.pipeline literalReturnPasses unchecked).run elaborationSource = .ok (lcbReturnJob 42) ∧
-    ((registry literalReturnPasses).lcbPipeline unchecked).run elaborationSource =
-      .ok (lcbReturnJob 42) ∧
+example (route : Route) :
+    (Registry.pipeline literalReturnPasses route).run elaborationSource = .ok (lcbReturnJob 42) ∧
     (LCBInput.Execution Empty elaborationSource.project).observes
       (lcbReturnJob 42) (.returned 42 ByteArray.empty) := by
-  have ran : ((registry literalReturnPasses).lcbPipeline unchecked).run elaborationSource =
-      .ok (lcbReturnJob 42) := by cases unchecked <;> with_unfolding_all rfl
-  refine ⟨ran, ran, ?_⟩
+  have ran : (Registry.pipeline literalReturnPasses route).run elaborationSource =
+      .ok (lcbReturnJob 42) := by
+    rw [registry_pipeline_run_after_parser literalReturnPasses route elaborationSource rfl
+      (literalParserRun literalReturnPasses)]
+    cases route <;> with_unfolding_all rfl
+  refine ⟨ran, ?_⟩
   · with_unfolding_all exact ⟨_, ⟨_, rfl, .nil _⟩, rfl⟩
 
 set_option maxRecDepth 4096 in
-example (unchecked : Bool) :
+example (route : Route) :
     let mutant := { literalReturnPasses with
       lowerCore := fun _ => .error (.invalidInput rule)
       lowerUnchecked := fun _ => .error (.invalidInput rule) }
-    ¬ ∃ output, (Registry.pipeline mutant unchecked).run elaborationSource = .ok output := by
+    ¬ ∃ output, (Registry.pipeline mutant route).run elaborationSource = .ok output := by
   intro mutant
-  have refused : (Registry.pipeline mutant unchecked).run elaborationSource =
+  have refused : (Registry.pipeline mutant route).run elaborationSource =
       .error ⟨StageFailure, .invalidInput rule⟩ := by
-    cases unchecked <;> with_unfolding_all rfl
+    rw [registry_pipeline_run_after_parser mutant route elaborationSource rfl
+      (literalParserRun mutant)]
+    cases route <;> with_unfolding_all rfl
   rintro ⟨_, ran⟩
   rw [refused] at ran
   cases ran
 
 set_option maxRecDepth 4096 in
-example (unchecked : Bool) :
+example (route : Route) :
     let mutant : Passes slice0 testProfile :=
       { literalReturnPasses with elaborate := fun _ => .ok (pendingLiteral 43) }
-    (Registry.pipeline mutant unchecked).run elaborationSource = .ok (lcbReturnJob 43) ∧
+    (Registry.pipeline mutant route).run elaborationSource = .ok (lcbReturnJob 43) ∧
     ¬ (registry mutant).elaborator.Validated := by
   refine ⟨?_, wrongLiteralElaboratorInvalid _ rfl⟩
-  cases unchecked <;> with_unfolding_all rfl
+  rw [registry_pipeline_run_after_parser _ route elaborationSource rfl
+    (literalParserRun _)]
+  cases route <;> with_unfolding_all rfl
 
 -- Structural job validation accepts both functions. Imported execution
 -- observes their different returns from the supplied body and runtime input.
@@ -157,17 +222,21 @@ private theorem literalTables : literalMemory.TablesWF := by
         cases follows
       · intro block present
         cases List.mem_singleton.mp present
-        exact ⟨rfl, nofun⟩
+        exact ⟨rfl, fun _ h => nomatch h⟩
 
 set_option maxRecDepth 4096 in
 private theorem literalHandoff : literalMemory.HandoffWF := by
-  refine ⟨literalTables, List.mem_singleton_self _, ?_, nofun⟩
+  refine ⟨literalTables, List.mem_singleton_self _, ?_, nofun,
+    ⟨.nil, ⟨.nil, nofun⟩, nofun⟩, ⟨.nil, nofun⟩⟩
   intro origin present
   have member : origin ∈ [literalOrigin] := by with_unfolding_all exact present
   obtain rfl := List.mem_singleton.mp member
   let checkedSpan : ConcreteSpec.Core.Span :=
     ⟨⟨0⟩, 18, 28, by decide, 1, 19, by decide, by decide⟩
   exact ⟨checkedSpan, _, rfl, rfl, by decide, rfl, rfl, rfl, rfl⟩
+
+private theorem literalMIRHandoff : MIR.HandoffWF (language := earlyFixtureLanguage) literalMIR :=
+  ⟨literalHandoff, fun _ _ _ hFn _ _ hLoc => by cases List.mem_singleton.mp hFn; cases hLoc⟩
 
 set_option maxRecDepth 4096 in
 private theorem literalConsumes : ConsumesEvidence literalCore [] literalMIR := by
@@ -197,8 +266,25 @@ private theorem literalUnchecked :
       exact (Option.some.inj h).symm
     · exact trace
 
+private def literalMemoryBlock : MemoryBlock returnLowering :=
+  ⟨⟨0⟩, [], [], .ret (some ⟨returnType, .literal ⟨[42]⟩⟩), [literalOrigin]⟩
+
+private theorem literalMemory_functions :
+    literalMemory.functions = [(earlyEntry, [], ⟨⟨0⟩, #[literalMemoryBlock]⟩)] := by
+  with_unfolding_all rfl
+
 set_option maxRecDepth 4096 in
 private theorem literalMemoryContract : LowersMemory (language := earlyFixtureLanguage) literalMIR literalMemory := by
+  have retains : RetainsTypedRoots literalMIR literalMemory :=
+    ⟨.cons nofun .nil, by rw [literalMemory_functions]; exact .cons nofun .nil,
+     fun _ _ _ h => by cases List.mem_singleton.mp h; exact .nil,
+     fun _ _ _ h => by rw [literalMemory_functions] at h; cases List.mem_singleton.mp h; exact .nil,
+     fun _ _ _ h => by
+       cases List.mem_singleton.mp h
+       exact ⟨_, _, by rw [literalMemory_functions]; exact List.mem_singleton_self _, fun _ _ => Iff.rfl⟩,
+     fun _ _ _ h => by
+       rw [literalMemory_functions] at h; cases List.mem_singleton.mp h
+       exact ⟨_, _, List.mem_singleton_self _, fun _ _ => Iff.rfl⟩⟩
   with_unfolding_all
     have sourceFinal : literalMIRExecution.result literalMIR literalRegisters literalResult := by with_unfolding_all rfl
     have targetFinal : literalMemoryExecution.result literalMemory literalRegisters literalResult := by with_unfolding_all rfl
@@ -217,7 +303,8 @@ private theorem literalMemoryContract : LowersMemory (language := earlyFixtureLa
       · intro fn classes place present member
         cases List.mem_singleton.mp present
         cases member
-    refine ⟨rfl, rfl, ⟨fun _ h => h, fun _ h => h⟩, layout, ⟨rfl, rfl⟩, promotes, literalTables, literalTables,
+    refine ⟨rfl, rfl, ⟨fun _ h => h, fun _ h => h⟩, layout, ⟨rfl, rfl⟩, promotes, retains, nofun,
+      literalTables, literalTables,
       matchingRefinement (language := earlyFixtureLanguage) (refinesToTerminal literalMIRExecution literalMemoryExecution literalRegisters literalRegisters literalResult
         ⟨literalRegisters, by with_unfolding_all rfl, .nil _⟩ sourceFinal targetFinal (fun _ h => h) (fun _ h => (Option.some.inj h).symm) rfl), ?_⟩
     intro _
@@ -244,8 +331,19 @@ private theorem literalMemoryContract : LowersMemory (language := earlyFixtureLa
 
 set_option maxRecDepth 4096 in
 private theorem literalSSAContract : BuildsSSA (language := earlyFixtureLanguage) literalMemory literalSSA := by
+  have hres : ResidualAddsMatch literalMemory literalSSA := by
+    constructor
+    · intro _ _ _ hFn ⟨_, hB, _, hO, _⟩
+      rw [literalMemory_functions] at hFn
+      cases List.mem_singleton.mp hFn
+      cases List.mem_singleton.mp hB
+      cases hO
+    · intro _ _ _ hFn _ hB _ hO
+      cases List.mem_singleton.mp hFn
+      cases List.mem_singleton.mp hB
+      cases hO
   with_unfolding_all
-    refine ⟨rfl, rfl, rfl, ⟨rfl, rfl⟩, ⟨fun _ h => h, fun _ h => h⟩, ?_⟩
+    refine ⟨rfl, rfl, rfl, ⟨rfl, rfl⟩, ⟨fun _ h => h, fun _ h => h⟩, hres, ?_⟩
     exact refinesToTerminal literalMemoryExecution literalSSAExecution literalRegisters literalRegisters literalResult
       ⟨_, rfl, .nil _⟩ (by with_unfolding_all rfl) (by with_unfolding_all rfl)
       (fun _ h => h) (fun _ h => (Option.some.inj h).symm) rfl
@@ -275,8 +373,8 @@ private theorem literalLCBContract : EmitsLCB earlyFixtureLanguage literalBIR (l
       (fun _ h => h) (fun _ h => (Option.some.inj h).symm) rfl
 
 set_option maxRecDepth 4096 in
-example (unchecked : Bool) :
-    let pipeline := (registry literalReturnPasses).lcbPipeline unchecked
+example (route : Route) :
+    let pipeline := Registry.pipeline literalReturnPasses route
     pipeline.Ready elaborationSource ∧ pipeline.Corresponds elaborationSource (lcbReturnJob 42) := by
   have static := returnAdmissionContract.1.2.1.1
   have checked := returnAdmissionContract.1
@@ -285,8 +383,14 @@ example (unchecked : Bool) :
   have fragment : literalCore.InFragment := ⟨_, representsReturn 42⟩
   have elaborates : (registry literalReturnPasses).elaborator.success parsedReturn pendingReturn :=
     ⟨returnProgram, rfl, rfl⟩
+  have ssaWF : SSA.WF (language := earlyFixtureLanguage) literalSSA :=
+    ⟨(SSA.checkRegisterFormation_eq_true_iff (language := earlyFixtureLanguage) literalSSA).mp (by decide),
+      by with_unfolding_all exact literalHandoff⟩
   have birWF : BIR.WF (language := earlyFixtureLanguage) literalBIR :=
-    ⟨literalBIRContract.2.1, by decide, .cons nofun .nil, List.mem_singleton_self _, nofun, by with_unfolding_all exact literalTables, nofun⟩
+    ⟨(BIR.checkRegisterFormation_eq_true_iff (language := earlyFixtureLanguage) literalBIR).mp (by decide),
+      literalBIRContract.2.1, by decide,
+      by with_unfolding_all exact literalHandoff.origins_bind, nofun,
+      by with_unfolding_all exact literalHandoff⟩
   have ready : Source.WF elaborationSource ∧ elaborationSource.slice = slice0 := ⟨parsedReturnDomain.1, rfl⟩
   have front := returnLexerContract
   have parse := returnParserContract
@@ -296,24 +400,24 @@ example (unchecked : Bool) :
         (registry literalReturnPasses).buildBIR.outputInvariant bir ∧
         (registry literalReturnPasses).buildBIR.success literalSSA bir ∧
         (registry literalReturnPasses).buildBIR.trust literalSSA bir ∧
-        (Pipeline.next (registry literalReturnPasses).emitLCB .done).Corresponds bir (lcbReturnJob 42) := by
+        (Pipeline.next (registry literalReturnPasses).emit .done).Corresponds bir (lcbReturnJob 42) := by
     exact ⟨literalBIR, by with_unfolding_all rfl, birWF, ⟨literalBIRContract, rfl⟩, trivial, lcbReturnJob 42,
-      by with_unfolding_all rfl, ⟨literalBIR, literalLCBContract⟩, literalLCBContract, trivial, rfl⟩
-  cases unchecked
-  · exact ⟨ready, returnStream, rfl, ⟨front.2.1, rfl⟩, front, trivial,
-      parsedReturn, by with_unfolding_all rfl, parsedReturnDomain, parse, trivial,
+      by with_unfolding_all rfl, ⟨literalBIR, literalLCBContract⟩, ⟨by decide, literalLCBContract⟩, trivial, rfl⟩
+  cases route
+  · exact ⟨ready, returnStream, rfl, ⟨front.2.1, front.tokensOrdered, rfl⟩, front, trivial,
+      parsedReturn, literalParserRun literalReturnPasses, parsedReturnDomain, parse, trivial,
       pendingReturn, rfl, parsedReturnDomain.2.2.2.2 _ elaborates, elaborates, trivial,
       ⟨literalCore, []⟩, by with_unfolding_all rfl, admitted, ⟨rfl, _, rfl, checked⟩, trivial,
-      literalMIR, rfl, literalHandoff, lowerCore, trivial,
+      literalMIR, rfl, literalMIRHandoff, lowerCore, trivial,
       literalMemory, rfl, literalHandoff, ⟨literalMemoryContract, rfl⟩, trivial,
-      literalSSA, by with_unfolding_all rfl, by with_unfolding_all exact literalHandoff, ⟨literalSSAContract, rfl⟩, trivial, back⟩
-  · exact ⟨ready, returnStream, rfl, ⟨front.2.1, rfl⟩, front, trivial,
-      parsedReturn, by with_unfolding_all rfl, parsedReturnDomain, parse, trivial,
+      literalSSA, by with_unfolding_all rfl, ssaWF, ⟨literalSSAContract, rfl⟩, trivial, back⟩
+  · exact ⟨ready, returnStream, rfl, ⟨front.2.1, front.tokensOrdered, rfl⟩, front, trivial,
+      parsedReturn, literalParserRun literalReturnPasses, parsedReturnDomain, parse, trivial,
       pendingReturn, rfl, parsedReturnDomain.2.2.2.2 _ elaborates, elaborates, trivial,
       literalCore, rfl, ⟨rfl, returnedCoreWF 42, fragment⟩, ⟨rfl, rfl⟩, trivial,
       literalCore, by with_unfolding_all rfl, ⟨rfl, static⟩, rfl, trivial,
-      literalMIR, rfl, literalHandoff, literalUnchecked, trivial,
+      literalMIR, rfl, literalMIRHandoff, literalUnchecked, trivial,
       literalMemory, rfl, literalHandoff, ⟨literalMemoryContract, rfl⟩, trivial,
-      literalSSA, by with_unfolding_all rfl, by with_unfolding_all exact literalHandoff, ⟨literalSSAContract, rfl⟩, trivial, back⟩
+      literalSSA, by with_unfolding_all rfl, ssaWF, ⟨literalSSAContract, rfl⟩, trivial, back⟩
 
 end StageInterfaceControls

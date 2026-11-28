@@ -90,7 +90,7 @@ example :
       exact ⟨rfl, ⟨_, rfl, rfl, [], _, _, _, rfl, rfl, rfl, rfl, .nil _⟩, _, rfl⟩
   have targetResult : ssaExecution.result (callingSSA .abort) helperState (helperTrap .abort) := by
     with_unfolding_all rfl
-  obtain ⟨q, reached, result, _⟩ := (lowered.2.2.2.2.2 safe).1 helperState (helperTrap .abort)
+  obtain ⟨q, reached, result, _⟩ := (lowered.2.2.2.2.2.2 safe).1 helperState (helperTrap .abort)
     ⟨storeInitial, by with_unfolding_all rfl, .cons targetTick (.nil _)⟩ targetResult
   rcases limits q reached with rfl | rfl
   · have absent : (none : Option Concrete.Contracts.Observation) = some (helperTrap .abort) := by
@@ -112,7 +112,31 @@ example :
   let ssa := callingSSA .divisionByZero
   let memory := ssa.memoryView (language := testLanguage)
   let outcome := helperTrap .divisionByZero
-  refine ⟨rfl, rfl, rfl, ⟨rfl, rfl⟩, by with_unfolding_all exact ⟨fun _ h => h, fun _ h => h⟩, ?_⟩
+  have hres : ResidualAddsMatch memory ssa := by
+    constructor
+    · intro fn mLocals mGraph hFn ⟨mBlock, hMB, mOp, hMO, hRes⟩
+      have hMem : (fn, mLocals, mGraph) ∈
+          [(Exec.Demo.mainF, [], ⟨⟨0⟩, #[⟨⟨0⟩, [], [⟨testOrigin, .call callee none []⟩],
+              .ret (some ⟨(), .literal ⟨[0]⟩⟩), []⟩]⟩),
+           (callee, [], ⟨⟨0⟩, #[⟨⟨0⟩, [], [], .trap .divisionByZero testOrigin, []⟩]⟩)] := by
+        with_unfolding_all exact hFn
+      rcases List.mem_cons.mp hMem with h1 | h2
+      · cases h1
+        cases List.mem_singleton.mp hMB
+        cases List.mem_singleton.mp hMO
+        cases hRes
+      · cases List.mem_singleton.mp h2
+        cases List.mem_singleton.mp hMB
+        cases hMO
+    · intro fn sLocals sGraph hFn sBlock hSB sOp hSO
+      simp only [ssa, callingSSA, List.mem_cons, List.not_mem_nil, or_false, Prod.mk.injEq] at hFn
+      rcases hFn with ⟨rfl, rfl, rfl⟩ | ⟨rfl, rfl, rfl⟩
+      · cases List.mem_singleton.mp hSB
+        cases List.mem_singleton.mp hSO
+        trivial
+      · cases List.mem_singleton.mp hSB
+        cases hSO
+  refine ⟨rfl, rfl, rfl, ⟨rfl, rfl⟩, by with_unfolding_all exact ⟨fun _ h => h, fun _ h => h⟩, hres, ?_⟩
   have targetTick : ssaExecution.step ssa storeInitial helperState := by
     with_unfolding_all exact ⟨rfl, ⟨_, rfl, rfl, [], _, _, _, rfl, rfl, rfl, rfl, .nil _⟩, _, rfl⟩
   have targetOnly (q : ssaExecution.State) (tick : ssaExecution.step ssa storeInitial q) :

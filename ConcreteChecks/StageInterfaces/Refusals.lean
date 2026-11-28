@@ -18,14 +18,15 @@ private def invalidTrapCallee (project : Project) : BIR testLowering testProfile
     signatures := [(callee, ⟨[], none⟩)]}
 
 -- A call to a void helper with a valid trap slot is refused before emission.
-example (m : LoweringModels testLanguage testLowering testProfile) (parser : Parser grammar) :
+example (m : LoweringModels testLanguage testLowering testProfile) (parser : Parser grammar)
+    (hsteps : 2 ≤ parser.stepsPerToken) :
     let bir := {invalidTrapCallee tabProject with sites := #[trapEntry]}
-    (r m parser).emitLCB.run bir = .error .lcbLinkingUnavailable := by
+    (r m parser [] hsteps).emit.run bir = .error .lcbLinkingUnavailable := by
   with_unfolding_all rfl
 
 -- The same call block is accepted when disconnected and refused when its
 -- predecessor jumps to it. The array order differs from traversal order.
-example (parser : Parser grammar) :
+example (parser : Parser grammar) (hsteps : 2 ≤ parser.stepsPerToken) :
     let callBlock := {birReturnBlock false with
       id := ⟨1⟩
       body := [⟨testOrigin, .call callee none []⟩]}
@@ -36,23 +37,26 @@ example (parser : Parser grammar) :
       {bundledBIR tabProject with
         functions := [(Exec.Demo.mainF, [], ⟨⟨0⟩, #[callBlock, entry linked]⟩),
           (callee, [], ⟨⟨0⟩, #[birReturnBlock true]⟩)]}
-    let stages := fixtureEntries parser {testPasses [] with emitLCB := fun _ => .ok (bundledJobs 7)}
-    stages.emitLCB.run (input false) = .ok (bundledJobs 7) ∧
-      stages.emitLCB.run (input true) = .error .lcbLinkingUnavailable := by
+    let stages := fixtureEntries parser {testPasses (profile := testProfile) [] with emit := fun _ => .ok (bundledJobs 7)} hsteps
+    stages.emit.run (input false) = .ok (bundledJobs 7) ∧
+      stages.emit.run (input true) = .error .lcbLinkingUnavailable := by
   with_unfolding_all exact ⟨rfl, rfl⟩
 
 -- The verified job edge requires no external behavior hypothesis.
-example (m : LoweringModels testLanguage testLowering testProfile) (parser : Parser grammar) :
-    (r m parser).emitLCB.Trusted := fun _ _ _ _ => trivial
+example (m : LoweringModels testLanguage testLowering testProfile) (parser : Parser grammar)
+    (hsteps : 2 ≤ parser.stepsPerToken) :
+    (r m parser [] hsteps).emit.Trusted := fun _ _ _ _ => trivial
 
 private theorem oversizedLCBRefused (passes : Passes slice0 testProfile)
     (bir : BIR returnLowering testProfile) (over : LCBInput.trapCapacity < bir.sites.size) :
-    let edge := (registry passes).emitLCB
+    let edge := (registry passes).emit
     let failure := StageFailure.resource (LCBInput.trapCapacityRefusal bir.sites.size)
     edge.run bir = .error failure ∧ edge.refusal bir failure := by
-  refine ⟨?_, rfl, over⟩
-  change passes.emitSingleLCB bir = .error _
-  simp [PassFunctions.emitSingleLCB, over]
+  refine ⟨?_, Or.inl ⟨over, rfl⟩⟩
+  change emitGuarded (language := earlyFixtureLanguage) passes.emit bir = .error _
+  unfold emitGuarded
+  dsimp only [testProfile]
+  simp [over]
 
 private def singletonTrapBIR (sites : TrapTable) (slot : TrapIndex) :
     BIR returnLowering testProfile :=
@@ -64,7 +68,52 @@ private theorem singletonTrapWF (sites : TrapTable) (slot : TrapIndex)
     (locations : ∀ site ∈ sites.toList, ∃ span, site.origin.lexical.Binds tabProject span) :
     BIR.WF (language := earlyFixtureLanguage) (singletonTrapBIR sites slot) := by
   obtain ⟨entry, found⟩ := resolves
-  refine ⟨?_, Nat.zero_le _, .cons nofun .nil, List.mem_singleton_self _, locations, ?_, nofun⟩
+  have hlt : slot.index < sites.size := by
+    cases Nat.lt_or_ge slot.index sites.size with
+    | inl h => exact h
+    | inr h => rw [Array.getElem?_eq_none h] at found; cases found
+  have hmem : entry ∈ sites.toList := by
+    rw [Array.getElem?_eq_some_iff] at found
+    obtain ⟨hlt', rfl⟩ := found
+    exact Array.getElem_mem_toList hlt'
+  have hreg : (singletonTrapBIR sites slot).RegisterFormation (language := earlyFixtureLanguage) := by
+    have hnorm : (RegisterIR.bir (singletonTrapBIR sites slot)).normalize =
+        { entry := earlyEntry
+          signatures := [(earlyEntry, ⟨[], none⟩)]
+          functions := [(earlyEntry, [], ⟨⟨0⟩, [⟨⟨0⟩, [], [], .trapOk, []⟩]⟩)]
+          layouts := []
+          mutableLocals := []
+          declarations := [] } := by
+      simp [RegisterIR.normalize, singletonTrapBIR, singleBlockGraph, RegTerminator.ofBIR, hlt]
+    exact (BIR.checkRegisterFormation_eq_true_iff (language := earlyFixtureLanguage) _).mp (by
+      unfold BIR.checkRegisterFormation checkRegisterFormation
+      rw [hnorm]
+      decide)
+  have horig : ∀ origin ∈ (singletonTrapBIR sites slot).origins,
+      ∃ span, origin.lexical.Binds tabProject span := by
+    intro origin ho
+    simp only [BIR.origins, singletonTrapBIR, singleBlockGraph, CFG.origins, found,
+      Option.map_some, Option.toList_some, List.flatMap_cons, List.flatMap_nil,
+      List.map_nil, List.nil_append, List.append_nil, List.mem_singleton] at ho
+    subst ho
+    exact locations entry hmem
+  have hmemOrig : ∀ origin ∈ ((singletonTrapBIR sites slot).memoryView (language := earlyFixtureLanguage)).origins,
+      ∃ span, origin.lexical.Binds tabProject span := by
+    intro origin ho
+    have hblocks : ((singletonTrapBIR sites slot).memoryView (language := earlyFixtureLanguage)).functions =
+        [(earlyEntry, [], ⟨⟨0⟩, #[⟨⟨0⟩, [], [],
+          match sites[slot.index]? with
+          | some site => (Terminator.trap site.kind site.origin : MemoryTerm returnLowering)
+          | none => .invalid, []⟩]⟩)] := by
+      with_unfolding_all rfl
+    simp only [Memory.origins, hblocks, CFG.origins, found, Terminator.origins,
+      List.flatMap_cons, List.flatMap_nil, List.map_nil, List.nil_append, List.append_nil,
+      List.mem_singleton] at ho
+    subst ho
+    exact locations entry hmem
+  refine ⟨hreg, ?_, Nat.zero_le _, horig, locations,
+    ?_, List.mem_singleton_self _, hmemOrig, nofun,
+    ⟨.nil, ⟨.nil, nofun⟩, nofun⟩, ⟨.nil, nofun⟩⟩
   · intro fn member block inside index trapped
     cases List.mem_singleton.mp member
     cases List.mem_singleton.mp inside
@@ -100,7 +149,7 @@ private theorem singletonTrapWF (sites : TrapTable) (slot : TrapIndex)
           constructor
           · rw [endingEq]
             trivial
-          · exact nofun
+          · exact fun _ h => nomatch h
 
 -- Prove the table facts for a symbolic length so the kernel never constructs
 -- the oversized array.
@@ -130,8 +179,8 @@ private theorem syntheticTrapWF (n : Nat) :
 
 private def OversizedTrapGate (n : Nat) : Prop :=
   let bir := singletonTrapBIR (syntheticTrapSites n) ⟨n⟩
-  let passes := {literalReturnPasses with emitLCB := fun _ => .ok (lcbReturnJob 42)}
-  let edge := (registry passes).emitLCB
+  let passes := {literalReturnPasses with emit := fun _ => .ok (lcbReturnJob 42)}
+  let edge := (registry passes).emit
   let failure := StageFailure.resource (LCBInput.trapCapacityRefusal bir.sites.size)
   bir.sites.size = LCBInput.trapCapacity + 1 ∧ edge.inputInvariant bir ∧
     edge.run bir = .error failure ∧ edge.refusal bir failure
@@ -176,17 +225,27 @@ example :
           exact ⟨_, List.mem_singleton_self _, rfl, rfl⟩
         · intro block inside
           cases List.mem_singleton.mp inside
-          exact ⟨trivial, nofun⟩
+          exact ⟨trivial, fun _ h => nomatch h⟩
   have noTrap : bir.TrapSlotsWF := by
     intro fn present block inside site trap
     cases List.mem_singleton.mp present
     cases List.mem_singleton.mp inside
     cases trap
-  refine ⟨rfl, ⟨tables, List.mem_singleton_self _, by with_unfolding_all exact ⟨nofun, nofun⟩⟩,
-    ⟨noTrap, by decide, .cons nofun .nil,
-    List.mem_singleton_self _, nofun, ?_⟩, rfl,
+  have ssaReg : ssa.RegisterFormation (language := earlyFixtureLanguage) :=
+    (SSA.checkRegisterFormation_eq_true_iff (language := earlyFixtureLanguage) ssa).mp (by decide)
+  have birReg : bir.RegisterFormation (language := earlyFixtureLanguage) :=
+    (BIR.checkRegisterFormation_eq_true_iff (language := earlyFixtureLanguage) bir).mp (by decide)
+  refine ⟨rfl,
+    ⟨ssaReg, tables, List.mem_singleton_self _,
+      (fun _ h => by with_unfolding_all exact nomatch h), nofun,
+      ⟨.nil, ⟨.nil, nofun⟩, nofun⟩, ⟨.nil, nofun⟩⟩,
+    ⟨birReg, noTrap, by decide,
+      (fun _ h => by with_unfolding_all exact nomatch h), nofun,
+      (by with_unfolding_all exact tables), List.mem_singleton_self _,
+      (fun _ h => by with_unfolding_all exact nomatch h),
+      nofun, ⟨.nil, ⟨.nil, nofun⟩, nofun⟩, ⟨.nil, nofun⟩⟩,
+    rfl,
     ⟨rfl, noTrap, ?_, ?_, by decide, ⟨rfl, rfl, by with_unfolding_all rfl⟩, ?_⟩, rfl⟩
-  · with_unfolding_all exact ⟨tables, nofun⟩
   · intro fn present block inside kind site trap
     cases List.mem_singleton.mp present
     cases List.mem_singleton.mp inside
@@ -210,8 +269,8 @@ example :
     (¬ BIR.WF (language := testLanguage) ({input with functions := []} : BIR testLowering testProfile)) ∧
     (¬ BIR.WF (language := testLanguage) ({input with functions := input.functions ++ input.functions} : BIR testLowering testProfile)) := by
   refine ⟨fun h => ?_, fun h => ?_⟩
-  · exact List.not_mem_nil h.2.2.2.1
-  · simpa [birReturn] using h.2.2.1
+  · exact List.not_mem_nil h.registerFormation.entry_mem
+  · simpa [birReturn] using h.registerFormation.functions_nodup
 
 example :
     let input := birReturn tabProject false
@@ -223,22 +282,28 @@ example :
   cases found
 
 -- A spurious typed linking refusal cannot validate on the registered edge.
-example (parser : Parser grammar) :
+example (parser : Parser grammar) (hsteps : 2 ≤ parser.stepsPerToken) :
     let stages := fixtureEntries parser
-      {testPasses (profile := testProfile) [] with emitLCB := fun _ => .error .lcbLinkingUnavailable}
-    ¬ stages.emitLCB.Validated := by
+      {testPasses (profile := testProfile) [] with emit := fun _ => .error .lcbLinkingUnavailable} hsteps
+    ¬ stages.emit.Validated := by
   intro stages valid
   let input : BIR testLowering testProfile := {birReturn tabProject false with signatures := [(Exec.Demo.mainF, ⟨[], some ()⟩)]}
-  have eligible : stages.emitLCB.inputInvariant input := by
-    refine ⟨?_, (by decide : 0 ≤ 3), by simp [input, birReturn, testBIR], by simp [input, birReturn, testBIR], nofun, ?_⟩
-    · intro fn member block included slot trap
-      cases List.mem_singleton.mp member
-      cases List.mem_singleton.mp included
-      cases trap
-    · exact ⟨birReturnTables tabProject testProfile, nofun⟩
-  have wrong : false = true := by
-    with_unfolding_all exact valid.2 input .lcbLinkingUnavailable eligible rfl
-  cases wrong
+  have eligible : stages.emit.inputInvariant input := by
+    refine ⟨(BIR.checkRegisterFormation_eq_true_iff (language := testLanguage) input).mp (by with_unfolding_all rfl),
+      ?_, (by decide : 0 ≤ 3), by with_unfolding_all exact nofun, nofun,
+      ⟨birReturnTables tabProject testProfile, List.mem_singleton_self _,
+        by with_unfolding_all exact nofun, nofun, ⟨.nil, ⟨.nil, nofun⟩, nofun⟩, ⟨.nil, nofun⟩⟩⟩
+    intro fn member block included slot trap
+    cases List.mem_singleton.mp member
+    cases List.mem_singleton.mp included
+    cases trap
+  have href := valid.2 input .lcbLinkingUnavailable eligible rfl
+  rcases href with ⟨_, h⟩ | ⟨_, h, _⟩ | ⟨_, _, _, _, h⟩ | ⟨_, _, _, _, _, _, _, _, h⟩
+  · cases h
+  · have wrong : false = true := by with_unfolding_all exact h
+    cases wrong
+  · cases h
+  · cases h
 
 private def atInvalidTrap (project : Project) : MemoryRegisters testLanguage testProfile :=
   {(BIR.entryState (invalidTrapCallee project)) with

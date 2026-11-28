@@ -284,7 +284,21 @@ set_option maxHeartbeats 3000000 in
 example (project : Project) :
     LowersMemory (language := addressLanguage) (logicalAddressProgram project) (addressMemory project) := by
   have static := addressStatic project
-  refine ⟨rfl, rfl, static.1, static.2.1, ⟨rfl, rfl⟩, static.2.2.1, static.2.2.2.1, static.2.2.2.2, ?_, ?_⟩
+  have hretains : RetainsTypedRoots (logicalAddressProgram project) (addressMemory project) := by
+    refine ⟨by simp [logicalAddressProgram], by simp [addressMemory, storingMemory], ?_, ?_, ?_, ?_⟩
+    · intro _ _ _ h; cases List.mem_singleton.mp h; decide
+    · intro _ _ _ h; cases List.mem_singleton.mp h; decide
+    · intro _ _ _ h; cases List.mem_singleton.mp h
+      exact ⟨_, _, List.mem_singleton_self _, fun _ _ => Iff.rfl⟩
+    · intro _ _ _ h; cases List.mem_singleton.mp h
+      exact ⟨_, _, List.mem_singleton_self _, fun _ _ => Iff.rfl⟩
+  have hlayouts : (addressMemory project).LayoutsWF := by
+    intro tbl htbl slot hslot
+    cases List.mem_singleton.mp htbl
+    cases List.mem_singleton.mp hslot
+    decide
+  refine ⟨rfl, rfl, static.1, static.2.1, ⟨rfl, rfl⟩, static.2.2.1, hretains, hlayouts,
+    static.2.2.2.1, static.2.2.2.2, ?_, ?_⟩
   · apply matchingRefinement (language := addressLanguage)
     refine finiteProgressRefines addressMIRExecution addressMemoryExecution _ _ addressResult
       AddressSourcePhase.done.state
@@ -387,7 +401,7 @@ example (project : Project) :
   let wrong : Concrete.Contracts.Observation := .returned 0 ByteArray.empty
   have result : addressMemoryExecution.result output storeInitial wrong := by with_unfolding_all rfl
   obtain ⟨s, finite, observed, _⟩ :=
-    (lowered.2.2.2.2.2.2.2.2.1 safe).1 storeInitial wrong ⟨_, initial, .nil _⟩ result
+    (lowered.2.2.2.2.2.2.2.2.2.2.1 safe).1 storeInitial wrong ⟨_, initial, .nil _⟩ result
   obtain ⟨phase, equal⟩ := reachable s finite
   rw [← equal] at observed
   cases phase

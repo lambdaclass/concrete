@@ -155,7 +155,7 @@ private theorem unsafeEntryStuck : mirExecution.stuck unsafeMIR storeInitial := 
 -- An invalid terminator remains executable only as a malformed input to the
 -- semantics. It is excluded from the registered lowering handoff.
 example : ¬ LowersMemory (language := testLanguage) unsafeMIR (returningMemory tabProject) := by
-  rintro ⟨_, _, _, _, _, _, _, tables, _, _⟩
+  rintro ⟨_, _, _, _, _, _, _, _, _, tables, _, _⟩
   let block : MemoryBlock testLowering := ⟨⟨0⟩, [], [], .invalid, []⟩
   have present : (Exec.Demo.mainF, [], ⟨⟨0⟩, #[block]⟩) ∈
       (unsafeMIR.logicalView (language := testLanguage)).functions :=

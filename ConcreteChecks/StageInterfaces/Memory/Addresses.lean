@@ -1,3 +1,4 @@
+import ConcreteSpec.Proofs.Memory
 import ConcreteChecks.StageInterfaces.Memory.Fixtures
 
 open Concrete
@@ -14,7 +15,7 @@ def emptyStoreAddress : OperationAddress Unit :=
 
 abbrev addressLanguage : CoreLanguage :=
   {testLanguage with
-    operation := fun _ opcode _ _ args _ operands before result effects after =>
+    operation := fun _ opcode _ _ args target operands before result effects after =>
       match opcode with
       | .named operation =>
         if operation = ⟨"address"⟩ then
@@ -29,10 +30,47 @@ abbrev addressLanguage : CoreLanguage :=
             after = {before with
               addressedValues := AList.update before.addressedValues ⟨0⟩ (fun _ => CoreValue.scalar (.int .u8 99))}) ∨
            ∃ ptr bytes, args = [CoreValue.scalar (.int .u8 ptr.addr)] ∧
-             before.bytes.load testProfile.memoryTarget ptr 1 1 = some [.init 42 none] ∧
-             before.bytes.store testProfile.memoryTarget ptr [.init 99 none] 1 = some bytes ∧
+             before.bytes.load target ptr 1 1 = some [.init 42 none] ∧
+             before.bytes.store target ptr [.init 99 none] 1 = some bytes ∧
              after = {before with bytes := bytes})
       | _ => False
+    preservesResidentHandles := by
+      intro _ op _ _ _ target _ before _ _ after hop hwf
+      cases op with
+      | read | arithmetic _ => cases hop
+      | named operation =>
+        dsimp only at hop
+        split at hop
+        · obtain ⟨_, _, rfl⟩ := hop
+          exact ⟨hwf, Nat.le_refl _, fun _ _ hb hl => ⟨_, hb, hl, rfl, rfl, rfl, rfl⟩⟩
+        · obtain ⟨_, _, _, hcase⟩ := hop
+          rcases hcase with ⟨_, _, rfl⟩ | ⟨ptr, bytes, _, _, hstore, rfl⟩
+          · exact ⟨hwf, Nat.le_refl _, fun _ _ hb hl => ⟨_, hb, hl, rfl, rfl, rfl, rfl⟩⟩
+          · have hwf' : bytes.WellFormed target := by
+              have h := Mem.store_wellFormed target before.bytes hwf ptr [.init 99 none] 1
+              rw [hstore] at h
+              exact h
+            have hstore' := hstore
+            unfold Mem.Memory.store at hstore'
+            cases ha : before.bytes.access target ptr ([Mem.MByte.init 99 none]).length 1 with
+            | none => rw [ha] at hstore'; cases hstore'
+            | some v =>
+              rw [ha] at hstore'
+              cases v with
+              | none =>
+                cases Option.some.inj hstore'
+                exact ⟨hwf', Nat.le_refl _, fun _ _ hb hl => ⟨_, hb, hl, rfl, rfl, rfl, rfl⟩⟩
+              | some pair =>
+                rcases pair with ⟨b, off⟩
+                cases Option.some.inj hstore'
+                refine ⟨hwf', Nat.le_refl _, fun id blk hblk hlive => ?_⟩
+                rw [Mem.block_modify]
+                by_cases heq : id = b
+                · subst heq
+                  simp only [↓reduceIte, hblk, Option.map_some]
+                  exact ⟨_, rfl, hlive, rfl, rfl, rfl, rfl⟩
+                · simp only [heq, ↓reduceIte]
+                  exact ⟨blk, hblk, hlive, rfl, rfl, rfl, rfl⟩
     representsValue := fun _ ranges _ logical physical =>
       match logical with
       | .scalar _ => logical = physical
