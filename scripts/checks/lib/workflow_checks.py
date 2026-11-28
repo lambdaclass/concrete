@@ -25,14 +25,32 @@ AGGREGATE = "landing-gates"
 AGGREGATE_NAME = "Landing gates"
 
 GHA_EXPR_RE = re.compile(r"\$\{\{(.*?)\}\}", re.DOTALL)
+RUNNER_OS_EXPR_RE = re.compile(r"^\s*runner\.os\s*$", re.IGNORECASE)
 PURE_HASHFILES_RE = re.compile(
     r"^\s*hashFiles\(\s*('[^']*'(?:\s*,\s*'[^']*')*)\s*\)\s*$",
     re.IGNORECASE,
 )
+LAKE_PACKAGES_KEY_RE = re.compile(
+    r"^\$\{\{\s*runner\.os\s*\}\}-lake-packages-sources(?:-[A-Za-z0-9._]+)?-"
+    r"\$\{\{\s*hashFiles\(\s*'[^']*'\s*,\s*'[^']*'\s*\)\s*\}\}$",
+    re.IGNORECASE,
+)
 QUOTED_LITERAL = re.compile(r"'([^']*)'")
-LAKE_CMD_RE = re.compile(r"\blake\b")
-DEFAULT_NIX_DEVELOP_RE = re.compile(r"\bnix\s+develop\b(?!\s+\.#(?:gates|extcheck)(?:\s|$))")
-LAKE_SCRIPT_RE = re.compile(r"\bscripts/(?:checks/compiler|proofs|spec)/")
+ENV_ASSIGN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+LAKE_SCRIPT_RE = re.compile(r"(?:^|/)scripts/(?:checks/compiler|proofs|spec)/")
+SHELL_KEYWORDS = frozenset({
+    "if", "then", "elif", "else", "do", "while", "until", "!", "{", "}", "time", "coproc",
+})
+SHELL_BINARIES = frozenset({"bash", "sh", "dash", "zsh", "ksh"})
+GIT_INVALIDATING_SUBCOMMANDS = frozenset({
+    "checkout", "switch", "reset", "clean", "pull", "restore",
+    "merge", "rebase", "cherry-pick", "am", "apply",
+})
+SENSITIVE_PATHS = frozenset({
+    "lake-manifest.json", "lean-toolchain", ".lake", ".lake/packages",
+})
+MANIFEST_FILENAMES = frozenset({"lake-manifest.json", "lean-toolchain"})
+OUTPUT_REDIR_OPS = frozenset({">", ">>", ">|", "<>", "&>", "&>>"})
 
 
 def gate_names():
@@ -168,20 +186,765 @@ def step_action(step):
     return step.get("uses", "").partition("@")[0].lower()
 
 
+def normalize_rel_path(path):
+    if not isinstance(path, str):
+        return ""
+    norm = path.strip()
+    while norm.startswith("./"):
+        norm = norm[2:]
+    return norm.rstrip("/")
+
+
+def is_sensitive_path(path):
+    norm = normalize_rel_path(path)
+    if norm in SENSITIVE_PATHS:
+        return True
+    return norm.startswith(".lake/packages/")
+
+
+def _read_cmd_subst(text, start):
+    """Read balanced $(...) body starting immediately after '$('."""
+    n = len(text)
+    i = start
+    depth = 1
+    in_squote = False
+    in_dquote = False
+    at_boundary = True
+    while i < n:
+        ch = text[i]
+        if in_squote:
+            if ch == "'":
+                in_squote = False
+            i += 1
+            continue
+        if in_dquote:
+            if ch == "\\" and i + 1 < n:
+                i += 2
+                continue
+            if ch == '"':
+                in_dquote = False
+                i += 1
+                continue
+            if ch == "$" and i + 1 < n and text[i + 1] == "(":
+                _, i = _read_cmd_subst(text, i + 2)
+                continue
+            if ch == "`":
+                _, i = _read_backtick(text, i + 1)
+                continue
+            i += 1
+            continue
+        if ch == "$" and text.startswith("${{", i):
+            end = text.find("}}", i + 3)
+            i = n if end == -1 else end + 2
+            at_boundary = False
+            continue
+        if ch == "\\" and i + 1 < n:
+            i += 2
+            at_boundary = False
+            continue
+        if ch == "'":
+            in_squote = True
+            at_boundary = False
+            i += 1
+            continue
+        if ch == '"':
+            in_dquote = True
+            at_boundary = False
+            i += 1
+            continue
+        if ch == "#" and at_boundary:
+            nl = text.find("\n", i)
+            i = n if nl == -1 else nl
+            at_boundary = True
+            continue
+        if ch == "(":
+            depth += 1
+            at_boundary = True
+            i += 1
+            continue
+        if ch == ")":
+            depth -= 1
+            if depth == 0:
+                return text[start:i], i + 1
+            at_boundary = True
+            i += 1
+            continue
+        if ch == "`":
+            _, i = _read_backtick(text, i + 1)
+            at_boundary = False
+            continue
+        at_boundary = ch in " \t\r\n;|&()"
+        i += 1
+    return text[start:], n
+
+
+def _read_backtick(text, start):
+    """Read `...` body starting immediately after opening backtick."""
+    n = len(text)
+    i = start
+    buf = []
+    while i < n:
+        ch = text[i]
+        if ch == "\\" and i + 1 < n and text[i + 1] in {"$", "`", "\\", "\n"}:
+            if text[i + 1] != "\n":
+                buf.append(text[i + 1])
+            i += 2
+            continue
+        if ch == "`":
+            return "".join(buf), i + 1
+        buf.append(ch)
+        i += 1
+    return "".join(buf), n
+
+
+def parse_shell_commands(text):
+    """Parse a shell script into ordered simple commands.
+
+    Each item is (words, redirections, heredocs, substitutions) so command execution
+    is distinguished from filename mentions, command wrappers and subshells are
+    inspected in order, and heredocs piped to shells are analyzed.
+    """
+    commands = []
+    words = []
+    redirections = []
+    heredocs = []
+    substitutions = []
+    pending_redir = None
+    heredoc_queue = []
+    cur = []
+    in_word = False
+
+    def flush_word():
+        nonlocal cur, in_word, pending_redir
+        if not in_word:
+            return
+        tok = "".join(cur)
+        cur = []
+        in_word = False
+        if pending_redir is not None:
+            op = pending_redir
+            pending_redir = None
+            if op in {"<<", "<<-"}:
+                heredoc_queue.append((tok, op == "<<-", heredocs))
+            else:
+                redirections.append((op, tok))
+        else:
+            words.append(tok)
+
+    def flush_command():
+        nonlocal words, redirections, heredocs, substitutions, pending_redir
+        flush_word()
+        pending_redir = None
+        if words or redirections or heredocs or substitutions:
+            commands.append((words, redirections, heredocs, substitutions))
+            words = []
+            redirections = []
+            heredocs = []
+            substitutions = []
+
+    n = len(text)
+    i = 0
+    while i < n:
+        ch = text[i]
+
+        if ch == "\n":
+            flush_command()
+            i += 1
+            if heredoc_queue:
+                for delim, strip_tabs, target_heredocs in heredoc_queue:
+                    body_lines = []
+                    while i < n:
+                        nl = text.find("\n", i)
+                        if nl == -1:
+                            line = text[i:]
+                            i = n
+                        else:
+                            line = text[i:nl]
+                            i = nl + 1
+                        cmp_line = line.lstrip("\t") if strip_tabs else line
+                        if cmp_line == delim:
+                            break
+                        body_lines.append(line)
+                    target_heredocs.append("\n".join(body_lines))
+                heredoc_queue = []
+            continue
+
+        if ch in " \t\r":
+            flush_word()
+            i += 1
+            continue
+
+        if ch == "#" and not in_word:
+            nl = text.find("\n", i)
+            i = n if nl == -1 else nl
+            continue
+
+        # Multi-character shell operators and redirections.
+        three = text[i:i + 3]
+        two = text[i:i + 2]
+        if three in {"<<-", "<<<", "&>>"}:
+            if in_word and "".join(cur).isdigit():
+                cur = []
+                in_word = False
+            else:
+                flush_word()
+            pending_redir = three
+            i += 3
+            continue
+        if two in {"&&", "||", "|&", ";;"}:
+            flush_command()
+            i += 2
+            continue
+        if two in {"<<", ">>", ">|", "<>", "&>", ">&", "<&"}:
+            if in_word and "".join(cur).isdigit():
+                cur = []
+                in_word = False
+            else:
+                flush_word()
+            pending_redir = two
+            i += 2
+            continue
+        if ch in ";|&()":
+            flush_command()
+            i += 1
+            continue
+        if ch in "<>":
+            if in_word and "".join(cur).isdigit():
+                cur = []
+                in_word = False
+            else:
+                flush_word()
+            pending_redir = ch
+            i += 1
+            continue
+
+        # Word character / quoting / expansion.
+        in_word = True
+        if ch == "$" and text.startswith("${{", i):
+            end = text.find("}}", i + 3)
+            if end == -1:
+                cur.append(text[i:])
+                i = n
+            else:
+                cur.append(text[i:end + 2])
+                i = end + 2
+            continue
+        if ch == "\\" and i + 1 < n:
+            if text[i + 1] == "\n":
+                i += 2
+                continue
+            cur.append(text[i + 1])
+            i += 2
+            continue
+        if ch == "'":
+            end = text.find("'", i + 1)
+            if end == -1:
+                cur.append(text[i + 1:])
+                i = n
+            else:
+                cur.append(text[i + 1:end])
+                i = end + 1
+            continue
+        if ch == '"':
+            i += 1
+            while i < n and text[i] != '"':
+                if text[i] == "\\" and i + 1 < n:
+                    if text[i + 1] == "\n":
+                        i += 2
+                        continue
+                    cur.append(text[i + 1])
+                    i += 2
+                    continue
+                if text[i] == "$" and text.startswith("${{", i):
+                    end = text.find("}}", i + 3)
+                    if end == -1:
+                        cur.append(text[i:])
+                        i = n
+                    else:
+                        cur.append(text[i:end + 2])
+                        i = end + 2
+                    continue
+                if text[i] == "$" and i + 1 < n and text[i + 1] == "(":
+                    inner, i = _read_cmd_subst(text, i + 2)
+                    substitutions.append(inner)
+                    continue
+                if text[i] == "`":
+                    inner, i = _read_backtick(text, i + 1)
+                    substitutions.append(inner)
+                    continue
+                cur.append(text[i])
+                i += 1
+            if i < n and text[i] == '"':
+                i += 1
+            continue
+        if ch == "$" and i + 1 < n and text[i + 1] == "(":
+            inner, i = _read_cmd_subst(text, i + 2)
+            substitutions.append(inner)
+            continue
+        if ch == "`":
+            inner, i = _read_backtick(text, i + 1)
+            substitutions.append(inner)
+            continue
+
+        cur.append(ch)
+        i += 1
+
+    flush_command()
+    return commands
+
+
+def _analyze_nix_develop(args, events):
+    """Inspect `nix develop ...` arguments. Return inner command words after -c/--command."""
+    opts = []
+    inner = []
+    i = 0
+    while i < len(args):
+        tok = args[i]
+        if tok in {"-c", "--command"}:
+            inner = args[i + 1:]
+            break
+        opts.append(tok)
+        i += 1
+
+    # Extract positional installable(s) from nix develop options.
+    two_arg_flags = {"--option", "--override-input"}
+    one_arg_flags = {
+        "-I", "-k", "--keep", "-u", "--unset", "--inputs-from", "--profile",
+        "--redirect", "--eval-store", "--store", "--extra-experimental-features",
+        "--experimental-features", "--override-flake", "--update-input",
+        "--builders", "--max-jobs", "-j", "--cores", "--log-format",
+    }
+    installables = []
+    j = 0
+    while j < len(opts):
+        tok = opts[j]
+        if tok == "--":
+            installables.extend(opts[j + 1:])
+            break
+        if tok in two_arg_flags:
+            j += 3
+            continue
+        if tok in one_arg_flags:
+            j += 2
+            continue
+        if tok.startswith("-"):
+            j += 1
+            continue
+        installables.append(tok)
+        j += 1
+
+    if not installables or any(inst not in {".#gates", ".#extcheck"} for inst in installables):
+        events.append(("lake", "default nix develop shell"))
+    return inner
+
+
+def _git_subcommand(args):
+    one_arg = {
+        "-C", "-c", "--git-dir", "--work-tree", "--namespace",
+        "--super-prefix", "--config-env", "--list-cmds",
+    }
+    i = 0
+    while i < len(args):
+        tok = args[i]
+        if tok == "--":
+            return args[i + 1] if i + 1 < len(args) else ""
+        if tok in one_arg:
+            i += 2
+            continue
+        if tok.startswith("-"):
+            i += 1
+            continue
+        return tok
+    return ""
+
+
+def _lake_subcommand(args):
+    one_arg = {"-d", "--dir", "-f", "--file", "-K", "-o", "--out", "--log-level"}
+    i = 0
+    while i < len(args):
+        tok = args[i]
+        if tok == "--":
+            return args[i + 1] if i + 1 < len(args) else ""
+        if tok in one_arg:
+            i += 2
+            continue
+        if tok.startswith("-"):
+            i += 1
+            continue
+        return tok
+    return ""
+
+
+def _analyze_simple_command(words, redirections, heredocs, substitutions, events, depth):
+    if depth > 8:
+        return
+
+    for sub in substitutions:
+        _collect_shell_events(sub, events, depth + 1)
+
+    for op, target in redirections:
+        if op in OUTPUT_REDIR_OPS and is_sensitive_path(target):
+            events.append(("invalidate", f"write to {target}"))
+
+    idx = 0
+    while idx < len(words) and words[idx] in SHELL_KEYWORDS:
+        idx += 1
+    while idx < len(words) and ENV_ASSIGN_RE.match(words[idx]):
+        idx += 1
+    words = words[idx:]
+    if not words:
+        return
+
+    for _ in range(16):
+        if not words:
+            return
+        cmd = words[0]
+        base = cmd.rsplit("/", 1)[-1]
+        rest = words[1:]
+
+        if base == "env":
+            i = 0
+            while i < len(rest):
+                tok = rest[i]
+                if tok == "--":
+                    i += 1
+                    break
+                if tok in {"-u", "--unset", "-C", "--chdir"}:
+                    i += 2
+                    continue
+                if tok == "-S" and i + 1 < len(rest):
+                    _collect_shell_events(rest[i + 1], events, depth + 1)
+                    i += 2
+                    continue
+                if tok.startswith("-"):
+                    i += 1
+                    continue
+                if ENV_ASSIGN_RE.match(tok):
+                    i += 1
+                    continue
+                break
+            words = rest[i:]
+            continue
+
+        if base == "command":
+            i = 0
+            query_only = False
+            while i < len(rest):
+                tok = rest[i]
+                if tok == "--":
+                    i += 1
+                    break
+                if tok.startswith("-") and len(tok) > 1:
+                    if "v" in tok[1:] or "V" in tok[1:]:
+                        query_only = True
+                    i += 1
+                    continue
+                break
+            if query_only:
+                return
+            words = rest[i:]
+            continue
+
+        if base in {"exec", "nohup", "builtin"}:
+            i = 0
+            while i < len(rest):
+                tok = rest[i]
+                if tok == "--":
+                    i += 1
+                    break
+                if base == "exec" and tok == "-a":
+                    i += 2
+                    continue
+                if tok.startswith("-"):
+                    i += 1
+                    continue
+                break
+            words = rest[i:]
+            continue
+
+        if base == "timeout":
+            i = 0
+            while i < len(rest):
+                tok = rest[i]
+                if tok == "--":
+                    i += 1
+                    break
+                if tok in {"-k", "--kill-after", "-s", "--signal"}:
+                    i += 2
+                    continue
+                if tok.startswith("-"):
+                    i += 1
+                    continue
+                break
+            # Skip the duration operand.
+            words = rest[i + 1:] if i < len(rest) else []
+            continue
+
+        if base == "nice":
+            i = 0
+            while i < len(rest):
+                tok = rest[i]
+                if tok == "--":
+                    i += 1
+                    break
+                if tok in {"-n", "--adjustment"}:
+                    i += 2
+                    continue
+                if tok.startswith("-"):
+                    i += 1
+                    continue
+                break
+            words = rest[i:]
+            continue
+
+        if base == "sudo":
+            one_arg = {"-u", "-g", "-C", "-h", "-p", "-r", "-t", "-U", "-D"}
+            i = 0
+            while i < len(rest):
+                tok = rest[i]
+                if tok == "--":
+                    i += 1
+                    break
+                if tok in one_arg:
+                    i += 2
+                    continue
+                if tok.startswith("-") or ENV_ASSIGN_RE.match(tok):
+                    i += 1
+                    continue
+                break
+            words = rest[i:]
+            continue
+
+        if base == "xargs":
+            one_arg = {"-I", "-L", "-n", "-P", "-d", "-E", "-s", "-a", "-R"}
+            i = 0
+            while i < len(rest):
+                tok = rest[i]
+                if tok == "--":
+                    i += 1
+                    break
+                if tok in one_arg:
+                    i += 2
+                    continue
+                if tok.startswith("-"):
+                    i += 1
+                    continue
+                break
+            words = rest[i:]
+            continue
+
+        if base == "nix" and rest and rest[0] == "develop":
+            words = _analyze_nix_develop(rest[1:], events)
+            continue
+
+        if base in SHELL_BINARIES:
+            i = 0
+            seen_c = False
+            while i < len(rest):
+                tok = rest[i]
+                if tok == "--":
+                    i += 1
+                    break
+                if tok in {"-o", "+o"}:
+                    i += 2
+                    continue
+                if tok.startswith("--"):
+                    i += 1
+                    continue
+                if tok.startswith("-") and len(tok) > 1:
+                    if "c" in tok[1:]:
+                        seen_c = True
+                    i += 1
+                    continue
+                if tok.startswith("+") and len(tok) > 1:
+                    i += 1
+                    continue
+                break
+            if seen_c:
+                if i < len(rest):
+                    _collect_shell_events(rest[i], events, depth + 1)
+                return
+            if i < len(rest):
+                if LAKE_SCRIPT_RE.search(rest[i]):
+                    events.append(("lake", f"script {rest[i]}"))
+                return
+            for body in heredocs:
+                _collect_shell_events(body, events, depth + 1)
+            return
+
+        if base == "eval":
+            if rest:
+                _collect_shell_events(" ".join(rest), events, depth + 1)
+            return
+
+        break
+
+    if not words:
+        return
+    cmd = words[0]
+    base = cmd.rsplit("/", 1)[-1]
+    rest = words[1:]
+
+    if base == "lake":
+        events.append(("lake", "lake command"))
+        if _lake_subcommand(rest) == "update":
+            events.append(("invalidate", "lake update"))
+        return
+
+    if LAKE_SCRIPT_RE.search(cmd):
+        events.append(("lake", f"script {cmd}"))
+        return
+
+    if base == "git":
+        sub = _git_subcommand(rest)
+        if sub in GIT_INVALIDATING_SUBCOMMANDS:
+            events.append(("invalidate", f"git {sub}"))
+        return
+
+    if base in {"rm", "unlink", "truncate", "tee", "touch"}:
+        one_arg = {"-s", "--size", "-r", "--reference"} if base == "truncate" else set()
+        i = 0
+        end_opts = False
+        while i < len(rest):
+            tok = rest[i]
+            if not end_opts and tok == "--":
+                end_opts = True
+                i += 1
+                continue
+            if not end_opts and tok in one_arg:
+                i += 2
+                continue
+            if not end_opts and tok.startswith("-") and tok != "-":
+                i += 1
+                continue
+            if is_sensitive_path(tok):
+                events.append(("invalidate", f"{base} {tok}"))
+            i += 1
+        return
+
+    if base in {"cp", "mv", "ln", "install"}:
+        one_arg = {"-S", "--suffix", "-m", "-o", "-g", "-b"}
+        target_dir = None
+        positionals = []
+        i = 0
+        end_opts = False
+        while i < len(rest):
+            tok = rest[i]
+            if not end_opts and tok == "--":
+                end_opts = True
+                i += 1
+                continue
+            if not end_opts and tok in {"-t", "--target-directory"} and i + 1 < len(rest):
+                target_dir = rest[i + 1]
+                i += 2
+                continue
+            if not end_opts and tok.startswith("--target-directory="):
+                target_dir = tok.split("=", 1)[1]
+                i += 1
+                continue
+            if not end_opts and tok in one_arg:
+                i += 2
+                continue
+            if not end_opts and tok.startswith("-") and tok != "-":
+                i += 1
+                continue
+            positionals.append(tok)
+            i += 1
+
+        if base == "mv":
+            for arg in positionals:
+                if is_sensitive_path(arg):
+                    events.append(("invalidate", f"mv {arg}"))
+            if target_dir is not None and (
+                is_sensitive_path(target_dir)
+                or (
+                    normalize_rel_path(target_dir) in {"", "."}
+                    and any(p.rstrip("/").rsplit("/", 1)[-1] in MANIFEST_FILENAMES for p in positionals)
+                )
+            ):
+                events.append(("invalidate", f"mv to {target_dir}"))
+        else:
+            dest = target_dir if target_dir is not None else (
+                positionals[-1] if (len(positionals) >= 2 or (base == "ln" and positionals)) else None
+            )
+            sources = positionals if target_dir is not None else positionals[:-1]
+            if dest is not None and (
+                is_sensitive_path(dest)
+                or (
+                    normalize_rel_path(dest) in {"", "."}
+                    and any(p.rstrip("/").rsplit("/", 1)[-1] in MANIFEST_FILENAMES for p in sources)
+                )
+            ):
+                events.append(("invalidate", f"{base} {dest}"))
+        return
+
+    if base in {"sed", "perl"}:
+        in_place = False
+        positionals = []
+        i = 0
+        end_opts = False
+        while i < len(rest):
+            tok = rest[i]
+            if not end_opts and tok == "--":
+                end_opts = True
+                i += 1
+                continue
+            if not end_opts and (
+                tok == "-i"
+                or tok.startswith("-i")
+                or tok == "--in-place"
+                or tok.startswith("--in-place=")
+                or (base == "perl" and tok.startswith("-") and not tok.startswith("--") and "i" in tok[1:])
+            ):
+                in_place = True
+                i += 1
+                continue
+            if not end_opts and tok in {"-e", "-f", "-E", "-M", "-I"}:
+                i += 2
+                continue
+            if not end_opts and tok.startswith("-"):
+                i += 1
+                continue
+            positionals.append(tok)
+            i += 1
+        if in_place:
+            for arg in positionals:
+                if is_sensitive_path(arg):
+                    events.append(("invalidate", f"{base} -i {arg}"))
+        return
+
+    if base == "patch":
+        events.append(("invalidate", "patch"))
+
+
+def _collect_shell_events(text, events, depth=0):
+    if not isinstance(text, str) or not text.strip() or depth > 8:
+        return
+    for words, redirections, heredocs, substitutions in parse_shell_commands(text):
+        _analyze_simple_command(words, redirections, heredocs, substitutions, events, depth)
+
+
+def step_shell_events(step, *, default_shell=""):
+    """Return ordered (kind, detail) events for a step, treating effective shell as part of the command."""
+    action = step_action(step)
+    events = []
+    if action == "actions/checkout":
+        events.append(("invalidate", "actions/checkout"))
+    if action == "leanprover/lean-action":
+        events.append(("lake", "leanprover/lean-action"))
+    if "run" in step:
+        run_cmd = step.get("run")
+        effective_shell = step.get("shell") or default_shell
+        # GitHub Actions invokes the effective shell before executing the step body.
+        if isinstance(effective_shell, str) and effective_shell.strip():
+            _collect_shell_events(effective_shell, events)
+        if isinstance(run_cmd, str) and run_cmd.strip():
+            _collect_shell_events(run_cmd, events)
+    return events
+
+
 def step_uses_lake(step, *, default_shell=""):
-    if step_action(step) == "leanprover/lean-action":
-        return True
-    run_cmd = step.get("run", "")
-    if not isinstance(run_cmd, str) or not run_cmd:
-        return False
-    shell = step.get("shell") or default_shell
-    if isinstance(shell, str) and DEFAULT_NIX_DEVELOP_RE.search(shell):
-        return True
-    return bool(
-        LAKE_CMD_RE.search(run_cmd)
-        or DEFAULT_NIX_DEVELOP_RE.search(run_cmd)
-        or LAKE_SCRIPT_RE.search(run_cmd)
-    )
+    return any(kind == "lake" for kind, _ in step_shell_events(step, default_shell=default_shell))
 
 
 def check_step_cache_policy(scope, step, *, allow_lake_packages_cache=False):
@@ -224,6 +987,27 @@ def check_step_cache_policy(scope, step, *, allow_lake_packages_cache=False):
                 raise ValueError(
                     f"{scope}: {LAKE_PACKAGES_CACHE_PATH} cache key must hash only literal "
                     f"lake-manifest.json and lean-toolchain (got {hashed_args!r})"
+                )
+            exprs = [match.group(1) for match in GHA_EXPR_RE.finditer(key)]
+            if not any(RUNNER_OS_EXPR_RE.fullmatch(expr) for expr in exprs):
+                raise ValueError(
+                    f"{scope}: {LAKE_PACKAGES_CACHE_PATH} cache key must include ${{{{ runner.os }}}}"
+                )
+            unexpected_exprs = [
+                expr.strip()
+                for expr in exprs
+                if not RUNNER_OS_EXPR_RE.fullmatch(expr) and not PURE_HASHFILES_RE.fullmatch(expr)
+            ]
+            if unexpected_exprs:
+                raise ValueError(
+                    f"{scope}: {LAKE_PACKAGES_CACHE_PATH} cache key must not contain dynamic or "
+                    f"extra expressions {unexpected_exprs!r}"
+                )
+            if not LAKE_PACKAGES_KEY_RE.fullmatch(key):
+                raise ValueError(
+                    f"{scope}: {LAKE_PACKAGES_CACHE_PATH} cache key must match "
+                    f"${{{{ runner.os }}}}-lake-packages-sources[-<tag>]-"
+                    f"${{{{ hashFiles('lake-manifest.json', 'lean-toolchain') }}}} (got {key!r})"
                 )
             if not allow_lake_packages_cache:
                 raise ValueError(
@@ -345,6 +1129,7 @@ def expand_steps(
     scope,
     base_env,
     default_shell,
+    default_workdir,
     conditional_or_soft,
     local_actions,
     visiting,
@@ -360,7 +1145,12 @@ def expand_steps(
         check_step_cache_policy(step_scope, step, allow_lake_packages_cache=False)
 
         run_cmd = step.get("run", "")
+        effective_shell = step.get("shell") or default_shell
         if isinstance(run_cmd, str) and FETCH_HELPER in run_cmd:
+            raise ValueError(
+                f"{step_scope}: call {LAKE_PACKAGES_ACTION_USE} instead of inlining {FETCH_HELPER}"
+            )
+        if isinstance(effective_shell, str) and FETCH_HELPER in effective_shell:
             raise ValueError(
                 f"{step_scope}: call {LAKE_PACKAGES_ACTION_USE} instead of inlining {FETCH_HELPER}"
             )
@@ -373,7 +1163,7 @@ def expand_steps(
                     raise ValueError(
                         f"{step_scope}: {LAKE_PACKAGES_ACTION_USE} must run unconditionally and fail closed"
                     )
-                events.append(("helper", step_scope, step_env))
+                events.append(("helper", step_scope, step_env, LAKE_PACKAGES_ACTION_USE))
                 continue
             if local_dir in visiting:
                 raise ValueError(f"{step_scope}: cyclic local action reference ./{local_dir}")
@@ -383,6 +1173,7 @@ def expand_steps(
                 scope=f"{step_scope}->./{local_dir}",
                 base_env=step_env,
                 default_shell="",
+                default_workdir="",
                 conditional_or_soft=step_cond,
                 local_actions=local_actions,
                 visiting=visiting | {local_dir},
@@ -390,13 +1181,20 @@ def expand_steps(
             )
             continue
 
-        action = step_action(step)
-        if action == "actions/checkout":
-            events.append(("checkout", step_scope, step_env))
-        if step_uses_lake(step, default_shell=default_shell):
-            events.append(("lake", step_scope, step_env))
+        effective_workdir = step.get("working-directory") or default_workdir
+        subevents = step_shell_events(step, default_shell=default_shell)
+        if any(kind == "lake" for kind, _ in subevents):
+            norm_wd = normalize_rel_path(effective_workdir) if isinstance(effective_workdir, str) else ""
+            if norm_wd and norm_wd != ".":
+                raise ValueError(
+                    f"{step_scope}: Lake step must run in repository root "
+                    f"(got working-directory {effective_workdir!r})"
+                )
+        if subevents:
+            for kind, detail in subevents:
+                events.append((kind, step_scope, step_env, detail))
         else:
-            events.append(("other", step_scope, step_env))
+            events.append(("other", step_scope, step_env, ""))
 
 
 def check_cache_steps(
@@ -408,7 +1206,9 @@ def check_cache_steps(
 ):
     actions_map = {} if local_actions is None else dict(local_actions)
     wf_env = workflow.get("env") or {}
-    wf_shell = (workflow.get("defaults") or {}).get("run", {}).get("shell", "")
+    wf_run_defaults = (workflow.get("defaults") or {}).get("run") or {}
+    wf_shell = wf_run_defaults.get("shell") or ""
+    wf_workdir = wf_run_defaults.get("working-directory") or ""
     jobs = workflow.get("jobs")
     if not isinstance(jobs, dict) or not jobs:
         raise ValueError(f"{workflow_scope}: workflow must define jobs")
@@ -424,47 +1224,67 @@ def check_cache_steps(
                 )
             continue
         job_env = wf_env | (job.get("env") or {})
-        job_shell = (job.get("defaults") or {}).get("run", {}).get("shell") or wf_shell
+        job_run_defaults = (job.get("defaults") or {}).get("run") or {}
+        job_shell = job_run_defaults.get("shell") or wf_shell
+        job_workdir = job_run_defaults.get("working-directory") or wf_workdir
         events = []
         expand_steps(
             job["steps"],
             scope=job_scope,
             base_env=job_env,
             default_shell=job_shell,
+            default_workdir=job_workdir,
             conditional_or_soft=False,
             local_actions=actions_map,
             visiting=frozenset(),
             events=events,
         )
 
-        lake_events = [(i, sc, env) for i, (kind, sc, env) in enumerate(events) if kind == "lake"]
-        helper_events = [(i, sc) for i, (kind, sc, _) in enumerate(events) if kind == "helper"]
-        checkout_events = [(i, sc) for i, (kind, sc, _) in enumerate(events) if kind == "checkout"]
+        # Invariant: every Lake invocation must be preceded by an unconditional
+        # ./.github/actions/lake-packages verification AFTER the most recent checkout
+        # or manifest/toolchain/packages mutation in that job.
+        verified = False
+        seen_helper = False
+        has_any_helper = any(kind == "helper" for kind, _, _, _ in events)
+        last_invalidation = None
 
-        if lake_events:
-            if len(helper_events) != 1:
-                raise ValueError(
-                    f"{job_scope}: Lake-using job must invoke {LAKE_PACKAGES_ACTION_USE} once"
-                )
-            helper_idx = helper_events[0][0]
-            first_lake_idx = lake_events[0][0]
-            prior_checkouts = [idx for idx, _ in checkout_events if idx < first_lake_idx]
-            if prior_checkouts and helper_idx <= prior_checkouts[-1]:
-                raise ValueError(
-                    f"{job_scope}: {LAKE_PACKAGES_ACTION_USE} must run after actions/checkout"
-                )
-            if helper_idx >= first_lake_idx:
-                raise ValueError(
-                    f"{job_scope}: {LAKE_PACKAGES_ACTION_USE} must run before any Lake step"
-                )
-            for _i, step_scope, env in lake_events:
+        for kind, step_scope, env, detail in events:
+            if kind == "helper":
+                verified = True
+                seen_helper = True
+                last_invalidation = None
+            elif kind == "invalidate":
+                verified = False
+                last_invalidation = (detail, step_scope)
+            elif kind == "lake":
+                if not verified:
+                    if not has_any_helper:
+                        raise ValueError(
+                            f"{job_scope}: Lake-using job must invoke {LAKE_PACKAGES_ACTION_USE} "
+                            f"before Lake step {step_scope}"
+                        )
+                    if seen_helper and last_invalidation is not None:
+                        inv_reason, inv_scope = last_invalidation
+                        raise ValueError(
+                            f"{job_scope}: {LAKE_PACKAGES_ACTION_USE} must run after {inv_reason} "
+                            f"({inv_scope}) before Lake step {step_scope}"
+                        )
+                    if not seen_helper:
+                        raise ValueError(
+                            f"{job_scope}: {LAKE_PACKAGES_ACTION_USE} must run before any Lake step "
+                            f"(unverified Lake step {step_scope})"
+                        )
+                    raise ValueError(
+                        f"{job_scope}: {LAKE_PACKAGES_ACTION_USE} must verify dependencies "
+                        f"before Lake step {step_scope}"
+                    )
                 if env.get("LAKE_NO_CACHE") != "true" or env.get("LAKE_ARTIFACT_CACHE") != "false":
                     raise ValueError(
                         f"{step_scope}: build Lake packages locally with artifact caching disabled"
                     )
 
         if require_all_jobs_no_artifact_cache:
-            for _kind, step_scope, env in events:
+            for _kind, step_scope, env, _detail in events:
                 if env.get("LAKE_NO_CACHE") != "true" or env.get("LAKE_ARTIFACT_CACHE") != "false":
                     raise ValueError(
                         f"{step_scope}: build Lake packages locally with artifact caching disabled"
@@ -505,7 +1325,10 @@ def check_workflows(names):
             for step in steps:
                 check_step_cache_policy(str(path), step, allow_lake_packages_cache=False)
                 run_cmd = step.get("run", "")
-                if isinstance(run_cmd, str) and FETCH_HELPER in run_cmd:
+                step_shell = step.get("shell", "")
+                if (isinstance(run_cmd, str) and FETCH_HELPER in run_cmd) or (
+                    isinstance(step_shell, str) and FETCH_HELPER in step_shell
+                ):
                     raise ValueError(
                         f"{path}: call {LAKE_PACKAGES_ACTION_USE} instead of inlining {FETCH_HELPER}"
                     )
@@ -635,6 +1458,30 @@ def check_workflows(names):
             "must hash lean-toolchain",
             "cache key without lean-toolchain hash",
         ),
+        (
+            (0, 2),
+            "lake-packages-sources-${{ hashFiles('lake-manifest.json', 'lean-toolchain') }}",
+            "must include ${{ runner.os }}",
+            "matching restore/save keys omitting runner.os",
+        ),
+        (
+            (0, 2),
+            "${{ runner.os }}-lake-packages-sources-${{ github.run_id }}-${{ hashFiles('lake-manifest.json', 'lean-toolchain') }}",
+            "dynamic or extra expressions",
+            "matching restore/save keys containing unique github.run_id",
+        ),
+        (
+            (0, 2),
+            "${{ runner.os }}-lake-packages-sources-${{ github.sha }}-${{ hashFiles('lake-manifest.json', 'lean-toolchain') }}",
+            "dynamic or extra expressions",
+            "matching restore/save keys containing per-commit github.sha",
+        ),
+        (
+            (0, 2),
+            "${{ runner.os }}-other-prefix-${{ hashFiles('lake-manifest.json', 'lean-toolchain') }}",
+            "cache key must match",
+            "matching restore/save keys with non-standard prefix",
+        ),
     ):
         mutated = copy.deepcopy(lake_action_doc)
         for step_idx in step_indices:
@@ -700,7 +1547,7 @@ def check_workflows(names):
 
     mismatched_keys_action = copy.deepcopy(lake_action_doc)
     mismatched_keys_action["runs"]["steps"][2]["with"]["key"] = (
-        "other-${{ hashFiles('lake-manifest.json', 'lean-toolchain') }}"
+        "${{ runner.os }}-lake-packages-sources-v2-${{ hashFiles('lake-manifest.json', 'lean-toolchain') }}"
     )
     expect_failure(
         check_lake_packages_action,
@@ -1045,6 +1892,250 @@ def check_workflows(names):
         workflow_scope=".github/workflows/late-checkout.yml",
         label="actions/checkout wiping .lake/packages after ./.github/actions/lake-packages",
     )
+
+    # Finding 4 controls: Lake invoked via job defaults.run.shell or step shell:.
+    shell_lake_default = {
+        "name": "ShellLake",
+        "on": "workflow_dispatch",
+        "jobs": {
+            "build": {
+                "runs-on": "ubuntu-latest",
+                "defaults": {"run": {"shell": "lake env bash {0}"}},
+                "steps": [
+                    {"uses": "actions/checkout@v4"},
+                    {"run": "lean ConcreteSpec.lean"},
+                ],
+            },
+        },
+    }
+    expect_failure(
+        check_cache_steps,
+        f"must invoke {LAKE_PACKAGES_ACTION_USE}",
+        shell_lake_default,
+        local_actions=local_actions,
+        workflow_scope=".github/workflows/shell-lake.yml",
+        label="defaults.run.shell invoking lake env bash without helper",
+    )
+
+    shell_lake_default_no_env = copy.deepcopy(shell_lake_default)
+    shell_lake_default_no_env["jobs"]["build"]["steps"].insert(1, {"uses": LAKE_PACKAGES_ACTION_USE})
+    expect_failure(
+        check_cache_steps,
+        "artifact caching disabled",
+        shell_lake_default_no_env,
+        local_actions=local_actions,
+        workflow_scope=".github/workflows/shell-lake.yml",
+        label="defaults.run.shell invoking lake env bash without disabling artifact cache",
+    )
+
+    shell_lake_step = {
+        "name": "StepShellLake",
+        "on": "workflow_dispatch",
+        "env": {"LAKE_NO_CACHE": "true", "LAKE_ARTIFACT_CACHE": "false"},
+        "jobs": {
+            "build": {
+                "runs-on": "ubuntu-latest",
+                "steps": [
+                    {"uses": "actions/checkout@v4"},
+                    {"shell": "lake env bash {0}", "run": "lean ConcreteSpec.lean"},
+                ],
+            },
+        },
+    }
+    expect_failure(
+        check_cache_steps,
+        f"must invoke {LAKE_PACKAGES_ACTION_USE}",
+        shell_lake_step,
+        local_actions=local_actions,
+        workflow_scope=".github/workflows/step-shell-lake.yml",
+        label="step shell invoking lake env bash without helper",
+    )
+
+    shell_lake_valid = copy.deepcopy(shell_lake_default_no_env)
+    shell_lake_valid["env"] = {"LAKE_NO_CACHE": "true", "LAKE_ARTIFACT_CACHE": "false"}
+    check_cache_steps(
+        shell_lake_valid,
+        local_actions=local_actions,
+        workflow_scope=".github/workflows/shell-lake.yml",
+    )
+    print("  ok   control accepts properly wired defaults.run.shell lake env bash job")
+
+    # Finding 5 controls: second checkout or manifest/git mutation invalidates verification
+    # before a subsequent Lake build; re-verifying after the second checkout is accepted.
+    second_checkout_unverified = {
+        "name": "SecondCheckout",
+        "on": "workflow_dispatch",
+        "env": {"LAKE_NO_CACHE": "true", "LAKE_ARTIFACT_CACHE": "false"},
+        "jobs": {
+            "compare": {
+                "runs-on": "ubuntu-latest",
+                "steps": [
+                    {"uses": "actions/checkout@v4"},
+                    {"uses": LAKE_PACKAGES_ACTION_USE},
+                    {"run": "lake build"},
+                    {"uses": "actions/checkout@v4", "with": {"ref": "main"}},
+                    {"run": "lake build"},
+                ],
+            },
+        },
+    }
+    expect_failure(
+        check_cache_steps,
+        "must run after actions/checkout",
+        second_checkout_unverified,
+        local_actions=local_actions,
+        workflow_scope=".github/workflows/second-checkout.yml",
+        label="second actions/checkout between two Lake builds without re-verification",
+    )
+
+    second_checkout_reverified = copy.deepcopy(second_checkout_unverified)
+    second_checkout_reverified["jobs"]["compare"]["steps"].insert(4, {"uses": LAKE_PACKAGES_ACTION_USE})
+    check_cache_steps(
+        second_checkout_reverified,
+        local_actions=local_actions,
+        workflow_scope=".github/workflows/second-checkout.yml",
+    )
+    print("  ok   control accepts second actions/checkout when followed by re-verification")
+
+    for bad_steps, diag, label in (
+        (
+            [
+                {"uses": "actions/checkout@v4"},
+                {"uses": LAKE_PACKAGES_ACTION_USE},
+                {"run": "lake build"},
+                {"run": "git checkout main"},
+                {"run": "lake build"},
+            ],
+            "must run after git checkout",
+            "git checkout between two Lake builds without re-verification",
+        ),
+        (
+            [
+                {"uses": "actions/checkout@v4"},
+                {"uses": LAKE_PACKAGES_ACTION_USE},
+                {"run": "git checkout main && lake build"},
+            ],
+            "must run after git checkout",
+            "git checkout followed by lake build in the same step",
+        ),
+        (
+            [
+                {"uses": "actions/checkout@v4"},
+                {"uses": LAKE_PACKAGES_ACTION_USE},
+                {"run": "cp other-manifest.json lake-manifest.json"},
+                {"run": "lake build"},
+            ],
+            "must run after cp lake-manifest.json",
+            "overwriting lake-manifest.json before Lake build without re-verification",
+        ),
+        (
+            [
+                {"uses": "actions/checkout@v4"},
+                {"uses": LAKE_PACKAGES_ACTION_USE},
+                {"run": "printf 'leanprover/lean4:v4.35.0\\n' > lean-toolchain"},
+                {"run": "lake build"},
+            ],
+            "must run after write to lean-toolchain",
+            "rewriting lean-toolchain before Lake build without re-verification",
+        ),
+        (
+            [
+                {"uses": "actions/checkout@v4"},
+                {"uses": LAKE_PACKAGES_ACTION_USE},
+                {"run": "lake build"},
+                {"run": "rm -rf .lake/packages"},
+                {"run": "lake build"},
+            ],
+            "must run after rm .lake/packages",
+            "deleting .lake/packages before second Lake build without re-verification",
+        ),
+        (
+            [
+                {"uses": "actions/checkout@v4"},
+                {"uses": LAKE_PACKAGES_ACTION_USE},
+                {"run": "lake update"},
+                {"run": "lake build"},
+            ],
+            "must run after lake update",
+            "lake update mutating manifest/packages before subsequent Lake build",
+        ),
+        (
+            [
+                {"uses": "actions/checkout@v4"},
+                {"uses": LAKE_PACKAGES_ACTION_USE},
+                {"run": "lake build"},
+                {"if": "always()", "uses": "actions/checkout@v4"},
+                {"run": "lake build"},
+            ],
+            "must run after actions/checkout",
+            "conditional second checkout invalidating verification before later Lake build",
+        ),
+    ):
+        mutated_wf = {
+            "name": "Mutated",
+            "on": "workflow_dispatch",
+            "env": {"LAKE_NO_CACHE": "true", "LAKE_ARTIFACT_CACHE": "false"},
+            "jobs": {"build": {"runs-on": "ubuntu-latest", "steps": bad_steps}},
+        }
+        expect_failure(
+            check_cache_steps,
+            diag,
+            mutated_wf,
+            local_actions=local_actions,
+            workflow_scope=".github/workflows/mutated.yml",
+            label=label,
+        )
+
+    # Non-blocking 3 controls: filename mentions (sha256sum lake-manifest.json) are not
+    # classified as Lake builds, while real indirect Lake invocations still are.
+    manifest_only_job = {
+        "name": "ManifestHash",
+        "on": "workflow_dispatch",
+        "jobs": {
+            "checksum": {
+                "runs-on": "ubuntu-latest",
+                "steps": [
+                    {"uses": "actions/checkout@v4"},
+                    {"run": "sha256sum lake-manifest.json"},
+                    {"run": "cat lake-manifest.json && echo lake"},
+                ],
+            },
+        },
+    }
+    check_cache_steps(
+        manifest_only_job,
+        local_actions=local_actions,
+        workflow_scope=".github/workflows/manifest-only.yml",
+    )
+    print("  ok   control accepts manifest-only checksum job without requiring Lake package fetch")
+
+    for hidden_cmd, label in (
+        ("bash -c 'lake build'", "bash -c running lake build without helper"),
+        ("env FOO=1 /usr/local/bin/lake build", "env-wrapped absolute /usr/local/bin/lake build without helper"),
+        ("bash <<'EOF'\nlake build\nEOF", "bash heredoc running lake build without helper"),
+    ):
+        hidden_lake_wf = {
+            "name": "HiddenLake",
+            "on": "workflow_dispatch",
+            "env": {"LAKE_NO_CACHE": "true", "LAKE_ARTIFACT_CACHE": "false"},
+            "jobs": {
+                "build": {
+                    "runs-on": "ubuntu-latest",
+                    "steps": [
+                        {"uses": "actions/checkout@v4"},
+                        {"run": hidden_cmd},
+                    ],
+                },
+            },
+        }
+        expect_failure(
+            check_cache_steps,
+            f"must invoke {LAKE_PACKAGES_ACTION_USE}",
+            hidden_lake_wf,
+            local_actions=local_actions,
+            workflow_scope=".github/workflows/hidden-lake.yml",
+            label=label,
+        )
 
     cyclic_composite = {
         "name": "Cyclic",

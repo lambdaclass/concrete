@@ -30,7 +30,7 @@ source "$ROOT_DIR/scripts/checks/lib/git_sandbox.sh" || exit 2
 
 TMP="$(mktemp -d)"
 cleanup_tmp() {
-  chmod -R u+rwx "$TMP" 2>/dev/null || true
+  find "$TMP" -type d -exec chmod u+rwx {} + 2>/dev/null || true
   rm -rf "$TMP"
 }
 trap cleanup_tmp EXIT
@@ -119,9 +119,19 @@ for arg in "\$@"; do
     break
   fi
 done
-if [ "\$is_checkout" = 1 ] && [ "\${STUB_MODE:-}" = "slow-checkout" ]; then
-  sleep 5
-  exit 0
+if [ "\$is_checkout" = 1 ]; then
+  if [ -n "\${STUB_CHECKOUT_COUNT_FILE:-}" ]; then
+    co_count=0
+    [ ! -f "\$STUB_CHECKOUT_COUNT_FILE" ] || co_count="\$(cat "\$STUB_CHECKOUT_COUNT_FILE")"
+    co_count=\$((co_count + 1))
+    printf '%s\n' "\$co_count" >"\$STUB_CHECKOUT_COUNT_FILE"
+  fi
+  if [ "\${STUB_MODE:-}" = "slow-checkout" ]; then
+    sleep 3
+    exit 0
+  elif [ "\${STUB_MODE:-}" = "slow-fetch-and-checkout" ]; then
+    sleep 0.65
+  fi
 fi
 if [ "\$is_fetch" = 1 ]; then
   if [ -n "\${STUB_COUNT_FILE:-}" ]; then
@@ -147,6 +157,8 @@ if [ "\$is_fetch" = 1 ]; then
         exit 128
       fi
     done
+  elif [ "\${STUB_MODE:-}" = "slow-fetch-and-checkout" ]; then
+    sleep 0.65
   elif [ "\${STUB_MODE:-}" = "timeout" ]; then
     sleep 10
     exit 0
@@ -311,19 +323,70 @@ else
   no "nested .lake control failed"
 fi
 
-# 3e. Non-blocking 2: unreadable directory hiding nested .lake -> traversal error invalidates and refetches.
+# 3e. Non-blocking 2: unreadable directory hiding nested .lake and read-only/unreadable files ->
+# traversal error invalidates, directory-only chmod removes it, and helper refetches clean.
 mkdir -p "$PROJ/.lake/packages/dummy-dep/locked/.lake/build"
 printf 'hidden\n' >"$PROJ/.lake/packages/dummy-dep/locked/.lake/build/x.olean"
+chmod 0444 "$PROJ/.lake/packages/dummy-dep/locked/.lake/build/x.olean"
+printf 'locked\n' >"$PROJ/.lake/packages/dummy-dep/locked/zero.txt"
+chmod 0000 "$PROJ/.lake/packages/dummy-dep/locked/zero.txt"
 chmod 000 "$PROJ/.lake/packages/dummy-dep/locked"
 if (cd "$PROJ" && LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/unreadable-dir.log" 2>&1 \
    && has_match -F "filesystem traversal error" <"$TMP/unreadable-dir.log" \
    && [ ! -e "$PROJ/.lake/packages/dummy-dep/locked" ] \
    && [ "$(git -C "$PROJ/.lake/packages/dummy-dep" rev-parse HEAD)" = "$REV1" ]; then
-  ok "unreadable directory traversal error invalidates restored package and refetches clean"
+  ok "unreadable directory with read-only files invalidates restored package and refetches clean"
 else
   chmod 700 "$PROJ/.lake/packages/dummy-dep/locked" 2>/dev/null || true
   cat "$TMP/unreadable-dir.log" >&2
   no "unreadable directory traversal control failed"
+fi
+
+echo "=== Finding 3 (round 2): hard-linked shared object permissions are never mutated ==="
+SHARED_MIRROR="$TMP/shared-mirror.git"
+git clone -q --bare "$DEP_SRC" "$SHARED_MIRROR"
+COMMIT_OBJ_REL="objects/${REV1:0:2}/${REV1:2}"
+MIRROR_COMMIT_OBJ="$SHARED_MIRROR/$COMMIT_OBJ_REL"
+chmod 0444 "$MIRROR_COMMIT_OBJ"
+
+PROJ_HL_HIT="$TMP/proj-hardlink-hit"
+write_project "$PROJ_HL_HIT" "$SHARED_MIRROR" "$REV1"
+mkdir -p "$PROJ_HL_HIT/.lake/packages"
+git clone -q "$SHARED_MIRROR" "$PROJ_HL_HIT/.lake/packages/dummy-dep"
+git -C "$PROJ_HL_HIT/.lake/packages/dummy-dep" checkout -q --detach "$REV1"
+CLONE_COMMIT_OBJ="$PROJ_HL_HIT/.lake/packages/dummy-dep/.git/$COMMIT_OBJ_REL"
+BEFORE_INO="$(stat -c '%i' "$MIRROR_COMMIT_OBJ")"
+CLONE_INO="$(stat -c '%i' "$CLONE_COMMIT_OBJ")"
+BEFORE_MODE="$(stat -c '%a' "$MIRROR_COMMIT_OBJ")"
+if [ "$BEFORE_INO" != "$CLONE_INO" ] || [ "$BEFORE_MODE" != "444" ]; then
+  no "hardlink hit setup failed: mirror_ino=$BEFORE_INO clone_ino=$CLONE_INO mode=$BEFORE_MODE"
+elif (cd "$PROJ_HL_HIT" && LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/hl-hit.log" 2>&1 \
+     && has_match -F "cache verified at $REV1" <"$TMP/hl-hit.log" \
+     && [ "$(stat -c '%a' "$MIRROR_COMMIT_OBJ")" = "444" ] \
+     && [ "$(stat -c '%i' "$PROJ_HL_HIT/.lake/packages/dummy-dep/.git/$COMMIT_OBJ_REL")" != "$BEFORE_INO" ]; then
+  ok "cache hit cleanup of hard-linked local clone preserves shared mirror object mode 444"
+else
+  cat "$TMP/hl-hit.log" >&2
+  no "hard-linked cache hit mutated shared object mode (now $(stat -c '%a' "$MIRROR_COMMIT_OBJ" 2>/dev/null || echo missing))"
+fi
+
+PROJ_HL_MISS="$TMP/proj-hardlink-miss"
+write_project "$PROJ_HL_MISS" "$SHARED_MIRROR" "$REV1"
+mkdir -p "$PROJ_HL_MISS/.lake/packages"
+git clone -q "$SHARED_MIRROR" "$PROJ_HL_MISS/.lake/packages/dummy-dep"
+git -C "$PROJ_HL_MISS/.lake/packages/dummy-dep" checkout -q --detach "$REV1"
+printf '%s\n' '-- dirty' >>"$PROJ_HL_MISS/.lake/packages/dummy-dep/DummyDep.lean"
+CLONE_MISS_OBJ="$PROJ_HL_MISS/.lake/packages/dummy-dep/.git/$COMMIT_OBJ_REL"
+if [ "$(stat -c '%i' "$CLONE_MISS_OBJ")" != "$BEFORE_INO" ] || [ "$(stat -c '%a' "$MIRROR_COMMIT_OBJ")" != "444" ]; then
+  no "hardlink miss setup failed"
+elif (cd "$PROJ_HL_MISS" && LAKE_FETCH_BACKOFF_BASE=0 bash "$HELPER") >"$TMP/hl-miss.log" 2>&1 \
+     && has_match -F "restored package failed verification" <"$TMP/hl-miss.log" \
+     && [ "$(stat -c '%a' "$MIRROR_COMMIT_OBJ")" = "444" ] \
+     && [ "$(stat -c '%i' "$PROJ_HL_MISS/.lake/packages/dummy-dep/.git/$COMMIT_OBJ_REL")" != "$BEFORE_INO" ]; then
+  ok "refetch cleanup of dirty hard-linked local clone preserves shared mirror object mode 444"
+else
+  cat "$TMP/hl-miss.log" >&2
+  no "hard-linked refetch cleanup mutated shared object mode (now $(stat -c '%a' "$MIRROR_COMMIT_OBJ" 2>/dev/null || echo missing))"
 fi
 
 echo "=== Finding 3: configured Git mirror (url.*.insteadOf) controls ==="
@@ -410,12 +473,15 @@ else
   no "scratch seed fallback control failed"
 fi
 
-# Structural control on scripts/proofs/trust_ban.sh: must use fetch_lake_packages.sh and never symlink .lake/packages.
+# Structural control on scripts/proofs/trust_ban.sh: must use fetch_lake_packages.sh,
+# never symlink .lake/packages, and never hide set -e inside an `if (` subshell.
 if has_match -F "fetch_lake_packages.sh" <"$ROOT_DIR/scripts/proofs/trust_ban.sh" \
-   && ! has_match -E 'ln -s.*\.lake/packages' <"$ROOT_DIR/scripts/proofs/trust_ban.sh"; then
-  ok "trust_ban.sh populates its scratch workspace via fetch_lake_packages.sh without symlinking .lake/packages"
+   && has_match -F "build_verified_scratch" <"$ROOT_DIR/scripts/proofs/trust_ban.sh" \
+   && ! has_match -E 'ln -s.*\.lake/packages' <"$ROOT_DIR/scripts/proofs/trust_ban.sh" \
+   && ! has_match -E '^[[:space:]]*if[[:space:]]*\([[:space:]]*$' <"$ROOT_DIR/scripts/proofs/trust_ban.sh"; then
+  ok "trust_ban.sh populates its scratch workspace via fail-closed verified wrapper without symlinking or if-subshells"
 else
-  no "trust_ban.sh still symlinks .lake/packages or omits fetch_lake_packages.sh"
+  no "trust_ban.sh violates scratch-workspace fail-closed structural invariants"
 fi
 
 echo "=== bounded retry, fallback and single per-attempt deadline controls ==="
@@ -497,19 +563,42 @@ else
   no "shared per-attempt deadline control failed (rc=$rc)"
 fi
 
-# 7c. Non-blocking 1: stalled checkout also runs inside the same per-attempt deadline.
+# 7c. Non-blocking 1 (round 2): stalled materialization checkout runs inside the single deadline
+# (and only the verified materialization checkout runs — no redundant raw checkout).
 PROJ_CO_TO="$TMP/proj-checkout-timeout"
 write_project "$PROJ_CO_TO" "$DEP_BARE" "$REV1"
+CO_COUNT_FILE="$TMP/co-timeout.count"
+rm -f "$CO_COUNT_FILE"
 rc=0
-(cd "$PROJ_CO_TO" && PATH="$STUB_BIN:$PATH" STUB_MODE=slow-checkout \
+(cd "$PROJ_CO_TO" && PATH="$STUB_BIN:$PATH" STUB_MODE=slow-checkout STUB_CHECKOUT_COUNT_FILE="$CO_COUNT_FILE" \
   LAKE_FETCH_ATTEMPTS=1 LAKE_FETCH_BACKOFF_BASE=0 LAKE_FETCH_TIMEOUT=1 bash "$HELPER") >"$TMP/co-timeout.log" 2>&1 || rc=$?
 if [ "$rc" -ne 0 ] \
+   && [ "$(cat "$CO_COUNT_FILE" 2>/dev/null || echo 0)" = "1" ] \
    && has_match -F "fetch timed out after 1s" <"$TMP/co-timeout.log" \
    && [ ! -e "$PROJ_CO_TO/.lake/packages/dummy-dep" ]; then
-  ok "stalled checkout is killed by the same single per-attempt deadline"
+  ok "stalled materialization checkout is killed by the same single per-attempt deadline"
 else
   cat "$TMP/co-timeout.log" >&2
-  no "checkout deadline control failed (rc=$rc)"
+  no "materialization checkout deadline control failed (rc=$rc, co_count=$(cat "$CO_COUNT_FILE" 2>/dev/null || echo 0))"
+fi
+
+# 7d. Non-blocking 1 (round 2): combined fetch (0.65s) + materialization checkout (0.65s)
+# shares ONE 1s per-attempt deadline and times out cleanly.
+PROJ_COMBINED_TO="$TMP/proj-combined-timeout"
+write_project "$PROJ_COMBINED_TO" "$DEP_BARE" "$REV1"
+CO_COUNT_FILE="$TMP/combined-co.count"
+rm -f "$CO_COUNT_FILE"
+rc=0
+(cd "$PROJ_COMBINED_TO" && PATH="$STUB_BIN:$PATH" STUB_MODE=slow-fetch-and-checkout STUB_CHECKOUT_COUNT_FILE="$CO_COUNT_FILE" \
+  LAKE_FETCH_ATTEMPTS=1 LAKE_FETCH_BACKOFF_BASE=0 LAKE_FETCH_TIMEOUT=1 bash "$HELPER") >"$TMP/combined-timeout.log" 2>&1 || rc=$?
+if [ "$rc" -ne 0 ] \
+   && [ "$(cat "$CO_COUNT_FILE" 2>/dev/null || echo 0)" = "1" ] \
+   && has_match -F "fetch timed out after 1s" <"$TMP/combined-timeout.log" \
+   && [ ! -e "$PROJ_COMBINED_TO/.lake/packages/dummy-dep" ]; then
+  ok "fetch and final materialization checkout share one single per-attempt deadline"
+else
+  cat "$TMP/combined-timeout.log" >&2
+  no "combined fetch + materialization deadline control failed (rc=$rc, co_count=$(cat "$CO_COUNT_FILE" 2>/dev/null || echo 0))"
 fi
 
 echo "=== manifest integrity controls ==="

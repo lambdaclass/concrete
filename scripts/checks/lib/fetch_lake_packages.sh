@@ -20,7 +20,8 @@
 #   LAKE_FETCH_ATTEMPTS      max fetch attempts per package (default: 3)
 #   LAKE_FETCH_BACKOFF_BASE  initial retry delay in seconds, doubled per retry (default: 10)
 #   LAKE_FETCH_TIMEOUT       single per-attempt deadline in seconds across fetch,
-#                            fallback fetch and checkout (default: 180)
+#                            fallback fetch, object verification and checkout
+#                            materialization (default: 180)
 #   LAKE_SEED_PACKAGES_DIR   optional directory of existing package repos used ONLY as
 #                            an untrusted object-store seed when a package is absent
 #                            (only verified commit <rev> objects are extracted into a
@@ -28,50 +29,11 @@
 #                            never inherited)
 set -euo pipefail
 
+HELPER_SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 HELPER_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 BOUNDED_EXEC="$HELPER_ROOT/scripts/checks/lib/bounded_exec.py"
 source "$HELPER_ROOT/scripts/checks/lib/git_sandbox.sh" || exit 2
 git_sandbox || exit 2
-
-MANIFEST="lake-manifest.json"
-TOOLCHAIN="lean-toolchain"
-ATTEMPTS="${LAKE_FETCH_ATTEMPTS:-3}"
-BACKOFF_BASE="${LAKE_FETCH_BACKOFF_BASE:-10}"
-FETCH_TIMEOUT="${LAKE_FETCH_TIMEOUT:-180}"
-SEED_PACKAGES_DIR="${LAKE_SEED_PACKAGES_DIR:-}"
-
-if [[ ! "$ATTEMPTS" =~ ^[1-9][0-9]*$ ]]; then
-  echo "error: lake-packages: LAKE_FETCH_ATTEMPTS must be a positive integer (got '$ATTEMPTS')" >&2
-  exit 2
-fi
-if [[ ! "$BACKOFF_BASE" =~ ^[0-9]+$ ]]; then
-  echo "error: lake-packages: LAKE_FETCH_BACKOFF_BASE must be a non-negative integer (got '$BACKOFF_BASE')" >&2
-  exit 2
-fi
-if ! python3 -I - "$FETCH_TIMEOUT" <<'PY'; then
-import math, sys
-try:
-    v = float(sys.argv[1])
-except ValueError:
-    sys.exit(1)
-sys.exit(0 if math.isfinite(v) and v > 0 else 1)
-PY
-  echo "error: lake-packages: LAKE_FETCH_TIMEOUT must be a positive finite number (got '$FETCH_TIMEOUT')" >&2
-  exit 2
-fi
-
-if [ ! -f "$TOOLCHAIN" ] || [ -L "$TOOLCHAIN" ] || [ ! -s "$TOOLCHAIN" ]; then
-  echo "error: lake-packages: $TOOLCHAIN must exist as a non-empty regular file" >&2
-  exit 2
-fi
-if [ ! -f "$MANIFEST" ] || [ -L "$MANIFEST" ]; then
-  echo "error: lake-packages: $MANIFEST must exist as a regular file" >&2
-  exit 2
-fi
-if [ -L ".lake" ]; then
-  echo "error: lake-packages: refusing symlink at .lake" >&2
-  exit 1
-fi
 
 safe_rm_rf() {
   local target="$1"
@@ -92,11 +54,22 @@ if stat.S_ISLNK(st.st_mode) or not stat.S_ISDIR(st.st_mode):
     os.unlink(path)
     sys.exit(0)
 
-def unlock_tree(root):
+def unlock_dirs(root):
+    # Restrict permission repair strictly to directories needed for traversal and deletion.
+    # Never chmod regular files: local git clones can share hard-linked object inodes with
+    # other repositories/mirrors, and POSIX unlink only requires containing-dir permissions.
     try:
-        os.chmod(root, 0o700)
+        rst = os.lstat(root)
     except OSError:
-        pass
+        return
+    if not stat.S_ISDIR(rst.st_mode) or stat.S_ISLNK(rst.st_mode):
+        return
+    mode = stat.S_IMODE(rst.st_mode)
+    if (mode & 0o700) != 0o700:
+        try:
+            os.chmod(root, mode | 0o700)
+        except OSError:
+            pass
     try:
         entries = list(os.scandir(root))
     except OSError:
@@ -107,117 +80,15 @@ def unlock_tree(root):
         except OSError:
             continue
         if stat.S_ISDIR(est.st_mode) and not stat.S_ISLNK(est.st_mode):
-            unlock_tree(entry.path)
-        elif stat.S_ISREG(est.st_mode):
-            try:
-                os.chmod(entry.path, 0o600)
-            except OSError:
-                pass
+            unlock_dirs(entry.path)
 
-unlock_tree(path)
+unlock_dirs(path)
 shutil.rmtree(path)
 PY
 }
 
-TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/lake-packages.XXXXXX")"
-CURRENT_STAGE=""
-CURRENT_FRESH=""
-cleanup() {
-  [ -z "${CURRENT_FRESH:-}" ] || safe_rm_rf "$CURRENT_FRESH" || true
-  [ -z "${CURRENT_STAGE:-}" ] || safe_rm_rf "$CURRENT_STAGE" || true
-  [ -z "${TMP_DIR:-}" ] || safe_rm_rf "$TMP_DIR" || true
-}
-trap cleanup EXIT
-
-MANIFEST_ROWS="$TMP_DIR/manifest.tsv"
-python3 -I - "$MANIFEST" >"$MANIFEST_ROWS" <<'PY'
-import json
-import re
-import sys
-from pathlib import Path
-
-manifest_path = Path(sys.argv[1])
-try:
-    data = json.loads(manifest_path.read_text(encoding="utf-8"))
-except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-    sys.exit(f"error: lake-packages: cannot parse {manifest_path}: {exc}")
-
-if not isinstance(data, dict):
-    sys.exit(f"error: lake-packages: {manifest_path} must be a JSON object")
-
-packages_dir = data.get("packagesDir")
-if packages_dir != ".lake/packages":
-    sys.exit(
-        f"error: lake-packages: expected packagesDir '.lake/packages', got {packages_dir!r}"
-    )
-
-packages = data.get("packages")
-if not isinstance(packages, list):
-    sys.exit(f"error: lake-packages: {manifest_path} packages field must be a list")
-
-seen = set()
-for index, entry in enumerate(packages):
-    if not isinstance(entry, dict):
-        sys.exit(f"error: lake-packages: package entry {index} must be an object")
-    pkg_type = entry.get("type")
-    if pkg_type != "git":
-        sys.exit(f"error: lake-packages: package entry {index} has unsupported type {pkg_type!r}")
-    raw_name = entry.get("name")
-    if not isinstance(raw_name, str) or not raw_name:
-        sys.exit(f"error: lake-packages: package entry {index} missing name")
-    name = raw_name[1:-1] if raw_name.startswith("«") and raw_name.endswith("»") else raw_name
-    if (
-        not name
-        or name in {".", ".."}
-        or name.startswith(".")
-        or any(ch in name for ch in "/\\\t\r\n\0«»")
-    ):
-        sys.exit(f"error: lake-packages: unsafe package name {raw_name!r}")
-    if name in seen:
-        sys.exit(f"error: lake-packages: duplicate package name {name!r}")
-    seen.add(name)
-
-    url = entry.get("url")
-    if (
-        not isinstance(url, str)
-        or not url
-        or url.startswith("-")
-        or any(ch in url for ch in "\t\r\n\0")
-    ):
-        sys.exit(f"error: lake-packages: package {name} has unsafe url {url!r}")
-
-    rev = entry.get("rev")
-    if not isinstance(rev, str) or not re.fullmatch(r"[0-9a-f]{40}", rev):
-        sys.exit(
-            f"error: lake-packages: package {name} rev must be a 40-char hex commit (got {rev!r})"
-        )
-
-    print(f"{name}\t{url}\t{rev}")
-PY
-
-PACKAGES_DIR=".lake/packages"
-if [ -L "$PACKAGES_DIR" ] || { [ -e "$PACKAGES_DIR" ] && [ ! -d "$PACKAGES_DIR" ]; }; then
-  echo "warn lake-packages: removing non-directory $PACKAGES_DIR" >&2
-  safe_rm_rf "$PACKAGES_DIR"
-fi
-mkdir -p "$PACKAGES_DIR"
-
-# Prune any unexpected or leftover entries under .lake/packages not listed in lake-manifest.json.
-declare -A EXPECTED_PKGS=()
-while IFS=$'\t' read -r name _url _rev; do
-  [ -n "$name" ] || continue
-  EXPECTED_PKGS["$name"]=1
-done <"$MANIFEST_ROWS"
-
-shopt -s nullglob dotglob
-for entry in "$PACKAGES_DIR"/*; do
-  base="$(basename "$entry")"
-  if [ -z "${EXPECTED_PKGS[$base]+x}" ]; then
-    echo "warn lake-packages: pruning unexpected entry $entry" >&2
-    safe_rm_rf "$entry"
-  fi
-done
-shopt -u nullglob dotglob
+# Helper functions live above the --internal-fetch-attempt dispatch so bounded fetch
+# attempts share the exact verification and materialization logic under one deadline.
 
 # Strictly scan DIR for any top-level or nested .lake path without suppressing traversal errors.
 scan_no_lake_dirs() {
@@ -681,6 +552,187 @@ verify_restored_package() {
   return 0
 }
 
+# Internal worker entry point invoked under bounded_exec.py so one single per-attempt
+# deadline governs init, remote add, primary fetch, optional raw-SHA fallback fetch,
+# stored-config verification, strict object unpack/fsck, and final checkout materialization.
+if [ "${1:-}" = "--internal-fetch-attempt" ]; then
+  if [ "$#" -ne 6 ]; then
+    echo "error: lake-packages: invalid internal attempt arguments" >&2
+    exit 2
+  fi
+  raw_stage="$2"
+  fresh_stage="$3"
+  url="$4"
+  rev="$5"
+  TMP_DIR="$6"
+  primary_err="$TMP_DIR/primary-fetch.err"
+  rm -f "$primary_err"
+  git init -q --template="" "$raw_stage"
+  git -C "$raw_stage" remote add origin "$url"
+  if ! git -C "$raw_stage" fetch -q --depth 1 --no-tags origin "$rev" 2>"$primary_err"; then
+    cat "$primary_err" >&2
+    if grep -qiE "not our ref|unadvertised object|couldn't find remote ref|no such remote ref" "$primary_err"; then
+      git -C "$raw_stage" fetch -q --no-tags origin
+    else
+      exit 1
+    fi
+  fi
+  if ! cfg_err="$(verify_stored_config "$raw_stage" "$url")"; then
+    echo "fetched checkout failed verification ($cfg_err)" >&2
+    exit 1
+  fi
+  if ! mat_err="$(materialize_verified_checkout "$raw_stage/.git/objects" "$fresh_stage" "$url" "$rev")"; then
+    echo "fetched checkout failed verification ($mat_err)" >&2
+    exit 1
+  fi
+  exit 0
+fi
+
+if [ "$#" -ne 0 ]; then
+  echo "error: lake-packages: unexpected arguments: $*" >&2
+  exit 2
+fi
+
+MANIFEST="lake-manifest.json"
+TOOLCHAIN="lean-toolchain"
+ATTEMPTS="${LAKE_FETCH_ATTEMPTS:-3}"
+BACKOFF_BASE="${LAKE_FETCH_BACKOFF_BASE:-10}"
+FETCH_TIMEOUT="${LAKE_FETCH_TIMEOUT:-180}"
+SEED_PACKAGES_DIR="${LAKE_SEED_PACKAGES_DIR:-}"
+
+if [[ ! "$ATTEMPTS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "error: lake-packages: LAKE_FETCH_ATTEMPTS must be a positive integer (got '$ATTEMPTS')" >&2
+  exit 2
+fi
+if [[ ! "$BACKOFF_BASE" =~ ^[0-9]+$ ]]; then
+  echo "error: lake-packages: LAKE_FETCH_BACKOFF_BASE must be a non-negative integer (got '$BACKOFF_BASE')" >&2
+  exit 2
+fi
+if ! python3 -I - "$FETCH_TIMEOUT" <<'PY'; then
+import math, sys
+try:
+    v = float(sys.argv[1])
+except ValueError:
+    sys.exit(1)
+sys.exit(0 if math.isfinite(v) and v > 0 else 1)
+PY
+  echo "error: lake-packages: LAKE_FETCH_TIMEOUT must be a positive finite number (got '$FETCH_TIMEOUT')" >&2
+  exit 2
+fi
+
+if [ ! -f "$TOOLCHAIN" ] || [ -L "$TOOLCHAIN" ] || [ ! -s "$TOOLCHAIN" ]; then
+  echo "error: lake-packages: $TOOLCHAIN must exist as a non-empty regular file" >&2
+  exit 2
+fi
+if [ ! -f "$MANIFEST" ] || [ -L "$MANIFEST" ]; then
+  echo "error: lake-packages: $MANIFEST must exist as a regular file" >&2
+  exit 2
+fi
+if [ -L ".lake" ]; then
+  echo "error: lake-packages: refusing symlink at .lake" >&2
+  exit 1
+fi
+
+TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/lake-packages.XXXXXX")"
+CURRENT_STAGE=""
+CURRENT_FRESH=""
+cleanup() {
+  [ -z "${CURRENT_FRESH:-}" ] || safe_rm_rf "$CURRENT_FRESH" || true
+  [ -z "${CURRENT_STAGE:-}" ] || safe_rm_rf "$CURRENT_STAGE" || true
+  [ -z "${TMP_DIR:-}" ] || safe_rm_rf "$TMP_DIR" || true
+}
+trap cleanup EXIT
+
+MANIFEST_ROWS="$TMP_DIR/manifest.tsv"
+python3 -I - "$MANIFEST" >"$MANIFEST_ROWS" <<'PY'
+import json
+import re
+import sys
+from pathlib import Path
+
+manifest_path = Path(sys.argv[1])
+try:
+    data = json.loads(manifest_path.read_text(encoding="utf-8"))
+except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+    sys.exit(f"error: lake-packages: cannot parse {manifest_path}: {exc}")
+
+if not isinstance(data, dict):
+    sys.exit(f"error: lake-packages: {manifest_path} must be a JSON object")
+
+packages_dir = data.get("packagesDir")
+if packages_dir != ".lake/packages":
+    sys.exit(
+        f"error: lake-packages: expected packagesDir '.lake/packages', got {packages_dir!r}"
+    )
+
+packages = data.get("packages")
+if not isinstance(packages, list):
+    sys.exit(f"error: lake-packages: {manifest_path} packages field must be a list")
+
+seen = set()
+for index, entry in enumerate(packages):
+    if not isinstance(entry, dict):
+        sys.exit(f"error: lake-packages: package entry {index} must be an object")
+    pkg_type = entry.get("type")
+    if pkg_type != "git":
+        sys.exit(f"error: lake-packages: package entry {index} has unsupported type {pkg_type!r}")
+    raw_name = entry.get("name")
+    if not isinstance(raw_name, str) or not raw_name:
+        sys.exit(f"error: lake-packages: package entry {index} missing name")
+    name = raw_name[1:-1] if raw_name.startswith("«") and raw_name.endswith("»") else raw_name
+    if (
+        not name
+        or name in {".", ".."}
+        or name.startswith(".")
+        or any(ch in name for ch in "/\\\t\r\n\0«»")
+    ):
+        sys.exit(f"error: lake-packages: unsafe package name {raw_name!r}")
+    if name in seen:
+        sys.exit(f"error: lake-packages: duplicate package name {name!r}")
+    seen.add(name)
+
+    url = entry.get("url")
+    if (
+        not isinstance(url, str)
+        or not url
+        or url.startswith("-")
+        or any(ch in url for ch in "\t\r\n\0")
+    ):
+        sys.exit(f"error: lake-packages: package {name} has unsafe url {url!r}")
+
+    rev = entry.get("rev")
+    if not isinstance(rev, str) or not re.fullmatch(r"[0-9a-f]{40}", rev):
+        sys.exit(
+            f"error: lake-packages: package {name} rev must be a 40-char hex commit (got {rev!r})"
+        )
+
+    print(f"{name}\t{url}\t{rev}")
+PY
+
+PACKAGES_DIR=".lake/packages"
+if [ -L "$PACKAGES_DIR" ] || { [ -e "$PACKAGES_DIR" ] && [ ! -d "$PACKAGES_DIR" ]; }; then
+  echo "warn lake-packages: removing non-directory $PACKAGES_DIR" >&2
+  safe_rm_rf "$PACKAGES_DIR"
+fi
+mkdir -p "$PACKAGES_DIR"
+
+# Prune any unexpected or leftover entries under .lake/packages not listed in lake-manifest.json.
+declare -A EXPECTED_PKGS=()
+while IFS=$'\t' read -r name _url _rev; do
+  [ -n "$name" ] || continue
+  EXPECTED_PKGS["$name"]=1
+done <"$MANIFEST_ROWS"
+
+shopt -s nullglob dotglob
+for entry in "$PACKAGES_DIR"/*; do
+  base="$(basename "$entry")"
+  if [ -z "${EXPECTED_PKGS[$base]+x}" ]; then
+    echo "warn lake-packages: pruning unexpected entry $entry" >&2
+    safe_rm_rf "$entry"
+  fi
+done
+shopt -u nullglob dotglob
+
 run_bounded_attempt() {
   local err_file="$1"
   local status_file="$2"
@@ -693,36 +745,21 @@ run_bounded_attempt() {
   fi
 }
 
-# Run one complete fetch attempt (init, remote add, primary fetch, optional raw-SHA
-# fallback fetch, and checkout) under ONE single deadline (FETCH_TIMEOUT).
+# Run one complete fetch, object-verification and checkout-materialization attempt
+# under ONE single deadline (FETCH_TIMEOUT).
 fetch_once() {
-  local stage="$1"
-  local url="$2"
-  local rev="$3"
-  local err_file="$4"
-  local status_file="$5"
-  local primary_err="$TMP_DIR/primary-fetch.err"
+  local raw_stage="$1"
+  local fresh_stage="$2"
+  local url="$3"
+  local rev="$4"
+  local attempt_tmp="$5"
+  local err_file="$6"
+  local status_file="$7"
   local outcome=""
 
-  rm -f "$primary_err"
   run_bounded_attempt "$err_file" "$status_file" \
-    bash --noprofile --norc -euo pipefail -c '
-      stage="$1"
-      url="$2"
-      rev="$3"
-      primary_err="$4"
-      git init -q --template="" "$stage"
-      git -C "$stage" remote add origin "$url"
-      if ! git -C "$stage" fetch -q --depth 1 --no-tags origin "$rev" 2>"$primary_err"; then
-        cat "$primary_err" >&2
-        if grep -qiE "not our ref|unadvertised object|couldn'\''t find remote ref|no such remote ref" "$primary_err"; then
-          git -C "$stage" fetch -q --no-tags origin
-        else
-          exit 1
-        fi
-      fi
-      git -C "$stage" -c core.hooksPath=/dev/null -c advice.detachedHead=false checkout -q --force --detach "$rev"
-    ' _ "$stage" "$url" "$rev" "$primary_err"
+    bash --noprofile --norc "$HELPER_SCRIPT" \
+    --internal-fetch-attempt "$raw_stage" "$fresh_stage" "$url" "$rev" "$attempt_tmp"
 
   outcome="$(cat "$status_file" 2>/dev/null || true)"
   if [ "$outcome" != "exit 0" ]; then
@@ -746,7 +783,7 @@ fetch_package_with_retry() {
   local shift_exp=0
   local raw_stage=""
   local fresh_stage=""
-  local verify_err=""
+  local attempt_tmp=""
 
   while [ "$attempt" -le "$ATTEMPTS" ]; do
     if [ "$attempt" -gt 1 ]; then
@@ -765,24 +802,22 @@ fetch_package_with_retry() {
     CURRENT_STAGE="$raw_stage"
     fresh_stage="$(mktemp -d "$PACKAGES_DIR/.clean-$name.XXXXXX")"
     CURRENT_FRESH="$fresh_stage"
+    attempt_tmp="$(mktemp -d "$TMP_DIR/attempt-$name.XXXXXX")"
 
-    if fetch_once "$raw_stage" "$url" "$rev" "$err_file" "$status_file"; then
-      if verify_err="$(verify_stored_config "$raw_stage" "$url")" \
-         && verify_err="$(materialize_verified_checkout "$raw_stage/.git/objects" "$fresh_stage" "$url" "$rev")"; then
-        safe_rm_rf "$dest"
-        mv "$fresh_stage" "$dest"
-        CURRENT_FRESH=""
-        safe_rm_rf "$raw_stage"
-        CURRENT_STAGE=""
-        echo "ok   lake-packages: $name fetched and verified at $rev (attempt $attempt/$ATTEMPTS)"
-        return 0
-      else
-        echo "warn lake-packages: $name: fetched checkout failed verification ($verify_err)" >&2
-      fi
+    if fetch_once "$raw_stage" "$fresh_stage" "$url" "$rev" "$attempt_tmp" "$err_file" "$status_file"; then
+      safe_rm_rf "$dest"
+      mv "$fresh_stage" "$dest"
+      CURRENT_FRESH=""
+      safe_rm_rf "$raw_stage"
+      CURRENT_STAGE=""
+      safe_rm_rf "$attempt_tmp"
+      echo "ok   lake-packages: $name fetched and verified at $rev (attempt $attempt/$ATTEMPTS)"
+      return 0
     else
       echo "warn lake-packages: $name: fetch attempt $attempt/$ATTEMPTS failed: $(tr '\n' ' ' <"$err_file" | head -c 400)" >&2
     fi
 
+    safe_rm_rf "$attempt_tmp"
     safe_rm_rf "$fresh_stage"
     CURRENT_FRESH=""
     safe_rm_rf "$raw_stage"
@@ -831,6 +866,47 @@ try_seed_package() {
   return 1
 }
 
+# Final fail-closed post-condition: assert .lake/packages and every manifest package
+# materialized on disk at its exact pinned revision with no .lake subdirectory.
+verify_manifest_packages_present() {
+  local rows_file="$1"
+  local pkg_name=""
+  local pkg_url=""
+  local pkg_rev=""
+  local pkg_dir=""
+  local head_rev=""
+
+  if [ ! -d ".lake" ] || [ -L ".lake" ]; then
+    echo "error: lake-packages: post-condition failed: missing or symlinked .lake" >&2
+    return 1
+  fi
+  if [ ! -d "$PACKAGES_DIR" ] || [ -L "$PACKAGES_DIR" ]; then
+    echo "error: lake-packages: post-condition failed: missing or symlinked $PACKAGES_DIR" >&2
+    return 1
+  fi
+  while IFS=$'\t' read -r pkg_name pkg_url pkg_rev; do
+    [ -n "$pkg_name" ] || continue
+    pkg_dir="$PACKAGES_DIR/$pkg_name"
+    if [ ! -d "$pkg_dir" ] || [ -L "$pkg_dir" ] || [ ! -d "$pkg_dir/.git" ] || [ -L "$pkg_dir/.git" ]; then
+      echo "error: lake-packages: post-condition failed: missing verified checkout at $pkg_dir" >&2
+      return 1
+    fi
+    if [ -e "$pkg_dir/.lake" ] || [ -L "$pkg_dir/.lake" ]; then
+      echo "error: lake-packages: post-condition failed: unexpected .lake in $pkg_dir" >&2
+      return 1
+    fi
+    head_rev="$(resolve_stored_head "$pkg_dir")" || {
+      echo "error: lake-packages: post-condition failed: unreadable HEAD in $pkg_dir" >&2
+      return 1
+    }
+    if [ "$head_rev" != "$pkg_rev" ]; then
+      echo "error: lake-packages: post-condition failed: $pkg_dir HEAD is $head_rev, expected $pkg_rev" >&2
+      return 1
+    fi
+  done <"$rows_file"
+  return 0
+}
+
 while IFS=$'\t' read -r name url rev; do
   [ -n "$name" ] || continue
   pkg_dir="$PACKAGES_DIR/$name"
@@ -856,3 +932,5 @@ while IFS=$'\t' read -r name url rev; do
   fi
   fetch_package_with_retry "$name" "$url" "$rev"
 done <"$MANIFEST_ROWS"
+
+verify_manifest_packages_present "$MANIFEST_ROWS" || exit 1
