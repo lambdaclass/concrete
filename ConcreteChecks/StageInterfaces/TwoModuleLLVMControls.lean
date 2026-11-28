@@ -12,7 +12,11 @@ Standalone freeze controls written directly against the frozen interface modules
 3. Changed source coordinates (line, column, and file path), verifying `LauncherMatches` rejects
    mismatched launchers and `.launcher` bytes change on each coordinate change;
 4. Target triple and datalayout enforcement on BOTH `.component` and `.launcher`:
-   - forged target headers are unrepresentable in `LLVMModule` / `LLVMInput` (`fail_if_success`);
+   - direct structure-eta, `Item`-exhaustiveness, and exact-header-prefix theorems showing
+     `LLVMModule` is determined by `items` alone, `LLVMInput` by `(component, launcher, sites)`
+     alone, `Item` has no target-directive or raw-text constructor, and `bytesAt` unconditionally
+     embeds the profile header on BOTH roles, paired with `#guard_msgs` controls rejecting raw
+     target-header strings as `Item` and cross-profile `LLVMInput` coercions;
    - `x86_64Linux`, `aarch64Linux`, and `aarch64Macos` embed their exact headers and yield pairwise
      distinct bytes on BOTH `.component` and `.launcher`;
 5. Swapped roles (`⟨out.launcher, out.component, out.sites⟩`) rejected by `LauncherMatches` and
@@ -300,14 +304,116 @@ theorem changed_coordinates_invalidate_launcher :
 
 /-! ## Control 4: Wrong triple/layout unrepresentable and platform-distinct on BOTH roles -/
 
-/-- `LLVMModule` carries no target header fields, so a mismatched triple or datalayout cannot be
-forged on either `.component` or `.launcher`. -/
-example (p : Profile) : LLVMInput p := by
-  fail_if_success exact (⟨"wrong-triple", p.llvmDataLayout, []⟩ : LLVMModule)
-  fail_if_success exact (⟨p.llvmTriple, "wrong-layout", []⟩ : LLVMModule)
-  fail_if_success exact (⟨⟨"wrong-triple", p.llvmDataLayout, []⟩, ⟨[]⟩, #[]⟩ : LLVMInput p)
-  fail_if_success exact (⟨⟨[]⟩, ⟨p.llvmTriple, "wrong-layout", []⟩, #[]⟩ : LLVMInput p)
-  exact ⟨compReturn 42, launchOfLines [], #[]⟩
+/-- `LLVMModule` has no target-header fields: it is determined exclusively by `items`. -/
+theorem llvmModule_determined_by_items :
+    (∀ m : LLVMModule, m = ⟨m.items⟩) ∧
+    (∀ m₁ m₂ : LLVMModule, m₁.items = m₂.items → m₁ = m₂) := by
+  refine ⟨fun m => by cases m; rfl, fun m₁ m₂ h => by cases m₁; cases m₂; cases h; rfl⟩
+
+/-- `LLVMInput p` carries no separate triple/datalayout fields: it is determined exclusively by
+`(component, launcher, sites)`. -/
+theorem llvmInput_determined_by_fields (p : Profile) :
+    (∀ x : LLVMInput p, x = ⟨x.component, x.launcher, x.sites⟩) ∧
+    (∀ a b : LLVMInput p,
+      a.component = b.component → a.launcher = b.launcher → a.sites = b.sites → a = b) := by
+  refine ⟨fun x => by cases x; rfl, fun a b hc hl hs => by
+    cases a; cases b; cases hc; cases hl; cases hs; rfl⟩
+
+/-- `Backend.LLVM.Item` is closed to exactly 8 structured assembly constructors, with no
+target-directive or raw-text constructor. -/
+theorem llvmItem_exhaustive_no_target_directive (item : Item) :
+    (∃ result fn args, item = .declare result fn args) ∨
+    (∃ internal result fn args, item = .define internal result fn args) ∨
+    (∃ name bytes, item = .constant name bytes) ∨
+    (∃ name, item = .label name) ∨
+    (∃ inst, item = .instruction inst) ∨
+    (∃ term, item = .terminator term) ∨
+    item = .endFunction ∨
+    item = .blank := by
+  cases item with
+  | declare result fn args => exact Or.inl ⟨result, fn, args, rfl⟩
+  | define internal result fn args => exact Or.inr (Or.inl ⟨internal, result, fn, args, rfl⟩)
+  | constant name bytes => exact Or.inr (Or.inr (Or.inl ⟨name, bytes, rfl⟩))
+  | label name => exact Or.inr (Or.inr (Or.inr (Or.inl ⟨name, rfl⟩)))
+  | instruction inst => exact Or.inr (Or.inr (Or.inr (Or.inr (Or.inl ⟨inst, rfl⟩))))
+  | terminator term => exact Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl ⟨term, rfl⟩)))))
+  | endFunction => exact Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl rfl))))))
+  | blank => exact Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr rfl))))))
+
+/-- For EVERY `LLVMInput p` and BOTH roles (`.component` and `.launcher`), `bytesAt` is
+unconditionally prefixed by `p`'s exact `target datalayout` and `target triple` header, so no pair
+of inputs across `x86_64Linux`, `aarch64Linux`, and `aarch64Macos` can ever produce equal bytes on
+either role. -/
+theorem llvmInput_bytesAt_exact_profile_header :
+    (∀ (p : Profile) (inp : LLVMInput p) (role : LLVMRole),
+      inp.bytesAt role = (headerOf p ++ render (inp.moduleAt role).items).toUTF8 ∧
+      ∀ idx, idx < (headerOf p).toUTF8.data.size →
+        (inp.bytesAt role).data[idx]? = (headerOf p).toUTF8.data[idx]?) ∧
+    (∀ (inX64 : LLVMInput llvmLinux) (inArmLin : LLVMInput llvmAarch64Linux)
+      (inMac : LLVMInput llvmMac) (role : LLVMRole),
+      inX64.bytesAt role ≠ inArmLin.bytesAt role ∧
+      inX64.bytesAt role ≠ inMac.bytesAt role ∧
+      inArmLin.bytesAt role ≠ inMac.bytesAt role) := by
+  refine ⟨fun p inp role => ⟨rfl, fun idx h => prefixByte _ _ idx h⟩,
+    fun inX64 inArmLin inMac role =>
+      ⟨header_diff_bytesAt 61 (by cbv) (by cbv) (by cbv; decide),
+       header_diff_bytesAt 25 (by cbv) (by cbv) (by cbv; decide),
+       header_diff_bytesAt 25 (by cbv) (by cbv) (by cbv; decide)⟩⟩
+
+-- Negative elaboration controls pinned with `#guard_msgs`: raw target-header strings cannot enter
+-- `LLVMModule.items`, and an `LLVMInput` cannot cross target-profile boundaries.
+
+/--
+error: Application type mismatch: The argument
+  "target triple = \"wrong-triple\"\n"
+has type
+  String
+but is expected to have type
+  Item
+in the application
+  List.cons "target triple = \"wrong-triple\"\n"
+-/
+#guard_msgs in
+example : LLVMModule :=
+  ⟨["target triple = \"wrong-triple\"\n"]⟩
+
+/--
+error: Application type mismatch: The argument
+  "target datalayout = \"wrong-layout\"\n"
+has type
+  String
+but is expected to have type
+  Item
+in the application
+  List.cons "target datalayout = \"wrong-layout\"\n"
+-/
+#guard_msgs in
+example : LLVMModule :=
+  ⟨["target datalayout = \"wrong-layout\"\n"]⟩
+
+/--
+error: Type mismatch
+  inp
+has type
+  LLVMInput llvmLinux
+but is expected to have type
+  LLVMInput llvmAarch64Linux
+-/
+#guard_msgs in
+example (inp : LLVMInput llvmLinux) : LLVMInput llvmAarch64Linux :=
+  inp
+
+/--
+error: Type mismatch
+  inp
+has type
+  LLVMInput llvmLinux
+but is expected to have type
+  LLVMInput llvmMac
+-/
+#guard_msgs in
+example (inp : LLVMInput llvmLinux) : LLVMInput llvmMac :=
+  inp
 
 /-- Identical structured `.component` and `.launcher` items under `x86_64Linux`, `aarch64Linux`,
 and `aarch64Macos` embed each profile's exact datalayout/triple header and produce pairwise

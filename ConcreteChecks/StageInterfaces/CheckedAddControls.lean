@@ -1369,15 +1369,92 @@ theorem two_site_checked_add_first_and_second_overflow :
 
 /-! ## Section 2: Planted checked-add mutants (all 6 required mutation classes) -/
 
--- Mutant 2c (type-level swapped-result control): passing `flag : SSAValue EarlyTy boolTy`
--- where a `u8Ty` sum is expected is rejected at elaboration time.
-example : SSABlock s0Lang := by
-  let flgV : SSAValue EarlyTy boolTy := ⟨1⟩
-  fail_if_success exact (⟨⟨2⟩, [], [], .ret (some ⟨u8Ty, .value flgV⟩), []⟩ : SSABlock s0Lang)
-  fail_if_success exact
-    (⟨⟨0⟩, [], [⟨orig0, .addWithOverflow .u8 ⟨0⟩ flgV (.literal ⟨[20]⟩) (.literal ⟨[22]⟩)⟩],
-      .branch (.value flgV) ⟨⟨1⟩, []⟩ ⟨⟨2⟩, [⟨u8Ty, .value flgV⟩]⟩, []⟩ : SSABlock s0Lang)
-  exact ssaAddB2
+-- Mutant 2c (type-level `dst`/`flag` controls): `SSAValue EarlyTy u8Ty` (`dst`) and
+-- `SSAValue EarlyTy boolTy` (`flag`) are statically distinct across `ret`, `.branch`
+-- continuation arguments, `.branch` condition, and both result slots of `addWithOverflow`.
+
+-- Positive baseline: well-typed `addWithOverflow` block using `flgV` as branch condition and
+-- `dstV` as `u8Ty` continuation argument elaborates cleanly.
+example (dstV : SSAValue EarlyTy u8Ty) (flgV : SSAValue EarlyTy boolTy) : SSABlock s0Lang :=
+  ⟨⟨0⟩, [], [⟨orig0, .addWithOverflow .u8 dstV flgV (.literal ⟨[20]⟩) (.literal ⟨[22]⟩)⟩],
+    .branch (.value flgV) ⟨⟨1⟩, []⟩ ⟨⟨2⟩, [⟨u8Ty, .value dstV⟩]⟩, []⟩
+
+-- 2c(i): Bool overflow flag cannot be returned where a `u8Ty` value is expected.
+/--
+error: Application type mismatch: The argument
+  flgV
+has type
+  SSAValue EarlyTy boolTy
+but is expected to have type
+  SSAValue EarlyTy u8Ty
+in the application
+  SSARead.value flgV
+-/
+#guard_msgs in
+example (flgV : SSAValue EarlyTy boolTy) : SSABlock s0Lang :=
+  ⟨⟨2⟩, [], [], .ret (some ⟨u8Ty, .value flgV⟩), []⟩
+
+-- 2c(ii): Bool overflow flag cannot be passed as a `u8Ty` continuation jump argument.
+/--
+error: Application type mismatch: The argument
+  flgV
+has type
+  SSAValue EarlyTy boolTy
+but is expected to have type
+  SSAValue EarlyTy u8Ty
+in the application
+  SSARead.value flgV
+-/
+#guard_msgs in
+example (dstV : SSAValue EarlyTy u8Ty) (flgV : SSAValue EarlyTy boolTy) : SSABlock s0Lang :=
+  ⟨⟨0⟩, [], [⟨orig0, .addWithOverflow .u8 dstV flgV (.literal ⟨[20]⟩) (.literal ⟨[22]⟩)⟩],
+    .branch (.value flgV) ⟨⟨1⟩, []⟩ ⟨⟨2⟩, [⟨u8Ty, .value flgV⟩]⟩, []⟩
+
+-- 2c(iii): Integer sum `dst` (`u8Ty`) cannot be used as the `.branch` condition (`s0Lang.bool`).
+/--
+error: Application type mismatch: The argument
+  dstV
+has type
+  SSAValue EarlyTy u8Ty
+but is expected to have type
+  SSAValue EarlyTy s0Lang.bool
+in the application
+  SSARead.value dstV
+-/
+#guard_msgs in
+example (dstV : SSAValue EarlyTy u8Ty) (flgV : SSAValue EarlyTy boolTy) : SSABlock s0Lang :=
+  ⟨⟨0⟩, [], [⟨orig0, .addWithOverflow .u8 dstV flgV (.literal ⟨[20]⟩) (.literal ⟨[22]⟩)⟩],
+    .branch (.value dstV) ⟨⟨1⟩, []⟩ ⟨⟨2⟩, [⟨u8Ty, .value dstV⟩]⟩, []⟩
+
+-- 2c(iv): `addWithOverflow`'s `dst` slot rejects a `boolTy` SSA register.
+/--
+error: Application type mismatch: The argument
+  badDst
+has type
+  SSAValue EarlyTy boolTy
+but is expected to have type
+  SSAValue EarlyTy (s0Lang.intTy IntTy.u8)
+in the application
+  SSAInst.addWithOverflow IntTy.u8 badDst
+-/
+#guard_msgs in
+example (badDst : SSAValue EarlyTy boolTy) (flgV : SSAValue EarlyTy boolTy) : SSAInst s0Lang :=
+  .addWithOverflow .u8 badDst flgV (.literal ⟨[20]⟩) (.literal ⟨[22]⟩)
+
+-- 2c(v): `addWithOverflow`'s `flag` slot rejects a `u8Ty` SSA register.
+/--
+error: Application type mismatch: The argument
+  badFlag
+has type
+  SSAValue EarlyTy u8Ty
+but is expected to have type
+  SSAValue EarlyTy s0Lang.bool
+in the application
+  SSAInst.addWithOverflow IntTy.u8 dstV badFlag
+-/
+#guard_msgs in
+example (dstV : SSAValue EarlyTy u8Ty) (badFlag : SSAValue EarlyTy u8Ty) : SSAInst s0Lang :=
+  .addWithOverflow .u8 dstV badFlag (.literal ⟨[20]⟩) (.literal ⟨[22]⟩)
 
 /-- Mutant 2a (constant flag), 2b (inverted flag), 2c (wrong continuation value),
 2d (aliased `dst`/`flag`), 2e (wrapped-on-overflow + unguarded plain add), and
@@ -1750,9 +1827,9 @@ theorem checkedAdd_slot_budget_2_passes_1_fails :
     rfl, ⟨rfl, rfl, rfl, by decide⟩⟩
 
 /-- Control 3b: `RegisterFormation` positive controls (`u8`/`u32` checked-add, zero-slot self-loop
-with `maxBIRSlots = 0`, parameterized loop) and negative controls (aliased `dst`/`flag`,
-sibling-block non-dominance, diamond non-dominance, unreachable use-before-def, unreachable
-`.invalid`, malformed `u32` literal, out-of-bounds trap slot). -/
+with `maxBIRSlots = 0`, parameterized loop) and negative controls (sibling-block non-dominance,
+diamond non-dominance, unreachable use-before-def, unreachable `.invalid`, malformed `u32` literal,
+out-of-bounds trap slot; aliased `dst`/`flag` is covered in `checkedAdd_mutants_rejected`). -/
 theorem registerFormation_controls :
     let p := lcbProfile
     let p0 := lcbProfile 0

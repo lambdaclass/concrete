@@ -226,47 +226,363 @@ private def mkRegState (profile : Profile) (fn : FnId) (blk : Nat) (pc : Nat)
 
 /-! ## Section 1: `RoutePipeline` and `Registry` privacy & cross-index rejections -/
 
--- Private constructors `RoutePipeline.mk` and `Registry.mk` cannot be forged outside `Pipeline.lean`.
-example (_pLCB : Pipeline Source (BackendOutput ⟨.lcb, .x86_64Linux, 8, 4096⟩))
-    (_pLLVM : Pipeline Source (BackendOutput ⟨.llvm, .x86_64Linux, 8, 4096⟩)) : True := by
-  fail_if_success
-    let _ : RoutePipeline slice0 ⟨.lcb, .x86_64Linux, 8, 4096⟩ .checked := RoutePipeline.mk _pLCB
-  fail_if_success
-    let _ : RoutePipeline slice0 ⟨.lcb, .x86_64Linux, 8, 4096⟩ .unchecked := RoutePipeline.mk _pLCB
-  fail_if_success
-    let _ : RoutePipeline slice0 ⟨.llvm, .x86_64Linux, 8, 4096⟩ .checked := RoutePipeline.mk _pLLVM
-  fail_if_success
-    let _ : RoutePipeline slice0 ⟨.llvm, .x86_64Linux, 8, 4096⟩ .unchecked := RoutePipeline.mk _pLLVM
-  fail_if_success
-    let _ := Registry.mk
-  trivial
+-- Private constructors `RoutePipeline.mk` and `Registry.mk` cannot be forged outside `Pipeline.lean`,
+-- either by explicit constructor name or via anonymous constructor notation `⟨...⟩`.
+
+/--
+error: Unknown constant `Concrete.Interfaces.RoutePipeline.mk`
+-/
+#guard_msgs in
+example (_pLCB : Pipeline Source (BackendOutput ⟨.lcb, .x86_64Linux, 8, 4096⟩)) :
+    RoutePipeline slice0 ⟨.lcb, .x86_64Linux, 8, 4096⟩ .checked :=
+  RoutePipeline.mk _pLCB
+
+/--
+error: Unknown constant `Concrete.Interfaces.RoutePipeline.mk`
+-/
+#guard_msgs in
+example (_pLCB : Pipeline Source (BackendOutput ⟨.lcb, .x86_64Linux, 8, 4096⟩)) :
+    RoutePipeline slice0 ⟨.lcb, .x86_64Linux, 8, 4096⟩ .unchecked :=
+  RoutePipeline.mk _pLCB
+
+/--
+error: Unknown constant `Concrete.Interfaces.RoutePipeline.mk`
+-/
+#guard_msgs in
+example (_pLLVM : Pipeline Source (BackendOutput ⟨.llvm, .x86_64Linux, 8, 4096⟩)) :
+    RoutePipeline slice0 ⟨.llvm, .x86_64Linux, 8, 4096⟩ .checked :=
+  RoutePipeline.mk _pLLVM
+
+/--
+error: Unknown constant `Concrete.Interfaces.RoutePipeline.mk`
+-/
+#guard_msgs in
+example (_pLLVM : Pipeline Source (BackendOutput ⟨.llvm, .x86_64Linux, 8, 4096⟩)) :
+    RoutePipeline slice0 ⟨.llvm, .x86_64Linux, 8, 4096⟩ .unchecked :=
+  RoutePipeline.mk _pLLVM
+
+/--
+error: Invalid `⟨...⟩` notation: Constructor for `Concrete.Interfaces.RoutePipeline` is marked as private
+-/
+#guard_msgs in
+example (_pLCB : Pipeline Source (BackendOutput ⟨.lcb, .x86_64Linux, 8, 4096⟩)) :
+    RoutePipeline slice0 ⟨.lcb, .x86_64Linux, 8, 4096⟩ .checked :=
+  ⟨_pLCB⟩
+
+/--
+error: Invalid `⟨...⟩` notation: Constructor for `Concrete.Interfaces.RoutePipeline` is marked as private
+-/
+#guard_msgs in
+example (_pLLVM : Pipeline Source (BackendOutput ⟨.llvm, .x86_64Linux, 8, 4096⟩)) :
+    RoutePipeline slice0 ⟨.llvm, .x86_64Linux, 8, 4096⟩ .unchecked :=
+  ⟨_pLLVM⟩
+
+/--
+error: Unknown constant `Concrete.Interfaces.Registry.mk`
+-/
+#guard_msgs in
+#check Registry.mk
+
+/--
+error: Invalid `⟨...⟩` notation: Constructor for `Concrete.Interfaces.Registry` is marked as private
+-/
+#guard_msgs in
+example : Registry slice0 ⟨.lcb, .x86_64Linux, 8, 4096⟩ :=
+  ⟨⟩
+
+-- Positive baseline controls: matching indices elaborate via `Registry.pipeline`.
+example (passes : Passes slice0 ⟨.lcb, .x86_64Linux, 8, 4096⟩) :
+    RoutePipeline slice0 ⟨.lcb, .x86_64Linux, 8, 4096⟩ .checked :=
+  Registry.pipeline passes .checked
+
+example (passes : Passes slice0 ⟨.llvm, .x86_64Linux, 8, 4096⟩) :
+    RoutePipeline slice0 ⟨.llvm, .x86_64Linux, 8, 4096⟩ .unchecked :=
+  Registry.pipeline passes .unchecked
 
 -- Cross-index rejections on `.checked` (`slice`, `route`, `backend`, `maxBIRSlots`,
 -- `maxImageStackBytes`, and `backendTarget` / platform).
+
+/--
+error: Type mismatch
+  rp
+has type
+  RoutePipeline slice0
+    { backend := BackendKind.lcb, backendTarget := LCB.Target.x86_64Linux, maxBIRSlots := 8,
+      maxImageStackBytes := 4096 }
+    Route.checked
+but is expected to have type
+  RoutePipeline sliceOne
+    { backend := BackendKind.lcb, backendTarget := LCB.Target.x86_64Linux, maxBIRSlots := 8,
+      maxImageStackBytes := 4096 }
+    Route.checked
+-/
+#guard_msgs in
 example (passes : Passes slice0 ⟨.lcb, .x86_64Linux, 8, 4096⟩) :
-    RoutePipeline slice0 ⟨.lcb, .x86_64Linux, 8, 4096⟩ .checked := by
+    RoutePipeline sliceOne ⟨.lcb, .x86_64Linux, 8, 4096⟩ .checked :=
   let rp := Registry.pipeline passes .checked
-  fail_if_success exact (rp : RoutePipeline sliceOne ⟨.lcb, .x86_64Linux, 8, 4096⟩ .checked)
-  fail_if_success exact (rp : RoutePipeline slice0 ⟨.lcb, .x86_64Linux, 8, 4096⟩ .unchecked)
-  fail_if_success exact (rp : RoutePipeline slice0 ⟨.llvm, .x86_64Linux, 8, 4096⟩ .checked)
-  fail_if_success exact (rp : RoutePipeline slice0 ⟨.lcb, .x86_64Linux, 4, 4096⟩ .checked)
-  fail_if_success exact (rp : RoutePipeline slice0 ⟨.lcb, .x86_64Linux, 8, 8192⟩ .checked)
-  fail_if_success exact (rp : RoutePipeline slice0 ⟨.lcb, .aarch64Linux, 8, 4096⟩ .checked)
-  fail_if_success exact (rp : RoutePipeline slice0 ⟨.lcb, .aarch64Macos, 8, 4096⟩ .checked)
-  exact rp
+  rp
+
+/--
+error: Type mismatch
+  rp
+has type
+  RoutePipeline slice0
+    { backend := BackendKind.lcb, backendTarget := LCB.Target.x86_64Linux, maxBIRSlots := 8,
+      maxImageStackBytes := 4096 }
+    Route.checked
+but is expected to have type
+  RoutePipeline slice0
+    { backend := BackendKind.lcb, backendTarget := LCB.Target.x86_64Linux, maxBIRSlots := 8,
+      maxImageStackBytes := 4096 }
+    Route.unchecked
+-/
+#guard_msgs in
+example (passes : Passes slice0 ⟨.lcb, .x86_64Linux, 8, 4096⟩) :
+    RoutePipeline slice0 ⟨.lcb, .x86_64Linux, 8, 4096⟩ .unchecked :=
+  let rp := Registry.pipeline passes .checked
+  rp
+
+/--
+error: Type mismatch
+  rp
+has type
+  RoutePipeline slice0
+    { backend := BackendKind.lcb, backendTarget := LCB.Target.x86_64Linux, maxBIRSlots := 8,
+      maxImageStackBytes := 4096 }
+    Route.checked
+but is expected to have type
+  RoutePipeline slice0
+    { backend := BackendKind.llvm, backendTarget := LCB.Target.x86_64Linux, maxBIRSlots := 8,
+      maxImageStackBytes := 4096 }
+    Route.checked
+-/
+#guard_msgs in
+example (passes : Passes slice0 ⟨.lcb, .x86_64Linux, 8, 4096⟩) :
+    RoutePipeline slice0 ⟨.llvm, .x86_64Linux, 8, 4096⟩ .checked :=
+  let rp := Registry.pipeline passes .checked
+  rp
+
+/--
+error: Type mismatch
+  rp
+has type
+  RoutePipeline slice0
+    { backend := BackendKind.lcb, backendTarget := LCB.Target.x86_64Linux, maxBIRSlots := 8,
+      maxImageStackBytes := 4096 }
+    Route.checked
+but is expected to have type
+  RoutePipeline slice0
+    { backend := BackendKind.lcb, backendTarget := LCB.Target.x86_64Linux, maxBIRSlots := 4,
+      maxImageStackBytes := 4096 }
+    Route.checked
+-/
+#guard_msgs in
+example (passes : Passes slice0 ⟨.lcb, .x86_64Linux, 8, 4096⟩) :
+    RoutePipeline slice0 ⟨.lcb, .x86_64Linux, 4, 4096⟩ .checked :=
+  let rp := Registry.pipeline passes .checked
+  rp
+
+/--
+error: Type mismatch
+  rp
+has type
+  RoutePipeline slice0
+    { backend := BackendKind.lcb, backendTarget := LCB.Target.x86_64Linux, maxBIRSlots := 8,
+      maxImageStackBytes := 4096 }
+    Route.checked
+but is expected to have type
+  RoutePipeline slice0
+    { backend := BackendKind.lcb, backendTarget := LCB.Target.x86_64Linux, maxBIRSlots := 8,
+      maxImageStackBytes := 8192 }
+    Route.checked
+-/
+#guard_msgs in
+example (passes : Passes slice0 ⟨.lcb, .x86_64Linux, 8, 4096⟩) :
+    RoutePipeline slice0 ⟨.lcb, .x86_64Linux, 8, 8192⟩ .checked :=
+  let rp := Registry.pipeline passes .checked
+  rp
+
+/--
+error: Type mismatch
+  rp
+has type
+  RoutePipeline slice0
+    { backend := BackendKind.lcb, backendTarget := LCB.Target.x86_64Linux, maxBIRSlots := 8,
+      maxImageStackBytes := 4096 }
+    Route.checked
+but is expected to have type
+  RoutePipeline slice0
+    { backend := BackendKind.lcb, backendTarget := LCB.Target.aarch64Linux, maxBIRSlots := 8,
+      maxImageStackBytes := 4096 }
+    Route.checked
+-/
+#guard_msgs in
+example (passes : Passes slice0 ⟨.lcb, .x86_64Linux, 8, 4096⟩) :
+    RoutePipeline slice0 ⟨.lcb, .aarch64Linux, 8, 4096⟩ .checked :=
+  let rp := Registry.pipeline passes .checked
+  rp
+
+/--
+error: Type mismatch
+  rp
+has type
+  RoutePipeline slice0
+    { backend := BackendKind.lcb, backendTarget := LCB.Target.x86_64Linux, maxBIRSlots := 8,
+      maxImageStackBytes := 4096 }
+    Route.checked
+but is expected to have type
+  RoutePipeline slice0
+    { backend := BackendKind.lcb, backendTarget := LCB.Target.aarch64Macos, maxBIRSlots := 8,
+      maxImageStackBytes := 4096 }
+    Route.checked
+-/
+#guard_msgs in
+example (passes : Passes slice0 ⟨.lcb, .x86_64Linux, 8, 4096⟩) :
+    RoutePipeline slice0 ⟨.lcb, .aarch64Macos, 8, 4096⟩ .checked :=
+  let rp := Registry.pipeline passes .checked
+  rp
 
 -- Cross-index rejections on `.unchecked` and `.llvm`.
+
+/--
+error: Type mismatch
+  rp
+has type
+  RoutePipeline slice0
+    { backend := BackendKind.llvm, backendTarget := LCB.Target.x86_64Linux, maxBIRSlots := 8,
+      maxImageStackBytes := 4096 }
+    Route.unchecked
+but is expected to have type
+  RoutePipeline sliceOne
+    { backend := BackendKind.llvm, backendTarget := LCB.Target.x86_64Linux, maxBIRSlots := 8,
+      maxImageStackBytes := 4096 }
+    Route.unchecked
+-/
+#guard_msgs in
 example (passes : Passes slice0 ⟨.llvm, .x86_64Linux, 8, 4096⟩) :
-    RoutePipeline slice0 ⟨.llvm, .x86_64Linux, 8, 4096⟩ .unchecked := by
+    RoutePipeline sliceOne ⟨.llvm, .x86_64Linux, 8, 4096⟩ .unchecked :=
   let rp := Registry.pipeline passes .unchecked
-  fail_if_success exact (rp : RoutePipeline sliceOne ⟨.llvm, .x86_64Linux, 8, 4096⟩ .unchecked)
-  fail_if_success exact (rp : RoutePipeline slice0 ⟨.llvm, .x86_64Linux, 8, 4096⟩ .checked)
-  fail_if_success exact (rp : RoutePipeline slice0 ⟨.lcb, .x86_64Linux, 8, 4096⟩ .unchecked)
-  fail_if_success exact (rp : RoutePipeline slice0 ⟨.llvm, .x86_64Linux, 4, 4096⟩ .unchecked)
-  fail_if_success exact (rp : RoutePipeline slice0 ⟨.llvm, .x86_64Linux, 8, 8192⟩ .unchecked)
-  fail_if_success exact (rp : RoutePipeline slice0 ⟨.llvm, .aarch64Linux, 8, 4096⟩ .unchecked)
-  fail_if_success exact (rp : RoutePipeline slice0 ⟨.llvm, .aarch64Macos, 8, 4096⟩ .unchecked)
-  exact rp
+  rp
+
+/--
+error: Type mismatch
+  rp
+has type
+  RoutePipeline slice0
+    { backend := BackendKind.llvm, backendTarget := LCB.Target.x86_64Linux, maxBIRSlots := 8,
+      maxImageStackBytes := 4096 }
+    Route.unchecked
+but is expected to have type
+  RoutePipeline slice0
+    { backend := BackendKind.llvm, backendTarget := LCB.Target.x86_64Linux, maxBIRSlots := 8,
+      maxImageStackBytes := 4096 }
+    Route.checked
+-/
+#guard_msgs in
+example (passes : Passes slice0 ⟨.llvm, .x86_64Linux, 8, 4096⟩) :
+    RoutePipeline slice0 ⟨.llvm, .x86_64Linux, 8, 4096⟩ .checked :=
+  let rp := Registry.pipeline passes .unchecked
+  rp
+
+/--
+error: Type mismatch
+  rp
+has type
+  RoutePipeline slice0
+    { backend := BackendKind.llvm, backendTarget := LCB.Target.x86_64Linux, maxBIRSlots := 8,
+      maxImageStackBytes := 4096 }
+    Route.unchecked
+but is expected to have type
+  RoutePipeline slice0
+    { backend := BackendKind.lcb, backendTarget := LCB.Target.x86_64Linux, maxBIRSlots := 8,
+      maxImageStackBytes := 4096 }
+    Route.unchecked
+-/
+#guard_msgs in
+example (passes : Passes slice0 ⟨.llvm, .x86_64Linux, 8, 4096⟩) :
+    RoutePipeline slice0 ⟨.lcb, .x86_64Linux, 8, 4096⟩ .unchecked :=
+  let rp := Registry.pipeline passes .unchecked
+  rp
+
+/--
+error: Type mismatch
+  rp
+has type
+  RoutePipeline slice0
+    { backend := BackendKind.llvm, backendTarget := LCB.Target.x86_64Linux, maxBIRSlots := 8,
+      maxImageStackBytes := 4096 }
+    Route.unchecked
+but is expected to have type
+  RoutePipeline slice0
+    { backend := BackendKind.llvm, backendTarget := LCB.Target.x86_64Linux, maxBIRSlots := 4,
+      maxImageStackBytes := 4096 }
+    Route.unchecked
+-/
+#guard_msgs in
+example (passes : Passes slice0 ⟨.llvm, .x86_64Linux, 8, 4096⟩) :
+    RoutePipeline slice0 ⟨.llvm, .x86_64Linux, 4, 4096⟩ .unchecked :=
+  let rp := Registry.pipeline passes .unchecked
+  rp
+
+/--
+error: Type mismatch
+  rp
+has type
+  RoutePipeline slice0
+    { backend := BackendKind.llvm, backendTarget := LCB.Target.x86_64Linux, maxBIRSlots := 8,
+      maxImageStackBytes := 4096 }
+    Route.unchecked
+but is expected to have type
+  RoutePipeline slice0
+    { backend := BackendKind.llvm, backendTarget := LCB.Target.x86_64Linux, maxBIRSlots := 8,
+      maxImageStackBytes := 8192 }
+    Route.unchecked
+-/
+#guard_msgs in
+example (passes : Passes slice0 ⟨.llvm, .x86_64Linux, 8, 4096⟩) :
+    RoutePipeline slice0 ⟨.llvm, .x86_64Linux, 8, 8192⟩ .unchecked :=
+  let rp := Registry.pipeline passes .unchecked
+  rp
+
+/--
+error: Type mismatch
+  rp
+has type
+  RoutePipeline slice0
+    { backend := BackendKind.llvm, backendTarget := LCB.Target.x86_64Linux, maxBIRSlots := 8,
+      maxImageStackBytes := 4096 }
+    Route.unchecked
+but is expected to have type
+  RoutePipeline slice0
+    { backend := BackendKind.llvm, backendTarget := LCB.Target.aarch64Linux, maxBIRSlots := 8,
+      maxImageStackBytes := 4096 }
+    Route.unchecked
+-/
+#guard_msgs in
+example (passes : Passes slice0 ⟨.llvm, .x86_64Linux, 8, 4096⟩) :
+    RoutePipeline slice0 ⟨.llvm, .aarch64Linux, 8, 4096⟩ .unchecked :=
+  let rp := Registry.pipeline passes .unchecked
+  rp
+
+/--
+error: Type mismatch
+  rp
+has type
+  RoutePipeline slice0
+    { backend := BackendKind.llvm, backendTarget := LCB.Target.x86_64Linux, maxBIRSlots := 8,
+      maxImageStackBytes := 4096 }
+    Route.unchecked
+but is expected to have type
+  RoutePipeline slice0
+    { backend := BackendKind.llvm, backendTarget := LCB.Target.aarch64Macos, maxBIRSlots := 8,
+      maxImageStackBytes := 4096 }
+    Route.unchecked
+-/
+#guard_msgs in
+example (passes : Passes slice0 ⟨.llvm, .x86_64Linux, 8, 4096⟩) :
+    RoutePipeline slice0 ⟨.llvm, .aarch64Macos, 8, 4096⟩ .unchecked :=
+  let rp := Registry.pipeline passes .unchecked
+  rp
 
 /-! ## Section 2: All 4 `passesAt` folds via `Registry.pipeline` on both routes -/
 
