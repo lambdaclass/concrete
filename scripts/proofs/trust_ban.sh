@@ -259,14 +259,130 @@ echo "=== X: the examples, in the kernel's terms ==="
 # collected as E collects a theorem's. Each example becomes a noncomputable abbreviation.
 # warningAsError stays off in this axiom-only copy: named abbreviations can trigger declaration
 # linters that anonymous examples do not; warnings remain errors in the original library.
-EX="$TMP/ex"; mkdir -p "$EX"
+# Give a scratch build its own verified pinned dependency checkout via the shared helper.
+# Never symlink $SEED_DIR (doing so would inherit local backend edits and prebuilt .olean
+# outputs from the caller's workspace). Passing LAKE_SEED_PACKAGES_DIR only allows
+# extracting cryptographically verified pinned commit objects from the caller's git object
+# store into a fresh source-only checkout, falling back to a remote fetch on mismatch.
+# Assert WORKSPACE_DIR has a real .lake/packages directory containing a verified,
+# non-symlink checkout at the exact pinned revision for every package in lake-manifest.json.
+verify_scratch_packages_exist() {
+  local workspace_dir="$1"
+  [ -d "$workspace_dir" ] && [ ! -L "$workspace_dir" ] || {
+    echo "verify_scratch_packages_exist: missing or symlinked workspace $workspace_dir" >&2
+    return 1
+  }
+  [ -d "$workspace_dir/.lake" ] && [ ! -L "$workspace_dir/.lake" ] || {
+    echo "verify_scratch_packages_exist: missing or symlinked $workspace_dir/.lake" >&2
+    return 1
+  }
+  [ -d "$workspace_dir/.lake/packages" ] && [ ! -L "$workspace_dir/.lake/packages" ] || {
+    echo "verify_scratch_packages_exist: missing or symlinked $workspace_dir/.lake/packages" >&2
+    return 1
+  }
+  python3 -I - "$workspace_dir" <<'PY' || return 1
+import json
+import os
+import re
+import stat
+import sys
+
+ws = sys.argv[1]
+manifest_path = os.path.join(ws, "lake-manifest.json")
+try:
+    st_man = os.lstat(manifest_path)
+    if stat.S_ISLNK(st_man.st_mode) or not stat.S_ISREG(st_man.st_mode):
+        sys.exit(f"verify_scratch_packages_exist: {manifest_path} is not a regular file")
+    with open(manifest_path, "r", encoding="utf-8") as fh:
+        data = json.load(fh)
+except Exception as exc:
+    sys.exit(f"verify_scratch_packages_exist: unreadable {manifest_path}: {exc}")
+
+if not isinstance(data, dict) or data.get("packagesDir") != ".lake/packages":
+    sys.exit("verify_scratch_packages_exist: unexpected packagesDir in lake-manifest.json")
+packages = data.get("packages")
+if not isinstance(packages, list):
+    sys.exit("verify_scratch_packages_exist: packages field is not a list")
+
+pkgs_dir = os.path.join(ws, ".lake", "packages")
+for entry in packages:
+    raw = entry.get("name", "")
+    name = raw[1:-1] if raw.startswith("«") and raw.endswith("»") else raw
+    rev = entry.get("rev", "")
+    if not name or not re.fullmatch(r"[0-9a-f]{40}", rev):
+        sys.exit(f"verify_scratch_packages_exist: invalid manifest entry {entry!r}")
+    pkg = os.path.join(pkgs_dir, name)
+    try:
+        st = os.lstat(pkg)
+    except OSError as exc:
+        sys.exit(f"verify_scratch_packages_exist: missing package {pkg}: {exc}")
+    if stat.S_ISLNK(st.st_mode) or not stat.S_ISDIR(st.st_mode):
+        sys.exit(f"verify_scratch_packages_exist: {pkg} is not a real directory")
+    git_dir = os.path.join(pkg, ".git")
+    try:
+        gst = os.lstat(git_dir)
+    except OSError as exc:
+        sys.exit(f"verify_scratch_packages_exist: missing .git in {pkg}: {exc}")
+    if stat.S_ISLNK(gst.st_mode) or not stat.S_ISDIR(gst.st_mode):
+        sys.exit(f"verify_scratch_packages_exist: {git_dir} is not a real directory")
+    if os.path.lexists(os.path.join(pkg, ".lake")):
+        sys.exit(f"verify_scratch_packages_exist: unexpected .lake in {pkg}")
+    head_path = os.path.join(git_dir, "HEAD")
+    try:
+        hst = os.lstat(head_path)
+        if stat.S_ISLNK(hst.st_mode) or not stat.S_ISREG(hst.st_mode):
+            sys.exit(f"verify_scratch_packages_exist: invalid HEAD in {pkg}")
+        with open(head_path, "r", encoding="utf-8") as fh:
+            head_val = fh.read().strip()
+    except OSError as exc:
+        sys.exit(f"verify_scratch_packages_exist: unreadable HEAD in {pkg}: {exc}")
+    if head_val != rev:
+        sys.exit(f"verify_scratch_packages_exist: {pkg} HEAD is {head_val!r}, expected {rev!r}")
+PY
+  return 0
+}
+
+prepare_scratch_packages() {
+  local seed_dir="$1"
+  local workspace_dir="$2"
+  [ -d "$workspace_dir" ] || {
+    echo "prepare_scratch_packages: missing workspace $workspace_dir" >&2
+    return 1
+  }
+  (cd "$workspace_dir" && LAKE_SEED_PACKAGES_DIR="$seed_dir" bash "$ROOT_DIR/scripts/checks/lib/fetch_lake_packages.sh") || return 1
+  verify_scratch_packages_exist "$workspace_dir" || return 1
+  return 0
+}
+
+# Prepare verified pinned packages and run `$LAKE build` only after verification passes.
+# Returns 10 if package verification fails (before invoking Lake) or 11 if Lake fails.
+build_verified_scratch() {
+  local seed_dir="$1"
+  local workspace_dir="$2"
+  local pkg_log="$3"
+  local build_log="$4"
+  shift 4
+  prepare_scratch_packages "$seed_dir" "$workspace_dir" > "$pkg_log" 2>&1 || return 10
+  (cd "$workspace_dir" && "$LAKE" build "$@") > "$build_log" 2>&1 || return 11
+  return 0
+}
+
+EX="$TMP/ex"; mkdir -p "$EX" || { no "could not create examples workspace"; finish; }
 cp lakefile.toml lean-toolchain lake-manifest.json "$EX"/ || { no "could not copy the Lake files"; finish; }
-sed -i 's/^warningAsError = true$/warningAsError = false/' "$EX/lakefile.toml"
-cp "$ENUMERATOR" "$TMP/examples-enumerator.lean"
+sed -i 's/^warningAsError = true$/warningAsError = false/' "$EX/lakefile.toml" \
+  || { no "could not update scratch lakefile.toml"; finish; }
+cp "$ENUMERATOR" "$TMP/examples-enumerator.lean" || { no "could not copy examples enumerator"; finish; }
 NEX=$(python3 "$PROOFS_DIR/lean_lex.py" examples . "$EX" "${SRC[@]}" "${EVIDENCE_SRC[@]}" "${COMPILER_SRC[@]}") \
   || { no "the examples could not be rewritten: $NEX"; finish; }
-(cd "$EX" && "$LAKE" build ConcreteSpec ConcreteSpecEvidence Concrete) > "$TMP/ex-build.log" 2>&1 \
-  || { no "the library with its examples as declarations does not build: $(grep -m3 error "$TMP/ex-build.log" | tr '\n' ' ')"; finish; }
+EX_BUILD_RC=0
+build_verified_scratch "$ROOT_DIR/.lake/packages" "$EX" "$TMP/ex-packages.log" "$TMP/ex-build.log" ConcreteSpec ConcreteSpecEvidence Concrete || EX_BUILD_RC=$?
+if [ "$EX_BUILD_RC" -eq 10 ]; then
+  no "could not prepare verified pinned packages for examples workspace: $(tail -5 "$TMP/ex-packages.log" | tr '\n' ' ')"
+  finish
+elif [ "$EX_BUILD_RC" -ne 0 ]; then
+  no "the library with its examples as declarations does not build: $(grep -m3 error "$TMP/ex-build.log" | tr '\n' ' ')"
+  finish
+fi
 (cd "$EX" && PROOF_MODE=examples run_enumerator "$TMP/examples-enumerator.lean") > "$TMP/examples.out" 2> "$TMP/examples.err" \
   || { no "PROOF_MODE=examples failed: $(head -2 "$TMP/examples.err" | tr '\n' ' ')"; finish; }
 grep -P '\t' "$TMP/examples.out" > "$TMP/examples.tsv"
@@ -450,4 +566,250 @@ X=$(nonstandard "$TMP/exc.tsv")
   && ! has_match -F "C.lean:3»" <<<"$X" \
   && ok "control: an example proved by decide +native and one closed by stop are reported, rfl is not, and the word example in a string is no example ($(echo $X | tr '\n' ' '))" \
   || no "control: rewritten examples: $N, rows $(grep -c . "$TMP/exc.tsv"), reported '$X'"
+# Scratch-workspace verification and isolation controls (ISS-0130).
+# Isolate git config once after production checks finish; never rely on `if ( set -e; ... )`
+# subshells (which suppress `set -e` in bash) — every step and required observation checks
+# its own exit status explicitly with `|| return 1`.
+source "$ROOT_DIR/scripts/checks/lib/git_sandbox.sh" || { no "could not load git_sandbox.sh"; finish; }
+git_sandbox "$TMP/scratch-ctl-gitconfig" || { no "git_sandbox failed for scratch controls"; finish; }
+cat >"$GIT_CONFIG_GLOBAL" <<'EOF' || { no "could not write scratch gitconfig"; finish; }
+[user]
+	name = trust-ban scratch control
+	email = control@example.invalid
+[init]
+	defaultBranch = main
+[advice]
+	detachedHead = false
+EOF
+
+# Finding 1 controls: failed scratch-package verification must propagate non-zero and
+# stop build_verified_scratch BEFORE Lake is ever invoked.
+SENTINEL_LAKE="$TMP/sentinel-lake"
+SENTINEL_MARKER="$TMP/sentinel-lake-ran"
+cat >"$SENTINEL_LAKE" <<EOF
+#!/usr/bin/env bash
+printf 'lake-invoked\n' >"$SENTINEL_MARKER"
+exit 0
+EOF
+chmod +x "$SENTINEL_LAKE"
+
+EMPTY_WS="$TMP/empty-scratch-ws"
+mkdir -p "$EMPTY_WS"
+rm -f "$SENTINEL_MARKER"
+rc=0
+(
+  LAKE="$SENTINEL_LAKE"
+  build_verified_scratch "$TMP/nonexistent-seed" "$EMPTY_WS" \
+    "$TMP/empty-pkg.log" "$TMP/empty-build.log" ConcreteSpec
+) || rc=$?
+if [ "$rc" -eq 10 ] && [ ! -e "$SENTINEL_MARKER" ] && has_match -F "lean-toolchain" <"$TMP/empty-pkg.log"; then
+  ok "control: failed scratch-package verification on empty workspace stops before Lake build"
+else
+  cat "$TMP/empty-pkg.log" >&2
+  no "control: empty scratch workspace did not stop before build (rc=$rc, lake_ran=$([ -e "$SENTINEL_MARKER" ] && echo yes || echo no))"
+fi
+
+UNREACHABLE_WS="$TMP/unreachable-scratch-ws"
+mkdir -p "$UNREACHABLE_WS"
+cp "$ROOT_DIR/lean-toolchain" "$UNREACHABLE_WS/"
+cat >"$UNREACHABLE_WS/lake-manifest.json" <<EOF
+{"version": "1.3.0",
+ "packagesDir": ".lake/packages",
+ "packages":
+ [{"url": "$TMP/no-such-remote.git",
+   "type": "git",
+   "subDir": null,
+   "scope": "",
+   "rev": "0123456789abcdef0123456789abcdef01234567",
+   "name": "missingDep",
+   "manifestFile": "lake-manifest.json",
+   "inputRev": "0123456789abcdef0123456789abcdef01234567",
+   "inherited": false,
+   "configFile": "lakefile.toml"}],
+ "name": "unreachableCtl",
+ "lakeDir": ".lake",
+ "fixedToolchain": false}
+EOF
+rm -f "$SENTINEL_MARKER"
+rc=0
+(
+  LAKE="$SENTINEL_LAKE"
+  LAKE_FETCH_ATTEMPTS=1 LAKE_FETCH_BACKOFF_BASE=0 \
+    build_verified_scratch "$TMP/nonexistent-seed" "$UNREACHABLE_WS" \
+      "$TMP/unreachable-pkg.log" "$TMP/unreachable-build.log" ConcreteSpec
+) || rc=$?
+if [ "$rc" -eq 10 ] && [ ! -e "$SENTINEL_MARKER" ] && has_match -F "failed to fetch" <"$TMP/unreachable-pkg.log"; then
+  ok "control: failed scratch-package fetch with missing seed stops before Lake build"
+else
+  cat "$TMP/unreachable-pkg.log" >&2
+  no "control: unreachable scratch fetch did not stop before build (rc=$rc, lake_ran=$([ -e "$SENTINEL_MARKER" ] && echo yes || echo no))"
+fi
+
+EMPTY_PKGS_WS="$TMP/missing-pkg-ws"
+mkdir -p "$EMPTY_PKGS_WS/.lake/packages"
+cp "$ROOT_DIR/lean-toolchain" "$ROOT_DIR/lake-manifest.json" "$EMPTY_PKGS_WS/"
+rc=0
+verify_scratch_packages_exist "$EMPTY_PKGS_WS" >"$TMP/missing-pkg.log" 2>&1 || rc=$?
+if [ "$rc" -ne 0 ] && has_match -F "missing package" <"$TMP/missing-pkg.log"; then
+  ok "control: final scratch-package assertion refuses an empty .lake/packages directory"
+else
+  cat "$TMP/missing-pkg.log" >&2
+  no "control: final scratch-package assertion accepted an empty .lake/packages directory (rc=$rc)"
+fi
+
+# Run the end-to-end Lean isolation control in DIR, building CALLER_TARGET in the caller
+# workspace and requiring EXPECTED_DIAG in the failing scratch build log. Optional 4th arg
+# PLANT_INHERITED_LAKE=1 simulates leaked dependency .lake outputs to prove the check fails.
+# Every required observation (caller build, caller output creation, offline package preparation,
+# absence of inherited .lake outputs, rejection of localAddedLemma, expected diagnostic, and
+# clean scratch build) is independently mandatory via explicit `|| return 1`.
+run_scratch_isolation_control() {
+  local d="$1"
+  local caller_target="$2"
+  local expected_diag="$3"
+  local plant_inherited_lake="${4:-0}"
+  local ws=""
+  local dep_rev=""
+
+  mkdir -p "$d/dep-src" "$d/caller" "$d/scratch" || return 1
+  cp "$ROOT_DIR/lean-toolchain" "$d/dep-src/" || return 1
+  printf 'name = "scratchDep"\n[[lean_lib]]\nname = "ScratchDep"\n' >"$d/dep-src/lakefile.toml" || return 1
+  printf 'def pinnedVal : Nat := 1\n' >"$d/dep-src/ScratchDep.lean" || return 1
+  git init -q "$d/dep-src" || return 1
+  git -C "$d/dep-src" add lakefile.toml ScratchDep.lean lean-toolchain || return 1
+  git -C "$d/dep-src" commit -qm "pinned" || return 1
+  dep_rev="$(git -C "$d/dep-src" rev-parse HEAD)" || return 1
+  [ -n "$dep_rev" ] || return 1
+  git clone -q --bare "$d/dep-src" "$d/dep.git" || return 1
+
+  for ws in "$d/caller" "$d/scratch"; do
+    cp "$ROOT_DIR/lean-toolchain" "$ws/" || return 1
+    cat >"$ws/lakefile.toml" <<EOF || return 1
+name = "scratchCtl"
+[[require]]
+name = "scratchDep"
+git = "$d/dep.git"
+rev = "$dep_rev"
+[[lean_lib]]
+name = "ScratchMain"
+EOF
+    cat >"$ws/lake-manifest.json" <<EOF || return 1
+{"version": "1.3.0",
+ "packagesDir": ".lake/packages",
+ "packages":
+ [{"url": "$d/dep.git",
+   "type": "git",
+   "subDir": null,
+   "scope": "",
+   "rev": "$dep_rev",
+   "name": "scratchDep",
+   "manifestFile": "lake-manifest.json",
+   "inputRev": "$dep_rev",
+   "inherited": false,
+   "configFile": "lakefile.toml"}],
+ "name": "scratchCtl",
+ "lakeDir": ".lake",
+ "fixedToolchain": false}
+EOF
+    printf 'import ScratchDep\nexample : localAddedLemma = 42 := rfl\n' >"$ws/ScratchMain.lean" || return 1
+  done
+
+  (cd "$d/caller" && LAKE_FETCH_BACKOFF_BASE=0 bash "$ROOT_DIR/scripts/checks/lib/fetch_lake_packages.sh") || {
+    echo "caller fetch_lake_packages.sh failed" >&2
+    return 1
+  }
+  printf 'def localAddedLemma : Nat := 42\n' >>"$d/caller/.lake/packages/scratchDep/ScratchDep.lean" || return 1
+
+  # Mandatory observation 1: caller builds with the locally added backend lemma and writes .lake outputs.
+  (cd "$d/caller" && "$LAKE" build "$caller_target") || {
+    echo "caller build of $caller_target failed" >&2
+    return 1
+  }
+  [ -d "$d/caller/.lake/packages/scratchDep/.lake" ] || {
+    echo "caller build did not produce scratchDep/.lake outputs" >&2
+    return 1
+  }
+
+  # Take the remote offline to prove seeding uses only verified pinned objects with zero network access.
+  mv "$d/dep.git" "$d/dep-offline.git" || return 1
+
+  # Mandatory observation 2: prepare_scratch_packages succeeds offline from verified seed objects.
+  prepare_scratch_packages "$d/caller/.lake/packages" "$d/scratch" || {
+    echo "prepare_scratch_packages failed for scratch workspace" >&2
+    return 1
+  }
+
+  if [ "$plant_inherited_lake" = "1" ]; then
+    mkdir -p "$d/scratch/.lake/packages/scratchDep/.lake/build" || return 1
+  fi
+
+  # Mandatory observation 3: no inherited .lake build outputs exist in scratch dependency.
+  [ ! -e "$d/scratch/.lake/packages/scratchDep/.lake" ] || {
+    echo "scratch workspace inherited caller .lake build outputs" >&2
+    return 1
+  }
+
+  # Mandatory observation 4: scratch build rejects the locally added backend lemma.
+  if (cd "$d/scratch" && "$LAKE" build ScratchMain) >"$d/scratch-bad.log" 2>&1; then
+    echo "scratch build unexpectedly accepted locally added backend lemma" >&2
+    return 1
+  fi
+
+  # Mandatory observation 5: scratch build log contains the required diagnostic.
+  has_match -F "$expected_diag" <"$d/scratch-bad.log" || {
+    echo "scratch build log missing expected diagnostic '$expected_diag'" >&2
+    return 1
+  }
+
+  # Mandatory observation 6: clean example using only pinnedVal builds cleanly in scratch.
+  printf 'import ScratchDep\nexample : pinnedVal = 1 := rfl\n' >"$d/scratch/ScratchMain.lean" || return 1
+  (cd "$d/scratch" && "$LAKE" build ScratchMain) || {
+    echo "clean scratch build failed" >&2
+    return 1
+  }
+  return 0
+}
+
+rc=0
+run_scratch_isolation_control "$TMP/scratch-isolation" "ScratchMain" "localAddedLemma" \
+  >"$TMP/scratch-isolation.log" 2>&1 || rc=$?
+if [ "$rc" -eq 0 ]; then
+  ok "control: examples scratch workspace rejects an example using a lemma added locally to the caller's backend"
+else
+  tail -20 "$TMP/scratch-isolation.log" >&2
+  no "control: examples scratch workspace isolation control failed (rc=$rc)"
+fi
+
+# Finding 2 negative controls: planting a failing caller build, leaked dependency .lake
+# outputs, or an absent required diagnostic MUST each independently fail the control
+# instead of being masked by the final clean build.
+rc=0
+run_scratch_isolation_control "$TMP/scratch-isolation-bad-target" "NonexistentTarget" "localAddedLemma" \
+  >"$TMP/scratch-isolation-bad-target.log" 2>&1 || rc=$?
+if [ "$rc" -ne 0 ] && has_match -F "caller build of NonexistentTarget failed" <"$TMP/scratch-isolation-bad-target.log"; then
+  ok "control: isolation control fails when caller build targets a nonexistent library"
+else
+  tail -20 "$TMP/scratch-isolation-bad-target.log" >&2
+  no "control: isolation control masked a failing caller build (rc=$rc)"
+fi
+
+rc=0
+run_scratch_isolation_control "$TMP/scratch-isolation-leaked-lake" "ScratchMain" "localAddedLemma" 1 \
+  >"$TMP/scratch-isolation-leaked-lake.log" 2>&1 || rc=$?
+if [ "$rc" -ne 0 ] && has_match -F "scratch workspace inherited caller .lake build outputs" <"$TMP/scratch-isolation-leaked-lake.log"; then
+  ok "control: isolation control fails when inherited .lake outputs are planted in scratch dependency"
+else
+  tail -20 "$TMP/scratch-isolation-leaked-lake.log" >&2
+  no "control: isolation control masked planted inherited .lake outputs (rc=$rc)"
+fi
+
+rc=0
+run_scratch_isolation_control "$TMP/scratch-isolation-bad-diag" "ScratchMain" "DiagnosticThatCannotAppear" \
+  >"$TMP/scratch-isolation-bad-diag.log" 2>&1 || rc=$?
+if [ "$rc" -ne 0 ] && has_match -F "scratch build log missing expected diagnostic 'DiagnosticThatCannotAppear'" <"$TMP/scratch-isolation-bad-diag.log"; then
+  ok "control: isolation control fails when required scratch build diagnostic is absent"
+else
+  tail -20 "$TMP/scratch-isolation-bad-diag.log" >&2
+  no "control: isolation control masked an absent diagnostic (rc=$rc)"
+fi
 finish
