@@ -6,6 +6,7 @@ import ConcreteSpec.Proofs.Memory
 -- The specification of the new compiler. Start with ConcreteSpec/README.md.
 -- The rules and their examples: ConcreteSpec/Spec.lean. The proofs: ConcreteSpec/Proofs/.
 import ConcreteSpec.Spec
+import ConcreteSpec.Tactics
 import ConcreteSpec.Proofs.Examples
 import ConcreteSpec.Proofs.Authority
 import ConcreteSpec.Proofs.Observe
@@ -29,6 +30,7 @@ import ConcreteSpec.Proofs.OwnErasure
 
 import ConcreteSpec.StageInterface
 import ConcreteSpec.StageGrammar
+import ConcreteSpec.Proofs.StageParser
 import ConcreteSpec.Admission
 import ConcreteSpec.Admission.Controls
 import ConcreteSpec.IntegratedCore

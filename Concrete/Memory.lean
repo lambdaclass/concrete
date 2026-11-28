@@ -112,7 +112,13 @@ theorem storageClass_virtual_iff {language : CoreLanguage}
     (mir : MIR lang profile) (fn : FnId) (root : PlaceId) (ty : language.operands.Ty) :
     storageClass (language := language) mir fn root ty = .virtual ↔
       (language.scalarType ty).isSome ∧ ¬ mir.Escapes fn root := by
-  simp [storageClass, Bool.and_eq_true, ← escapes_iff]
+  unfold storageClass
+  cases hsc : (language.scalarType ty).isSome <;> cases hesc : escapes (language := language) mir fn root
+  · exact ⟨fun h => StorageClass.noConfusion h, fun h => Bool.noConfusion h.1⟩
+  · exact ⟨fun h => StorageClass.noConfusion h, fun h => Bool.noConfusion h.1⟩
+  · exact ⟨fun _ => ⟨rfl, fun h => Bool.noConfusion (hesc.symm.trans ((escapes_iff mir fn root).mpr h))⟩,
+      fun _ => rfl⟩
+  · exact ⟨fun h => StorageClass.noConfusion h, fun h => (h.2 ((escapes_iff mir fn root).mp hesc)).elim⟩
 
 private def checkSignature {Ty : Type} [DecidableEq Ty] {lang : LoweringLanguage Ty}
     {profile : Profile} (memory : Interfaces.Memory lang profile) (fn : FnId)

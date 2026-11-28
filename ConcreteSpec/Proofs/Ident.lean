@@ -1,6 +1,7 @@
 import ConcreteSpec.Diagnostics.Types
 import ConcreteSpec.Spec.Basics
 import ConcreteSpec.Spec.Ident
+import ConcreteSpec.Tactics
 
 /-!
 # Laws of typed and persistent identities
@@ -1221,46 +1222,14 @@ theorem EncodedPremise.read_iff (reader : SpecVersion) (record : EncodedPremise)
           decoded = ⟨kind, record.scope, record.spec⟩ := by
   constructor
   · intro found
-    by_cases hspec : record.spec = reader
-    · by_cases hreader : reader = specVersion
-      · refine ⟨hspec, hreader, ?_⟩
-        rcases record with ⟨category, scope, spec⟩
-        simp only at hspec
-        subst hreader
-        subst hspec
-        unfold EncodedPremise.read PremiseKind.decode at found
-        simp only [↓reduceIte] at found
-        match category with
-        | 0 =>
-          simp only [Option.some.injEq] at found
-          exact ⟨.target, rfl, found.symm⟩
-        | 1 =>
-          simp only [Option.some.injEq] at found
-          exact ⟨.heap, rfl, found.symm⟩
-        | 2 =>
-          simp only [Option.some.injEq] at found
-          exact ⟨.stack, rfl, found.symm⟩
-        | 3 =>
-          simp only [Option.some.injEq] at found
-          exact ⟨.foreignFunction, rfl, found.symm⟩
-        | 4 =>
-          simp only [Option.some.injEq] at found
-          exact ⟨.trustedSurface, rfl, found.symm⟩
-        | 5 =>
-          simp only [Option.some.injEq] at found
-          exact ⟨.entropy, rfl, found.symm⟩
-        | 6 =>
-          simp only [Option.some.injEq] at found
-          exact ⟨.assume, rfl, found.symm⟩
-        | n + 7 => cases found
-      · rw [EncodedPremise.read_version_mismatch reader record (Or.inr hreader)] at found
-        cases found
-    · rw [EncodedPremise.read_version_mismatch reader record (Or.inl hspec)] at found
-      cases found
+    rcases record with ⟨category, scope, spec⟩
+    unfold_step EncodedPremise.read, PremiseKind.decode at found
+    crush_option
+    all_goals subst_vars; refine ⟨rfl, rfl, _, ?_, rfl⟩; rfl
   · rintro ⟨hspec, hreader, kind, hkind, rfl⟩
-    unfold EncodedPremise.read PremiseKind.decode
+    unfold_step EncodedPremise.read, PremiseKind.decode
     rw [← hkind]
-    cases kind <;> simp [PremiseKind.encode, hspec, hreader]
+    cases kind <;> simp only [PremiseKind.encode, hspec, hreader, ↓reduceIte]
 
 namespace SourcePath
 
