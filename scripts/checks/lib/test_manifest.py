@@ -144,7 +144,22 @@ def validate_expect(path, line, expect):
             fail(path, line, f"invalid expect {expect!r}")
 
 
-def validate_source(path, line, program, seen_sources):
+def resolve_manifest_dirs(path, line, *, strict_dir=False):
+    manifest_dir = path.parent
+    if manifest_dir.is_symlink():
+        fail(path, line, f"manifest directory {manifest_dir} must not be a symlink")
+    try:
+        tests_dir = manifest_dir.resolve(strict=strict_dir)
+    except OSError:
+        fail(path, line, f"manifest directory {manifest_dir} does not exist")
+    except RuntimeError as error:
+        fail(path, line, f"manifest directory {manifest_dir} cannot be resolved: {error}")
+    if tests_dir.name != "tests":
+        fail(path, line, f"manifest directory {manifest_dir} must be named 'tests'")
+    return tests_dir, tests_dir.parent
+
+
+def resolve_con_source(path, line, program):
     relative = program[4:]
     parts = relative.split("/")
     pure = PurePosixPath(relative)
@@ -154,7 +169,7 @@ def validate_source(path, line, program, seen_sources):
         fail(path, line, f"con: path {relative!r} must be a normalized tests/*.con path")
     if len(parts) > 1 and parts[1] == "golden":
         fail(path, line, f"con: path {relative!r} must not be under tests/golden/")
-    tests_dir = path.parent.resolve()
+    tests_dir, project_root = resolve_manifest_dirs(path, line, strict_dir=True)
     cur = tests_dir
     for part in parts[1:]:
         cur = cur / part
@@ -173,6 +188,13 @@ def validate_source(path, line, program, seen_sources):
         fail(path, line, f"con: path {relative!r} is not a file")
     if resolved != tests_dir and tests_dir not in resolved.parents:
         fail(path, line, f"con: file {relative!r} escapes tests/")
+    if resolved != project_root / relative:
+        fail(path, line, f"con: file {relative!r} is outside the manifest project root")
+    return relative, resolved, project_root, tests_dir
+
+
+def validate_source(path, line, program, seen_sources):
+    relative, resolved, _, _ = resolve_con_source(path, line, program)
     if relative in seen_sources or resolved in seen_sources.values():
         fail(path, line, f"con: path {relative!r} is listed more than once")
     seen_sources[relative] = resolved
@@ -233,6 +255,8 @@ def parse(path, text):
 
 def load(manifest):
     path = Path(manifest)
+    if path.is_symlink():
+        raise ManifestError(f"{path}: manifest must not be a symlink")
     try:
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeError) as error:
@@ -245,24 +269,41 @@ def decode_stderr_bytes(data):
 
 
 def materialize_expect(manifest, ident, out_dir):
-    rows = load(manifest)
+    path = Path(manifest)
+    rows = load(path)
+    resolve_manifest_dirs(path, None, strict_dir=True)
     row = next((item for item in rows if item.id == ident), None)
     if row is None:
         fail(manifest, None, f"unknown test id {ident!r}")
     parts = row.expect.split(" ")
     match parts:
         case ["exit", status, stderr]:
+            expect_kind = "exit"
             exit_status = int(status)
             stderr_bytes = decode_stderr_bytes(stderr)
         case ["trap", _, _, stderr]:
+            expect_kind = "trap"
             exit_status = 134
             stderr_bytes = decode_stderr_bytes(stderr)
         case _:
             fail(manifest, None, f"row {ident!r} has non-executable expect {row.expect!r}")
     dest = Path(out_dir)
     dest.mkdir(parents=True, exist_ok=True)
+    (dest / "reason").write_text("exit\n", encoding="utf-8")
     (dest / "status").write_text(f"{exit_status}\n", encoding="utf-8")
+    (dest / "signal").write_text("none\n", encoding="utf-8")
     (dest / "stderr").write_bytes(stderr_bytes)
+    (dest / "expect_kind").write_text(f"{expect_kind}\n", encoding="utf-8")
+    (dest / "program").write_text(f"{row.program}\n", encoding="utf-8")
+    if row.program.startswith("con:"):
+        rel_path, source_path, project_root, tests_dir = resolve_con_source(path, None, row.program)
+        (dest / "rel_path").write_text(f"{rel_path}\n", encoding="utf-8")
+        (dest / "source_path").write_text(f"{source_path}\n", encoding="utf-8")
+        (dest / "project_root").write_text(f"{project_root}\n", encoding="utf-8")
+        (dest / "tests_dir").write_text(f"{tests_dir}\n", encoding="utf-8")
+    else:
+        for stale in ("rel_path", "source_path", "project_root", "tests_dir"):
+            (dest / stale).unlink(missing_ok=True)
     return row, exit_status
 
 
@@ -297,16 +338,50 @@ def self_test():
         )
         row_a, status_a = materialize_expect(manifest_file, "a", root / "out-a")
         assert row_a.program == "bir:answer" and status_a == 42
+        assert (root / "out-a" / "reason").read_text(encoding="utf-8") == "exit\n"
         assert (root / "out-a" / "status").read_text(encoding="utf-8") == "42\n"
+        assert (root / "out-a" / "signal").read_text(encoding="utf-8") == "none\n"
         assert (root / "out-a" / "stderr").read_bytes() == b""
+        assert (root / "out-a" / "expect_kind").read_text(encoding="utf-8") == "exit\n"
+        assert not (root / "out-a" / "source_path").exists()
         row_t, status_t = materialize_expect(manifest_file, "t", root / "out-t")
         assert row_t.program == "con:tests/slice0/trap.con" and status_t == 134
+        assert (root / "out-t" / "reason").read_text(encoding="utf-8") == "exit\n"
         assert (root / "out-t" / "status").read_text(encoding="utf-8") == "134\n"
+        assert (root / "out-t" / "signal").read_text(encoding="utf-8") == "none\n"
         assert (root / "out-t" / "stderr").read_bytes() == trap_line
+        assert (root / "out-t" / "expect_kind").read_text(encoding="utf-8") == "trap\n"
+        assert (root / "out-t" / "rel_path").read_text(encoding="utf-8") == "tests/slice0/trap.con\n"
+        assert (root / "out-t" / "source_path").read_text(encoding="utf-8") == f"{(tests / 'slice0' / 'trap.con').resolve()}\n"
+        assert (root / "out-t" / "project_root").read_text(encoding="utf-8") == f"{root.resolve()}\n"
         row_e, status_e = materialize_expect(manifest_file, "e", root / "out-e")
         assert row_e.program == "bir:msg" and status_e == 7
+        assert (root / "out-e" / "reason").read_text(encoding="utf-8") == "exit\n"
         assert (root / "out-e" / "status").read_text(encoding="utf-8") == "7\n"
+        assert (root / "out-e" / "signal").read_text(encoding="utf-8") == "none\n"
         assert (root / "out-e" / "stderr").read_bytes() == b"ok\n"
+        symlink_manifest = tests / "manifest_link.tsv"
+        symlink_manifest.symlink_to(manifest_file)
+        linked_project = root / "linked-project"
+        linked_project.mkdir()
+        (linked_project / "tests").symlink_to(tests)
+        wrong_dir = root / "not_tests"
+        wrong_dir.mkdir()
+        (wrong_dir / "slice0").mkdir()
+        (wrong_dir / "slice0" / "trap.con").write_text("return 0;\n", encoding="utf-8")
+        wrong_manifest = wrong_dir / "manifest.tsv"
+        wrong_manifest.write_text(
+            f"id\tprogram\texpect\tslice\n"
+            f"t\tcon:tests/slice0/trap.con\ttrap arithmeticOverflow 1 {trap_line.hex()}\tslice0\n",
+            encoding="utf-8",
+        )
+        for bad_manifest in (symlink_manifest, linked_project / "tests" / "manifest.tsv", wrong_manifest):
+            try:
+                materialize_expect(bad_manifest, "t", root / "out-bad-manifest")
+            except ManifestError:
+                pass
+            else:
+                raise AssertionError(f"materialize_expect accepted bad manifest {bad_manifest}")
         for bad_id in ("missing", "b", "c", "l"):
             try:
                 materialize_expect(manifest_file, bad_id, root / f"out-{bad_id}")
