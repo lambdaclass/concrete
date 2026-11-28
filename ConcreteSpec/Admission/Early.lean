@@ -51,6 +51,34 @@ theorem checkStatic_iff {language} {input : CoreInput language} (wf : input.WF) 
         rw [ran] at good
         contradiction
 
+/-- Every rendered static refusal from `CoreInput.checkStatic` preserves the exact
+runtime-policy checker reason, registered rule, primary span, and related spans. -/
+theorem checkStatic_refused {language} {input : CoreInput language} {failure}
+    (ran : input.checkStatic = .error (.refused failure)) : input.StaticRefuses failure := by
+  cases decoded : input.decode with
+  | error r =>
+    simp [CoreInput.checkStatic, decoded, Except.mapError, Bind.bind, Except.bind] at ran
+  | ok view =>
+    have exactView := (input.decode_iff view).mp decoded
+    cases checked : checkProgramWith .runtime view.program with
+    | ok ds =>
+      simp [CoreInput.checkStatic, decoded, checked, Except.mapError, Bind.bind, Except.bind, Pure.pure, Except.pure] at ran
+    | error reason =>
+      simp only [CoreInput.checkStatic, decoded, checked, AdmissionView.failure, Except.mapError,
+        Bind.bind, Except.bind] at ran
+      cases rendered : view.render reason with
+      | none => simp [rendered] at ran
+      | some diagnostic =>
+        simp only [rendered, Except.error.injEq, AdmissionFailure.refused.injEq] at ran
+        subst ran
+        refine ⟨?_, view, reason, exactView, checked, rendered⟩
+        rintro ⟨_, ⟨t, ht, decls, _⟩, w, hw, body⟩
+        cases t.unique ht exactView
+        cases w.unique hw exactView
+        obtain ⟨_, good⟩ := (checkProgramWith_iff .runtime _).2 ⟨decls, body⟩
+        rw [checked] at good
+        contradiction
+
 /-- The bridge can fail structurally before checking. Every language refusal is
 rendered from the same traversal and canonical view. -/
 def admitInput {language : CoreLanguage} (input : CoreInput language) :

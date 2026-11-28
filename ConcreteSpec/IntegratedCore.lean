@@ -11,11 +11,11 @@ open Core
 little-endian literal encoding and the approved overflow trap kind. -/
 theorem earlyAddLiteralCondition (slice : Slice) (ty : Core.IntTy) (left right : Int) :
     (sliceLanguage slice).safety
-      (.expression (.inl (.add ty (.literal (.int ty left)) (.literal (.int ty right))))) =
+      (.expression (.add ty (.literal (.int ty left)) (.literal (.int ty right)))) =
       [⟨0, .overflow, [
-        (.inl (.scalar (.int ty)), .literal ((Mem.leBytes ty.byteSize (toBits ty left)).map
+        (.scalar (.int ty), .literal ((Mem.leBytes ty.byteSize (toBits ty left)).map
           fun byte => UInt8.ofNat byte.val)),
-        (.inl (.scalar (.int ty)), .literal ((Mem.leBytes ty.byteSize (toBits ty right)).map
+        (.scalar (.int ty), .literal ((Mem.leBytes ty.byteSize (toBits ty right)).map
           fun byte => UInt8.ofNat byte.val))]⟩] := by
   cases ty <;> rfl
 
@@ -32,7 +32,7 @@ private theorem literalOctets (bytes : List (Fin 256)) :
 Core operation identities. The decoder does not depend on the target. -/
 theorem earlyIntegerLiteralRoundTrip (slice : Slice) (ty : Core.IntTy) (n : Int)
     (inRange : ty.InRange n) :
-    (sliceLanguage slice).literal (.inl (.scalar (.int ty)))
+    (sliceLanguage slice).literal (.scalar (.int ty))
       ((Mem.leBytes ty.byteSize (toBits ty n)).map fun byte => UInt8.ofNat byte.val) =
       some (.scalar (.int ty n)) := by
   change (if ((Mem.leBytes ty.byteSize (toBits ty n)).map
@@ -64,10 +64,10 @@ theorem earlyAddOverflow (slice : Slice) (ty : Core.IntTy) (left right : Int)
     (locals : AList Var EarlyValue) (store : Hybrid.State)
     (overflow : checked ty .add left right = .error .overflow) :
     (sliceLanguage slice).operands.eval locals store
-      (.inl (.add ty (.literal (.int ty left)) (.literal (.int ty right)))) = .trap .overflow := by
+      (.add ty (.literal (.int ty left)) (.literal (.int ty right))) = .trap .overflow := by
   have evaluation :
       (sliceLanguage slice).operands.eval locals store
-        (.inl (.add ty (.literal (.int ty left)) (.literal (.int ty right)))) =
+        (.add ty (.literal (.int ty left)) (.literal (.int ty right))) =
       ((plain ty .add left right).map (CoreValue.scalar ∘ CVal.int ty)).map
         (fun value => (value, store)) := by
     cases ty <;> rfl

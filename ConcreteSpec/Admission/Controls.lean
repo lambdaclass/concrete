@@ -185,4 +185,189 @@ theorem discharge_after_binding :
   have h := afterBindingBatch.dischargeSafety (d := afterBindingDischarge) (by simp [afterBindingBatch]) reached
   exact ⟨h.2.1, h.2.2.2.2⟩
 
+/-! ### Freeze F1a stage-boundary controls -/
+
+section StageBoundaryControls
+
+open ConcreteSpec.Core ConcreteSpec.Core.SourcePathSpan ConcreteSpec.StageInterface
+
+private def mkSpan (start stop : Nat) : Surface0.Span := ⟨start, stop, 1, start + 1, ⟨0⟩⟩
+private def braceSpan : Surface0.Span := mkSpan 31 32
+private def nameSpan : Surface0.Span := mkSpan 3 7
+
+-- Codex 5: empty body and non-empty fallthrough both cite `Slice0Rules.Returns@1` at `closeBrace`.
+theorem fallthrough_cites_closeBrace :
+    let emptyProg : Surface0.Program := ⟨"main", nameSpan, [], braceSpan⟩
+    let nonEmptyProg : Surface0.Program :=
+      ⟨"main", nameSpan, [.bind ⟨"x", mkSpan 22 23, .integer 1 none (mkSpan 30 31)⟩ (mkSpan 18 31)], braceSpan⟩
+    SurfacePreparation.prepareSurface0 emptyProg = .error (.surface (.fallthrough braceSpan)) ∧
+    SurfacePreparation.prepareSurface0 nonEmptyProg = .error (.surface (.fallthrough braceSpan)) ∧
+    (RefusalCause.surface (.fallthrough braceSpan)).rule = ⟨``Slice0Rules.Returns, 1⟩ ∧
+    (RefusalCause.surface (.fallthrough braceSpan)).primary = surfaceFileSpan braceSpan :=
+  ⟨rfl, rfl, rfl, rfl⟩
+
+-- Stage-order `prepareSurface0`: surface preparation checks surface rules left-to-right only,
+-- never preempting a later surface violation with a Core check (`LiteralTyped` / `AdditionFits` / `LocalsUsed`).
+theorem prepareSurface0_stage_order :
+    let bind256 : Surface0.Statement :=
+      .bind ⟨"x", mkSpan 22 23, .integer 256 none (mkSpan 30 33)⟩ (mkSpan 18 34)
+    let bindOption : Surface0.Statement :=
+      .bind ⟨"Option", mkSpan 39 45, .integer 1 none (mkSpan 52 53)⟩ (mkSpan 35 54)
+    let retX : Surface0.Statement := .ret (.local "x" (mkSpan 62 63)) (mkSpan 55 64)
+    let ret42 : Surface0.Statement := .ret (.integer 42 none (mkSpan 25 27)) (mkSpan 18 28)
+    let ret256 : Surface0.Statement := .ret (.integer 256 none (mkSpan 25 28)) (mkSpan 18 29)
+    let ret256PlusMissing : Surface0.Statement :=
+      .ret (.add (.integer 256 none (mkSpan 26 29)) (.local "missing" (mkSpan 32 39)) (mkSpan 30 31)) (mkSpan 18 41)
+    let retMissing : Surface0.Statement := .ret (.local "missing" (mkSpan 25 32)) (mkSpan 18 33)
+    -- `let x: u8 = 256; let Option: u8 = 1; return x;` → UnreservedLocal@2 at Option, not Core LiteralTyped
+    SurfacePreparation.prepareSurface0 ⟨"main", nameSpan, [bind256, bindOption, retX], braceSpan⟩ =
+      .error (.surface (.reservedBinder "Option" (mkSpan 39 45))) ∧
+    -- `return (256 + missing);` → LocalBound@1 at missing, not Core LiteralTyped
+    SurfacePreparation.prepareSurface0 ⟨"main", nameSpan, [ret256PlusMissing], braceSpan⟩ =
+      .error (.surface (.unknownLocal "missing" (mkSpan 32 39))) ∧
+    -- `return 42; let Option: u8 = 1;` → ReachableBody@1 at full statement span [35, 54), not UnreservedLocal
+    SurfacePreparation.prepareSurface0 ⟨"main", nameSpan, [ret42, bindOption], braceSpan⟩ =
+      .error (.surface (.unreachable (mkSpan 35 54))) ∧
+    -- `return 256; let Option: u8 = 1;` → ReachableBody@1 at full statement span, not Core LiteralTyped
+    SurfacePreparation.prepareSurface0 ⟨"main", nameSpan, [ret256, bindOption], braceSpan⟩ =
+      .error (.surface (.unreachable (mkSpan 35 54))) ∧
+    -- `return missing; return 42;` → LocalBound@1 at missing (left-to-right before trailing statement)
+    SurfacePreparation.prepareSurface0 ⟨"main", nameSpan, [retMissing, ret42], braceSpan⟩ =
+      .error (.surface (.unknownLocal "missing" (mkSpan 25 32))) ∧
+    -- Both routes share identical surface preparation.
+    SurfacePreparation.prepareSurface0 ⟨"main", nameSpan, [bind256, bindOption, retX], braceSpan⟩ .eligibility =
+      SurfacePreparation.prepareSurface0 ⟨"main", nameSpan, [bind256, bindOption, retX], braceSpan⟩ .admission :=
+  ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+
+-- Slice 1 located destructure refusal: `fn main() -> u8 { let Option {} = 1; return 0; }`
+-- cites registered `Surface1.StructDeclared@1` at `Option` [22, 28) before lowering RHS `1`.
+theorem slice1_destructure_unknown_struct_located :
+    let optionSpan : Surface0.Span := ⟨22, 28, 1, 23, ⟨0⟩⟩
+    let prog : Surface1.SourceProgram :=
+      ⟨[], "main", [.bind "Option" .destructure (.integer 1 none) optionSpan, .ret (.integer 0 none)]⟩
+    let declProg : Surface1.SourceProgram :=
+      ⟨["Token"], "main", [.bind "Token" .destructure (.construct "Token") optionSpan, .ret (.integer 0 none)]⟩
+    Surface1.elaborateChecked prog = .error (.unknownDestructuredStruct "Option" optionSpan) ∧
+    (Surface1.ElaborationRefusal.unknownDestructuredStruct "Option" optionSpan).ruleId =
+      some ⟨``Surface1.StructDeclared, 1⟩ ∧
+    (validateRule ⟨``Surface1.StructDeclared, 1⟩).isSome = true ∧
+    (Surface1.elaborateChecked declProg).isOk = true := by
+  exact ⟨rfl, rfl, by decide, rfl⟩
+
+-- `Slice0Rules.AdmittedProduction` aligned with `GrammarData.ProductionId` and `AdmittedAt 0`.
+theorem admittedProduction_catalog_aligned :
+    Slice0Rules.AdmittedProduction .plus ∧
+    Slice0Rules.AdmittedProduction .endDecls ∧
+    ¬ Slice0Rules.AdmittedProduction .minus ∧
+    ¬ Slice0Rules.AdmittedProduction .destructure ∧
+    ¬ Slice0Rules.AdmittedProduction .ifStmt ∧
+    (validateRule ⟨``Slice0Rules.AdmittedProduction, 3⟩).isSome = true ∧
+    (validateRule ⟨``Slice0Rules.AdmittedProduction, 2⟩).isNone = true := by
+  unfold Slice0Rules.AdmittedProduction GrammarData.AdmittedAt
+  decide
+
+-- `eofFileSpan` (trailing trivia included) and `ParserView.invalidLocation` (all 5 `LocationRefusal` variants).
+theorem parserView_locations_and_eof :
+    let proj := Project.singleton mainSourcePath (SourceText.ofBytes "a\nb  ".toUTF8.data.toList)
+    let src : Source := ⟨proj, ⟨0⟩, slice0⟩
+    let tok (span : FileSpan) : Located TokenValue := ⟨span, .fixed .semi rfl⟩
+    let view (span : FileSpan) : ParserView := ⟨src, #[tok span]⟩
+    eofFileSpan src = ⟨⟨0⟩, 5, 5, 2, 4⟩ ∧
+    (view ⟨⟨0⟩, 0, 1, 1, 1⟩).invalidLocation = none ∧
+    (view ⟨⟨1⟩, 0, 1, 1, 1⟩).invalidLocation = some (⟨⟨1⟩, 0, 1, 1, 1⟩, .unknownFile) ∧
+    (view ⟨⟨0⟩, 2, 1, 2, 1⟩).invalidLocation = some (⟨⟨0⟩, 2, 1, 2, 1⟩, .reversedRange) ∧
+    (view ⟨⟨0⟩, 0, 6, 1, 1⟩).invalidLocation = some (⟨⟨0⟩, 0, 6, 1, 1⟩, .pastEnd 5) ∧
+    (view ⟨⟨0⟩, 0, 1, 2, 1⟩).invalidLocation = some (⟨⟨0⟩, 0, 1, 2, 1⟩, .wrongLine 1) ∧
+    (view ⟨⟨0⟩, 0, 1, 1, 2⟩).invalidLocation = some (⟨⟨0⟩, 0, 1, 1, 2⟩, .wrongColumn 1) ∧
+    (locationRefusalRule .unknownFile).val = ⟨``SourcePathSpan.SlotResolves, 1⟩ ∧
+    (locationRefusalRule .reversedRange).val = ⟨``SourcePathSpan.OrderedOffsets, 2⟩ ∧
+    (locationRefusalRule (.pastEnd 5)).val = ⟨``SourcePathSpan.EndInSource, 2⟩ ∧
+    (locationRefusalRule (.wrongLine 1)).val = ⟨``SourcePathSpan.LineMatches, 2⟩ ∧
+    (locationRefusalRule (.wrongColumn 1)).val = ⟨``SourcePathSpan.ColumnMatches, 2⟩ := by
+  with_unfolding_all exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+
+-- ISS-0125 `Layout.WellFormed`: strict ceiling `align < addressCeiling`, overlapping sibling rejection,
+-- duplicate sibling name rejection, adjacent siblings acceptance, zero-sized sibling acceptance,
+-- and `sliceLanguage_layout_wf` on integers and logical empty nominals.
+private def ctrlDecl : DeclId := ⟨earlyEntry.module, ⟨"S"⟩⟩
+private def fldA : FieldId := ⟨.struct ctrlDecl, ⟨"a"⟩⟩
+private def fldB : FieldId := ⟨.struct ctrlDecl, ⟨"b"⟩⟩
+
+theorem layout_wellFormed_strict_and_disjoint :
+    let ceiling := linuxX8664.addressCeiling
+    -- Strict alignment ceiling rejects align = addressCeiling even at size 0.
+    (Layout.scalar 0 ceiling).WellFormed linuxX8664 = false ∧
+    -- Overlapping sibling fields [0, 4) and [2, 6) are rejected.
+    (Layout.mk 8 4 (.cons fldA 0 (.scalar 4 4) (.cons fldB 2 (.scalar 4 2) .nil))).WellFormed linuxX8664 = false ∧
+    -- Duplicate sibling field names are rejected even at disjoint offsets.
+    (Layout.mk 8 4 (.cons fldA 0 (.scalar 4 4) (.cons fldA 4 (.scalar 4 4) .nil))).WellFormed linuxX8664 = false ∧
+    -- Adjacent non-overlapping sibling fields [0, 4) and [4, 8) are accepted.
+    (Layout.mk 8 4 (.cons fldA 0 (.scalar 4 4) (.cons fldB 4 (.scalar 4 4) .nil))).WellFormed linuxX8664 = true ∧
+    -- Zero-sized sibling field sharing offset with a nonempty field is accepted (Q3.8).
+    (Layout.mk 4 4 (.cons fldA 0 (.scalar 4 4) (.cons fldB 0 (.scalar 0 1) .nil))).WellFormed linuxX8664 = true ∧
+    -- Logical empty nominal in `sliceLanguage` has layout (0, 1) and satisfies `Layout.WellFormed`.
+    (sliceLanguage sliceOne).layout [(ctrlDecl, ⟨ctrlDecl.name, false, []⟩)] linuxX8664 (.nominal ctrlDecl) =
+      some (.scalar 0 1) := by
+  refine ⟨by decide, by decide, by decide, by decide, by decide, rfl⟩
+
+theorem sliceLanguage_layout_wf_examples :
+    (Layout.scalar 0 1).WellFormed linuxX8664 = true ∧
+    (Layout.scalar 4 4).WellFormed linuxX8664 = true :=
+  ⟨sliceLanguage_layout_wf sliceOne [(ctrlDecl, ⟨ctrlDecl.name, false, []⟩)] linuxX8664
+      (.nominal ctrlDecl) (.scalar 0 1) rfl,
+   sliceLanguage_layout_wf slice0 [] linuxX8664 (.scalar (.int .u32)) (.scalar 4 4) rfl⟩
+
+-- ISS-0125 negative control: a hypothetical operation that frees a live incoming block
+-- violates the `preservesResidentHandles` contract.
+theorem freeing_operation_violates_preservesResidentHandles :
+    let initMem := Mem.Memory.empty
+    ∃ id allocated freed,
+      initMem.alloc linuxX8664 ⟨0⟩ 1 1 1 = .ok (id, allocated) ∧
+      allocated.free id = some freed ∧
+      ¬ (∀ b, allocated.block id = some b → b.live = true →
+          ∃ b', freed.block id = some b' ∧ b'.live = true) := by
+  refine ⟨⟨0⟩, ⟨[(⟨0⟩, Mem.candidate ⟨0⟩ 1 1 1)], 1⟩,
+    ⟨[(⟨0⟩, {Mem.candidate ⟨0⟩ 1 1 1 with live := false, exposed := false})], 1⟩,
+    rfl, rfl, ?_⟩
+  intro h
+  obtain ⟨b', found, live⟩ := h (Mem.candidate ⟨0⟩ 1 1 1) rfl rfl
+  cases found
+  cases live
+
+-- Rich `CoreInput.checkStatic`: passes unchecked overflow (while `checkInput` refuses `AdditionFits@1`),
+-- and refuses static violations with exact `RegisteredRule`, primary span, related spans, and `StaticRefuses`.
+theorem checkStatic_rich_controls (project : Project) :
+    let declSpan := mkSpan 22 23
+    let opSpan := mkSpan 30 37
+    let endSpan := mkSpan 40 49
+    let overflowView : AdmissionView :=
+      .zero ⟨[⟨⟨⟨0⟩, .add (.lit 200) (.lit 56)⟩, opSpan, declSpan, (mkSpan 30 33, mkSpan 36 38), .unnamed none⟩],
+        .var ⟨0⟩, endSpan, endSpan⟩
+    let overflowInput : CoreInput (sliceLanguage slice0) := ⟨project, slice0, .straightLine overflowView rfl⟩
+    let liveLinearView : AdmissionView :=
+      .one ⟨[(token, declSpan)],
+        [⟨.bind (.name x) (.nominal token) (.construct token), opSpan, declSpan, .unnamed none⟩],
+        .ret (.lit 0), endSpan⟩
+    let liveLinearInput : CoreInput (sliceLanguage sliceOne) := ⟨project, sliceOne, .straightLine liveLinearView rfl⟩
+    let liveLinearReason := Refusal.atPosition 1 (.liveLinearBinding x)
+    let liveLinearCause := RefusalCause.core .returning (surfaceFileSpan endSpan)
+      [(⟨"binding"⟩, surfaceFileSpan declSpan)] liveLinearReason
+    let unknownStructView : AdmissionView :=
+      .one ⟨[], [⟨.destructure token (.construct token), opSpan, declSpan, .unnamed none⟩],
+        .ret (.lit 0), endSpan⟩
+    let unknownStructInput : CoreInput (sliceLanguage sliceOne) := ⟨project, sliceOne, .straightLine unknownStructView rfl⟩
+    let unknownStructReason := Refusal.atPosition 0 (.unknownStruct token)
+    let unknownStructCause := RefusalCause.core .returning (surfaceFileSpan opSpan) [] unknownStructReason
+    overflowInput.checkStatic = .ok () ∧
+    checkInput overflowInput = .error (.refused (.core .slice0 (surfaceFileSpan opSpan) [] (.atPosition 0 .additionOverflowUnproven))) ∧
+    liveLinearInput.checkStatic = .error (.refused liveLinearCause) ∧
+    liveLinearCause.rule = ⟨``OwnershipRule.ReturnDischarged, 1⟩ ∧
+    liveLinearInput.StaticRefuses liveLinearCause ∧
+    unknownStructInput.checkStatic = .error (.refused unknownStructCause) ∧
+    unknownStructCause.rule = ⟨``Surface1.StructDeclared, 1⟩ ∧
+    unknownStructInput.StaticRefuses unknownStructCause := by
+  refine ⟨rfl, rfl, rfl, rfl, checkStatic_refused (failure := _) rfl, rfl, rfl, checkStatic_refused (failure := _) rfl⟩
+
+end StageBoundaryControls
+
 end ConcreteSpec.Admission.Controls

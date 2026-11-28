@@ -31,7 +31,7 @@ open ConcreteSpec.Surface0
 
 private def span : Surface0.Span := ⟨0, 1, 1, 1, ⟨1⟩⟩
 private def returned : Statement := .ret (.integer 0 none span) (statementSpan span span)
-private def parsedProgram : Surface0.Program := ⟨"main", span, [returned]⟩
+private def parsedProgram : Surface0.Program := ⟨"main", span, [returned], span⟩
 private def parsedTokens : List Token :=
   [⟨.fixed .fn, span⟩, ⟨.name "main", span⟩, ⟨.fixed .lparen, span⟩,
    ⟨.fixed .rparen, span⟩, ⟨.fixed .arrow, span⟩, ⟨.fixed .u8, span⟩,
@@ -142,11 +142,17 @@ theorem radixRefused : RuleRefused DecimalLiteral .hexadecimal := by
   unfold RuleRefused DecimalLiteral
   decide
 
-theorem productionAccepted : RuleAccepted AdmittedProduction (.more, [.t .plus, .n .product, .n .more]) := by
-  unfold RuleAccepted AdmittedProduction
+theorem productionAccepted : RuleAccepted AdmittedProduction .plus := by
+  unfold RuleAccepted AdmittedProduction ConcreteSpec.GrammarData.AdmittedAt
   decide
-theorem productionRefused : RuleRefused AdmittedProduction (.more, [.t .minus, .n .product, .n .more]) := by
-  unfold RuleRefused AdmittedProduction
+theorem productionEmptyDeclsAccepted : RuleAccepted AdmittedProduction .endDecls := by
+  unfold RuleAccepted AdmittedProduction ConcreteSpec.GrammarData.AdmittedAt
+  decide
+theorem productionRefused : RuleRefused AdmittedProduction .minus := by
+  unfold RuleRefused AdmittedProduction ConcreteSpec.GrammarData.AdmittedAt
+  decide
+theorem productionDestructureRefused : RuleRefused AdmittedProduction .destructure := by
+  unfold RuleRefused AdmittedProduction ConcreteSpec.GrammarData.AdmittedAt
   decide
 
 theorem literalAccepted : RuleAccepted LiteralTyped 255 := .int rfl
@@ -762,6 +768,14 @@ theorem overflow : RuleRefused ProgramPermitted
   unfold RuleRefused ProgramPermitted
   decide
 
+theorem structDeclaredAccepted : RuleAccepted Surface1.StructDeclared (decls, sName) := by
+  unfold RuleAccepted Surface1.StructDeclared
+  decide
+
+theorem structDeclaredRefused : RuleRefused Surface1.StructDeclared (decls, ⟨"Option"⟩) := by
+  unfold RuleRefused Surface1.StructDeclared
+  decide
+
 end Slice1Registry
 
 namespace ProjectRegistry
@@ -953,6 +967,8 @@ def registeredRuleExamples : List RuleExample :=
    ⟨``OwnershipRule.ReturnDischarged, ``Slice1Registry.liveReturn⟩,
    ⟨``WildcardPermitted, ``Slice1Registry.discardByte⟩,
    ⟨``WildcardPermitted, ``Slice1Registry.discardLinear⟩,
+   ⟨``Surface1.StructDeclared, ``Slice1Registry.structDeclaredAccepted⟩,
+   ⟨``Surface1.StructDeclared, ``Slice1Registry.structDeclaredRefused⟩,
    ⟨``AbortReady, ``Slice1Registry.usedAbort⟩,
    ⟨``AbortReady, ``Slice1Registry.unusedAbort⟩,
    ⟨``ProgramPermitted, ``Slice1Registry.consumeThenAbort⟩,
@@ -1084,7 +1100,9 @@ def registeredRuleExamples : List RuleExample :=
    ⟨``Slice0Rules.DecimalLiteral, ``Slice0Rules.radixAccepted⟩,
    ⟨``Slice0Rules.DecimalLiteral, ``Slice0Rules.radixRefused⟩,
    ⟨``Slice0Rules.AdmittedProduction, ``Slice0Rules.productionAccepted⟩,
+   ⟨``Slice0Rules.AdmittedProduction, ``Slice0Rules.productionEmptyDeclsAccepted⟩,
    ⟨``Slice0Rules.AdmittedProduction, ``Slice0Rules.productionRefused⟩,
+   ⟨``Slice0Rules.AdmittedProduction, ``Slice0Rules.productionDestructureRefused⟩,
    ⟨``Slice0Rules.LiteralTyped, ``Slice0Rules.literalAccepted⟩,
    ⟨``Slice0Rules.LiteralTyped, ``Slice0Rules.literalRefused⟩,
    ⟨``Slice0Rules.Admitted, ``Slice0Rules.admissionAccepted⟩,

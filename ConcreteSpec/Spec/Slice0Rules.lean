@@ -1,6 +1,7 @@
 import ConcreteSpec.Spec.Slice0
 import ConcreteSpec.Spec.Surface0
 import ConcreteSpec.Spec.Scalar
+import ConcreteSpec.Spec.GrammarData
 
 /-! Slice-0 rule predicates for conformance and diagnostics. Where a rule already has a
 specification judgment, the predicate delegates to that judgment. -/
@@ -86,12 +87,13 @@ def NamedBinding (name : String) : Prop := name ≠ "_"
 docs/decisions.md#decided-slice0-surface-2026-11-06. -/
 def DecimalLiteral (radix : Radix) : Prop := radix = .decimal
 
-/-- The refusal grammar marks productions outside the slice-0 fragment. This rule
-checks one production; unsupported-form classification requires a complete parse.
-Decision: Q8.3, docs/decisions.md#decided-slice0-surface-2026-11-06. -/
-def AdmittedProduction
-    (production : Nonterminal × List (Concrete.LL1.Sym Terminal Nonterminal)) : Prop :=
-  (projectedProductions .shared).lookup production = some false
+/-- The shared recognition grammar dates every production by its first admitting slice.
+This rule checks whether one production belongs to slice 0; unsupported-form
+classification requires a complete parse.
+Decision: Q8.3, docs/decisions.md#decided-slice0-surface-2026-11-06,
+docs/decisions.md#decided-2026-11-25-freeze-and-grammar. -/
+def AdmittedProduction (production : ConcreteSpec.GrammarData.ProductionId) : Prop :=
+  ConcreteSpec.GrammarData.AdmittedAt 0 production
 
 /-- Slice-0 literal typing delegates to the Core atom judgment (ARITH-2).
 Decision: Q6.1, docs/decisions.md#decided-project-no-hidden-traps. -/

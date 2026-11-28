@@ -70,8 +70,11 @@ def TokenValue.kind : TokenValue → Terminal
   | .label _ => .label
 
 inductive SurfaceNode where
-  | program | body | binding | return_ | add
+  | program | declList | structDecl | body | binding
+  | letHead | letAnnotated | letDestructure | return_ | callStmt
+  | expr | sumTail | product | productTail | add | group | construct | move_
   | extension (tag : Nat)
+  deriving DecidableEq, Repr
 
 inductive SyntaxTree where
   | node (kind : SurfaceNode) (fields : List SyntaxTree)
@@ -119,31 +122,65 @@ structure ParserView where
 private def sourcePositions (source : SourceText) : Array (Nat × Nat) :=
   ((source.bytes.scanl Position.advanceByte {}).map fun pos => (pos.line, pos.column)).toArray
 
-/-- Validate every token and return the entry file's EOF from the same coordinate
-table. Even an empty file has its initial position in the table. -/
-def ParserView.validateCoordinates (input : ParserView) : Except FileSpan FileSpan := do
+/-- Compute the zero-width EOF span of `source.entryFile`, including trailing trivia. -/
+def eofFileSpan (source : Source) : FileSpan :=
+  match source.project.fileAt source.entryFile with
+  | none => ⟨source.entryFile, 0, 0, 1, 1⟩
+  | some file =>
+    let pos := file.source.bytes.foldl Position.advanceByte {}
+    ⟨source.entryFile, pos.byte, pos.byte, pos.line, pos.column⟩
+
+/-- Every stream-coordinate refusal projects to its exact registered rule. -/
+def locationRefusalRule (reason : LocationRefusal) : RegisteredRule :=
+  ⟨reason.ruleId, by cases reason <;> (dsimp [LocationRefusal.ruleId]; decide)⟩
+
+private def validateTokenLocation (files : Array (Array (Nat × Nat))) (span : FileSpan) :
+    Option LocationRefusal :=
+  match files[span.file.index]? with
+  | none => some .unknownFile
+  | some table =>
+    if !(span.startOffset ≤ span.endOffset) then some .reversedRange
+    else if !(span.endOffset < table.size) then some (.pastEnd (table.size - 1))
+    else
+      match table[span.startOffset]? with
+      | none => some (.pastEnd (table.size - 1))
+      | some (line, col) =>
+        if span.line != line then some (.wrongLine line)
+        else if span.col != col then some (.wrongColumn col)
+        else none
+
+/-- Validate every token's file, byte range, and starting line/column, returning
+either the first offending token's span and exact `LocationRefusal` or the entry
+file's EOF from the same coordinate table. Even an empty file has its initial
+position in the table. -/
+def ParserView.validateCoordinates (input : ParserView) :
+    Except (FileSpan × LocationRefusal) FileSpan := do
   let files := (input.source.project.files.map (sourcePositions ∘ File.source)).toArray
   let entry := input.source.entryFile
   let missing : FileSpan := ⟨entry, 0, 0, 1, 1⟩
-  let some positions := files[entry.index]? | throw missing
-  let some (line, col) := positions.back? | throw missing
-  if let some token := input.tokens.find? (fun token =>
-      let span := token.span
-      match files[span.file.index]? with
-      | none => true
-      | some table => !(span.startOffset ≤ span.endOffset && span.endOffset < table.size &&
-          table[span.startOffset]? == some (span.line, span.col))) then
-    throw token.span
+  let some positions := files[entry.index]? | throw (missing, .unknownFile)
+  let some (line, col) := positions.back? | throw (missing, .unknownFile)
+  if let some bad := input.tokens.findSome? (fun token =>
+      (validateTokenLocation files token.span).map fun reason => (token.span, reason)) then
+    throw bad
   let endOffset := positions.size - 1
   return ⟨entry, endOffset, endOffset, line, col⟩
 
-def ParserView.invalidSpan (input : ParserView) : Option FileSpan :=
+def ParserView.invalidLocation (input : ParserView) : Option (FileSpan × LocationRefusal) :=
   match input.validateCoordinates with
-  | .error span => some span
+  | .error bad => some bad
   | .ok _ => none
 
+def ParserView.invalidSpan (input : ParserView) : Option FileSpan :=
+  input.invalidLocation.map Prod.fst
+
 def ParserView.WF (input : ParserView) : Prop :=
-  input.invalidSpan = none
+  input.invalidLocation = none
+
+theorem ParserView.invalidSpan_eq_none_iff (input : ParserView) :
+    input.invalidSpan = none ↔ input.invalidLocation = none := by
+  unfold ParserView.invalidSpan
+  cases input.invalidLocation <;> simp
 
 def TokenStream.parserView (stream : TokenStream) : ParserView :=
   ⟨stream.source, (stream.tokens.toList.map RetainedToken.decoded).toArray⟩
@@ -229,6 +266,7 @@ private def CoreContext.rule (context : CoreContext) : Admission.Refusal → Reg
       | .returning => ⟨⟨``OwnershipRule.ReturnDischarged, 1⟩, by decide⟩
       | .aborting => ⟨⟨``AbortReady, 1⟩, by decide⟩
     | .discardLinear _ => ⟨⟨``WildcardPermitted, 1⟩, by decide⟩
+    | .unknownStruct _ => ⟨Surface1.structDeclaredRule, by decide⟩
     | .literalOutOfRange .. | .additionOperandType _ (.atomFailure (.outOfRange ..)) => match context with
       | .slice0 => ⟨⟨``Slice0Rules.LiteralTyped, 1⟩, by decide⟩
       | .returning | .aborting => ⟨⟨``ProgramPermitted, 1⟩, by decide⟩
@@ -283,10 +321,43 @@ def RefusalCause.related : RefusalCause → List (Name × FileSpan)
 def FileSpan.surface (span : FileSpan) : Surface0.Span :=
   ⟨span.startOffset, span.endOffset, span.line, span.col, span.file⟩
 
+inductive MalformedCause where
+  | unexpectedToken
+  | unexpectedEnd
+  | trailingTokens
+  deriving DecidableEq, Repr
+
+inductive UnsupportedCause where
+  | production (id : GrammarData.ProductionId)
+  | nonDecimal (radix : Surface0.Radix)
+  deriving DecidableEq, Repr
+
 inductive ParseRefusal where
-  | invalidStream (atSpan : FileSpan)
-  | malformed (rule : RuleId) (atSpan : FileSpan)
-  | unsupported (rule : RuleId) (atSpan : FileSpan) (required : Slice)
+  | invalidStream (atSpan : FileSpan) (reason : LocationRefusal)
+  | malformed (rule : RegisteredRule) (cause : MalformedCause) (atSpan : FileSpan)
+  | unsupported (rule : RegisteredRule) (cause : UnsupportedCause) (atSpan : FileSpan) (required : Slice)
+  deriving DecidableEq
+
+def ParseRefusal.registeredRule : ParseRefusal → RegisteredRule
+  | .invalidStream _ reason => locationRefusalRule reason
+  | .malformed rule _ _ => rule
+  | .unsupported rule _ _ _ => rule
+
+def ParseRefusal.ruleId (r : ParseRefusal) : RuleId :=
+  r.registeredRule.val
+
+def ParseRefusal.span : ParseRefusal → FileSpan
+  | .invalidStream span _ => span
+  | .malformed _ _ span => span
+  | .unsupported _ _ span _ => span
+
+def ParseRefusal.toParserIssue? : ParseRefusal → Option ParserIssue
+  | .invalidStream .. => none
+  | .malformed _ .unexpectedToken _ => some .unexpectedToken
+  | .malformed _ .unexpectedEnd _ => some .unexpectedEnd
+  | .malformed _ .trailingTokens _ => some .trailingTokens
+  | .unsupported _ (.production _) _ _ => some .outsideProduction
+  | .unsupported _ (.nonDecimal _) _ _ => some .nonDecimal
 
 /-- Canonical identity of an ordered operand, shared with typed MIR reads.
 Literal bytes are the integrated Core instance's canonical value encoding. -/
@@ -349,17 +420,29 @@ def LayoutFields.lookup (name : FieldId) : LayoutFields → Option (Nat × Layou
   | .nil => none
   | .cons key offset child rest => if key = name then some (offset, child) else rest.lookup name
 
+/-- Sibling fields have distinct names and occupy disjoint byte ranges.
+Zero-sized fields occupy no bytes (Q3.8) and may share an offset with any sibling. -/
+def LayoutFields.disjointFrom (name : FieldId) (offset size : Nat) : LayoutFields → Bool
+  | .nil => true
+  | .cons otherName otherOffset otherChild rest =>
+    decide (name ≠ otherName ∧
+      (size = 0 ∨ otherChild.size = 0 ∨
+        offset + size ≤ otherOffset ∨ otherOffset + otherChild.size ≤ offset)) &&
+      rest.disjointFrom name offset size
+
 mutual
-/-- Slice 0 storage geometry at every node, with the physical alignment bound
-and the relative alignment and containment obligations at every field edge. -/
+/-- Slice 0 storage geometry at every node, with the strict physical alignment bound
+(`align < target.addressCeiling`), relative alignment and containment at every field edge,
+and pairwise distinct, non-overlapping sibling fields (ISS-0125). -/
 def Layout.WellFormed (target : Target) : Layout → Bool
   | ⟨size, align, fields⟩ => decide (Slice0Layout.StorageGeometry target size align ∧
-      align ≤ target.addressCeiling) && fields.check target size align
+      align < target.addressCeiling) && fields.check target size align
 
 def LayoutFields.check (target : Target) (size align : Nat) : LayoutFields → Bool
   | .nil => true
-  | .cons _ offset child rest =>
+  | .cons name offset child rest =>
     decide (child.align ∣ offset ∧ child.align ∣ align ∧ offset + child.size ≤ size) &&
+      rest.disjointFrom name offset child.size &&
       child.WellFormed target && rest.check target size align
 end
 
@@ -380,9 +463,66 @@ private theorem LayoutFields.lookup_geometry {target size align name offset chil
     unfold lookup at found
     split at found
     · cases found
-      exact checked.1
+      exact ⟨checked.1.1.1, checked.1.2⟩
     · exact lookup_geometry checked.2 found
 termination_by structural fs
+
+private theorem LayoutFields.disjointFrom_lookup {name off size other off' child'} {fs : LayoutFields}
+    (disj : fs.disjointFrom name off size = true) (found : fs.lookup other = some (off', child')) :
+    name ≠ other ∧
+      (size = 0 ∨ child'.size = 0 ∨ off + size ≤ off' ∨ off' + child'.size ≤ off) := by
+  cases fs with
+  | nil => cases found
+  | cons key k sub rest =>
+    simp only [disjointFrom, Bool.and_eq_true, decide_eq_true_eq] at disj
+    unfold lookup at found
+    split at found
+    · rename_i heq
+      subst heq
+      cases found
+      exact disj.1
+    · exact disjointFrom_lookup disj.2 found
+termination_by structural fs
+
+private theorem LayoutFields.lookup_disjoint {target size align name₁ name₂ off₁ off₂ child₁ child₂}
+    {fs : LayoutFields} (checked : fs.check target size align = true) (ne : name₁ ≠ name₂)
+    (found₁ : fs.lookup name₁ = some (off₁, child₁))
+    (found₂ : fs.lookup name₂ = some (off₂, child₂)) :
+    child₁.size = 0 ∨ child₂.size = 0 ∨
+      off₁ + child₁.size ≤ off₂ ∨ off₂ + child₂.size ≤ off₁ := by
+  cases fs with
+  | nil => cases found₁
+  | cons key k sub rest =>
+    simp only [check, Bool.and_eq_true, decide_eq_true_eq] at checked
+    unfold lookup at found₁ found₂
+    split at found₁
+    · rename_i eq₁
+      subst eq₁
+      cases found₁
+      simp only [ne, ↓reduceIte] at found₂
+      exact (disjointFrom_lookup checked.1.1.2 found₂).2
+    · split at found₂
+      · rename_i eq₂
+        subst eq₂
+        cases found₂
+        rcases (disjointFrom_lookup checked.1.1.2 found₁).2 with h | h | h | h
+        · exact Or.inr (Or.inl h)
+        · exact Or.inl h
+        · exact Or.inr (Or.inr (Or.inr h))
+        · exact Or.inr (Or.inr (Or.inl h))
+      · exact lookup_disjoint checked.2 ne found₁ found₂
+termination_by structural fs
+
+/-- Distinct immediate fields of a well-formed layout occupy disjoint byte ranges (ISS-0125). -/
+theorem Layout.fields_disjoint {target root name₁ name₂ off₁ off₂ child₁ child₂}
+    (wf : Layout.WellFormed target root = true) (ne : name₁ ≠ name₂)
+    (found₁ : root.fields.lookup name₁ = some (off₁, child₁))
+    (found₂ : root.fields.lookup name₂ = some (off₂, child₂)) :
+    child₁.size = 0 ∨ child₂.size = 0 ∨
+      off₁ + child₁.size ≤ off₂ ∨ off₂ + child₂.size ≤ off₁ := by
+  cases root with
+  | mk size align fields =>
+    exact LayoutFields.lookup_disjoint (Bool.and_eq_true_iff.mp wf).2 ne found₁ found₂
 
 /-- Alignment and containment compose over arbitrary nesting, including empty
 fields at the one-past offset. -/
@@ -473,6 +613,20 @@ structure CoreLanguage where
   operation : Declarations → Operator → List operands.Ty → operands.Ty → List operands.Val →
     Target → List (OperationAddress operands.Ty) → OperationStore operands.Val →
     operands.Val → List operands.Event → OperationStore operands.Val → Prop
+  /-- Operations preserve byte-memory well-formedness, block-identity monotonicity,
+  and the live backing geometry of every incoming live block, so resident
+  materialized handles across active and suspended frames remain valid after an
+  operation step (ISS-0125). -/
+  preservesResidentHandles :
+    ∀ env op inputs output values target addresses before result effects after,
+      operation env op inputs output values target addresses before result effects after →
+      before.bytes.WellFormed target →
+      after.bytes.WellFormed target ∧
+      before.bytes.next ≤ after.bytes.next ∧
+      ∀ id block, before.bytes.block id = some block → block.live = true →
+        ∃ block', after.bytes.block id = some block' ∧
+          block'.live = true ∧ block'.space = block.space ∧
+          block'.base = block.base ∧ block'.size = block.size ∧ block'.align = block.align
   /-- Relate logical references to physical values using only the backing ranges of
   related live allocations. Aggregate instances relate their fields recursively. -/
   representsValue : Target → AList Hybrid.Place (Option Hybrid.Range) → operands.Ty →
@@ -584,41 +738,40 @@ private def earlyIntRead (ty : Core.IntTy) : EarlyOperand → Option (EarlyTy ×
   | .copy localId => some (.scalar (.int ty), .copy ⟨localId.id⟩ [])
   | _ => none
 
-private def earlyOperation (env : Declarations) (op : Operator) (types : List (EarlyTy ⊕ Bool))
-    (ty : EarlyTy ⊕ Bool) (values : List EarlyValue) : Res EarlyValue :=
+private def earlyOperation (env : Declarations) (op : Operator) (types : List EarlyTy)
+    (ty : EarlyTy) (values : List EarlyValue) : Res EarlyValue :=
   match op, types, ty, values with
-  | .named ⟨"destructureEmpty"⟩, [.inl (.nominal id)], .inl (.scalar .unit), [.other actual] =>
+  | .named ⟨"destructureEmpty"⟩, [.nominal id], .scalar .unit, [.other actual] =>
     if actual = id && env.emptyLinear id then .ok (.scalar .unit) else .stuck
-  | .named ⟨"constructEmpty"⟩, [], .inl (.nominal id), [] =>
+  | .named ⟨"constructEmpty"⟩, [], .nominal id, [] =>
     if env.emptyLinear id then .ok (.other id) else .stuck
-  | .read, [.inl (.nominal src)], .inl (.nominal dst), [.other value] =>
+  | .read, [.nominal src], .nominal dst, [.other value] =>
     if src = dst && value = dst && env.emptyLinear dst then .ok (.other value) else .stuck
-  | .read, [.inl (.scalar input)], .inl (.scalar result), [.scalar value] =>
+  | .read, [.scalar input], .scalar result, [.scalar value] =>
     if input = result ∧ value.ty = result then .ok (.scalar value) else .stuck
-  | .arithmetic (.plain .add), [.inl (.scalar (.int left)), .inl (.scalar (.int right))],
-      .inl (.scalar (.int result)), [.scalar (.int lt l), .scalar (.int rt r)] =>
+  | .arithmetic (.plain .add), [.scalar (.int left), .scalar (.int right)],
+      .scalar (.int result), [.scalar (.int lt l), .scalar (.int rt r)] =>
     if left = result ∧ right = result ∧ lt = result ∧ rt = result then
       (plain result .add l r).map (CoreValue.scalar ∘ CVal.int result)
     else .stuck
   | _, _, _, _ => .stuck
 
 def earlyEvaluate (env : Declarations) (locals : AList Var EarlyValue)
-    (store : Hybrid.State) : EarlyExpr ⊕ Bool → Res (EarlyValue × Hybrid.State)
-  | .inl expr => (earlyEval env locals expr).map fun value => (value, store)
-  | .inr _ => .stuck
+    (store : Hybrid.State) (expr : EarlyExpr) : Res (EarlyValue × Hybrid.State) :=
+  (earlyEval env locals expr).map fun value => (value, store)
 
 /-- Closed scalar and nominal semantics for the implemented early fragments. -/
 def sliceLanguage (_slice : Slice) : CoreLanguage where
   operands := {
     Val := EarlyValue
-    Ty := EarlyTy ⊕ Bool
-    Expr := EarlyExpr ⊕ Bool
+    Ty := EarlyTy
+    Expr := EarlyExpr
     Prim := Empty
     Event := Empty
     Store := Hybrid.State
     unitVal := .scalar .unit
-    unitTy := .inl (.scalar .unit)
-    isCopy := fun ty => match ty with | .inl (.scalar _) => true | _ => false
+    unitTy := .scalar .unit
+    isCopy := fun | .scalar _ => true | .nominal _ => false
     eval := earlyEvaluate []
     life := fun _ store => some store
     test := fun | .scalar (.bool value) => some value | _ => none
@@ -626,30 +779,34 @@ def sliceLanguage (_slice : Slice) : CoreLanguage where
   hybridStore := rfl
   evalIn := earlyEvaluate
   expressionOperator
-    | .inl (.add ..) => .arithmetic (.plain .add)
-    | .inl (.constructEmpty _) => .named ⟨"constructEmpty"⟩
-    | .inl (.consumeEmpty ..) => .named ⟨"destructureEmpty"⟩
-    | _ => .read
+    | .add .. => .arithmetic (.plain .add)
+    | .constructEmpty _ => .named ⟨"constructEmpty"⟩
+    | .consumeEmpty .. => .named ⟨"destructureEmpty"⟩
+    | .read _ => .read
   primitiveOperator p := nomatch p
   argumentRead := fun _ => none
   argumentReadNoTrap := by simp
   OtherValue := DeclId
   valueShape := rfl
-  layout env target ty := do
+  layout env target ty :=
     let profile := Slice0Layout.linuxX8664Profile.withByteOrder target.byteOrder
-    if target ≠ profile.target then none else
-    let shape ← match ty with
-      | .inl (.scalar (.int intTy)) => some (.integer intTy)
-      | .inl (.nominal id) => if env.emptyLinear id then some .logical else none
-      | _ => none
-    let layout ← Slice0Layout.query profile shape
-    return .scalar layout.byteSize layout.alignment
+    if target = profile.target then
+      match match ty with
+        | .scalar (.int intTy) => some (.integer intTy)
+        | .nominal id => if env.emptyLinear id then some .logical else none
+        | _ => none with
+      | none => none
+      | some shape =>
+        match Slice0Layout.query profile shape with
+        | none => none
+        | some layout => some (.scalar layout.byteSize layout.alignment)
+    else none
   scalarType
-    | .inl (.scalar ty) => some ty
-    | _ => none
+    | .scalar ty => some ty
+    | .nominal _ => none
   literal ty bytes :=
     match ty with
-    | .inl (.scalar (.int intTy)) =>
+    | .scalar (.int intTy) =>
       if bytes.length = intTy.byteSize then
         some (.scalar (.int intTy (ofBits intTy (Mem.leValue (bytes.map UInt8.toFin)))))
       else none
@@ -657,12 +814,16 @@ def sliceLanguage (_slice : Slice) : CoreLanguage where
   typeDecidableEq := inferInstance
   fieldType := fun _ _ => none
   activeFields
-    | env, .inl (.nominal id), .other actual =>
+    | env, .nominal id, .other actual =>
       if id = actual && env.emptyLinear id then some [] else none
     | _, _, _ => none
   operation := fun env op inputs output values _ addresses before result effects after =>
     addresses = [] ∧ earlyOperation env op inputs output values = .ok result ∧
       effects = [] ∧ before = after
+  preservesResidentHandles := by
+    intro _ _ _ _ _ _ _ before _ _ after hstep wf
+    obtain ⟨_, _, _, rfl⟩ := hstep
+    exact ⟨wf, Nat.le_refl _, fun _ block found live => ⟨block, found, live, rfl, rfl, rfl, rfl⟩⟩
   checkTrap
     | .operator (.arithmetic (.plain .add)), 0, [.scalar (.int lt l), .scalar (.int rt r)] =>
       lt == rt && decide (checked lt .add l r = .error .overflow)
@@ -672,16 +833,42 @@ def sliceLanguage (_slice : Slice) : CoreLanguage where
   encodeOther := fun _ _ _ => none
   decodeOther := fun _ _ _ => none
   safety
-    | .expression (.inl (.add ty left right)) =>
+    | .expression (.add ty left right) =>
       match earlyIntRead ty left, earlyIntRead ty right with
-      | some l, some r => [⟨0, .overflow, [(.inl l.1, l.2), (.inl r.1, r.2)]⟩]
+      | some l, some r => [⟨0, .overflow, [l, r]⟩]
       | _, _ => []
     | .abort => [⟨0, .abort, []⟩]
     | _ => []
-  permit _ _ expr own :=
-    match expr with
-    | .inl e => earlyPermit own e
-    | _ => none
+  permit _ _ expr own := earlyPermit own expr
+
+/-- Every layout returned by `sliceLanguage` satisfies the recursive storage
+geometry contract for the queried target, including logical empty nominals
+(size 0, alignment 1). -/
+theorem sliceLanguage_layout_wf (s : Slice) (env : Declarations) (target : Target)
+    (ty : (sliceLanguage s).operands.Ty) (d : Layout)
+    (found : (sliceLanguage s).layout env target ty = some d) :
+    d.WellFormed target = true := by
+  unfold sliceLanguage at found
+  dsimp only at found
+  split at found
+  · rename_i sameTarget
+    cases horder : target.byteOrder <;>
+    · rw [horder] at sameTarget found
+      rw [sameTarget]
+      cases ty with
+      | nominal id =>
+        cases hemp : env.emptyLinear id
+        · simp only [hemp, Bool.false_eq_true, ↓reduceIte] at found
+          cases found
+        · simp only [hemp, ↓reduceIte] at found
+          cases found
+          decide
+      | scalar st =>
+        cases st with
+        | int intTy =>
+          cases intTy <;> (cases found; decide)
+        | bool | unit | char => cases found
+  · cases found
 
 
 structure MachineProgram (language : CoreLanguage) where
@@ -874,14 +1061,14 @@ def StraightEnd.toCore (ending : StraightEnd) (site : SiteId) : Terminator :=
 def StraightEnd.machine {slice owners decls} (ending : StraightEnd) (site : SiteId) :
     Exec.Stmt ((sliceLanguage slice).instrumented owners decls) :=
   match ending with
-  | .ret a => .ret (.inl (.read (earlyOperand a))) site
+  | .ret a => .ret (.read (earlyOperand a)) site
   | .abort => .abort site
 
 def StraightProgram.machineBody {slice owners decls} (fresh : Nat)
     (ending : Exec.Stmt ((sliceLanguage slice).instrumented owners decls)) :
     List LocatedStraightBinding → Nat → Exec.Stmt ((sliceLanguage slice).instrumented owners decls)
   | [], _ => ending
-  | b :: rest, i => .seq (.bind (b.statement.target fresh i) (.inl b.statement.expression) ⟨i⟩)
+  | b :: rest, i => .seq (.bind (b.statement.target fresh i) b.statement.expression ⟨i⟩)
       (machineBody fresh ending rest (i + 1))
 
 /-- Build the machine from the located syntax inspected by admission. Synthetic
@@ -891,7 +1078,7 @@ def AdmissionView.execution (v : AdmissionView) : MachineProgram (sliceLanguage 
   let ownership := StraightProgram.owners p.freshBase p.bindings 0
   let body := StraightProgram.machineBody p.freshBase
     (p.ending.machine (slice := v.slice) (owners := ownership) (decls := p.decls) p.endingOrigin.1) p.bindings 0
-  ⟨ownership, p.decls, ⟨[(earlyEntry, ⟨[], .inl (.scalar (.int .u8)), ⟨0⟩, body⟩)]⟩,
+  ⟨ownership, p.decls, ⟨[(earlyEntry, ⟨[], .scalar (.int .u8), ⟨0⟩, body⟩)]⟩,
     earlyEntry, p.bindingOrigins ++ [p.endingOrigin]⟩
 
 /-- A fragment carries its canonical syntax once. General Exec functions use
@@ -1109,47 +1296,17 @@ def AdmissionView.render (v : AdmissionView) (r : Admission.Refusal) : Option Re
 namespace SurfacePreparation
 open ConcreteSpec.Surface0
 
-/-- Select the subsequent Core entry. Both entries enforce identical surface statics. -/
+/-- Select the subsequent Core entry. Under stage-order refusal precedence
+(docs/decisions.md#decided-2026-11-28-refusal-precedence), both entries share the
+identical left-to-right surface preparation pass; Core checking runs only after
+surface preparation succeeds. -/
 inductive Purpose where
   | eligibility | admission
   deriving DecidableEq
 
-/-- A prefix contains only real reads and A-normal bindings already visited. When a
-later source action fails, the same Core judgments can still check this prefix. -/
-private inductive PrefixStep where
-  | integer (value : Nat) (span : Surface0.Span)
-  | binding (value : LocatedBinding)
-
 structure State where
   private next : Nat := 0
   private bindings : List LocatedBinding := []
-  private visited : List PrefixStep := []
-  private purpose : Purpose := .admission
-
-private def Purpose.policy : Purpose → ArithmeticPolicy
-  | .admission => .static
-  | .eligibility => .runtime
-
-private def State.firstFailure (s : State) (finish : Ctx → Nat → RefusalCause) : RefusalCause :=
-  visit [] 0 s.visited.reverse
-where
-  visit (ctx : Ctx) (pos : Nat) : List PrefixStep → RefusalCause
-    | [] => finish ctx pos
-    | .integer n span :: rest =>
-      match inferAtomType ctx.tys (.int .u8 n) with
-      | .error (.outOfRange ty value) =>
-        .core .slice0 (surfaceFileSpan span) [] (.atPosition pos (.literalOutOfRange ty value))
-      | _ => visit ctx pos rest
-    | .binding b :: rest =>
-      match checkStmtWith s.purpose.policy.permits [] ctx b.statement.toCore with
-      | .ok next => visit next (pos + 1) rest
-      | .error reason =>
-        -- Every integer read was already checked at its token. Remaining statement
-        -- conditions belong to the operation, including its arithmetic evidence.
-        .core .slice0 (surfaceFileSpan b.operationSpan) [] (.atPosition pos reason)
-
-private def State.refuse {α : Type} (s : State) (cause : RefusalCause) : Except RefusalCause α :=
-  .error (s.firstFailure fun _ _ => cause)
 
 abbrev Scope := List (String × ConcreteSpec.Var)
 
@@ -1167,7 +1324,7 @@ private def Rhs.bind (rhs : Rhs) (s : State)
   let b : LocatedBinding := match rhs with
     | .atom a => ⟨⟨x, .atom a.atom⟩, a.span, decl.getD a.span, (), name⟩
     | .add l r site => ⟨⟨x, .add l.atom r.atom⟩, site, decl.getD site, (l.span, r.span), name⟩
-  ((x, b.operationSpan), {s with next := s.next + 1, bindings := b :: s.bindings, visited := .binding b :: s.visited})
+  ((x, b.operationSpan), {s with next := s.next + 1, bindings := b :: s.bindings})
 
 private theorem Rhs.bind_fresh (rhs : Rhs) (s : State) (decl : Option Surface0.Span) (name : ConstructName)
     (x : Var) (below : x.id < s.next) : (rhs.bind s decl name).1.1 ≠ x := by
@@ -1184,64 +1341,53 @@ private def Rhs.asAtom (rhs : Rhs) (s : State) : LocatedAtom × State :=
 private def expr (scope : Scope) (s : State) : Surface0.Expr → Except RefusalCause (Rhs × State)
   | .integer n suffix span =>
     letI : Decidable (Slice0Rules.ExpectedTypeLiteral suffix) := inferInstanceAs (Decidable (suffix = none))
-    if ¬ Slice0Rules.ExpectedTypeLiteral suffix then s.refuse (.surface (.integerSuffix span))
-    else .ok (.atom ⟨.lit n, span⟩, {s with visited := .integer n span :: s.visited})
+    if ¬ Slice0Rules.ExpectedTypeLiteral suffix then throw (.surface (.integerSuffix span))
+    else .ok (.atom ⟨.lit n, span⟩, s)
 
   | .local name span =>
     match scope.lookup name with
     | some x => .ok (.atom ⟨.var x, span⟩, s)
-    | none => s.refuse (.surface (.unknownLocal name span))
+    | none => throw (.surface (.unknownLocal name span))
 
   | .add left right site => do
     let (lhs, s) ← expr scope s left
-    let (a, beforeRight) := lhs.asAtom s
-    let (rhs, s) ← expr scope beforeRight right
-    -- A-normalization emits a non-atomic right operand before the outer addition.
-    -- Validate a literal left read before its check can move past that operation.
-    if let .add .. := rhs then
-      if let .lit _ := a.atom then
-        if let .error reason := inferAddOperand [] a.atom.toCore then
-          beforeRight.refuse (.core .slice0 (surfaceFileSpan a.span) [] (.atPosition beforeRight.next reason))
+    let (a, s) := lhs.asAtom s
+    let (rhs, s) ← expr scope s right
     let (b, s) := rhs.asAtom s
     return (.add a b site, s)
 
-private def body (scope : Scope) (s : State) (last : Surface0.Span) :
+private def body (scope : Scope) (s : State) (closeBrace : Surface0.Span) :
     List Statement → Except RefusalCause EarlyProgram
-  | [] => s.refuse (.surface (.fallthrough last))
-  | .bind binding span :: rest => do
+  | [] => throw (.surface (.fallthrough closeBrace))
+  | .bind binding _ :: rest => do
     letI : Decidable (Slice0Rules.NamedBinding binding.name) := inferInstanceAs (Decidable (binding.name ≠ "_"))
-    unless Slice0Rules.NamedBinding binding.name do s.refuse (.surface (.wildcard binding.span))
-    if binding.name ∈ scope.map Prod.fst then s.refuse (.surface (.duplicateBinder binding.name binding.span))
+    unless Slice0Rules.NamedBinding binding.name do throw (.surface (.wildcard binding.span))
+    if binding.name ∈ scope.map Prod.fst then throw (.surface (.duplicateBinder binding.name binding.span))
     letI : Decidable (Slice0Rules.UnreservedLocal binding.name) := inferInstanceAs (Decidable (UnreservedLocalName binding.name))
-    unless Slice0Rules.UnreservedLocal binding.name do s.refuse (.surface (.reservedBinder binding.name binding.span))
+    unless Slice0Rules.UnreservedLocal binding.name do throw (.surface (.reservedBinder binding.name binding.span))
     let (rhs, s) ← expr scope s binding.rhs
     let ((x, _), s) := rhs.bind s (some binding.span) (.named ⟨binding.name⟩)
-    body ((binding.name, x) :: scope) s span rest
+    body ((binding.name, x) :: scope) s closeBrace rest
 
   | .ret value span :: rest => do
     let (rhs, s) ← expr scope s value
     let (ret, s) := rhs.asAtom s
-    let program : EarlyProgram := ⟨s.bindings.reverse, ret.atom, span, ret.span⟩
     if let next :: _ := rest then
-      -- The prefix carries a location for every operation, including this
-      -- terminator. Report a checker failure directly at the operation visited.
-      throw (s.firstFailure fun ctx pos =>
-        match checkEnd [] ctx (.ret ret.atom.toCore) with
-        | .ok _ => .surface (.unreachable next.span)
-        | .error reason =>
-          let related := match reason with
-            | .unusedBinding x | .liveLinearBinding x =>
-              ((AdmissionView.zero program).bindingAt x).toList.map fun loc => (⟨"binding"⟩, surfaceFileSpan loc)
-            | _ => []
-          let primary := if (rejectedLiteral reason).isSome then ret.span else span
-          .core .slice0 (surfaceFileSpan primary) related (.atPosition pos reason))
-    return program
+      throw (.surface (.unreachable next.span))
+    return ⟨s.bindings.reverse, ret.atom, span, ret.span⟩
 
-def prepareSurface0 (ast : Surface0.Program) (purpose : Purpose := .admission) :
+/-- Check Slice 0 surface rules strictly left-to-right: entry name first, then
+each binding and return RHS in source order, immediate unreachable refusal after
+a return, and fallthrough at the closing brace. Core checking runs only after
+surface preparation succeeds. -/
+def prepareSurface0 (ast : Surface0.Program) (_purpose : Purpose := .admission) :
     Except RefusalCause EarlyProgram := do
   letI : Decidable (Slice0Rules.EntryName ast.name) := inferInstanceAs (Decidable (ast.name = "main"))
   unless Slice0Rules.EntryName ast.name do throw (.surface (.unexpectedEntry ast.nameSpan))
-  body [] {purpose} ast.nameSpan ast.body
+  body [] {} ast.closeBrace ast.body
+
+theorem prepareSurface0_purpose_indep (ast : Surface0.Program) (p₁ p₂ : Purpose) :
+    prepareSurface0 ast p₁ = prepareSurface0 ast p₂ := rfl
 
 end SurfacePreparation
 
@@ -1254,6 +1400,10 @@ def CoreInput.checkStatic {language} (input : CoreInput language) : Except Admis
   let view ← input.decode.mapError AdmissionFailure.fragment
   let _ ← (checkProgramWith .runtime view.program).mapError view.failure
   pure ()
+
+def CoreInput.StaticRefuses {language} (input : CoreInput language) (failure : RefusalCause) : Prop :=
+  ¬ input.UncheckedWF ∧ ∃ (v : AdmissionView) (reason : Admission.Refusal), v.Represents input ∧
+    checkProgramWith .runtime v.program = .error reason ∧ v.render reason = some failure
 
 def CoreInput.CheckerRefuses {language} (input : CoreInput language) (failure : RefusalCause) : Prop :=
   ¬ input.Accepted ∧ ∃ (v : AdmissionView) (reason : Admission.Refusal), v.Represents input ∧
