@@ -95,25 +95,36 @@ private def bridgeControl (filePath : SourcePath) : IO Unit := do
         (ConcreteSpec.StageInterface.reconstruct ⟨0⟩ empty.tokens empty.trivia).any
           (·.data == spelling.toUTF8.data) do throw (IO.userError "lost EOF trivia")
   let malformed ← project [filePath] (.ofBytes "return ; @".toUTF8.data.toList)
-  let .error (.malformed "unexpected character at byte 9") :=
+  let .error (.source cause@(.lexical .character ⟨9, 10, 1, 10, ⟨0⟩⟩)) :=
     Lex.lexStream {input with project := malformed, entryFile := ⟨0⟩}
     | throw (IO.userError "scanner failure lost its location or precedence")
+  unless (Refusal.source cause).message == "unexpected character at byte 9" do
+    throw (IO.userError s!"wrong malformed diagnostic: {(Refusal.source cause).message}")
   let returnPrefix := "fn main() -> u8 { return "
   let nulContexts := ["f", "fn ma", "return ident", "return -", "return \"é"] ++
     ["'a", "/", "0x1", "1u8"].map (returnPrefix ++ ·)
-  let invalidSources := nulContexts.map (fun before => (before, [0], Lex.DecodeReason.nul)) ++
+  let invalidSources := nulContexts.map (fun before => (before, [0], ConcreteSpec.StageInterface.DecodeReason.nul)) ++
     [("fn ma", [0xef, 0xbb, 0xbf] ++ "in() -> u8 { return 0; }".toUTF8.data.toList, .bom)]
   for (before, bytes, reason) in invalidSources do
     let prefixBytes := before.toUTF8.data.toList
     let invalid ← project [filePath] (.ofBytes (prefixBytes ++ bytes))
-    let .error (.malformed diagnostic) := Lex.lexStream {input with project := invalid, entryFile := ⟨0⟩}
+    let .error (.source cause@(.lexical (.encoding found) span)) :=
+      Lex.lexStream {input with project := invalid, entryFile := ⟨0⟩}
       | throw (IO.userError s!"accepted {repr reason} after {before}")
-    unless diagnostic == s!"invalid source at byte {prefixBytes.length}: {repr reason}" do
+    let diagnostic := (Refusal.source cause).message
+    unless found == reason && span.start == prefixBytes.length &&
+        span.stop == prefixBytes.length + 1 && span.fileId == ⟨0⟩ &&
+        diagnostic == s!"invalid source at byte {prefixBytes.length}: {repr reason}" do
       throw (IO.userError s!"wrong {repr reason} diagnostic after {before}: {diagnostic}")
-  let large ← project [filePath] (.ofBytes (" " ++ String.ofList (List.replicate (Lex.integerDigitLimit+1) '9')).toUTF8.data.toList)
-  let .error (.digitLimit 1 limit) := Lex.lexStream {input with project := large, entryFile := ⟨0⟩}
+  let expectedLimit := Lex.integerDigitLimit
+  let expectedSpan : Span := ⟨1 + expectedLimit, 2 + expectedLimit, 1, 2 + expectedLimit, ⟨0⟩⟩
+  let large ← project [filePath] (.ofBytes (" " ++ String.ofList (List.replicate (expectedLimit + 1) '9')).toUTF8.data.toList)
+  let .error (.source cause@(.lexical (.digitLimit limit) span)) :=
+    Lex.lexStream {input with project := large, entryFile := ⟨0⟩}
     | throw (IO.userError "digit limit became a syntax error")
-  unless limit == Lex.integerDigitLimit do throw (IO.userError "wrong digit limit")
+  unless limit == expectedLimit && span == expectedSpan &&
+      (Refusal.source cause).code == "RESOURCE" && (Refusal.source cause).exitCode == 2 do
+    throw (IO.userError "wrong digit limit")
 
 def main : IO Unit := do
   let first ← path "a.con"

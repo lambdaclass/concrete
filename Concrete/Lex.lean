@@ -2845,14 +2845,96 @@ end Concrete.Lex
 namespace Concrete.Lex
 open ConcreteSpec.Surface0
 
+/-- Every scanner refusal is a typed lexical source cause, covering both
+lexical syntax/encoding errors and the scanner's `.digitLimit` resource refusal. -/
 def scannerFailure : Refusal → Prop
-  | .syntaxError _ | .lexerDigitLimit .. => True
+  | .source (.lexical ..) => True
   | _ => False
 
-private theorem nextToken_failure {input : List Nat} {pos : Position} {e : Refusal}
-    (h : nextToken input pos = .error e) : scannerFailure e := by
+private theorem nextToken_failure {fileId : ConcreteSpec.Core.FileId}
+    {input : List Nat} {pos : Position} {e : Refusal}
+    (h : nextToken fileId input pos = .error e) : scannerFailure e := by
   unfold nextToken at h
-  repeat' first | split at h | contradiction | cases h <;> trivial
+  cases hi : identifier input with
+  | some result => cases result; simp [hi, Pure.pure, Except.pure] at h
+  | none =>
+    simp only [hi] at h
+    cases hr : splitRadix input with
+    | mk radix digitInput =>
+      simp only [hr] at h
+      cases hb : boundedDigits radix integerDigitLimit digitInput with
+      | none =>
+        simp only [hb, throw, throwThe, MonadExceptOf.throw] at h
+        cases h
+        unfold digitRunFailure
+        split <;> trivial
+      | some digits =>
+        simp only [hb] at h
+        cases hf : finishIntegerDigits radix digits with
+        | error reason =>
+          simp only [hf, throw, throwThe, MonadExceptOf.throw] at h
+          cases h
+          trivial
+        | ok res =>
+          cases res with
+          | some i => simp [hf, Pure.pure, Except.pure] at h
+          | none =>
+            simp only [hf] at h
+            cases hp : punct input with
+            | some p => simp [hp, Pure.pure, Except.pure] at h
+            | none =>
+              simp only [hp] at h
+              have tail : ∀ {xs : List Nat},
+                  ((match byteLiteral xs with
+                  | .error reason => Except.error (byteFailure fileId pos xs reason)
+                  | .ok (some (lexeme, decoded, rest)) =>
+                    Except.ok (LosslessValue.byteLiteral (UInt8.ofNat decoded), lexeme, rest)
+                  | .ok none =>
+                    if let some (lexeme, rest) := label xs then
+                      Except.ok (LosslessValue.label (scalarText lexeme.tail), lexeme, rest)
+                    else Except.error (unrecognizedToken fileId pos xs)) :
+                    Except Refusal (LosslessValue × List Nat × List Nat)) = .error e →
+                  scannerFailure e := by
+                intro xs ht
+                cases hbl : byteLiteral xs with
+                | error reason =>
+                  simp only [hbl] at ht
+                  cases ht
+                  trivial
+                | ok res =>
+                  cases res with
+                  | some triple => simp [hbl] at ht
+                  | none =>
+                    cases hlab : label xs with
+                    | some pair => simp [hbl, hlab] at ht
+                    | none =>
+                      simp only [hbl, hlab] at ht
+                      cases ht
+                      unfold unrecognizedToken
+                      split
+                      · split <;> trivial
+                      · trivial
+                      · trivial
+              cases input with
+              | nil =>
+                exact tail (by simpa [Bind.bind, Except.bind, Pure.pure, Except.pure,
+                  throw, throwThe, MonadExceptOf.throw] using h)
+              | cons c cs =>
+                by_cases hq : c = 34
+                · subst hq
+                  cases hs : stringBody cs with
+                  | ok pair =>
+                    cases pair
+                    simp [hs, Pure.pure, Except.pure] at h
+                  | error reason =>
+                    simp only [hs, Bind.bind, Except.bind,
+                      throw, throwThe, MonadExceptOf.throw] at h
+                    cases h
+                    trivial
+                · split at h
+                  · rename_i _ heq; cases heq; exact (hq rfl).elim
+                  · exact tail (by simpa [Bind.bind, Except.bind, Pure.pure, Except.pure,
+                      throw, throwThe, MonadExceptOf.throw] using h)
 
 private theorem tokens_failure {fileId : ConcreteSpec.Core.FileId} (fuel : Nat)
     (input : List Nat) (pos : Position) (comment : Bool) (acc : List Piece) {e : Refusal}
@@ -2880,7 +2962,7 @@ private theorem tokens_failure {fileId : ConcreteSpec.Core.FileId} (fuel : Nat)
             cases eqn
             simp only [List.length_cons] at bound
             exact ih _ _ _ _ (by omega) h
-          · cases ht : nextToken (c :: cs) pos with
+          · cases ht : nextToken fileId (c :: cs) pos with
             | error err =>
               simp [ht, Bind.bind, Except.bind] at h
               subst err
@@ -2913,25 +2995,21 @@ open ConcreteSpec.StageInterface (FileSpan Source RetainedToken RawPiece)
 
 /-- The semantic lexer already distinguishes the three decoded literal classes.
 A plain fixed token is either a punctuation entry or a reserved word. -/
-private theorem fixed_plain {input spelling tail : List Nat} {kind : Terminal}
-    (ht : Tokenizes input spelling tail (.fixed kind))
-    (hp : (LosslessValue.parsed (.fixed kind)).Payload input spelling tail) :
+private theorem fixed_plain {input spelling tail : List Nat} {kind : Terminal} {plain : kind.IsFixed}
+    (ht : Tokenizes input spelling tail (.fixed kind plain))
+    (hp : (LosslessValue.parsed (.fixed kind plain)).Payload input spelling tail) :
     ConcreteSpec.StageInterface.Terminal.HasPayload kind = false := by
-  generalize eqn : TokenValue.fixed kind = value at ht
+  generalize eqn : TokenValue.fixed kind plain = value at ht
   cases ht with
   | word h =>
     simp only [wordValue] at eqn
     split at eqn
     · contradiction
-    · rename_i separate
-      unfold word at eqn separate
-      cases found : wordTokens.find? (fun entry => entry.1 == scalarText spelling) with
-      | none => simp [found] at separate
-      | some entry =>
-        simp [found] at eqn
-        have allowed : ∀ entry ∈ wordTokens,
-            ConcreteSpec.StageInterface.Terminal.HasPayload entry.2 = false := by decide
-        exact eqn.symm ▸ allowed entry (List.mem_of_find?_eq_some found)
+    · rename_i entry found
+      cases eqn
+      have allowed : ∀ entry ∈ wordTokens,
+          ConcreteSpec.StageInterface.Terminal.HasPayload entry.2 = false := by decide
+      exact allowed entry (List.mem_of_find?_eq_some found)
   | integer => contradiction
   | string => cases eqn; exact False.elim (hp.1 rfl)
   | byte => cases eqn; exact False.elim (hp.2.1 rfl)
@@ -2942,9 +3020,9 @@ private theorem fixed_plain {input spelling tail : List Nat} {kind : Terminal}
         ConcreteSpec.StageInterface.Terminal.HasPayload e.2 = false := by decide
     exact allowed _ member
 
-theorem fixed_in_stream {fileId pos bytes scalars pieces kind span}
+theorem fixed_in_stream {fileId pos bytes scalars pieces kind plain span}
     (h : PieceStream fileId pos bytes scalars pieces)
-    (member : Piece.token (.parsed (.fixed kind)) span ∈ pieces) :
+    (member : Piece.token (.parsed (.fixed kind plain)) span ∈ pieces) :
     ConcreteSpec.StageInterface.Terminal.HasPayload kind = false := by
   induction h with
   | nil => contradiction
@@ -2964,10 +3042,10 @@ def retainPiece (stream : LosslessStream) (piece : {p // p ∈ stream.pieces}) :
   | .whitespace s | .lineComment s => .inl (raw s)
   | .token value s =>
     let decoded : ConcreteSpec.StageInterface.TokenValue := match hv : value with
-      | .parsed (.fixed kind) => .fixed kind (by
+      | .parsed (.fixed kind plain) => .fixed kind (by
           obtain ⟨_, meaning⟩ := stream.meaning
           exact fixed_in_stream meaning (by simpa only [eqn, hv] using piece.property :
-            Piece.token (.parsed (.fixed kind)) s ∈ stream.pieces))
+            Piece.token (.parsed (.fixed kind plain)) s ∈ stream.pieces))
       | .parsed (.name name) => .name name
       | .parsed (.integer n radix suffix) => .integer n radix suffix
       | .stringLiteral text => .stringLiteral text.toUTF8.data.toList
@@ -3000,7 +3078,7 @@ def retain (source : Source) (stream : LosslessStream) : ConcreteSpec.StageInter
 end Bridge
 
 /-- Resolve the exact project file and retain the scanner's located pieces in
-the registered representation. The digit-limit channel preserves its offset. -/
+the registered representation. Scanner refusals retain their typed lexical cause. -/
 def lexStream (source : ConcreteSpec.StageInterface.Source) :
     Except Concrete.Interfaces.LexRefusal ConcreteSpec.StageInterface.TokenStream :=
   match source.project.fileAt source.entryFile with
@@ -3011,9 +3089,9 @@ def lexStream (source : ConcreteSpec.StageInterface.Source) :
     | .error e =>
       have hf := lexLossless_failure h
       match e with
-      | .syntaxError diagnostic => .error (.malformed diagnostic)
-      | .lexerDigitLimit offset limit => .error (.digitLimit offset limit)
-      | .internal _ | .parser _ | .unsupported _ | .checker _ | .backendResource ..
-      | .backendProfile .. | .toolFailure _ | .manifest _ | .usageError _ => False.elim hf
+      | .source cause@(.lexical ..) => .error (.source cause)
+      | .source (.parser ..) | .source (.surface ..) | .source (.core ..)
+      | .path .. | .missingLocation _ | .backendResource .. | .backendProfile ..
+      | .toolFailure _ | .manifest _ | .usageError _ | .internal _ => False.elim hf
 
 end Concrete.Lex
