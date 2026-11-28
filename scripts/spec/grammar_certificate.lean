@@ -70,6 +70,42 @@ private def exercise (label : String) (g : RawGrammar) : IO (Array UInt64) := do
   IO.println s!"{label}: {g.cfg.prods.length} rows, {mem.size} words, {v.program.size} instructions"
   return mem
 
+/-- Independently extract the expected cell table and nonterminal ranks directly
+from the independent producer's accepted word vector, without using `decodeCells`
+or `decodeRank`. -/
+private def expectedTableFromProducer (l : Layout) (producerWords : Array UInt64) :
+    Option (Array (Option Nat) × Array Nat) := do
+  guard (producerWords.size == l.scratch + 1)
+  let mut cells : Array (Option Nat) := Array.mkEmpty (l.n * l.c)
+  for n in [:l.n] do
+    for col in [:l.c] do
+      let w ← producerWords[l.cell n col]?
+      cells := cells.push (if w == 0 then none else some (w.toNat - 1))
+  let mut ranks : Array Nat := Array.mkEmpty l.n
+  for n in [:l.n] do
+    let w ← producerWords[l.rank n]?
+    ranks := ranks.push w.toNat
+  return (cells, ranks)
+
+/-- Decode every nonterminal rank through `decodeRank`. -/
+private def decodeAllRanks (l : Layout) (memory : Array UInt64) : Option (Array Nat) :=
+  ((List.finRange l.n).mapM (decodeRank l memory)).map List.toArray
+
+/-- Compare EVERY decoded cell `(n, col)` and EVERY decoded nonterminal rank `n`
+against independently stated expected values. -/
+private def matchesExpectedTable (l : Layout) (expectedCells : Array (Option Nat))
+    (expectedRanks : Array Nat) (candidateCells : Array (Option Nat))
+    (candidateRanks : Array Nat) : Bool :=
+  candidateCells.size == l.n * l.c &&
+  expectedCells.size == l.n * l.c &&
+  candidateRanks.size == l.n &&
+  expectedRanks.size == l.n &&
+  (List.range l.n).all fun n =>
+    candidateRanks[n]? == expectedRanks[n]? &&
+    (List.range l.c).all fun col =>
+      let addr := l.cell n col
+      candidateCells[addr]? == expectedCells[addr]?
+
 def main (args : List String) : IO Unit := do
   if args == ["--export"] then IO.print (exportRows catalog); return
   -- Byte-exact reproducibility: regenerate twice from scripts/spec/grammar_proposal.py
@@ -122,23 +158,43 @@ def main (args : List String) : IO Unit := do
     unless addr < earlyProposal.size && earlyProposal[addr]! != word &&
         !fullVerifier.accepts (earlyProposal.set! addr word) catalog.budget do
       throw (IO.userError s!"{label} mutation escaped")
-  -- Wrong-length controls and decoded-table/rank identity checks on the production proposal.
+  -- Wrong-length controls and full decoded-table/rank identity checks against the
+  -- independent producer's accepted word vector (`full`).
   let progIdx : Fin fl.n := ⟨Nonterminal.program.ctorIdx, by decide⟩
   for wrongSize in [earlyProposal.pop, earlyProposal.push 0] do
     unless !fullVerifier.accepts wrongSize catalog.budget &&
         (decodeCells fl wrongSize).isNone && (decodeRank fl wrongSize progIdx).isNone do
       throw (IO.userError "wrong full certificate dimensions accepted")
+  let some (expectedFullCells, expectedFullRanks) := expectedTableFromProducer fl full
+    | throw (IO.userError "failed to derive expected cells/ranks from independent producer")
   let some fullDecoded := decodeCells fl earlyProposal
     | throw (IO.userError "failed to decode accepted full earlyProposal")
-  unless fullDecoded.size == fl.n * fl.c &&
-      fullDecoded[fnCell]? == some (some 0) &&
+  let some fullRanks := decodeAllRanks fl earlyProposal
+    | throw (IO.userError "failed to decode all accepted nonterminal ranks")
+  unless matchesExpectedTable fl expectedFullCells expectedFullRanks fullDecoded fullRanks &&
+      fullDecoded[fnCell]? == some (some ProductionId.program.ctorIdx) &&
       fullDecoded[eofProgramCell]? == some none &&
-      fullDecoded != fullDecoded.set! fnCell (some 1) do
-    throw (IO.userError "full decoded cell table lost identity or accepted cell substitution")
-  let some progRank := decodeRank fl earlyProposal progIdx
-    | throw (IO.userError "failed to decode accepted program rank")
-  unless progRank == earlyProposal[rankProg]!.toNat && progRank != progRank + 1 do
-    throw (IO.userError "full decoded rank lost identity or accepted rank substitution")
+      fullDecoded[letBodyCell]? == some (some ProductionId.binding.ctorIdx) do
+    throw (IO.userError "full decoded cell table or ranks differ from independent producer output")
+  -- Negative table-identity controls: every mutation is tested against the independently
+  -- expected producer output, never against a modified copy of the candidate array.
+  let swappedBodyLet := fullDecoded.set! letBodyCell (some ProductionId.retStmt.ctorIdx)
+  if matchesExpectedTable fl expectedFullCells expectedFullRanks swappedBodyLet fullRanks then
+    throw (IO.userError "table identity control accepted swapping body/let cell to retStmt")
+  let clearedFn := fullDecoded.set! fnCell none
+  if matchesExpectedTable fl expectedFullCells expectedFullRanks clearedFn fullRanks then
+    throw (IO.userError "table identity control accepted clearing program/fn cell")
+  let spuriousEof := fullDecoded.set! eofProgramCell (some ProductionId.program.ctorIdx)
+  if matchesExpectedTable fl expectedFullCells expectedFullRanks spuriousEof fullRanks then
+    throw (IO.userError "table identity control accepted spurious program/EOF cell")
+  let swappedRank := fullRanks.set! Nonterminal.program.ctorIdx
+    fullRanks[Nonterminal.structs.ctorIdx]!
+  if matchesExpectedTable fl expectedFullCells expectedFullRanks fullDecoded swappedRank then
+    throw (IO.userError "table identity control accepted swapping program rank to structs rank")
+  let bumpedRank := fullRanks.set! Nonterminal.program.ctorIdx
+    (fullRanks[Nonterminal.program.ctorIdx]! + 1)
+  if matchesExpectedTable fl expectedFullCells expectedFullRanks fullDecoded bumpedRank then
+    throw (IO.userError "table identity control accepted incrementing program rank")
   -- S -> A t0 ; A -> epsilon | t1. The start is also nullable in the second toy.
   let g : RawGrammar := ⟨2, 2, 0, [(0,[.n 1,.t 0]), (1,[]), (1,[.t 1])]⟩
   let mem ← exercise "nullable prefix" g
@@ -153,8 +209,6 @@ def main (args : List String) : IO Unit := do
     unless addr < mem.size && mem[addr]! != word && !v.accepts (mem.set! addr word) g.budget do
       throw (IO.userError s!"{label} mutation escaped")
   let rankIndex : Fin l.n := ⟨1, by decide⟩
-  unless decodeRank l mem rankIndex == some mem[l.rank 1]!.toNat do
-    throw (IO.userError "decoder lost the accepted nonterminal rank")
   for wrongSize in [mem.pop, mem.push 0] do
     unless !v.accepts wrongSize g.budget && (decodeCells l wrongSize).isNone &&
         (decodeRank l wrongSize rankIndex).isNone do
@@ -168,10 +222,21 @@ def main (args : List String) : IO Unit := do
   let forged := (original.set! (recursive.layout.follow 0 2) 2).set! (recursive.layout.cell 0 2) 2
   let cert := compileTableVerifier recursive
   if cert.accepts forged recursive.budget then throw (IO.userError "self-supported FOLLOW escaped")
+  let expectedToyCells : Array (Option Nat) := #[none, some 0, some 0, none, some 1, some 2]
+  let expectedToyRanks : Array Nat := #[2, 1]
+  let some (producerToyCells, producerToyRanks) := expectedTableFromProducer l mem
+    | throw (IO.userError "failed to derive expected cells/ranks for toy grammar")
   let some decoded := decodeCells l mem | throw (IO.userError "failed to decode accepted table")
-  unless decoded.size == l.n*l.c && decoded[l.cell 1 1]? == some (some 1) &&
-      decoded[l.cell 1 0]? == some none && decoded != decoded.set! (l.cell 1 1) (some 0) do
-    throw (IO.userError "decoder lost the accepted row-major prefix")
+  let some decodedRanks := decodeAllRanks l mem | throw (IO.userError "failed to decode accepted ranks")
+  unless producerToyCells == expectedToyCells && producerToyRanks == expectedToyRanks &&
+      matchesExpectedTable l expectedToyCells expectedToyRanks decoded decodedRanks do
+    throw (IO.userError "toy decoded cells or ranks differ from expected table")
+  if matchesExpectedTable l expectedToyCells expectedToyRanks
+      (decoded.set! (l.cell 1 1) (some 0)) decodedRanks then
+    throw (IO.userError "toy table identity control accepted cell substitution")
+  if matchesExpectedTable l expectedToyCells expectedToyRanks
+      decoded (decodedRanks.set! 0 1) then
+    throw (IO.userError "toy table identity control accepted rank substitution")
   let eps : RawGrammar := ⟨1, 1, 0, [(0,[])]⟩
   let empty ← exercise "physical EOF" eps
   unless !(compileTableVerifier eps).accepts (empty.set! 0 0) eps.budget do
