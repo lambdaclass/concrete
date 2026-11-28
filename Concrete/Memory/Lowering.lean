@@ -38,6 +38,9 @@ private def classifyInst (classify : PlaceId → StorageClass) : MemoryInst lang
   | .op dst op args checks addresses =>
     .op (classifyPlace classify dst) op (classifyArgs classify args) checks
       (addresses.map (classifyParam classify))
+  | .addWithOverflow t dst flag lhs rhs =>
+    .addWithOverflow t (classifyPlace classify dst) (classifyPlace classify flag)
+      (classifyRead classify lhs) (classifyRead classify rhs)
   | .beginLifetime place => .beginLifetime place
   | .endLifetime place => .endLifetime place
   | .destructure src bindings =>

@@ -341,6 +341,16 @@ theorem StepOutcome.startDefinitions_of_false {memory : Memory lang profile}
           hargs, htrap, haddr, hop, hkeys, ?_, eq⟩
         exact .cons (ite_eq_left (writeValue_live write.2.2.1) ▸ rfl) write (.nil _)
       · exact write.elim
+    | addWithOverflow t dst flag lhs rhs =>
+      obtain ⟨ht, hbool, hdisj, lv, afterLhs, rv, afterReads, x, y, stored,
+        hread1, hread2, hlv, hrv, hwrite, heq⟩ := body
+      cases exhausting
+      · obtain ⟨mid, w1, w2⟩ := hwrite
+        refine ⟨ht, hbool, hdisj, lv, afterLhs, rv, afterReads, x, y, stored,
+          hread1, hread2, hlv, hrv, ?_, heq⟩
+        exact .cons (ite_eq_left (writeValue_live w1.2.2.1) ▸ rfl) w1
+          (.cons (ite_eq_left (writeValue_live w2.2.2.1) ▸ rfl) w2 (.nil _))
+      · exact hwrite.elim
     | beginLifetime place => exact body
     | endLifetime place => exact body
     | destructure src bindings => exact body

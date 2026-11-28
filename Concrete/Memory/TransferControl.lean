@@ -293,7 +293,8 @@ theorem ssa_exhaustion : ssa.WF (language := Language) ∧ ssaExec.finite ssa at
     ssaExec.step ssa atBegin halted ∧ ssaExec.result ssa halted .resourceExhausted := by
   refine ⟨?_, ?_, ?_, by with_unfolding_all rfl⟩
   · letI := Language.typeDecidableEq
-    exact (checkHandoff_iff _).mp (by with_unfolding_all decide)
+    exact ⟨(SSA.checkRegisterFormation_eq_true_iff _).mp (by with_unfolding_all decide),
+      (checkHandoff_iff _).mp (by with_unfolding_all decide)⟩
   · refine ⟨start, by with_unfolding_all rfl,
       .cons (b := jumping) ?_ (.cons (b := forced) ?_ (.cons ?_ (.nil _)))⟩
     · with_unfolding_all exact ⟨rfl, ⟨_, rfl, _, ⟨nofun, .inr ⟨rfl, _, rfl, .inr
@@ -311,14 +312,15 @@ theorem ssa_exhaustion : ssa.WF (language := Language) ∧ ssaExec.finite ssa at
 theorem bir_exhaustion : bir.WF (language := Language) ∧ birExec.finite bir atBegin ∧
     birExec.step bir atBegin halted ∧ birExec.result bir halted .resourceExhausted := by
   refine ⟨?_, ?_⟩
-  · refine ⟨?_, by with_unfolding_all decide, by with_unfolding_all decide, by with_unfolding_all decide,
-      fun _ h => (List.not_mem_nil h).elim, ?_⟩
-    · rintro _ member block present _ _
-      cases List.mem_singleton.mp member
-      change block ∈ [_] at present
-      cases List.mem_singleton.mp present
-      contradiction
-    · with_unfolding_all exact ⟨ssa_exhaustion.1.1, ssa_exhaustion.1.2.2.2⟩
+  · refine ⟨(BIR.checkRegisterFormation_eq_true_iff _).mp (by with_unfolding_all decide),
+      ?_, by with_unfolding_all decide,
+      fun o ho => ssa_exhaustion.1.memoryView.origins_bind o (by with_unfolding_all exact ho),
+      fun _ h => (List.not_mem_nil h).elim, by with_unfolding_all exact ssa_exhaustion.1.memoryView⟩
+    rintro _ member block present _ _
+    cases List.mem_singleton.mp member
+    change block ∈ [_] at present
+    cases List.mem_singleton.mp present
+    contradiction
   · with_unfolding_all exact ssa_exhaustion.2
 
 namespace TrailingParam
@@ -623,7 +625,7 @@ theorem corrupted_tag_rejected :
       .cons ((bind_iff _).mpr rfl) (.cons ((jump_iff _).mpr rfl) (.nil _))⟩, by with_unfolding_all rfl⟩,
     stuck, ?_⟩
   intro contract
-  obtain ⟨_, _, _, _, _, _, _, _, refinement, _⟩ := contract
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, refinement, _⟩ := contract
   exact (refinement source_safe).2.2 atJump stuck
 
 end TrailingParam
@@ -979,7 +981,7 @@ theorem corrupted_target_rejected :
     refine ⟨doneState, ⟨start, by with_unfolding_all rfl, .cons ?_ (.nil _)⟩, by with_unfolding_all rfl⟩
     with_unfolding_all exact ⟨rfl, ⟨_, rfl, rfl, _, _, _, rfl, rfl, rfl, bindings⟩, [], rfl⟩
   · intro contract
-    obtain ⟨_, _, _, _, _, _, _, _, refinement, _⟩ := contract
+    obtain ⟨_, _, _, _, _, _, _, _, _, _, refinement, _⟩ := contract
     exact (refinement safe).2.2 start stuck
 
 end SingleParam

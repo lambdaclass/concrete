@@ -28,6 +28,15 @@ def elaborate (slice : Slice) (ast : Parsed ((sliceGrammar slice).value (sliceGr
   else
     .error (.sliceMismatch slice ast.source.slice)
 
+theorem elaborate_slice0_inl (source : Source) (tree : SyntaxTree) (hslice : source.slice = slice0) :
+    elaborate slice0 ⟨source, .inl tree⟩ =
+      match Concrete.Elab.surfaceProgram tree with
+      | some program => .ok (.pending source.project (.zero program) rfl)
+      | none => .error (.invalidTree source.entryFile) := by
+  unfold elaborate
+  rw [ite_eq_left hslice]
+  rfl
+
 private theorem fromTree_corresponds (slice : Slice) (source : Source)
     (tree : SurfaceAST sliceASTExtra slice) {result}
     (reference : SliceElaboration slice source.project tree result) :
@@ -66,6 +75,20 @@ theorem validated {slice : Slice} {profile : Profile} (passes : Passes slice pro
     have h := corresponds ast domain
     change passes.elaborate ast = .error failure at ran
     rwa [ran] at h
+
+/-- Static typing gate validation on the unchecked route: every on-slice static
+refusal renders to the single `.admission (.refused cause)` form backed by
+`CoreInput.StaticRefuses`. -/
+theorem typingEntry_validated (language : CoreLanguage) (slice : Slice) :
+    (typingEntry language slice).Validated :=
+  Concrete.Interfaces.typingEntry_validated_of_render language slice
+    (fun v _ herr => Concrete.IntegratedCore.DischargeTransfer.render_of_checkProgramWith_error .runtime v herr)
+
+-- `RoutePipeline.mk` is private to `Concrete.Interfaces.Pipeline` and cannot be forged outside it.
+example (_p : Pipeline Source (BackendOutput ⟨.lcb, .x86_64Linux, 8, 4096⟩)) : True := by
+  fail_if_success
+    let _ : RoutePipeline slice0 ⟨.lcb, .x86_64Linux, 8, 4096⟩ .checked := RoutePipeline.mk _p
+  trivial
 
 section LCB
 
@@ -112,10 +135,11 @@ theorem lcb_trap_word {profile : Profile} {Event : Type} (project : Project) (ou
   have slot : 256 + index.index - 256 = index.index := by omega
   simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt inWord, ite_eq_right trapRange, slot,
     entryAt, Option.bind_some]
-  change (project.files[entry.origin.lexical.file.index]?).bind _ = _
-  rw [fileAt]
-  simp only [trapDiagnostic, fileAt, Option.map_some, Option.getD_some]
-  rfl
+  have hFileAt : project.fileAt entry.origin.lexical.file = some file := by
+    rw [ConcreteSpec.Core.SourcePathSpan.Project.fileAt, ← Array.getElem?_toList]
+    exact fileAt
+  simp only [runtimeSite, trapDiagnostic, hFileAt, Bind.bind, Option.bind,
+    Pure.pure, Option.map_some, Option.getD_some]
 
 end LCB
 

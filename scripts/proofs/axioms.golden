@@ -3372,6 +3372,7 @@ ConcreteSpec.Core.SourcePathSpan.LocationRefusal.wrongLine.inj
 ConcreteSpec.Core.SourcePathSpan.LocationRefusal.wrongLine.injEq	propext
 ConcreteSpec.Core.SourcePathSpan.LocationRefusal.wrongLine.sizeOf_spec	
 ConcreteSpec.Core.SourcePathSpan.Project.admitted	Quot.sound propext
+ConcreteSpec.Core.SourcePathSpan.Project.fileAt.eq_1	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.Project.files.eq_1	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.Project.findFile.eq_1	Quot.sound propext
 ConcreteSpec.Core.SourcePathSpan.Project.findFile_succeeds_iff	Quot.sound propext
@@ -4251,6 +4252,15 @@ ConcreteSpec.GrammarData.AdmittedAt.eq_1
 ConcreteSpec.GrammarData.Authority.arithmetic.sizeOf_spec	
 ConcreteSpec.GrammarData.Authority.brecOn.eq	
 ConcreteSpec.GrammarData.Authority.component.sizeOf_spec	
+ConcreteSpec.GrammarData.Authority.firstSlice.eq_1	
+ConcreteSpec.GrammarData.Authority.firstSlice.eq_2	
+ConcreteSpec.GrammarData.Authority.firstSlice.eq_3	
+ConcreteSpec.GrammarData.Authority.firstSlice.eq_4	
+ConcreteSpec.GrammarData.Authority.firstSlice.eq_5	
+ConcreteSpec.GrammarData.Authority.firstSlice.eq_6	
+ConcreteSpec.GrammarData.Authority.firstSlice.eq_7	
+ConcreteSpec.GrammarData.Authority.firstSlice.eq_8	
+ConcreteSpec.GrammarData.Authority.firstSlice.eq_def	
 ConcreteSpec.GrammarData.Authority.inHead.inj	
 ConcreteSpec.GrammarData.Authority.inHead.injEq	propext
 ConcreteSpec.GrammarData.Authority.inHead.sizeOf_spec	
@@ -4442,6 +4452,7 @@ ConcreteSpec.GrammarData.ProductionId.stringLit.sizeOf_spec
 ConcreteSpec.GrammarData.ProductionId.times.sizeOf_spec	
 ConcreteSpec.GrammarData.ProductionId.trueLit.sizeOf_spec	
 ConcreteSpec.GrammarData.ProductionId.wildcard.sizeOf_spec	
+ConcreteSpec.GrammarData.ProductionRow.firstSlice.eq_1	
 ConcreteSpec.GrammarData.ProductionRow.mk.inj	
 ConcreteSpec.GrammarData.ProductionRow.mk.injEq	propext
 ConcreteSpec.GrammarData.ProductionRow.mk.sizeOf_spec	
@@ -5314,6 +5325,31 @@ ConcreteSpec.StageGrammar.Action.cons.sizeOf_spec	propext
 ConcreteSpec.StageGrammar.Action.constant.inj	propext
 ConcreteSpec.StageGrammar.Action.constant.injEq	propext
 ConcreteSpec.StageGrammar.Action.constant.sizeOf_spec	propext
+ConcreteSpec.StageGrammar.Action.cost.eq_1	propext
+ConcreteSpec.StageGrammar.Action.cost.eq_10	propext
+ConcreteSpec.StageGrammar.Action.cost.eq_11	propext
+ConcreteSpec.StageGrammar.Action.cost.eq_2	propext
+ConcreteSpec.StageGrammar.Action.cost.eq_3	propext
+ConcreteSpec.StageGrammar.Action.cost.eq_4	propext
+ConcreteSpec.StageGrammar.Action.cost.eq_5	propext
+ConcreteSpec.StageGrammar.Action.cost.eq_6	propext
+ConcreteSpec.StageGrammar.Action.cost.eq_7	propext
+ConcreteSpec.StageGrammar.Action.cost.eq_8	propext
+ConcreteSpec.StageGrammar.Action.cost.eq_9	propext
+ConcreteSpec.StageGrammar.Action.cost.eq_def	propext
+ConcreteSpec.StageGrammar.Action.eval.eq_1	propext
+ConcreteSpec.StageGrammar.Action.eval.eq_10	propext
+ConcreteSpec.StageGrammar.Action.eval.eq_11	propext
+ConcreteSpec.StageGrammar.Action.eval.eq_2	propext
+ConcreteSpec.StageGrammar.Action.eval.eq_3	propext
+ConcreteSpec.StageGrammar.Action.eval.eq_4	propext
+ConcreteSpec.StageGrammar.Action.eval.eq_5	propext
+ConcreteSpec.StageGrammar.Action.eval.eq_6	propext
+ConcreteSpec.StageGrammar.Action.eval.eq_7	propext
+ConcreteSpec.StageGrammar.Action.eval.eq_8	propext
+ConcreteSpec.StageGrammar.Action.eval.eq_9	propext
+ConcreteSpec.StageGrammar.Action.eval.eq_def	propext
+ConcreteSpec.StageGrammar.Action.eval_cost	propext
 ConcreteSpec.StageGrammar.Action.inl.inj	propext
 ConcreteSpec.StageGrammar.Action.inl.injEq	propext
 ConcreteSpec.StageGrammar.Action.inl.sizeOf_spec	propext
@@ -5341,7 +5377,6 @@ ConcreteSpec.StageGrammar.Action.some.injEq	propext
 ConcreteSpec.StageGrammar.Action.some.sizeOf_spec	propext
 ConcreteSpec.StageGrammar.CheckedTable.acyclic	propext
 ConcreteSpec.StageGrammar.CheckedTable.dimensions	propext
-ConcreteSpec.StageGrammar.CheckedTable.mk.congr_simp	propext
 ConcreteSpec.StageGrammar.CheckedTable.mk.inj	propext
 ConcreteSpec.StageGrammar.CheckedTable.mk.injEq	propext
 ConcreteSpec.StageGrammar.CheckedTable.mk.sizeOf_spec	propext
@@ -5349,9 +5384,13 @@ ConcreteSpec.StageGrammar.CheckedTable.predicts	propext
 ConcreteSpec.StageGrammar.Derives.brecOn	propext
 ConcreteSpec.StageGrammar.Derives.tokensEligible	Quot.sound propext
 ConcreteSpec.StageGrammar.DerivesArgs.brecOn	propext
+ConcreteSpec.StageGrammar.DerivesArgsTrace.brecOn	propext
+ConcreteSpec.StageGrammar.DerivesTrace.brecOn	propext
 ConcreteSpec.StageGrammar.ParseCursor.mk.inj	
 ConcreteSpec.StageGrammar.ParseCursor.mk.injEq	propext
 ConcreteSpec.StageGrammar.ParseCursor.mk.sizeOf_spec	
+ConcreteSpec.StageGrammar.ParseCursor.require.eq_1	
+ConcreteSpec.StageGrammar.ParseCursor.require_firstUnsupportedHit_isSome	propext
 ConcreteSpec.StageGrammar.ParseStop.exhausted.sizeOf_spec	
 ConcreteSpec.StageGrammar.ParseStop.malformed.sizeOf_spec	
 ConcreteSpec.StageGrammar.Parser.exactTable	Classical.choice Quot.sound propext
@@ -5363,23 +5402,28 @@ ConcreteSpec.StageGrammar.Parser.verified	Classical.choice Quot.sound propext
 ConcreteSpec.StageGrammar.ParserEngine.mk.inj	propext
 ConcreteSpec.StageGrammar.ParserEngine.mk.injEq	propext
 ConcreteSpec.StageGrammar.ParserEngine.mk.sizeOf_spec	propext
-ConcreteSpec.StageGrammar.ParserEngine.run._proof_1	
-ConcreteSpec.StageGrammar.ParserEngine.run._proof_2	Quot.sound propext
-ConcreteSpec.StageGrammar.ParserEngine.run._proof_3	Quot.sound propext
 ConcreteSpec.StageGrammar.Predictive.brecOn	propext
 ConcreteSpec.StageGrammar.PredictiveArgs.brecOn	propext
 ConcreteSpec.StageGrammar.Production.mk.inj	propext
 ConcreteSpec.StageGrammar.Production.mk.injEq	propext
 ConcreteSpec.StageGrammar.Production.mk.sizeOf_spec	propext
+ConcreteSpec.StageGrammar.SharedGrammar.grammar.eq_1	propext
 ConcreteSpec.StageGrammar.SharedGrammar.integerSliceCoverage	propext
 ConcreteSpec.StageGrammar.SharedGrammar.mk.inj	propext
 ConcreteSpec.StageGrammar.SharedGrammar.mk.injEq	propext
 ConcreteSpec.StageGrammar.SharedGrammar.mk.sizeOf_spec	propext
 ConcreteSpec.StageGrammar.SharedGrammar.nonDecimalLater	propext
+ConcreteSpec.StageGrammar.SharedGrammar.rawGrammar.eq_1	propext
+ConcreteSpec.StageGrammar.SharedGrammar.rawGrammar_budget	Quot.sound propext
+ConcreteSpec.StageGrammar.SharedGrammar.rawGrammar_columns	propext
+ConcreteSpec.StageGrammar.SharedGrammar.rawGrammar_positions	Quot.sound propext
 ConcreteSpec.StageGrammar.SharedGrammar.required._proof_1	propext
 ConcreteSpec.StageGrammar.SharedGrammar.startShape	propext
 ConcreteSpec.StageGrammar.SharedGrammar.terminalSliceCoverage	propext
 ConcreteSpec.StageGrammar.SharedGrammar.terminalSliceExact	propext
+ConcreteSpec.StageGrammar.SliceEvent.mk.inj	
+ConcreteSpec.StageGrammar.SliceEvent.mk.injEq	propext
+ConcreteSpec.StageGrammar.SliceEvent.mk.sizeOf_spec	
 ConcreteSpec.StageGrammar.TableVerifier.completes	Classical.choice Quot.sound propext
 ConcreteSpec.StageGrammar.TableVerifier.mk.inj	Classical.choice Quot.sound propext
 ConcreteSpec.StageGrammar.TableVerifier.mk.injEq	Classical.choice Quot.sound propext
@@ -5387,11 +5431,14 @@ ConcreteSpec.StageGrammar.TableVerifier.mk.sizeOf_spec	Classical.choice Quot.sou
 ConcreteSpec.StageGrammar.TableVerifier.sound	Classical.choice Quot.sound propext
 ConcreteSpec.StageGrammar.TableVerifier.spaceBound	Classical.choice Quot.sound propext
 ConcreteSpec.StageGrammar.VerificationInputs.accepted	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.VerificationInputs.engineTableEq	Classical.choice Quot.sound propext
 ConcreteSpec.StageGrammar.VerificationInputs.exactTable	Classical.choice Quot.sound propext
 ConcreteSpec.StageGrammar.VerificationInputs.mk.inj	Classical.choice Quot.sound propext
 ConcreteSpec.StageGrammar.VerificationInputs.mk.injEq	Classical.choice Quot.sound propext
 ConcreteSpec.StageGrammar.VerificationInputs.mk.sizeOf_spec	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.VerificationInputs.proposalSize	Classical.choice Quot.sound propext
 ConcreteSpec.StageGrammar.VerificationInputs.spaceBound	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.VerificationInputs.verifierCompiled	Classical.choice Quot.sound propext
 ConcreteSpec.StageGrammar.VerifyInstruction.add.inj	
 ConcreteSpec.StageGrammar.VerifyInstruction.add.injEq	propext
 ConcreteSpec.StageGrammar.VerifyInstruction.add.sizeOf_spec	
@@ -5432,10 +5479,239 @@ ConcreteSpec.StageGrammar.VerifyState.step.eq_6	Classical.choice Quot.sound prop
 ConcreteSpec.StageGrammar.VerifyState.step.eq_7	Classical.choice Quot.sound propext
 ConcreteSpec.StageGrammar.VerifyState.step.eq_8	Classical.choice Quot.sound propext
 ConcreteSpec.StageGrammar.VerifyState.step.eq_9	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.acceptedCells.eq_1	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.acceptedRank.eq_1	propext
+ConcreteSpec.StageGrammar.decodeAtom0._sparseCasesOn_1.else_eq	propext
+ConcreteSpec.StageGrammar.decodeAtom0._sparseCasesOn_10.else_eq	propext
+ConcreteSpec.StageGrammar.decodeAtom0._sparseCasesOn_11.else_eq	propext
+ConcreteSpec.StageGrammar.decodeAtom0._sparseCasesOn_12.else_eq	propext
+ConcreteSpec.StageGrammar.decodeAtom0._sparseCasesOn_2.else_eq	propext
+ConcreteSpec.StageGrammar.decodeAtom0._sparseCasesOn_3.else_eq	propext
+ConcreteSpec.StageGrammar.decodeAtom0._sparseCasesOn_4.else_eq	propext
+ConcreteSpec.StageGrammar.decodeAtom0._sparseCasesOn_5.else_eq	propext
+ConcreteSpec.StageGrammar.decodeAtom0._sparseCasesOn_6.else_eq	propext
+ConcreteSpec.StageGrammar.decodeAtom0._sparseCasesOn_7.else_eq	propext
+ConcreteSpec.StageGrammar.decodeAtom0._sparseCasesOn_8.else_eq	propext
+ConcreteSpec.StageGrammar.decodeAtom0._sparseCasesOn_9.else_eq	propext
+ConcreteSpec.StageGrammar.decodeAtom0.eq_1	propext
+ConcreteSpec.StageGrammar.decodeAtom0.eq_2	propext
+ConcreteSpec.StageGrammar.decodeAtom0.eq_3	propext
+ConcreteSpec.StageGrammar.decodeAtom0.eq_4	propext
+ConcreteSpec.StageGrammar.decodeAtom0.eq_def	propext
+ConcreteSpec.StageGrammar.decodeAtom1._sparseCasesOn_1.else_eq	propext
+ConcreteSpec.StageGrammar.decodeAtom1._sparseCasesOn_2.else_eq	propext
+ConcreteSpec.StageGrammar.decodeAtom1._sparseCasesOn_3.else_eq	propext
+ConcreteSpec.StageGrammar.decodeAtom1.eq_1	propext
+ConcreteSpec.StageGrammar.decodeAtom1.eq_2	propext
+ConcreteSpec.StageGrammar.decodeAtom1.eq_3	propext
+ConcreteSpec.StageGrammar.decodeAtom1.eq_4	propext
+ConcreteSpec.StageGrammar.decodeAtom1.eq_5	propext
+ConcreteSpec.StageGrammar.decodeAtom1.eq_6	propext
+ConcreteSpec.StageGrammar.decodeAtom1.eq_def	propext
+ConcreteSpec.StageGrammar.decodeBody0._sparseCasesOn_1.else_eq	propext
+ConcreteSpec.StageGrammar.decodeBody0._sparseCasesOn_4.else_eq	propext
+ConcreteSpec.StageGrammar.decodeBody0.eq_1	propext
+ConcreteSpec.StageGrammar.decodeBody0.eq_2	propext
+ConcreteSpec.StageGrammar.decodeBody0.eq_3	propext
+ConcreteSpec.StageGrammar.decodeBody0.eq_def	propext
+ConcreteSpec.StageGrammar.decodeBody1.eq_1	propext
+ConcreteSpec.StageGrammar.decodeBody1.eq_2	propext
+ConcreteSpec.StageGrammar.decodeBody1.eq_3	propext
+ConcreteSpec.StageGrammar.decodeBody1.eq_def	propext
+ConcreteSpec.StageGrammar.decodeDecls1._sparseCasesOn_3.else_eq	propext
+ConcreteSpec.StageGrammar.decodeDecls1.eq_1	propext
+ConcreteSpec.StageGrammar.decodeDecls1.eq_2	propext
+ConcreteSpec.StageGrammar.decodeDecls1.eq_3	propext
+ConcreteSpec.StageGrammar.decodeDecls1.eq_def	propext
+ConcreteSpec.StageGrammar.decodeExpr0._sparseCasesOn_1.else_eq	propext
+ConcreteSpec.StageGrammar.decodeExpr0.eq_1	propext
+ConcreteSpec.StageGrammar.decodeExpr0.eq_2	propext
+ConcreteSpec.StageGrammar.decodeExpr0.eq_def	propext
+ConcreteSpec.StageGrammar.decodeExpr1.eq_1	propext
+ConcreteSpec.StageGrammar.decodeExpr1.eq_2	propext
+ConcreteSpec.StageGrammar.decodeExpr1.eq_def	propext
+ConcreteSpec.StageGrammar.decodeProduct0._sparseCasesOn_1.else_eq	propext
+ConcreteSpec.StageGrammar.decodeProduct0._sparseCasesOn_2.else_eq	propext
+ConcreteSpec.StageGrammar.decodeProduct0.eq_1	propext
+ConcreteSpec.StageGrammar.decodeProduct0.eq_2	propext
+ConcreteSpec.StageGrammar.decodeProduct0.eq_def	propext
+ConcreteSpec.StageGrammar.decodeStatement0._sparseCasesOn_1.else_eq	propext
+ConcreteSpec.StageGrammar.decodeStatement0._sparseCasesOn_2.else_eq	propext
+ConcreteSpec.StageGrammar.decodeStatement0._sparseCasesOn_3.else_eq	propext
+ConcreteSpec.StageGrammar.decodeStatement0._sparseCasesOn_4.else_eq	propext
+ConcreteSpec.StageGrammar.decodeStatement0._sparseCasesOn_5.else_eq	propext
+ConcreteSpec.StageGrammar.decodeStatement0._sparseCasesOn_6.else_eq	propext
+ConcreteSpec.StageGrammar.decodeStatement0._sparseCasesOn_7.else_eq	propext
+ConcreteSpec.StageGrammar.decodeStatement0.eq_1	propext
+ConcreteSpec.StageGrammar.decodeStatement0.eq_2	propext
+ConcreteSpec.StageGrammar.decodeStatement0.eq_3	propext
+ConcreteSpec.StageGrammar.decodeStatement1._sparseCasesOn_5.else_eq	propext
+ConcreteSpec.StageGrammar.decodeStatement1._sparseCasesOn_6.else_eq	propext
+ConcreteSpec.StageGrammar.decodeStatement1._sparseCasesOn_7.else_eq	propext
+ConcreteSpec.StageGrammar.decodeStatement1._sparseCasesOn_8.else_eq	propext
+ConcreteSpec.StageGrammar.decodeStatement1.eq_1	propext
+ConcreteSpec.StageGrammar.decodeStatement1.eq_2	propext
+ConcreteSpec.StageGrammar.decodeStatement1.eq_3	propext
+ConcreteSpec.StageGrammar.decodeStatement1.eq_4	propext
+ConcreteSpec.StageGrammar.decodeStatement1.eq_5	propext
+ConcreteSpec.StageGrammar.decodeStatement1.eq_6	propext
+ConcreteSpec.StageGrammar.decodeSumTail0._sparseCasesOn_3.else_eq	propext
+ConcreteSpec.StageGrammar.decodeSumTail0._sparseCasesOn_4.else_eq	propext
+ConcreteSpec.StageGrammar.decodeSumTail0.eq_1	propext
+ConcreteSpec.StageGrammar.decodeSumTail0.eq_2	propext
+ConcreteSpec.StageGrammar.decodeSumTail0.eq_3	propext
+ConcreteSpec.StageGrammar.decodeSumTail0.eq_def	propext
+ConcreteSpec.StageGrammar.decodeSumTail1.eq_1	propext
+ConcreteSpec.StageGrammar.decodeSumTail1.eq_2	propext
+ConcreteSpec.StageGrammar.decodeSumTail1.eq_3	propext
+ConcreteSpec.StageGrammar.decodeSumTail1.eq_def	propext
+ConcreteSpec.StageGrammar.decodeSurface0._sparseCasesOn_3.else_eq	propext
+ConcreteSpec.StageGrammar.decodeSurface0._sparseCasesOn_4.else_eq	propext
+ConcreteSpec.StageGrammar.decodeSurface0._sparseCasesOn_5.else_eq	propext
+ConcreteSpec.StageGrammar.decodeSurface0.eq_1	propext
+ConcreteSpec.StageGrammar.decodeSurface0.eq_2	propext
+ConcreteSpec.StageGrammar.decodeSurface1.eq_1	propext
+ConcreteSpec.StageGrammar.decodeSurface1.eq_2	propext
+ConcreteSpec.StageGrammar.derivesTrace_mono	propext
+ConcreteSpec.StageGrammar.derivesTrace_props	Quot.sound propext
+ConcreteSpec.StageGrammar.derivesTrace_props._proof_1_10	Quot.sound propext
+ConcreteSpec.StageGrammar.derivesTrace_props._proof_1_11	Quot.sound propext
+ConcreteSpec.StageGrammar.derivesTrace_props._proof_1_12	Quot.sound propext
+ConcreteSpec.StageGrammar.derivesTrace_props._proof_1_5	Quot.sound propext
+ConcreteSpec.StageGrammar.derivesTrace_props._proof_1_6	Quot.sound propext
+ConcreteSpec.StageGrammar.derivesTrace_props._proof_1_7	Quot.sound propext
+ConcreteSpec.StageGrammar.derivesTrace_props._proof_1_8	Quot.sound propext
+ConcreteSpec.StageGrammar.derivesTrace_props._proof_1_9	Quot.sound propext
+ConcreteSpec.StageGrammar.derivesTrace_to_derives	propext
+ConcreteSpec.StageGrammar.derivesTrace_unique	Quot.sound propext
+ConcreteSpec.StageGrammar.derives_exists_trace	propext
+ConcreteSpec.StageGrammar.derives_mono	propext
+ConcreteSpec.StageGrammar.derives_to_predictive	Quot.sound propext
+ConcreteSpec.StageGrammar.derives_unique	Quot.sound propext
+ConcreteSpec.StageGrammar.earlyGrammar_slice0_decode_some	Quot.sound propext
+ConcreteSpec.StageGrammar.earlyGrammar_slice0_equiv	Quot.sound propext
+ConcreteSpec.StageGrammar.earlyGrammar_slice1_decode_some	Quot.sound propext
+ConcreteSpec.StageGrammar.earlyGrammar_slice1_equiv	Quot.sound propext
+ConcreteSpec.StageGrammar.earlyIntegerSlices._proof_1	
+ConcreteSpec.StageGrammar.earlyIntegerSlices.eq_1	propext
+ConcreteSpec.StageGrammar.earlyMalformedRule._proof_1	Quot.sound propext
+ConcreteSpec.StageGrammar.earlyNt._proof_1	
+ConcreteSpec.StageGrammar.earlyNt.eq_1	
+ConcreteSpec.StageGrammar.earlyParser_elaborationDomain	Quot.sound propext
+ConcreteSpec.StageGrammar.earlyParser_slice0_decodes	Quot.sound propext
+ConcreteSpec.StageGrammar.earlyParser_two_unsupported_control	Quot.sound propext
+ConcreteSpec.StageGrammar.earlyParser_two_unsupported_control._proof_1_1	Quot.sound propext
+ConcreteSpec.StageGrammar.earlyParser_unsupported_ne_program	Quot.sound propext
+ConcreteSpec.StageGrammar.earlyParser_validated	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.earlyProduction.eq_1	propext
+ConcreteSpec.StageGrammar.earlyProposal_accepts_shared	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.earlyRhs.eq_1	
+ConcreteSpec.StageGrammar.earlySharedGrammar._proof_1	propext
+ConcreteSpec.StageGrammar.earlySharedGrammar._proof_2	propext
+ConcreteSpec.StageGrammar.earlySharedGrammar._proof_3	propext
+ConcreteSpec.StageGrammar.earlySharedGrammar._proof_4	propext
+ConcreteSpec.StageGrammar.earlySharedGrammar._proof_5	propext
+ConcreteSpec.StageGrammar.earlySharedGrammar_budget	Quot.sound propext
+ConcreteSpec.StageGrammar.earlySharedGrammar_derivesTrace_program_slice0	Quot.sound propext
+ConcreteSpec.StageGrammar.earlySharedGrammar_productionIds_eq	Quot.sound propext
+ConcreteSpec.StageGrammar.earlySharedGrammar_productionIds_nodup	Quot.sound propext
+ConcreteSpec.StageGrammar.earlySharedGrammar_productive	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.earlySharedGrammar_program_id_index	propext
+ConcreteSpec.StageGrammar.earlySharedGrammar_program_id_unique	Quot.sound propext
+ConcreteSpec.StageGrammar.earlySharedGrammar_rawGrammar	Quot.sound propext
+ConcreteSpec.StageGrammar.earlyTable_acyclic	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.earlyTable_dimensions	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.earlyTable_lookup_eq	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.earlyTable_lookup_eq._proof_1_1	Quot.sound propext
+ConcreteSpec.StageGrammar.earlyTable_predicts	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.earlyTable_rank_le_max	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.earlyTerminalSlices._proof_1	
+ConcreteSpec.StageGrammar.earlyTerminalSlices.eq_1	propext
+ConcreteSpec.StageGrammar.earlyUnsupportedLiteralRule._proof_1	Quot.sound propext
+ConcreteSpec.StageGrammar.earlyUnsupportedProductionRule._proof_1	Quot.sound propext
+ConcreteSpec.StageGrammar.earlyVerification_accepted	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.earlyVerification_accepted._simp_1_1	propext
+ConcreteSpec.StageGrammar.earlyVerification_proposalSize	Quot.sound propext
+ConcreteSpec.StageGrammar.earlyVerifier_completes	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.earlyVerifier_instructionBound	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.earlyVerifier_sound	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.earlyVerifier_spaceBound	Quot.sound propext
+ConcreteSpec.StageGrammar.firstOutOfSlice.eq_1	
+ConcreteSpec.StageGrammar.firstOutOfSlice_eq_some_iff	propext
+ConcreteSpec.StageGrammar.instDecidableEqSliceEvent.decEq._proof_1	
+ConcreteSpec.StageGrammar.instDecidableEqSliceEvent.decEq._proof_2	
+ConcreteSpec.StageGrammar.instDecidableEqSliceEvent.decEq._proof_3	
+ConcreteSpec.StageGrammar.instDecidableEqSliceEvent.decEq._proof_4	
+ConcreteSpec.StageGrammar.instDecidableEqSliceEvent.decEq._proof_5	
+ConcreteSpec.StageGrammar.parseArgs.eq_def	propext
+ConcreteSpec.StageGrammar.parseSymbol.eq_def	propext
+ConcreteSpec.StageGrammar.parseSymbol_firstUnsupportedHit_isSome	propext
+ConcreteSpec.StageGrammar.parserEngine_error_sound	Quot.sound propext
+ConcreteSpec.StageGrammar.parserEngine_error_sound._proof_1_6	Quot.sound propext
+ConcreteSpec.StageGrammar.parserEngine_invalidStream_iff	Quot.sound propext
+ConcreteSpec.StageGrammar.parserEngine_malformed_first_failure	Quot.sound propext
+ConcreteSpec.StageGrammar.parserEngine_malformed_first_failure._proof_1_4	Quot.sound propext
+ConcreteSpec.StageGrammar.parserEngine_malformed_iff	Quot.sound propext
+ConcreteSpec.StageGrammar.parserEngine_malformed_viable_prefix	Quot.sound propext
+ConcreteSpec.StageGrammar.parserEngine_nonExhausted	Quot.sound propext
+ConcreteSpec.StageGrammar.parserEngine_ok_derives_iff	Quot.sound propext
+ConcreteSpec.StageGrammar.parserEngine_ok_iff	Quot.sound propext
+ConcreteSpec.StageGrammar.parserEngine_ok_sound	Quot.sound propext
+ConcreteSpec.StageGrammar.parserEngine_ok_sound._proof_1_6	Quot.sound propext
+ConcreteSpec.StageGrammar.parserEngine_steps_le	Quot.sound propext
+ConcreteSpec.StageGrammar.parserEngine_steps_le._proof_1_1	Quot.sound propext
+ConcreteSpec.StageGrammar.parserEngine_steps_le._proof_1_2	Quot.sound propext
+ConcreteSpec.StageGrammar.parserEngine_steps_le._proof_1_3	Quot.sound propext
+ConcreteSpec.StageGrammar.parserEngine_steps_le._proof_1_4	Quot.sound propext
+ConcreteSpec.StageGrammar.parserEngine_steps_le._proof_1_5	Quot.sound propext
+ConcreteSpec.StageGrammar.parserEngine_steps_le._proof_1_6	Quot.sound propext
+ConcreteSpec.StageGrammar.parserEngine_unsupported_first_witness	Quot.sound propext
+ConcreteSpec.StageGrammar.parserEngine_unsupported_first_witness._proof_1_6	Quot.sound propext
+ConcreteSpec.StageGrammar.parserEngine_unsupported_first_witness._proof_1_7	Quot.sound propext
+ConcreteSpec.StageGrammar.parserEngine_unsupported_iff	Quot.sound propext
+ConcreteSpec.StageGrammar.parserEngine_unsupported_iff._proof_1_5	Quot.sound propext
+ConcreteSpec.StageGrammar.parserView_entryFile_isSome	Quot.sound propext
+ConcreteSpec.StageGrammar.parserView_wf_token_binds	Quot.sound propext
+ConcreteSpec.StageGrammar.parserView_wf_token_binds._proof_1_15	Quot.sound propext
+ConcreteSpec.StageGrammar.parserView_wf_token_binds._proof_1_16	Quot.sound propext
+ConcreteSpec.StageGrammar.predictive_mono	propext
+ConcreteSpec.StageGrammar.predictive_to_derives	propext
 ConcreteSpec.StageGrammar.sliceGrammarStartShape	propext
+ConcreteSpec.StageGrammar.sliceParser_malformed_iff	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.sliceParser_nonExhausted	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.sliceParser_ok_derives_iff	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.sliceParser_ok_iff	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.sliceParser_rank_le	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.sliceParser_stepsPerToken_ge	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.sliceParser_steps_le	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.sliceParser_unsupported_iff	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.sliceParser_unsupported_ne_program	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.toSurface0Token.eq_1	propext
+ConcreteSpec.StageGrammar.toSurface0TokenValue._proof_1	propext
+ConcreteSpec.StageGrammar.toSurface0TokenValue._proof_2	
+ConcreteSpec.StageGrammar.toSurface0TokenValue._proof_3	
+ConcreteSpec.StageGrammar.toSurface0TokenValue._proof_4	
+ConcreteSpec.StageGrammar.toSurface0TokenValue.eq_1	propext
+ConcreteSpec.StageGrammar.toSurface0TokenValue.eq_2	propext
+ConcreteSpec.StageGrammar.toSurface0TokenValue.eq_3	propext
+ConcreteSpec.StageGrammar.toSurface0TokenValue.eq_4	propext
+ConcreteSpec.StageGrammar.toSurface0TokenValue.eq_5	propext
+ConcreteSpec.StageGrammar.toSurface0TokenValue.eq_6	propext
+ConcreteSpec.StageGrammar.twoUnsupportedControlInput._proof_1	propext
+ConcreteSpec.StageGrammar.twoUnsupportedControlInput._proof_2	propext
+ConcreteSpec.StageGrammar.twoUnsupportedControlInput._proof_3	propext
+ConcreteSpec.StageGrammar.twoUnsupportedControlInput._proof_4	propext
+ConcreteSpec.StageGrammar.twoUnsupportedControlInput._proof_5	propext
+ConcreteSpec.StageGrammar.twoUnsupportedControlInput._proof_6	propext
+ConcreteSpec.StageGrammar.twoUnsupportedControlInput._proof_7	propext
+ConcreteSpec.StageGrammar.twoUnsupportedControlInput_wf	Quot.sound propext
+ConcreteSpec.StageGrammar.twoUnsupportedControlSlice._proof_1	
 ConcreteSpec.StageGrammar.verifyRun.eq_1	Classical.choice Quot.sound propext
 ConcreteSpec.StageGrammar.verifyRun.eq_2	Classical.choice Quot.sound propext
 ConcreteSpec.StageGrammar.verifyRun.eq_def	Classical.choice Quot.sound propext
+ConcreteSpec.StageGrammar.zeroTokenStepBound.eq_1	
+ConcreteSpec.StageGrammar.zeroTokenStepBound.eq_2	
+ConcreteSpec.StageGrammar.zeroTokenStepBound.eq_def	
 ConcreteSpec.StageInterface.AddressStorage.bytes.sizeOf_spec	
 ConcreteSpec.StageInterface.AddressStorage.logical.sizeOf_spec	
 ConcreteSpec.StageInterface.AddressStorage.ofNat_ctorIdx	
@@ -5759,6 +6035,7 @@ ConcreteSpec.StageInterface.RetainedToken.mk.sizeOf_spec	propext
 ConcreteSpec.StageInterface.SafetyCondition.mk.inj	
 ConcreteSpec.StageInterface.SafetyCondition.mk.injEq	propext
 ConcreteSpec.StageInterface.SafetyCondition.mk.sizeOf_spec	
+ConcreteSpec.StageInterface.Slice.val.eq_1	
 ConcreteSpec.StageInterface.Source.mk.inj	Quot.sound propext
 ConcreteSpec.StageInterface.Source.mk.injEq	Quot.sound propext
 ConcreteSpec.StageInterface.Source.mk.sizeOf_spec	Quot.sound propext
@@ -5885,18 +6162,32 @@ ConcreteSpec.StageInterface.SyntaxTree.leaf.sizeOf_spec	propext
 ConcreteSpec.StageInterface.SyntaxTree.node.inj	propext
 ConcreteSpec.StageInterface.SyntaxTree.node.injEq	propext
 ConcreteSpec.StageInterface.SyntaxTree.node.sizeOf_spec	propext
+ConcreteSpec.StageInterface.Terminal.HasPayload._sparseCasesOn_1.else_eq	propext
+ConcreteSpec.StageInterface.Terminal.HasPayload.eq_1	propext
+ConcreteSpec.StageInterface.Terminal.HasPayload.eq_2	propext
+ConcreteSpec.StageInterface.Terminal.HasPayload.eq_3	propext
+ConcreteSpec.StageInterface.Terminal.HasPayload.eq_4	propext
+ConcreteSpec.StageInterface.Terminal.HasPayload.eq_5	propext
+ConcreteSpec.StageInterface.Terminal.HasPayload.eq_6	propext
 ConcreteSpec.StageInterface.TokenStream.mk.inj	Quot.sound propext
 ConcreteSpec.StageInterface.TokenStream.mk.injEq	Quot.sound propext
 ConcreteSpec.StageInterface.TokenStream.mk.sizeOf_spec	Quot.sound propext
 ConcreteSpec.StageInterface.TokenValue.byteLiteral.inj	propext
 ConcreteSpec.StageInterface.TokenValue.byteLiteral.injEq	propext
 ConcreteSpec.StageInterface.TokenValue.byteLiteral.sizeOf_spec	propext
+ConcreteSpec.StageInterface.TokenValue.fixed.congr_simp	propext
 ConcreteSpec.StageInterface.TokenValue.fixed.inj	propext
 ConcreteSpec.StageInterface.TokenValue.fixed.injEq	propext
 ConcreteSpec.StageInterface.TokenValue.fixed.sizeOf_spec	propext
 ConcreteSpec.StageInterface.TokenValue.integer.inj	propext
 ConcreteSpec.StageInterface.TokenValue.integer.injEq	propext
 ConcreteSpec.StageInterface.TokenValue.integer.sizeOf_spec	propext
+ConcreteSpec.StageInterface.TokenValue.kind.eq_1	propext
+ConcreteSpec.StageInterface.TokenValue.kind.eq_2	propext
+ConcreteSpec.StageInterface.TokenValue.kind.eq_3	propext
+ConcreteSpec.StageInterface.TokenValue.kind.eq_4	propext
+ConcreteSpec.StageInterface.TokenValue.kind.eq_5	propext
+ConcreteSpec.StageInterface.TokenValue.kind.eq_6	propext
 ConcreteSpec.StageInterface.TokenValue.label.inj	propext
 ConcreteSpec.StageInterface.TokenValue.label.injEq	propext
 ConcreteSpec.StageInterface.TokenValue.label.sizeOf_spec	propext
@@ -6283,12 +6574,14 @@ ConcreteSpec.StageInterface.locationRefusalRule._proof_1	Quot.sound propext
 ConcreteSpec.StageInterface.originAt_isSome_early	Quot.sound propext
 ConcreteSpec.StageInterface.originAt_isSome_early._proof_1_5	Quot.sound propext
 ConcreteSpec.StageInterface.slice0._proof_1	
+ConcreteSpec.StageInterface.slice0.eq_1	
 ConcreteSpec.StageInterface.sliceLanguage._proof_1	propext
 ConcreteSpec.StageInterface.sliceLanguage._proof_2	Quot.sound propext
 ConcreteSpec.StageInterface.sliceLanguage._proof_3	propext
 ConcreteSpec.StageInterface.sliceLanguage._proof_4	propext
 ConcreteSpec.StageInterface.sliceLanguage_layout_wf	Quot.sound propext
 ConcreteSpec.StageInterface.sliceOne._proof_1	
+ConcreteSpec.StageInterface.sliceOne.eq_1	
 ConcreteSpec.Stmt.letStruct.inj	
 ConcreteSpec.Stmt.letStruct.injEq	propext
 ConcreteSpec.Stmt.letStruct.sizeOf_spec	
@@ -6465,6 +6758,7 @@ ConcreteSpec.Surface0.Token.mk.inj
 ConcreteSpec.Surface0.Token.mk.injEq	propext
 ConcreteSpec.Surface0.Token.mk.sizeOf_spec	
 ConcreteSpec.Surface0.TokenStream.brecOn	Classical.choice Quot.sound propext
+ConcreteSpec.Surface0.TokenValue.fixed.congr_simp	
 ConcreteSpec.Surface0.TokenValue.fixed.inj	
 ConcreteSpec.Surface0.TokenValue.fixed.injEq	propext
 ConcreteSpec.Surface0.TokenValue.fixed.sizeOf_spec	
@@ -6664,6 +6958,86 @@ ConcreteSpec.Surface0.sourceFailure_forbidden_offset	Classical.choice Quot.sound
 ConcreteSpec.Surface0.sourceFailure_not_sourceOk	Classical.choice Quot.sound propext
 ConcreteSpec.Surface0.sourceFailure_unique	Classical.choice Quot.sound propext
 ConcreteSpec.Surface0.sourceFailure_unique._proof_1_1	Quot.sound propext
+ConcreteSpec.Surface0.terminalFirstSlice.eq_1	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_10	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_11	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_12	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_13	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_14	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_15	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_16	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_17	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_18	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_19	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_2	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_20	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_21	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_22	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_23	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_24	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_25	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_26	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_27	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_28	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_29	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_3	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_30	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_31	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_32	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_33	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_34	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_35	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_36	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_37	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_38	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_39	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_4	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_40	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_41	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_42	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_43	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_44	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_45	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_46	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_47	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_48	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_49	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_5	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_50	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_51	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_52	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_53	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_54	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_55	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_56	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_57	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_58	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_59	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_6	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_60	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_61	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_62	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_63	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_64	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_65	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_66	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_67	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_68	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_69	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_7	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_70	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_71	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_72	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_73	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_74	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_75	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_76	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_77	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_78	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_79	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_8	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_80	
+ConcreteSpec.Surface0.terminalFirstSlice.eq_9	
 ConcreteSpec.Surface0.wordValue._proof_1	propext
 ConcreteSpec.Surface1.AtomDerives.brecOn	
 ConcreteSpec.Surface1.BodyDerives.brecOn	
@@ -8644,6 +9018,558 @@ _private.ConcreteSpec.Proofs.Slice1.0.ConcreteSpec.runBody.match_1.eq_3
 _private.ConcreteSpec.Proofs.Slice1.0.ConcreteSpec.runBody.match_3.eq_1	
 _private.ConcreteSpec.Proofs.Slice1.0.ConcreteSpec.runBody.match_3.eq_2	
 _private.ConcreteSpec.Proofs.Slice1.0.ConcreteSpec.runBody.match_3.eq_3	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.GrammarData.instReprAuthority.repr.match_1.eq_1	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.GrammarData.instReprAuthority.repr.match_1.eq_2	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.GrammarData.instReprAuthority.repr.match_1.eq_3	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.GrammarData.instReprAuthority.repr.match_1.eq_4	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.GrammarData.instReprAuthority.repr.match_1.eq_5	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.GrammarData.instReprAuthority.repr.match_1.eq_6	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.GrammarData.instReprAuthority.repr.match_1.eq_7	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.GrammarData.instReprAuthority.repr.match_1.eq_8	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.SharedGrammar.rawGrammar.match_1.eq_1	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.SharedGrammar.rawGrammar.match_1.eq_2	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.Slice1Inv._proof_1	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.Slice1Inv._proof_2	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.Slice1Inv._proof_3	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.Slice1Inv._proof_4	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.Slice1Inv._proof_5	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.acceptedCells_decodeCells	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.acceptedCells_dimensions	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.acceptedCells_predicts	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.acceptedRank_acyclic	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.array_getElemBang_eq_getD_u64	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.compiledTableVerifier_sound	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.compiledTableVerifier_sound._proof_1_2	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.compiledTableVerifier_sound._proof_1_3	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.compiledTableVerifier_sound._simp_1_1	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeAtom0.match_1.eq_1	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeAtom0.match_1.eq_2	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeAtom0.match_1.eq_3	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeAtom0.match_1.eq_4	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeAtom1.match_1.eq_1	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeAtom1.match_1.eq_2	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeAtom1.match_1.eq_3	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeAtom1.match_1.eq_4	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeAtom1.match_1.eq_5	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeAtom1.match_1.eq_6	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeBody0.match_1.eq_1	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeBody0.match_1.eq_2	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeBody0.match_4.eq_1	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeBody0.match_4.eq_2	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeBody0.match_4.eq_3	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeBody1.match_1.eq_1	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeBody1.match_1.eq_2	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeDecls1.match_1.eq_1	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeDecls1.match_1.eq_2	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeDecls1.match_3.eq_1	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeDecls1.match_3.eq_2	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeDecls1.match_3.eq_3	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeExpr0.match_1.eq_1	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeExpr0.match_1.eq_2	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeProduct0.match_1.eq_1	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeProduct0.match_1.eq_2	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeStatement0.match_1.eq_1	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeStatement0.match_1.eq_2	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeStatement0.match_1.eq_3	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeStatement1.match_5.eq_1	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeStatement1.match_5.eq_2	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeStatement1.match_5.eq_3	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeStatement1.match_5.eq_4	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeStatement1.match_5.eq_5	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeStatement1.match_5.eq_6	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeSumTail0.match_1.eq_1	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeSumTail0.match_1.eq_2	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeSumTail0.match_3.eq_1	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeSumTail0.match_3.eq_2	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeSumTail0.match_3.eq_3	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeSumTail1.match_1.eq_1	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeSumTail1.match_1.eq_2	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeSurface0.match_3.eq_1	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeSurface0.match_3.eq_2	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeSurface1.match_3.eq_1	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.decodeSurface1.match_3.eq_2	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.derivesArgsTrace_decimal	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.derivesArgsTrace_fixed	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.derivesArgsTrace_name	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.derivesArgs_child_inv	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.derivesArgs_decimal	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.derivesArgs_fixed	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.derivesArgs_name	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.derivesArgs_nil_inv	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.derivesArgs_of_children	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.derivesArgs_token_inv	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.derives_inv	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.derives_of_rawProductive	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerivesTrace_apply	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_apply	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice0_inv	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice0_inv._proof_1_1	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice0_inv._proof_1_19	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice0_inv._proof_1_2	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice0_inv._proof_1_22	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice0_inv._proof_1_25	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice0_inv._proof_1_3	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice0_inv._proof_1_34	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice0_inv._proof_1_35	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice0_inv._proof_1_38	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice0_inv._proof_1_41	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice0_inv._proof_1_44	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice0_inv._proof_1_47	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice0_inv._proof_1_51	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice0_inv._proof_1_54	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice0_inv._proof_1_61	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice0_inv._proof_1_64	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice0_inv._proof_1_70	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice0_inv._proof_1_71	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice1_inv	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice1_inv._proof_1_23	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice1_inv._proof_1_28	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice1_inv._proof_1_3	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice1_inv._proof_1_31	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice1_inv._proof_1_32	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice1_inv._proof_1_44	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice1_inv._proof_1_45	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice1_inv._proof_1_46	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice1_inv._proof_1_47	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice1_inv._proof_1_50	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice1_inv._proof_1_51	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice1_inv._proof_1_54	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice1_inv._proof_1_57	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice1_inv._proof_1_6	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice1_inv._proof_1_61	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice1_inv._proof_1_62	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice1_inv._proof_1_71	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice1_inv._proof_1_74	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice1_inv._proof_1_75	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice1_inv._proof_1_76	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyDerives_slice1_inv._proof_1_9	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyIntegerSlices_radix_val	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyProd_slice0_cases	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyProd_slice1_cases	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyProduction_mem	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyRequired_decimal	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyRequired_eq_slice0_of_kind	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyRequired_fixed	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyRequired_name	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyRhs.match_1.eq_1	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyRhs.match_1.eq_2	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.eraseLook.eq_1	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.eraseLook.eq_2	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.eraseLook.match_1.eq_1	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.eraseLook.match_1.eq_2	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.eraseLook_eq_lookahead	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.eraseSym.eq_1	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.eraseSym.eq_2	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.eraseSym.match_1.eq_1	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.eraseSym.match_1.eq_2	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.eraseSym_inj	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.firstSeq_iff_raw	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.first_iff_raw	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.first_of_raw	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.first_to_raw	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.follow_iff_raw	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.follow_of_raw	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.follow_to_raw	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.grammar_prods_mem	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.grammar_prods_mem._simp_1_1	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.list_nodup_getElem?_head_eq	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.map_eraseSym_eq_map_n	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.map_eraseSym_split	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.map_toSurface0_fixed	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.mem_earlyProductions_iff	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.mem_earlyProductions_iff._simp_1_1	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.members_rows	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.mk_product0	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.mk_product1	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.nullableSeq_iff_raw	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.nullable_iff_raw	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.nullable_of_raw	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.nullable_to_raw	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.pairwise_append_left	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.pairwise_append_right	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.parserView_wf_token_binds.match_1_1.eq_1	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.parserView_wf_token_binds.match_1_1.eq_2	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.predicts_iff_raw	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.prod_at_iff_raw	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.productive_of_raw	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.program_rhs_terminals_slice0	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.program_rhs_terminals_slice0._simp_1_1	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.program_rhs_terminals_slice0._simp_1_2	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.rawGrammar_prods_mem	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.rawGrammar_prods_mem._simp_1_1	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.sampleTokenValue_kind	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.singleton_map_eq	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.slice_le_last	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.statementSpan_binds	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface0_atom_complete	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface0_atom_spansBind	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface0_body_complete	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface0_body_complete._proof_1_11	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface0_body_complete._proof_1_12	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface0_body_complete._proof_1_13	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface0_body_complete._proof_1_14	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface0_body_complete._proof_1_15	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface0_body_spansBind	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface0_body_tokenSpansBind	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface0_body_tokenSpansBind._simp_1_1	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface0_body_tokenSpansBind._simp_1_2	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface0_derives_complete	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface0_derives_complete._proof_1_10	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface0_derives_complete._proof_1_11	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface0_derives_complete._proof_1_12	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface0_derives_complete._proof_1_6	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface0_derives_complete._proof_1_7	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface0_derives_complete._proof_1_8	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface0_derives_complete._proof_1_9	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface0_derives_spansBind	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface0_derives_spansBind._simp_1_1	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface0_derives_spansBind._simp_1_2	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface0_derives_tokenSpansBind	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface0_derives_tokenSpansBind._simp_1_1	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface0_derives_tokenSpansBind._simp_1_2	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface0_expr_complete	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface0_expr_spansBind	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface0_tail_complete	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface0_tail_spansBind	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface1_atom_complete	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface1_atom_complete._proof_11	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface1_atom_complete._proof_12	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface1_atom_complete._proof_13	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface1_atom_complete._proof_5	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface1_atom_complete._proof_6	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface1_atom_complete._proof_7	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface1_atom_complete._proof_8	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface1_body_complete	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface1_body_complete._proof_1_18	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface1_body_complete._proof_1_19	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface1_body_complete._proof_1_22	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface1_body_complete._proof_1_23	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface1_body_complete._proof_1_24	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface1_body_complete._proof_1_25	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface1_body_complete._proof_1_26	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface1_body_complete._proof_1_29	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface1_body_complete._proof_1_30	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface1_body_complete._proof_1_31	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface1_body_complete._proof_1_32	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface1_decls_complete	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface1_decls_complete._proof_1_10	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface1_decls_complete._proof_1_7	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface1_decls_complete._proof_1_8	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface1_decls_complete._proof_1_9	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface1_derives_complete	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface1_derives_complete._proof_1_10	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface1_derives_complete._proof_1_11	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface1_derives_complete._proof_1_12	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface1_derives_complete._proof_1_6	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface1_derives_complete._proof_1_7	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface1_derives_complete._proof_1_8	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface1_derives_complete._proof_1_9	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface1_expr_complete	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface1_more_complete	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.surface1_type_complete	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.terminalColumn_lt	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.terminal_ctorIdx_inj	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.terminal_ofNat_ctorIdx	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.toSurface0TokenValue.match_1.eq_1	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.toSurface0TokenValue.match_1.eq_2	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.toSurface0TokenValue.match_1.eq_3	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.toSurface0TokenValue.match_1.eq_4	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.toSurface0TokenValue.match_1.eq_5	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.toSurface0TokenValue.match_1.eq_6	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.toSurface0TokenValue_eq_fixed	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.toSurface0TokenValue_eq_integer	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.toSurface0TokenValue_eq_name	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.toSurfaceSpan_surfaceFileSpan	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.tokenUnsupportedCause_eq_production_imp	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.tokenValue_eq_decimal_of_kind	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.tokenValue_eq_decimal_of_kind._proof_1_1	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.tokenValue_eq_decimal_of_kind._proof_1_2	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.tokenValue_eq_decimal_of_kind._proof_1_3	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.tokenValue_eq_decimal_of_kind._proof_1_4	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.tokenValue_eq_decimal_of_kind._proof_1_5	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.tokenValue_eq_decimal_of_kind._proof_1_6	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.tokenValue_eq_fixed_of_kind	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.tokenValue_eq_name_of_kind	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.twoUnsupportedControl_derivesTrace	Quot.sound propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageGrammar.twoUnsupportedControl_derivesTrace._simp_1_1	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageInterface.Terminal.HasPayload.match_1.eq_1	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageInterface.Terminal.HasPayload.match_1.eq_2	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageInterface.Terminal.HasPayload.match_1.eq_3	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageInterface.Terminal.HasPayload.match_1.eq_4	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageInterface.Terminal.HasPayload.match_1.eq_5	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageInterface.Terminal.HasPayload.match_1.eq_6	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageInterface.instReprTokenValue.repr.match_1.eq_1	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageInterface.instReprTokenValue.repr.match_1.eq_2	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageInterface.instReprTokenValue.repr.match_1.eq_3	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageInterface.instReprTokenValue.repr.match_1.eq_4	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageInterface.instReprTokenValue.repr.match_1.eq_5	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.StageInterface.instReprTokenValue.repr.match_1.eq_6	propext
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_1	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_10	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_11	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_12	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_13	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_14	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_15	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_16	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_17	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_18	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_19	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_2	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_20	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_21	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_22	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_23	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_24	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_25	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_26	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_27	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_28	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_29	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_3	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_30	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_31	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_32	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_33	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_34	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_35	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_36	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_37	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_38	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_39	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_4	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_40	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_41	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_42	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_43	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_44	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_45	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_46	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_47	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_48	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_49	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_5	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_50	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_51	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_52	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_53	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_54	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_55	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_56	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_57	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_58	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_59	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_6	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_60	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_61	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_62	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_63	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_64	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_65	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_66	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_67	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_68	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_69	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_7	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_70	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_71	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_72	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_73	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_74	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_75	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_76	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_77	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_78	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_79	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_8	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_80	
+_private.ConcreteSpec.Proofs.SliceGrammar.0.ConcreteSpec.Surface0.terminalFirstSlice.match_1.eq_9	
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.ParseCursor.require.match_1.eq_1	
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.ParseCursor.require.match_1.eq_2	
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.ParserEngine.run.match_1.eq_1	
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.ParserEngine.run.match_1.eq_2	
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.ParserEngine.run.match_3.eq_1	
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.ParserEngine.run.match_3.eq_2	
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.ParserEngine.run.match_5.eq_1	propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.ParserEngine.run.match_5.eq_2	propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.ParserEngine.run.match_5.eq_3	propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.Production.nonterminalCount.match_1.eq_1	
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.Production.nonterminalCount.match_1.eq_2	
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.action_cost_pos	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.action_cost_pos._proof_1_1	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.action_cost_pos._proof_1_2	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.action_cost_pos._proof_1_3	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.action_cost_pos._proof_1_4	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.action_cost_pos._proof_1_5	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.action_cost_pos._proof_1_6	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.array_getElem?_take_append	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.array_getElem?_take_append._proof_1_1	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.array_getElem?_take_append._proof_1_2	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.array_getElem?_take_append._proof_1_3	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.array_getElem?_take_append._proof_1_4	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.derivesArgsTrace_to_derivesArgs	propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.derivesArgs_productive_of_mem	propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.derivesArgs_suffix_of_append	propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.derivesTrace_inv	propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.derivesTrace_unique_aux	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.derives_first_of_cons	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.derives_mono_aux	propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.derives_nullable_of_nil	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.derives_to_predictive_aux	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.foldl_max_ge	propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.foldl_max_mem	propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.getElem?_eq_drop_head?	propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.le_maxFrameCost	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.le_maxNonterminals	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.list_getElem?_eq_drop_head?	propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.list_take_add	propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.lookup_of_derivesArgs	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.nullableSeq_append_single	propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.nullableSeq_cons	propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.nullableSeq_nil	
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.one_le_maxFrameCost	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.pairwise_append	propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs.match_5.eq_1	propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs.match_5.eq_2	propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_1	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_10	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_11	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_12	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_13	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_14	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_15	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_16	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_17	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_18	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_19	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_2	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_20	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_21	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_22	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_23	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_24	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_25	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_26	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_27	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_28	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_29	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_3	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_30	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_31	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_32	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_33	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_34	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_35	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_36	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_37	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_38	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_39	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_4	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_40	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_41	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_42	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_43	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_44	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_45	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_46	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_47	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_48	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_49	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_5	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_50	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_51	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_52	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_53	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_54	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_55	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_56	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_57	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_58	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_59	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_6	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_7	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_8	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseArgs_total_and_bounded._proof_1_9	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseSymbol.match_3.eq_1	propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseSymbol.match_3.eq_2	propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseSymbol.match_5.eq_1	propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseSymbol.match_5.eq_2	propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseSymbol_malformed_take_succ_not_viable	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseSymbol_nullable_of_ok_zero	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseSymbol_of_predictive	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseSymbol_of_predictive._proof_1_2	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseSymbol_parseArgs_mono	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseSymbol_parseArgs_ok_trace	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseSymbol_parseArgs_ok_trace._proof_1_3	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseSymbol_parseArgs_prefix_congr	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseSymbol_parseArgs_sound_ok	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseSymbol_parseArgs_sound_ok._proof_1_3	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseSymbol_parseArgs_sound_ok._proof_1_4	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseSymbol_parseArgs_sound_ok._proof_1_5	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseSymbol_parseArgs_sound_ok._proof_1_6	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseSymbol_parseArgs_viable_prefix	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseSymbol_total_and_bounded	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseSymbol_total_and_bounded._proof_1_1	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseSymbol_total_and_bounded._proof_1_10	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseSymbol_total_and_bounded._proof_1_11	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseSymbol_total_and_bounded._proof_1_12	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseSymbol_total_and_bounded._proof_1_13	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseSymbol_total_and_bounded._proof_1_14	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseSymbol_total_and_bounded._proof_1_15	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseSymbol_total_and_bounded._proof_1_2	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseSymbol_total_and_bounded._proof_1_3	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseSymbol_total_and_bounded._proof_1_4	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseSymbol_total_and_bounded._proof_1_5	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseSymbol_total_and_bounded._proof_1_9	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseSymbol_trailing_take_succ_not_viable	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseSymbol_trailing_take_succ_not_viable._proof_1_1	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.parseSymbol_trailing_take_succ_not_viable._proof_1_2	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.predictive_inv	propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.predictive_unique_aux	propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.production_frameCost_ge	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.production_frameCost_ge._proof_1_1	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.replayEvents.eq_1	
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.replayEvents_append	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.replayEvents_firstHit_spec	propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.replayEvents_only_req_hit	propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.replayEvents_required_spec	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.require_hit_some	propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.require_required_ge_left	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.require_required_ge_right	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.require_required_val	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.require_required_val._proof_1_1	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.require_required_val._proof_1_2	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.rhsNtCount.match_1.eq_1	
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.rhsNtCount.match_1.eq_2	
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.rhsNtCount_cons_n	
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.rhsNtCount_cons_t	
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.slice_eq_of_val_eq	
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.slice_le_last	
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.start_fuel_sufficient	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.start_fuel_sufficient._proof_1_1	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.tokenSlice.eq_1	propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.tokenSlice_append	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.tokenSlice_append._proof_1_1	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.tokenSlice_append._proof_1_2	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.tokenSlice_append_drop	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.tokenSlice_append_drop._proof_1_1	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.tokenSlice_cons	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.tokenSlice_cons._proof_1_1	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.tokenSlice_full	propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.tokenSlice_full._simp_1_2	
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.tokenSlice_length	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.tokenSlice_length._proof_1_1	Quot.sound propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.tokenSlice_self	propext
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.zeroTokenStepBound.match_1.eq_1	
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.zeroTokenStepBound.match_1.eq_2	
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.zeroTokenStepBound_le_succ	
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.zeroTokenStepBound_le_unit	
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageGrammar.zeroTokenStepBound_mono	
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageInterface.ParserView.invalidLocation.match_1.eq_1	
+_private.ConcreteSpec.Proofs.StageParser.0.ConcreteSpec.StageInterface.ParserView.invalidLocation.match_1.eq_2	
+_private.ConcreteSpec.Proofs.StageParser.0.List.filter.match_1.eq_1	
+_private.ConcreteSpec.Proofs.StageParser.0.List.filter.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Surface0.0.ConcreteSpec.Borrow.isScalar.match_1.eq_1	propext
 _private.ConcreteSpec.Proofs.Surface0.0.ConcreteSpec.Borrow.isScalar.match_1.eq_2	propext
 _private.ConcreteSpec.Proofs.Surface0.0.ConcreteSpec.Borrow.isScalar.match_1.eq_3	propext
@@ -9188,6 +10114,15 @@ _private.ConcreteSpec.Spec.ProjectPolicy.0.ConcreteSpec.Project.tableMatches.mat
 _private.ConcreteSpec.Spec.ProjectPolicy.0.ConcreteSpec.Project.tableMatches.match_1.eq_2	
 _private.ConcreteSpec.Spec.ProjectPolicy.0.List.any.match_1.eq_1	
 _private.ConcreteSpec.Spec.ProjectPolicy.0.List.any.match_1.eq_2	
+_private.ConcreteSpec.Spec.SliceGrammar.0.ConcreteSpec.GrammarData.numberedGrammar.match_1.eq_1	
+_private.ConcreteSpec.Spec.SliceGrammar.0.ConcreteSpec.GrammarData.numberedGrammar.match_1.eq_2	
+_private.ConcreteSpec.Spec.SliceGrammar.0.ConcreteSpec.StageGrammar.SharedGrammar.rawGrammar.match_1.eq_1	
+_private.ConcreteSpec.Spec.SliceGrammar.0.ConcreteSpec.StageGrammar.SharedGrammar.rawGrammar.match_1.eq_2	
+_private.ConcreteSpec.Spec.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyRhs.match_1.eq_1	
+_private.ConcreteSpec.Spec.SliceGrammar.0.ConcreteSpec.StageGrammar.earlyRhs.match_1.eq_2	
+_private.ConcreteSpec.Spec.SliceGrammar.0.ConcreteSpec.StageGrammar.productionFirstSlice_lt_22	
+_private.ConcreteSpec.Spec.SliceGrammar.0.ConcreteSpec.StageGrammar.radixFirstSlice_lt_22	
+_private.ConcreteSpec.Spec.SliceGrammar.0.ConcreteSpec.StageGrammar.terminalFirstSlice_lt_22	
 _private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.BaseDigit.match_1.eq_1	
 _private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.BaseDigit.match_1.eq_2	
 _private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.BaseDigit.match_1.eq_3	
@@ -9204,23 +10139,60 @@ _private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.Utf8.Encodes.match_1
 _private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.Utf8.Encodes.match_1.eq_3	propext
 _private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.Utf8.Encodes.match_1.eq_4	propext
 _private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.Utf8.Encodes.match_1.eq_5	propext
-_private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.bootstrapGrammar._proof_1	
-_private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.bootstrapGrammar._proof_2	
-_private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.bootstrapGrammar._proof_3	
-_private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.bootstrapGrammar._proof_4	propext
-_private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.bootstrapGrammar._proof_5	propext
-_private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.bootstrapTable._proof_1	propext
-_private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.bootstrapTable._proof_2	Classical.choice Quot.sound propext
-_private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.bootstrapTable._proof_3	propext
-_private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.bootstrapTable._simp_1	propext
-_private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.bootstrapTable.eq_1	Classical.choice Quot.sound propext
-_private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.bootstrapVerification._proof_1	propext
-_private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.bootstrapVerification._proof_2	Classical.choice Quot.sound propext
-_private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.bootstrapVerification._proof_3	Classical.choice Quot.sound propext
-_private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.bootstrapWords.eq_1	propext
-_private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.later._proof_1	
-_private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.returnCells.eq_1	propext
-_private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.returnRhs.eq_1	
+_private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.fixed.congr_simp	
+_private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.earlyVerification._proof_1	Classical.choice Quot.sound propext
+_private.ConcreteSpec.StageGrammar.0.ConcreteSpec.StageGrammar.earlyVerification._proof_2	Classical.choice Quot.sound propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.Action.cost.match_1.eq_1	propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.Action.cost.match_1.eq_10	propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.Action.cost.match_1.eq_11	propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.Action.cost.match_1.eq_2	propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.Action.cost.match_1.eq_3	propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.Action.cost.match_1.eq_4	propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.Action.cost.match_1.eq_5	propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.Action.cost.match_1.eq_6	propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.Action.cost.match_1.eq_7	propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.Action.cost.match_1.eq_8	propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.Action.cost.match_1.eq_9	propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.Action.eval.match_1.eq_1	
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.Action.eval.match_11.eq_1	propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.Action.eval.match_13.eq_1	propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.Action.eval.match_13.eq_10	propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.Action.eval.match_13.eq_11	propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.Action.eval.match_13.eq_2	propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.Action.eval.match_13.eq_3	propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.Action.eval.match_13.eq_4	propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.Action.eval.match_13.eq_5	propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.Action.eval.match_13.eq_6	propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.Action.eval.match_13.eq_7	propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.Action.eval.match_13.eq_8	propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.Action.eval.match_13.eq_9	propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.Action.eval.match_3.eq_1	
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.Action.eval.match_5.eq_1	
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.Action.eval.match_7.eq_1	
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.Action.eval.match_9.eq_1	propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.SharedGrammar.rawGrammar.match_1.eq_1	
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.SharedGrammar.rawGrammar.match_1.eq_2	
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.foldl_production_size	Quot.sound propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.foldl_production_size._proof_1_1	Quot.sound propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.parseArgs.match_1.eq_1	propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.parseArgs.match_3.eq_1	propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.parseArgs.match_3.eq_2	propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.parseArgs.match_5.eq_1	propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.parseArgs.match_5.eq_2	propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.parseArgs.match_7.eq_1	
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.parseArgs.match_7.eq_2	
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.parseArgs.match_7.eq_3	
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.parseArgs.match_7.eq_4	
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.parseSymbol.match_1.eq_1	propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.parseSymbol.match_3.eq_1	propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.parseSymbol.match_3.eq_2	propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.parseSymbol.match_5.eq_1	propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.parseSymbol.match_5.eq_2	propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.parseSymbol.match_7.eq_1	
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.parseSymbol.match_7.eq_2	
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.parseSymbol_parseArgs_firstUnsupportedHit_isSome	propext
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.zeroTokenStepBound.match_1.eq_1	
+_private.ConcreteSpec.StageGrammarCore.0.ConcreteSpec.StageGrammar.zeroTokenStepBound.match_1.eq_2	
 _private.ConcreteSpec.StageInterface.0.ConcreteSpec.ArithmeticPolicy.permits.match_1.eq_1	
 _private.ConcreteSpec.StageInterface.0.ConcreteSpec.ArithmeticPolicy.permits.match_1.eq_2	
 _private.ConcreteSpec.StageInterface.0.ConcreteSpec.Core.AList.lookup.match_1.eq_1	
@@ -9408,6 +10380,7 @@ _private.ConcreteSpec.StageInterface.0.Option.bind.match_1.eq_1
 _private.ConcreteSpec.StageInterface.0.Option.bind.match_1.eq_2	
 _private.ConcreteSpec.Surface1.0.ConcreteSpec.Surface1.State.site.eq_1	
 _private.ConcreteSpec.Surface1.0.ConcreteSpec.Surface1.asU8Atom.match_1.eq_1	
+_private.ConcreteSpec.Surface1.0.ConcreteSpec.Surface1.fixed.congr_simp	
 _private.ConcreteSpec.Surface1.0.ConcreteSpec.Surface1.lowerBodyChecked._sparseCasesOn_3.else_eq	propext
 _private.ConcreteSpec.Surface1.0.ConcreteSpec.Surface1.lowerBodyChecked._sparseCasesOn_4.else_eq	propext
 _private.ConcreteSpec.Surface1.0.ConcreteSpec.Surface1.lowerBodyChecked.eq_def	propext

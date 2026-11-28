@@ -108,9 +108,9 @@ theorem malformed_refused (s : Scenario) :
     ¬ (bir s false).WF (language := language s false) := by
   have bad : ¬ (description s false).WellFormed profile.memoryTarget := by cases s <;> decide
   refine ⟨by cases s <;> with_unfolding_all rfl, ?_, ?_, ?_⟩
-  · exact fun h => bad (geometry_required h.2.2.2 (.head _) (.head _))
-  · exact fun h => bad (geometry_required h.2.2.2 (.head _) (.head _))
-  · exact fun h => bad (geometry_required h.2.2.2.2.2.2 (.head _) (.head _))
+  · exact fun h => bad (geometry_required h.layoutsWF (.head _) (.head _))
+  · exact fun h => bad (geometry_required h.layoutsWF (.head _) (.head _))
+  · exact fun h => bad (geometry_required h.layoutsWF (.head _) (.head _))
 
 private def oneByte (align : Nat) : BIR lowering profile :=
   {project := mir.project, entry := mir.entry, signatures := mir.signatures, sites := #[]
@@ -121,7 +121,7 @@ private def oneByte (align : Nat) : BIR lowering profile :=
 theorem bir_u8_refused : ¬ (oneByte C).WF (language := baseLang) := by
   intro h
   exact (by decide : ¬ (Layout.scalar 1 C).WellFormed profile.memoryTarget)
-    (geometry_required h.2.2.2.2.2.2 (.head _) (.head _))
+    (geometry_required h.layoutsWF (.head _) (.head _))
 
 private abbrev State := MemoryRegisters baseLang profile
 private abbrev exec (s : Scenario) := Interfaces.Memory.Execution (language := language s true) (lang := lowering) (profile := profile)
@@ -159,18 +159,22 @@ private theorem handoff (s : Scenario) : (memory s true).HandoffWF :=
 theorem padded_lowering (s : Scenario) :
     lowerGraph (language := language s true) source = .ok (memory s true) ∧
     (memory s true).HandoffWF ∧ (ssa s true).WF (language := language s true) ∧ (bir s true).WF (language := language s true) := by
-  refine ⟨by cases s <;> with_unfolding_all rfl, handoff s, (checkHandoff_iff _).mp ?_, ?_⟩
-  · cases s <;> with_unfolding_all decide
-  · refine ⟨?_, by cases s <;> decide, by cases s <;> decide, by cases s <;> decide, nofun, ?_⟩
-    · intro fn member block present slot trap
-      cases List.mem_singleton.mp member
-      rcases List.mem_cons.mp present with rfl | tail
-      · contradiction
-      · cases List.mem_singleton.mp tail
-        contradiction
-    · have checked : ((bir s true).memoryView (language := language s true)).HandoffWF :=
-        (checkHandoff_iff _).mp (by cases s <;> with_unfolding_all decide)
-      exact ⟨checked.1, checked.2.2.2⟩
+  have hSsaView : ((ssa s true).memoryView (language := language s true)).HandoffWF :=
+    (checkHandoff_iff _).mp (by cases s <;> with_unfolding_all decide)
+  have hBirView : ((bir s true).memoryView (language := language s true)).HandoffWF :=
+    (checkHandoff_iff _).mp (by cases s <;> with_unfolding_all decide)
+  refine ⟨by cases s <;> with_unfolding_all rfl, handoff s,
+    ⟨(SSA.checkRegisterFormation_eq_true_iff _).mp (by cases s <;> with_unfolding_all decide), hSsaView⟩,
+    ⟨(BIR.checkRegisterFormation_eq_true_iff _).mp (by cases s <;> with_unfolding_all decide),
+      ?_, by cases s <;> decide,
+      fun o ho => hBirView.origins_bind o (by cases s <;> with_unfolding_all exact ho),
+      nofun, hBirView⟩⟩
+  intro fn member block present slot trap
+  cases List.mem_singleton.mp member
+  rcases List.mem_cons.mp present with rfl | tail
+  · contradiction
+  · cases List.mem_singleton.mp tail
+    contradiction
 
 -- This witness deliberately lies beyond the computed bound (C + 12).
 private abbrev farBase := C + 16
@@ -226,14 +230,14 @@ theorem padded_exhausts (s : Scenario) (tight : s ≠ .fourteenFree) :
     (exec s).finite (memory s true) (atJump s) ∧
     (exec s).step (memory s true) (atJump s) {atJump s with resourceExhausted := true} ∧
     (exec s).result (memory s true) {atJump s with resourceExhausted := true} .resourceExhausted :=
-  ⟨reachable s, (Interfaces.Memory.JumpAt.exhausted_iff (language := language s true) (handoff s).2.2.2 (jump s)).mpr ⟨⟨_, valid s⟩, noFit s tight⟩⟩
+  ⟨reachable s, (Interfaces.Memory.JumpAt.exhausted_iff (language := language s true) (handoff s).layoutsWF (jump s)).mpr ⟨⟨_, valid s⟩, noFit s tight⟩⟩
 
 theorem padded_completes :
     let s := Scenario.fourteenFree
     (exec s).finite (memory s true) (atJump s) ∧ ∃ next, (exec s).step (memory s true) (atJump s) next ∧
       next.resourceExhausted = false := by
   let s := Scenario.fourteenFree
-  exact ⟨reachable s, Interfaces.Memory.JumpAt.normal_of_fit (language := language s true) (handoff s).2.2.2 (jump s) (valid s)
+  exact ⟨reachable s, Interfaces.Memory.JumpAt.normal_of_fit (language := language s true) (handoff s).layoutsWF (jump s) (valid s)
     (by with_unfolding_all exact ⟨⟨0⟩, 4, ⟨1⟩, _, rfl, trivial⟩)⟩
 
 -- A valid outer edge cannot hide a malformed grandchild.
@@ -257,6 +261,6 @@ example :
   refine ⟨by decide, by decide, by with_unfolding_all rfl, ?_⟩
   intro h
   exact (by decide : ¬ (Layout.mk 8 4 (.cons fld 0 (.scalar 4 4) (.cons ⟨.struct decl, ⟨"word2"⟩⟩ 2 (.scalar 4 2) .nil))).WellFormed profile.memoryTarget)
-    (geometry_required h.2.2.2 (.head _) (.head _))
+    (geometry_required h.layoutsWF (.head _) (.head _))
 
 end Concrete.Memory.AggregateLayoutControl

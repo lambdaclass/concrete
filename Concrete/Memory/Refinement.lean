@@ -463,7 +463,7 @@ theorem lowerGraph_refines {mir : MIR lang profile} {memory : Interfaces.Memory 
     LowersMemory (language := language) mir memory := by
   have static := lowerGraph_handoff ok source
   refine ⟨static.project, static.entry, static.origins, static.layouts, ⟨static.signatures, static.declarations⟩,
-    static.promotion, static.handoff.1, source.1, ?_, ?_⟩
+    static.promotion, static.retainedRoots, static.handoff.layoutsWF, static.handoff.1, source.1, ?_, ?_⟩
   · intro safe
     have corr := steps safe
     refine ⟨?_, fun _ run => corr.divergence run, ?_⟩
@@ -496,7 +496,7 @@ theorem LowersMemory.result_or_exhausted {mir : MIR lang profile} {memory : Inte
     (∃ p, Src.finite mir p ∧ Src.result mir p o ∧ Src.trace mir p = Dst.trace memory q) ∨
       o = .resourceExhausted := by
   rcases Memory.result_cases outcome with ordinary | exhausted
-  · exact .inl ((contract.2.2.2.2.2.2.2.2.1 safe).1 q o reached ordinary)
+  · exact .inl ((contract.2.2.2.2.2.2.2.2.2.2.1 safe).1 q o reached ordinary)
   · exact .inr exhausted
 
 /-- The resource policy can recover strict result matching by ruling out the
@@ -506,7 +506,7 @@ theorem LowersMemory.refines_of_bound {mir : MIR lang profile} {memory : Interfa
     (bound : ¬ Dst.observes memory .resourceExhausted) :
     BehaviorRefinement Src Dst Src.result Dst.result mir memory := by
   intro safe
-  refine ⟨?_, (contract.2.2.2.2.2.2.2.2.1 safe).2⟩
+  refine ⟨?_, (contract.2.2.2.2.2.2.2.2.2.2.1 safe).2⟩
   intro q o reached outcome
   rcases LowersMemory.result_or_exhausted contract safe reached outcome with matched | rfl
   · exact matched
