@@ -210,7 +210,7 @@ theorem returnStream_parserView (n : Nat) : (returnStream n).parserView = return
 
 theorem parsedReturnDomain : Parsed.ElaborationDomain slice0 parsedReturn := by
   have hOrd : Concrete.Interfaces.TokensOrdered returnView := by
-    unfold Concrete.Interfaces.TokensOrdered
+    unfold Concrete.Interfaces.TokensOrdered ConcreteSpec.StageGrammar.TokensOrdered
     decide
   refine ⟨rfl, rfl, ⟨returnView, by with_unfolding_all rfl, hOrd, returnParserRun42⟩,
     ⟨.ok pendingReturn, returnProgram, rfl, rfl⟩, ?_⟩
@@ -241,7 +241,7 @@ example :
   have hmal : Refuses (sliceGrammar slice0) empty.parserView failure :=
     (sliceParser_malformed_iff slice0 empty.parserView hwf).mp ⟨_, _, _, hrun⟩
   have hord : Concrete.Interfaces.TokensOrdered empty.parserView := by
-    simp [Concrete.Interfaces.TokensOrdered, TokenStream.parserView, empty]
+    simp [Concrete.Interfaces.TokensOrdered, ConcreteSpec.StageGrammar.TokensOrdered, TokenStream.parserView, empty]
   have hEdgeRun : (registry (returnPasses fixtureElaborate)).parser.run empty = .error failure := by
     rw [registry_parser_run]
     exact (parserEntry_run_eq_error_iff (sliceParser slice0) (sliceParser_nonExhausted slice0)
